@@ -1,4 +1,5 @@
 use crate::block::entities::{BlockEntity, block_entity_from_nbt};
+use crate::server::metrics::WorldTickReport;
 use dashmap::DashMap;
 use pumpkin_data::chunk::Biome;
 use pumpkin_data::item::{BedrockItem, BedrockItemVersion};
@@ -1522,7 +1523,7 @@ impl World {
     }
 
     #[expect(clippy::too_many_lines)]
-    pub fn tick(self: &Arc<Self>, server: &Arc<Server>) {
+    pub fn tick(self: &Arc<Self>, server: &Arc<Server>) -> WorldTickReport {
         const ENTITY_TICK_BATCH_SIZE: usize = 16;
 
         let start = std::time::Instant::now();
@@ -1608,7 +1609,9 @@ impl World {
             });
         let entity_elapsed = t_entities.elapsed();
 
+        let t_tracker = std::time::Instant::now();
         self.entity_tracker.update_all(self);
+        let tracker_elapsed = t_tracker.elapsed();
 
         let mut block_entities: Vec<Arc<dyn BlockEntity>> = Vec::new();
         if self.block_entities.len() < active_chunks.len() {
@@ -1663,6 +1666,20 @@ impl World {
                 block_entity_count,
                 block_entity_elapsed,
             );
+        }
+
+        WorldTickReport {
+            world: self.dimension.minecraft_name,
+            total: total_elapsed,
+            chunks: chunk_elapsed,
+            players: player_elapsed,
+            player_count,
+            entities: entity_elapsed,
+            entity_count,
+            tracker: tracker_elapsed,
+            block_entities: block_entity_elapsed,
+            block_entity_count,
+            loaded_chunks: self.level.loaded_chunk_count(),
         }
     }
 

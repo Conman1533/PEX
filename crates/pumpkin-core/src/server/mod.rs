@@ -55,6 +55,7 @@ mod connection_cache;
 pub(crate) mod debug_profiler;
 pub mod enchantment;
 mod key_store;
+pub mod metrics;
 pub mod recipe;
 pub mod scheduler;
 pub mod seasonal_events;
@@ -132,6 +133,8 @@ pub struct Server {
     pub tick_rate_manager: Arc<ServerTickRateManager>,
     /// Stores the duration of the last 100 ticks for performance analysis
     pub tick_times_nanos: std::sync::Mutex<[i64; 100]>,
+    /// PEX tick metrics written to `metrics/`
+    pub metrics: metrics::Metrics,
     /// Aggregated tick times for efficient rolling average calculation
     pub aggregated_tick_times_nanos: AtomicI64,
     /// Total number of ticks processed by the server
@@ -310,6 +313,7 @@ impl Server {
             white_list,
             tick_rate_manager,
             tick_times_nanos: std::sync::Mutex::new([0; 100]),
+            metrics: metrics::Metrics::new(),
             aggregated_tick_times_nanos: AtomicI64::new(0),
             tick_count: AtomicI32::new(0),
             debug_profiler: debug_profiler::DebugProfiler::new(),
@@ -1197,10 +1201,14 @@ impl Server {
 
         let worlds = self.worlds.load();
         let handle = self.runtime.clone();
-        worlds.par_iter().for_each(|world| {
-            let _guard = handle.enter();
-            world.tick(self);
-        });
+        let reports = worlds
+            .par_iter()
+            .map(|world| {
+                let _guard = handle.enter();
+                world.tick(self)
+            })
+            .collect();
+        self.metrics.set_world_reports(reports);
 
         // Global tasks
         self.player_data_storage.tick(self);
@@ -1222,6 +1230,7 @@ impl Server {
     /// Updates the tick time statistics with the duration of the last tick.
     pub fn update_tick_times(&self, tick_duration_nanos: i64) {
         let tick_count = self.tick_count.fetch_add(1, Ordering::Relaxed);
+        self.metrics.record_tick(tick_count, tick_duration_nanos);
         let index = (tick_count % 100) as usize;
 
         let mut tick_times = self
