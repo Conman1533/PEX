@@ -124,12 +124,20 @@ impl FluidLevelSamplerImpl for StandardChunkFluidLevelSampler {
     }
 }
 
+/// Block storage of a proto chunk. Generation writes go to the flat array; a proto chunk that
+/// sits idle at its target stage (the ring around every view) is packed into paletted sections,
+/// which are several times smaller, and unpacked again on the next write.
+pub(crate) enum ProtoBlocks {
+    Flat(Vec<BlockStateId>),
+    Packed(Box<[BlockPalette]>),
+}
+
 pub struct ProtoChunk {
     pub x: i32,
     pub z: i32,
     pub default_block: &'static BlockState,
     biome_mixer_seed: i64,
-    pub(crate) flat_block_map: Vec<BlockStateId>,
+    pub(crate) blocks: ProtoBlocks,
     pub flat_biome_map: Box<[u8]>,
     pub flat_surface_height_map: [i16; CHUNK_AREA],
     pub flat_ocean_floor_height_map: [i16; CHUNK_AREA],
@@ -229,7 +237,7 @@ impl ProtoChunk {
             z,
             default_block,
             biome_mixer_seed,
-            flat_block_map: Vec::new(),
+            blocks: ProtoBlocks::Flat(Vec::new()),
             flat_biome_map: vec![
                 Biome::PLAINS.id;
                 biome_coords::from_block(CHUNK_DIM as i32) as usize
@@ -529,14 +537,69 @@ impl ProtoChunk {
         is_air(self.get_block_state(local_pos))
     }
 
+    /// Number of block sections that hold anything; the ones above are all air.
+    #[must_use]
+    pub(crate) fn stored_block_sections(&self) -> usize {
+        match &self.blocks {
+            ProtoBlocks::Flat(flat) => flat.len().div_ceil(BlockPalette::VOLUME),
+            ProtoBlocks::Packed(sections) => sections.len(),
+        }
+    }
+
+    /// Packs the flat block array into paletted sections. Cheap to call on an already packed chunk.
+    pub(crate) fn pack_blocks(&mut self) {
+        let ProtoBlocks::Flat(flat) = &self.blocks else {
+            return;
+        };
+        let sections = (0..flat.len() / BlockPalette::VOLUME)
+            .map(|section| {
+                let base = section * BlockPalette::VOLUME;
+                BlockPalette::from_fn(|x, y, z| {
+                    flat[base + Self::local_pos_to_block_index(x as i32, y as i32, z as i32)]
+                })
+            })
+            .collect();
+        self.blocks = ProtoBlocks::Packed(sections);
+    }
+
+    fn flat_blocks_mut(&mut self) -> &mut Vec<BlockStateId> {
+        if let ProtoBlocks::Packed(sections) = &self.blocks {
+            let mut flat = vec![BlockStateId::AIR; sections.len() * BlockPalette::VOLUME];
+            for (section_index, section) in sections.iter().enumerate() {
+                let base = section_index * BlockPalette::VOLUME;
+                for y in 0..BlockPalette::SIZE {
+                    for z in 0..BlockPalette::SIZE {
+                        for x in 0..BlockPalette::SIZE {
+                            flat[base
+                                + Self::local_pos_to_block_index(x as i32, y as i32, z as i32)] =
+                                section.get(x, y, z);
+                        }
+                    }
+                }
+            }
+            self.blocks = ProtoBlocks::Flat(flat);
+        }
+        match &mut self.blocks {
+            ProtoBlocks::Flat(flat) => flat,
+            ProtoBlocks::Packed(_) => unreachable!("unpacked above"),
+        }
+    }
+
     #[inline]
     #[must_use]
     pub fn get_block_state_raw(&self, x: i32, y: i32, z: i32) -> BlockStateId {
         debug_assert!((0..i32::from(self.height())).contains(&y));
-        self.flat_block_map
-            .get(Self::local_pos_to_block_index(x, y, z))
-            .copied()
-            .unwrap_or(BlockStateId::AIR)
+        match &self.blocks {
+            ProtoBlocks::Flat(flat) => flat
+                .get(Self::local_pos_to_block_index(x, y, z))
+                .copied()
+                .unwrap_or(BlockStateId::AIR),
+            ProtoBlocks::Packed(sections) => sections
+                .get((y as usize) >> 4)
+                .map_or(BlockStateId::AIR, |section| {
+                    section.get(x as usize, (y as usize) & 15, z as usize)
+                }),
+        }
     }
 
     #[inline]
@@ -578,16 +641,16 @@ impl ProtoChunk {
         }
 
         let index = Self::local_pos_to_block_index(local_x, local_y, local_z);
-        if index >= self.flat_block_map.len() {
+        let flat = self.flat_blocks_mut();
+        if index >= flat.len() {
             if block_state.id == BlockStateId::AIR {
                 return;
             }
             let section_end = ((local_y as usize >> 4) + 1) * BlockPalette::VOLUME;
-            self.flat_block_map
-                .reserve_exact(section_end - self.flat_block_map.len());
-            self.flat_block_map.resize(section_end, BlockStateId::AIR);
+            flat.reserve_exact(section_end - flat.len());
+            flat.resize(section_end, BlockStateId::AIR);
         }
-        self.flat_block_map[index] = block_state.id;
+        flat[index] = block_state.id;
     }
 
     #[inline]

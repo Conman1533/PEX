@@ -216,7 +216,7 @@ impl Chunk {
         let biome_min_y = biome_coords::from_block(dimension.min_y);
         let block_sections = (0..total_sections)
             .map(|section_index| {
-                if section_index * BlockPalette::VOLUME >= proto_chunk.flat_block_map.len() {
+                if section_index >= proto_chunk.stored_block_sections() {
                     return BlockPalette::Homogeneous(BlockStateId::AIR);
                 }
                 BlockPalette::from_fn(|x, y, z| {

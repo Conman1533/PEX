@@ -9,6 +9,7 @@ use super::{
     LevelChannel,
 };
 use crate::chunk::io::Dirtiable;
+use crate::generation::proto_chunk::ProtoBlocks;
 use crate::level::{Level, LoadedChunkChange, SyncChunk};
 use dashmap::DashMap;
 use pumpkin_config::lighting::LightingEngineConfig;
@@ -839,6 +840,27 @@ impl GenerationSchedule {
         }
     }
 
+    /// Packs the block storage of proto chunks that wait at their target stage with nothing
+    /// queued. Bounded per call so the scheduler thread never stalls on a large ring.
+    fn pack_idle_proto_chunks(&mut self) {
+        const MAX_PACKED_PER_CALL: usize = 128;
+        let mut packed = 0;
+        for holder in self.chunk_map.values_mut() {
+            if packed == MAX_PACKED_PER_CALL {
+                break;
+            }
+            if !holder.occupied.is_null() || holder.tasks.iter().any(|task| !task.is_null()) {
+                continue;
+            }
+            if let Some(Chunk::Proto(proto)) = &mut holder.chunk
+                && matches!(proto.blocks, ProtoBlocks::Flat(_))
+            {
+                proto.pack_blocks();
+                packed += 1;
+            }
+        }
+    }
+
     fn process_unload_queue(&mut self) {
         if self.unload_chunks.is_empty() {
             return;
@@ -1283,6 +1305,7 @@ impl GenerationSchedule {
             if self.last_unload.elapsed() >= std::time::Duration::from_secs(1) {
                 self.garbage_collect_dependencies();
                 self.process_unload_queue();
+                self.pack_idle_proto_chunks();
                 self.last_unload = std::time::Instant::now();
             }
 
