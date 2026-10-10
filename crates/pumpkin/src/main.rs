@@ -50,6 +50,8 @@ static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
 #[allow(clippy::too_many_lines)]
 #[tokio::main]
 async fn main() {
+    // Runtime workers only take a malloc arena on their first allocation, which comes later.
+    pumpkin_core::server::memory::configure_allocator();
     let _ = MAIN_THREAD.set(thread::current().id());
 
     // reqwest is built with `rustls-no-provider`, so pick the ring provider (the one
