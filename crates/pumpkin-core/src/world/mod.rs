@@ -4365,15 +4365,18 @@ impl World {
         let entities_guard = self.entities.load();
         let players_guard = self.players.load();
 
+        // Filter before cloning: every entity runs these queries each tick, and cloning the
+        // whole list first cost two atomic ops per entity per query.
         entities_guard
             .iter()
+            .filter(|entity| entity.get_entity().bounding_box.load().intersects(aabb))
             .map(|e| e.clone() as Arc<dyn EntityBase>)
             .chain(
                 players_guard
                     .iter()
+                    .filter(|player| player.get_entity().bounding_box.load().intersects(aabb))
                     .map(|p| p.clone() as Arc<dyn EntityBase>),
             )
-            .filter(|entity| entity.get_entity().bounding_box.load().intersects(aabb))
             .collect()
     }
 
