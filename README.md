@@ -60,6 +60,8 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
   - `slow-ticks.log` breaks down every slow tick by world and phase (chunks, players, entities, entity tracking, block entities), with counts and memory use.
   - `summary.csv` records tick times, counts and memory once a minute.
   - Set `PEX_METRICS=0` to turn metrics off and `PEX_SLOW_TICK_MS=<ms>` to change the slow tick threshold (default 100).
+- **Chunks unload when players leave**: the server no longer keeps the last player's view-distance chunks loaded forever after they disconnect.
+- **Idle servers hand memory back to the OS**: freed memory is returned once a minute on Linux (glibc). With the chunk unloading fix, idle RAM after everyone leaves dropped about 35% in testing (327 MB to 214 MB).
 - **Faster surface generation**: the surface rules only look up the biome when a rule needs it, as vanilla does. Output is unchanged.
 
 <!-- Check out our [Github Project](https://github.com/orgs/Pumpkin-MC/projects/3) to see current progress. -->
