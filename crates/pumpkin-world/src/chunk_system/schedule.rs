@@ -1303,6 +1303,17 @@ impl GenerationSchedule {
             // This must run even when the queue is empty: `garbage_collect_dependencies`
             // is what puts stale dependency holders into the queue in the first place.
             if self.last_unload.elapsed() >= std::time::Duration::from_secs(1) {
+                {
+                    let (mut protos, mut levels, mut empty) = (0usize, 0usize, 0usize);
+                    for h in self.chunk_map.values() {
+                        match &h.chunk {
+                            Some(Chunk::Proto(_)) => protos += 1,
+                            Some(Chunk::Level(_)) => levels += 1,
+                            None => empty += 1,
+                        }
+                    }
+                    tracing::info!("MEMPROBE misses={} holders={} protos={} levels={} empty={} public={} unload_q={} queue={} graph_nodes={} waiting={} io_pending={}", crate::chunk_system::chunk_loading::TICKET_REMOVE_MISSES.load(std::sync::atomic::Ordering::Relaxed), self.chunk_map.len(), protos, levels, empty, self.public_chunk_map.len(), self.unload_chunks.len(), self.queue.len(), self.graph.nodes.len(), self.waiting_for_chunks.len(), self.io_write.max_capacity() - self.io_write.capacity());
+                }
                 self.garbage_collect_dependencies();
                 self.process_unload_queue();
                 self.pack_idle_proto_chunks();

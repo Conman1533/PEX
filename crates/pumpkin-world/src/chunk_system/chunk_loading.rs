@@ -1,3 +1,4 @@
+pub static TICKET_REMOVE_MISSES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 use super::{ChunkLevel, ChunkPos, HashMapType, LevelChannel};
 use crate::chunk_system::chunk_state::StagedChunkEnum; // Fixed path
 use itertools::Itertools;
@@ -230,15 +231,19 @@ impl ChunkLoading {
         debug_assert!(self.debug_check_error());
     }
 
+    pub fn ticket_count(&self) -> usize {
+        self.ticket.values().map(Vec::len).sum()
+    }
+
     pub fn remove_ticket(&mut self, pos: ChunkPos, level: i8) {
         // debug!("remove ticket at {pos:?} level {level}");
         debug_assert!(level < Self::MAX_LEVEL);
         let Some(vec) = self.ticket.get_mut(&pos) else {
-            // warn!("No ticket found at {pos:?}");
+            TICKET_REMOVE_MISSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         };
         let Some((index, _)) = vec.iter().find_position(|x| **x == level) else {
-            // warn!("No ticket found at {pos:?}");
+            TICKET_REMOVE_MISSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         };
         vec.remove(index);
