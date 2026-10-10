@@ -35,67 +35,32 @@ This version of it, PEX (Pumkin Experimental) is a hazardously merged version fo
 
 ## Features
 
-- [x] Configuration (toml)
-- [Tracking: Protocol](https://github.com/Pumpkin-MC/Pumpkin/issues/1401)
-  - [x] Server Status/Ping
-  - [x] Encryption
-  - [x] Packet Compression
-  - [x] Java Edition
-  - [x] Bedrock Edition (W.I.P)
-  - ...
-- [Tracking: World](https://github.com/Pumpkin-MC/Pumpkin/issues/1403)
-  - [x] Player Tab-list
-  - [x] Scoreboard
-  - [x] World Loading
-  - [x] World Time
-  - [x] World Borders
-  - [x] World Saving
-  - [x] Lighting
-  - [x] Entity Spawning
-  - [x] Bossbar
-  - [x] Chunk Loading (Vanilla, Linear, Pump)
-  - [Chunk Generation](https://github.com/Pumpkin-MC/Pumpkin/issues/36)
-  - [x] Chunk Saving (Vanilla, Linear, Pump)
-  - [Redstone](https://github.com/Pumpkin-MC/Pumpkin/issues/1402)
-  - [x] Liquid Physics
-  - ...
-- [Tracking: Player](https://github.com/Pumpkin-MC/Pumpkin/issues/1405)
-  - [x] Skins
-  - [x] Teleport
-  - [x] Movement
-  - [x] Animation
-  - [x] Inventory
-  - [Combat](https://github.com/Pumpkin-MC/Pumpkin/issues/1404)
-  - [x] Experience
-  - [x] Hunger
-  - [X] Off Hand
-  - [X] Advancements (W.I.P)
-  - [x] Eating
-  - ...
-- Entities
-  - [x] Non-Living (Minecart, Eggs...) (W.I.P)
-  - [x] Entity Effects
-  - [x] Players
-  - [x] Mobs (W.I.P)
-  - [x] Animals (W.I.P)
-  - [Entity AI](https://github.com/Pumpkin-MC/Pumpkin/issues/1406)
-  - [x] Boss (W.I.P)
-  - [x] Villagers (W.I.P)
-  - [X] Entity Saving
-- Server
-  - [Plugins](https://github.com/Pumpkin-MC/Pumpkin/issues/1407)
-  - [x] Query
-  - [x] [Minecraft Server Management Protocol (MSMP)](https://minecraft.wiki/w/Minecraft_Server_Management_Protocol)
-  - [x] Inventories
-  - [x] Particles
-  - [x] Chat
-  - [Commands](https://github.com/Pumpkin-MC/Pumpkin/issues/15)
-  - [x] Permissions
-  - [x] Translations
-- Proxy
-  - [x] [BungeeCord](https://github.com/SpigotMC/BungeeCord)
-  - [x] [BungeeGuard](https://github.com/lucko/BungeeGuard)
-  - [x] [Velocity](https://github.com/PaperMC/Velocity)
+What PEX adds on top of upstream Pumpkin. Each item was tested on a server before it went in.
+
+### Gameplay fixes
+- **Hoes, shovels and axes work again**: tilling farmland, making dirt paths, stripping logs and scraping or waxing copper. A codegen bug had dropped every block transform rule.
+- **Projectiles can hit players**: arrows, tridents, snowballs, eggs, fishing bobbers and evoker fangs used to fly straight through players.
+- **Items merge into a matching off-hand stack** when picked up. Before, they stayed on the ground.
+- **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
+
+### Mob AI
+- **Skeletons pick bow or melee from the weapon they hold**, like vanilla, and switch when it changes. Bogged and Parched shoot more slowly, as in vanilla.
+- **Skeletons hide from the sun, sink in water and target iron golems and baby turtles.** Wither skeletons target piglins.
+- **Strafing mobs move at vanilla speed.** Skeletons used to zip around at about 3x normal speed.
+
+### Blocks and plants
+- **Farmland**: trampling with vanilla chances, pushing entities up when it turns to dirt, surviving under fence gates, and moisture changes visible to clients.
+- **Sugar cane and lily pads** use the fluid state, so they work next to and on waterlogged blocks.
+- **Crops and stems** follow vanilla light and growth rules.
+- **Sea pickles** spread in vanilla's diamond pattern and work with dispensers.
+- **Big and small dripleaf**: vanilla growth, collapse and tilt.
+
+### Performance and operations
+- **Tick metrics** in `metrics/`:
+  - `slow-ticks.log` breaks down every slow tick by world and phase (chunks, players, entities, entity tracking, block entities), with counts and memory use.
+  - `summary.csv` records tick times, counts and memory once a minute.
+  - Set `PEX_METRICS=0` to turn metrics off and `PEX_SLOW_TICK_MS=<ms>` to change the slow tick threshold (default 100).
+- **Faster surface generation**: the surface rules only look up the biome when a rule needs it, as vanilla does. Output is unchanged.
 
 <!-- Check out our [Github Project](https://github.com/orgs/Pumpkin-MC/projects/3) to see current progress. -->
 
