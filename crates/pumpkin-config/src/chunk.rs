@@ -26,24 +26,13 @@ impl Default for ChunkConfig {
 }
 
 /// Configuration for Anvil chunk storage.
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(default)]
 pub struct AnvilChunkConfig {
     /// Compression settings for chunk data.
     pub compression: ChunkCompression,
-    /// Whether chunks are written into their sectors in place, like vanilla. When false, every
-    /// save batch rewrites the whole region file through a temporary file: crash safe, but with
-    /// players walking between regions it wrote about 66 times more data than in place.
+    /// Whether chunks should be written in place.
     pub write_in_place: bool,
-}
-
-impl Default for AnvilChunkConfig {
-    fn default() -> Self {
-        Self {
-            compression: ChunkCompression::default(),
-            write_in_place: true,
-        }
-    }
 }
 
 /// Compression settings for chunk data.
