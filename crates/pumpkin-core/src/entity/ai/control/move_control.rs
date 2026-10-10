@@ -46,12 +46,14 @@ impl MoveControlTrait for MoveControl {
         let entity = &living_entity.entity;
         if self.operation == Operation::Strafe {
             // TODO: is_walkable check
+            // Vanilla moves with `setSpeed(speedModifier * MOVEMENT_SPEED)`; travel here already
+            // multiplies by MOVEMENT_SPEED, so only the modifier goes into the input.
+            let speed_modifier = self.speed_modifier;
             living_entity.movement_input.store(Vector3::new(
-                self.strafe_right as f64,
+                f64::from(self.strafe_right) * speed_modifier,
                 0.0,
-                self.strafe_forwards as f64,
+                f64::from(self.strafe_forwards) * speed_modifier,
             ));
-            // Vanilla sets speed here too
             self.operation = Operation::Wait;
         } else if self.operation == Operation::MoveTo {
             self.operation = Operation::Wait;
