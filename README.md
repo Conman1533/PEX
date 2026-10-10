@@ -41,6 +41,7 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Hoes, shovels and axes work again**: tilling farmland, making dirt paths, stripping logs and scraping or waxing copper. A codegen bug had dropped every block transform rule.
 - **Projectiles can hit players**: arrows, tridents, snowballs, eggs, fishing bobbers and evoker fangs used to fly straight through players.
 - **Items merge into a matching off-hand stack** when picked up. Before, they stayed on the ground.
+- **Fishing works**: casting, waiting, bites, reeling in catches and hooking entities, with vanilla particles and sounds (upstream PR [#3821](https://github.com/Pumpkin-MC/Pumpkin/pull/3821)).
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
 - **Wall torches drop torches when broken** (upstream PR [#3890](https://github.com/Pumpkin-MC/Pumpkin/pull/3890)).
