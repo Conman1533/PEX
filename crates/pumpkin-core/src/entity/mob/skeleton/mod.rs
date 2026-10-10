@@ -1,19 +1,22 @@
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::Difficulty;
 
 use crate::entity::{
     Entity,
     ai::goal::{
-        active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, bow_attack::BowAttackGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
-        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal,
-        wander_around::WanderAroundGoal,
+        Goal, active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
+        bow_attack::BowAttackGoal, flee_sun::FleeSunGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal,
+        restrict_sun::RestrictSunGoal, revenge::RevengeGoal, wander_around::WanderAroundGoal,
     },
+    living::LivingEntity,
     mob::{Mob, MobEntity, equipment::RegionalDifficulty},
 };
 use crate::world::World;
@@ -27,12 +30,48 @@ pub mod wither;
 
 pub struct SkeletonEntityBase {
     pub mob_entity: MobEntity,
+    hard_attack_interval: i32,
+    attack_interval: i32,
 }
 
 impl SkeletonEntityBase {
+    pub const HARD_ATTACK_INTERVAL: i32 = 20;
+    pub const NORMAL_ATTACK_INTERVAL: i32 = 40;
+    pub const INCREASED_HARD_ATTACK_INTERVAL: i32 = 50;
+    pub const INCREASED_NORMAL_ATTACK_INTERVAL: i32 = 70;
+
     pub fn new(entity: Entity) -> Arc<Self> {
+        Self::build(
+            entity,
+            Self::HARD_ATTACK_INTERVAL,
+            Self::NORMAL_ATTACK_INTERVAL,
+            &[],
+        )
+    }
+
+    /// For the variants that override `getHardAttackInterval` and `getAttackInterval`.
+    pub fn with_attack_intervals(
+        entity: Entity,
+        hard_attack_interval: i32,
+        attack_interval: i32,
+    ) -> Arc<Self> {
+        Self::build(entity, hard_attack_interval, attack_interval, &[])
+    }
+
+    /// `extra_targets` are registered at priority 3 before the shared targets, like
+    /// `WitherSkeleton.registerGoals` does before calling super.
+    pub fn build(
+        entity: Entity,
+        hard_attack_interval: i32,
+        attack_interval: i32,
+        extra_targets: &[&'static EntityType],
+    ) -> Arc<Self> {
         let mob_entity = MobEntity::new(entity);
-        let mob = Self { mob_entity };
+        let mob = Self {
+            mob_entity,
+            hard_attack_interval,
+            attack_interval,
+        };
         let mob_arc = Arc::new(mob);
         let mob_weak: Weak<dyn Mob> = {
             let mob_arc: Arc<dyn Mob> = mob_arc.clone();
@@ -50,34 +89,117 @@ impl SkeletonEntityBase {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, Box::new(BowAttackGoal::new(1.0, 20, 15.0)));
-            goal_selector.add_goal(3, Box::new(MeleeAttackGoal::new(1.2, false)));
+            goal_selector.add_goal(2, Box::new(RestrictSunGoal::new()));
+            goal_selector.add_goal(3, Box::new(FleeSunGoal::new(1.0)));
             goal_selector.add_goal(
                 3,
                 Box::new(AvoidEntityGoal::new(&EntityType::WOLF, 6.0, 1.0, 1.2)),
             );
-            goal_selector.add_goal(7, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                8,
+                6,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(6, Box::new(RandomLookAroundGoal::default()));
 
+            for target_type in extra_targets {
+                target_selector.add_goal(
+                    3,
+                    ActiveTargetGoal::with_default(&mob_arc.mob_entity, target_type, true),
+                );
+            }
             target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
             target_selector.add_goal(
                 2,
                 ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
             );
+            target_selector.add_goal(
+                3,
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::IRON_GOLEM, true),
+            );
+            target_selector.add_goal(
+                3,
+                Box::new(ActiveTargetGoal::new(
+                    &mob_arc.mob_entity,
+                    &EntityType::TURTLE,
+                    10,
+                    true,
+                    false,
+                    // `Turtle.BABY_ON_LAND_SELECTOR`
+                    Some(|target: &LivingEntity, _world: &World| {
+                        target.entity.age.load(Ordering::Relaxed) < 0 && !target.is_in_water()
+                    }),
+                )),
+            );
         };
 
+        mob_arc.reassess_weapon_goal();
         mob_arc
+    }
+
+    /// Vanilla `AbstractSkeleton.reassessWeaponGoal`: a bow in either hand gets the bow goal,
+    /// anything else the melee goal, both at priority 4.
+    pub fn reassess_weapon_goal(&self) {
+        let holding_bow = {
+            let equipment = self
+                .mob_entity
+                .living_entity
+                .entity_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            // `ProjectileUtil.getWeaponHoldingHand` falls back to the off hand.
+            equipment.get(&EquipmentSlot::MAIN_HAND).item.id == Item::BOW.id
+                || equipment.get(&EquipmentSlot::OFF_HAND).item.id == Item::BOW.id
+        };
+        let mut stopped = {
+            let mut goal_selector = self
+                .mob_entity
+                .goals_selector
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut stopped = goal_selector.remove_goals::<MeleeAttackGoal>();
+            stopped.extend(goal_selector.remove_goals::<BowAttackGoal>());
+            if holding_bow {
+                let difficulty = self
+                    .mob_entity
+                    .living_entity
+                    .entity
+                    .world
+                    .load()
+                    .level_info
+                    .load()
+                    .difficulty;
+                let min_attack_interval = if difficulty == Difficulty::Hard {
+                    self.hard_attack_interval
+                } else {
+                    self.attack_interval
+                };
+                goal_selector.add_goal(
+                    4,
+                    Box::new(BowAttackGoal::new(1.0, min_attack_interval, 15.0)),
+                );
+            } else {
+                goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.2, false)));
+            }
+            stopped
+        };
+        for goal in &mut stopped {
+            goal.stop(self);
+        }
     }
 }
 
 impl Mob for SkeletonEntityBase {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
+    }
+
+    fn mob_read_nbt(&self, _nbt: &NbtCompound) {
+        self.reassess_weapon_goal();
+    }
+
+    fn on_equip_item(&self, _slot: &EquipmentSlot) {
+        self.reassess_weapon_goal();
     }
 
     fn populate_default_equipment_slots(

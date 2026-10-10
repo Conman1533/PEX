@@ -216,7 +216,10 @@ impl CommandExecutor for EntityReplaceExecutor {
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .put(&eq, item_stack.clone());
-                    living.send_equipment_changes(&[(eq, item_stack.clone())]);
+                    living.send_equipment_changes(&[(eq.clone(), item_stack.clone())]);
+                    if let Some(mob) = target.get_mob() {
+                        mob.on_equip_item(&eq);
+                    }
                     modified_count += 1;
                 }
             }
