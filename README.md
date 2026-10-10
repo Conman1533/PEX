@@ -51,6 +51,11 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 
 - **Undead don't burn under roofs.** Positions were rounded instead of floored when converted to blocks, so a mob near the edge of a roof checked the open-sky column next to it. The same fix corrects light checks and where dropped items land.
 
+- **Placing powder snow leaves an empty bucket** (upstream PR [#3976](https://github.com/Pumpkin-MC/Pumpkin/pull/3976)).
+- **`/setworldspawn` survives restarts**: it now saves to `level.dat` (upstream PR [#3461](https://github.com/Pumpkin-MC/Pumpkin/pull/3461)).
+- **Fire keeps its age on neighbor updates** and **unsupported snow layers disappear right away**, as in vanilla (upstream PRs [#3869](https://github.com/Pumpkin-MC/Pumpkin/pull/3869) and [#3868](https://github.com/Pumpkin-MC/Pumpkin/pull/3868)).
+- **`/kill` and void damage follow vanilla's damage rules**: `/kill` uses the generic kill damage type, and the hurt cooldown bypass comes from the damage type tag (upstream PR [#3853](https://github.com/Pumpkin-MC/Pumpkin/pull/3853)).
+
 ### Mob AI
 - **Skeletons pick bow or melee from the weapon they hold**, like vanilla, and switch when it changes. Bogged and Parched shoot more slowly, as in vanilla.
 - **Skeletons hide from the sun, sink in water and target iron golems and baby turtles.** Wither skeletons target piglins.
@@ -70,6 +75,7 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
   - Set `PEX_METRICS=0` to turn metrics off and `PEX_SLOW_TICK_MS=<ms>` to change the slow tick threshold (default 100).
 - **Chunks unload when players leave**: the server no longer keeps the last player's view-distance chunks loaded forever after they disconnect.
 - **Idle servers hand memory back to the OS**: freed memory is returned once a minute on Linux (glibc). With the chunk unloading fix, idle RAM after everyone leaves dropped about 35% in testing (327 MB to 214 MB).
+- **Scheduled block and fluid ticks only run in active chunks**, as in vanilla, so loaded but inactive chunks cost no tick time (upstream PR [#3553](https://github.com/Pumpkin-MC/Pumpkin/pull/3553)).
 - **Faster surface generation**: the surface rules only look up the biome when a rule needs it, as vanilla does. Output is unchanged.
 
 <!-- Check out our [Github Project](https://github.com/orgs/Pumpkin-MC/projects/3) to see current progress. -->
