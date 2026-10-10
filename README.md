@@ -43,6 +43,12 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Items merge into a matching off-hand stack** when picked up. Before, they stayed on the ground.
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
+- **Wall torches drop torches when broken** (upstream PR [#3890](https://github.com/Pumpkin-MC/Pumpkin/pull/3890)).
+- **Damaged tools and armor no longer stack** with undamaged ones (upstream PR [#3666](https://github.com/Pumpkin-MC/Pumpkin/pull/3666)).
+- **Taking damage wakes sleeping players** (upstream PR [#3904](https://github.com/Pumpkin-MC/Pumpkin/pull/3904)).
+- **Buttons don't play their click sound twice** for the player pressing them (upstream PR [#3843](https://github.com/Pumpkin-MC/Pumpkin/pull/3843)).
+- **The Wither drops its Nether Star exactly once, on death**, and respects `mob_drops` (upstream PR [#3865](https://github.com/Pumpkin-MC/Pumpkin/pull/3865)).
+
 ### Mob AI
 - **Skeletons pick bow or melee from the weapon they hold**, like vanilla, and switch when it changes. Bogged and Parched shoot more slowly, as in vanilla.
 - **Skeletons hide from the sun, sink in water and target iron golems and baby turtles.** Wither skeletons target piglins.
