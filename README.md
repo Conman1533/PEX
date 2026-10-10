@@ -14,7 +14,9 @@ and customizable experience. It prioritizes performance and player enjoyment whi
 This version of it, PEX (Pumkin Experimental) is a hazardously merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. Use at your peril!
 <div align="center">
 
-![Pumpkin Chunk Loading](./assets/pumpkin-chunk-loading.webp)
+
+
+![Pumpkin Chunk Loading](https://cdn.discordapp.com/attachments/1045035467772538950/1558367058260008980/pexlogo.png?ex=6acb2deb&is=6ac9dc6b&hm=77d5ab0c78099171a0f8a663349a8e4a1111164bc805fdb207c7d7595365aa9f&)
 
 </div>
 
