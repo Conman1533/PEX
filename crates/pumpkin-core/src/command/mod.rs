@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fmt;
+use std::io::Write as _;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -145,8 +146,10 @@ impl fmt::Display for CommandSender {
 impl CommandSender {
     pub fn send_message(&self, text: TextComponent) {
         match self {
-            #[allow(clippy::print_stdout)]
-            Self::Console => println!("{}", text.to_pretty_console()),
+            // `println!` panics when stdout can't be written, for example on a full disk.
+            Self::Console => {
+                let _ = writeln!(std::io::stdout(), "{}", text.to_pretty_console());
+            }
             Self::Player(c) => c.send_system_message(&text),
             Self::CommandBlock(block_entity, _) => {
                 let mut last_output = block_entity

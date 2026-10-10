@@ -557,6 +557,13 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
         format!("./r.{region_x}.{region_z}.mca")
     }
 
+    fn has_unwritten_changes(&self) -> bool {
+        // A held lock means a write is in progress.
+        self.write_action.try_lock().map_or(true, |write_action| {
+            !matches!(*write_action, WriteAction::Pass)
+        })
+    }
+
     async fn write(&self, path: &PathBuf) -> Result<(), std::io::Error> {
         let mut write_action = self.write_action.lock().await;
         match &*write_action {

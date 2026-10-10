@@ -339,7 +339,7 @@ where
             if data.current_day_of_month != now.day() {
                 drop(data);
                 if let Err(e) = self.rotate_log() {
-                    eprintln!("Failed to rotate log: {e}");
+                    let _ = writeln!(io::stderr(), "Failed to rotate log: {e}");
                 }
             }
         }
