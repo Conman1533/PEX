@@ -26,6 +26,8 @@ use super::{
     },
 };
 
+use crate::chunk_system::generation_cache::SurfaceBiomeNeighborhood;
+
 pub mod rule;
 pub mod terrain;
 
@@ -39,7 +41,10 @@ pub struct MaterialRuleContext<'a> {
     pub block_pos_x: i32,
     pub block_pos_y: i32,
     pub block_pos_z: i32,
-    pub biome: &'a Biome,
+    /// Vanilla `SurfaceRules.Context.biome` is a memoized supplier; most blocks below the
+    /// surface never read it, and the fuzzy biome lookup is expensive.
+    biome: Option<&'static Biome>,
+    surface_biomes: Option<&'a SurfaceBiomeNeighborhood>,
     pub run_depth: i32,
     pub secondary_depth: f32,
     packed_chunk_pos: i64,
@@ -97,7 +102,8 @@ impl<'a> MaterialRuleContext<'a> {
             block_pos_x: 0,
             block_pos_y: 0,
             block_pos_z: 0,
-            biome: &Biome::PLAINS,
+            biome: None,
+            surface_biomes: None,
             run_depth: 0,
             secondary_depth: 0.0,
             surface_noise,
@@ -108,6 +114,36 @@ impl<'a> MaterialRuleContext<'a> {
             steep_material_condition: None,
             noise_threshold_samplers: Vec::new(),
         }
+    }
+
+    /// Resolves the biome lazily from `surface_biomes` for the current block position.
+    pub const fn set_surface_biomes(&mut self, surface_biomes: &'a SurfaceBiomeNeighborhood) {
+        self.surface_biomes = Some(surface_biomes);
+    }
+
+    pub const fn set_biome(&mut self, biome: Option<&'static Biome>) {
+        self.biome = biome;
+    }
+
+    fn biome(&mut self, chunk: &ProtoChunk) -> &'static Biome {
+        if let Some(biome) = self.biome {
+            return biome;
+        }
+        let biome = self
+            .surface_biomes
+            .map_or(&Biome::PLAINS, |surface_biomes| {
+                let Some(biome_id) = chunk.get_terrain_gen_biome_id_from_neighborhood(
+                    surface_biomes,
+                    self.block_pos_x,
+                    self.block_pos_y,
+                    self.block_pos_z,
+                ) else {
+                    panic!("surface biome neighborhood must cover fuzzy biome lookup");
+                };
+                Biome::from_id(biome_id).unwrap_or(&Biome::PLAINS)
+            });
+        self.biome = Some(biome);
+        biome
     }
 
     fn sample_run_depth(&self) -> i32 {
@@ -173,7 +209,9 @@ pub fn test_condition(
     surface_height_estimate_sampler: &mut SurfaceHeightEstimateSampler,
 ) -> bool {
     match condition {
-        MaterialCondition::Biome(biome) => BiomeMaterialCondition::test(biome.biome_is, context),
+        MaterialCondition::Biome(biome) => {
+            BiomeMaterialCondition::test(biome.biome_is, context.biome(chunk))
+        }
         MaterialCondition::NoiseThreshold(noise_threshold) => {
             test_noise_threshold(noise_threshold, context)
         }
@@ -183,7 +221,7 @@ pub fn test_condition(
         MaterialCondition::YAbove(above_y) => test_above_y_material(above_y, context),
         MaterialCondition::Water(water) => test_water_material(water, context),
         MaterialCondition::Temperature => {
-            let temperature = context.biome.weather.compute_temperature(
+            let temperature = context.biome(chunk).weather.compute_temperature(
                 context.block_pos_x as f64,
                 context.block_pos_y,
                 context.block_pos_z as f64,
@@ -321,8 +359,8 @@ pub fn estimate_surface_height(
 pub struct BiomeMaterialCondition;
 
 impl BiomeMaterialCondition {
-    pub fn test(biome_is: &[&'static Biome], context: &MaterialRuleContext) -> bool {
-        biome_is.contains(&context.biome)
+    pub fn test(biome_is: &[&'static Biome], biome: &'static Biome) -> bool {
+        biome_is.contains(&biome)
     }
 }
 

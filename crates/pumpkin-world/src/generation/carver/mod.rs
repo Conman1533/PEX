@@ -98,7 +98,7 @@ impl CarvingContext<'_> {
             self.sea_level,
         );
         context.init_horizontal(x, z);
-        context.biome = chunk.get_terrain_gen_biome(x, y, z);
+        context.set_biome(Some(chunk.get_terrain_gen_biome(x, y, z)));
         context.set_steep_material_condition(steep);
         context.init_vertical(1, 1, y, if under_fluid { y + 1 } else { i32::MIN });
 
