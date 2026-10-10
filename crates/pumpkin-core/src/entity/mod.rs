@@ -96,6 +96,7 @@ pub mod spawn_util;
 pub mod synched_entity_data;
 pub mod tnt;
 pub mod r#type;
+pub mod util;
 pub mod vehicle;
 pub mod velocity;
 
