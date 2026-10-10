@@ -172,6 +172,7 @@ bytes = { version = "1.12", default-features = false, features = ["serde", "std"
 # Concurrency/Parallelism and Synchronization
 futures = { version = "0.3", default-features = false, features = ["std"] }
 rayon = { version = "1.12", default-features = false }
+tikv-jemallocator = { version = "0.6", features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
 crossbeam = { version = "0.8", default-features = false, features = ["std"] }
 
 uuid = { version = "1.27", default-features = false, features = ["serde", "v3", "v4", "std"] }
