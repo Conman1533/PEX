@@ -88,6 +88,11 @@ impl ParrotEntity {
 }
 
 impl Mob for ParrotEntity {
+    /// Vanilla `Animal.removeWhenFarAway`: parrots are animals there, unlike in Pumpkin.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        false
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }
