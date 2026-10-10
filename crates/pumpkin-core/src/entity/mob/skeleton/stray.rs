@@ -1,3 +1,5 @@
+use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
 
 use crate::entity::{
@@ -20,5 +22,13 @@ impl StraySkeletonEntity {
 impl Mob for StraySkeletonEntity {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.entity.mob_entity
+    }
+
+    fn mob_read_nbt(&self, nbt: &NbtCompound) {
+        self.entity.mob_read_nbt(nbt);
+    }
+
+    fn on_equip_item(&self, slot: &EquipmentSlot) {
+        self.entity.on_equip_item(slot);
     }
 }
