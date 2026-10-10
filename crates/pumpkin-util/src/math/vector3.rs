@@ -648,12 +648,15 @@ impl<T: Math + Copy + Into<f64>> Vector3<T> {
 }
 
 impl<T: Math + Copy + Into<f64>> Vector3<T> {
-    /// Converts this vector to a `BlockPos` by rounding each component to the nearest integer.
-    ///
-    /// # Returns
-    /// A new `BlockPos` representing the rounded position.
+    /// The block containing this position, like vanilla `BlockPos.containing` (floors each
+    /// component; rounding would pick a neighbouring block past the half-way point).
     pub fn to_block_pos(&self) -> BlockPos {
-        BlockPos(self.to_i32())
+        let (x, y, z): (f64, f64, f64) = (self.x.into(), self.y.into(), self.z.into());
+        BlockPos(Vector3::new(
+            x.floor() as i32,
+            y.floor() as i32,
+            z.floor() as i32,
+        ))
     }
 }
 
