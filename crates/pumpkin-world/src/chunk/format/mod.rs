@@ -312,10 +312,18 @@ impl ChunkData {
                     // short array from disk is dropped instead of stored.
                     block_lights[index] = block_light
                         .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
-                        .map_or(LightContainer::Empty(0), LightContainer::Full);
+                        .map_or(LightContainer::Empty(0), |data| {
+                            let mut light = LightContainer::Full(data);
+                            light.compact();
+                            light
+                        });
                     sky_lights[index] = sky_light
                         .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
-                        .map_or(LightContainer::Empty(0), LightContainer::Full);
+                        .map_or(LightContainer::Empty(0), |data| {
+                            let mut light = LightContainer::Full(data);
+                            light.compact();
+                            light
+                        });
 
                     if let Some(bs_compound) = section_compound.get_compound("block_states") {
                         let data = bs_compound
@@ -474,11 +482,8 @@ impl ChunkData {
     fn internal_to_bytes(&self) -> Bytes {
         use pumpkin_nbt::tag::NbtTag;
 
-        fn extract_light_ref(light: Option<&LightContainer>) -> Option<&[u8]> {
-            match light {
-                Some(LightContainer::Full(data)) => Some(data.as_ref()),
-                _ => None,
-            }
+        fn extract_light_ref(light: Option<&LightContainer>) -> Option<std::borrow::Cow<'_, [u8]>> {
+            light.and_then(LightContainer::bytes)
         }
 
         let is_light_correct = self
@@ -975,7 +980,31 @@ impl LightContainer {
 
     #[inline]
     pub fn fill(&mut self, value: u8) {
-        *self = Self::new_filled(value);
+        *self = Self::new_empty(value);
+    }
+
+    /// Stores a section whose nibbles all hold the same value as that value alone. Sky light
+    /// above the terrain is uniformly 15, so this drops most of a chunk's light arrays.
+    pub fn compact(&mut self) {
+        if let Self::Full(data) = self {
+            let first = data[0];
+            if first >> 4 == first & 0x0F && data.iter().all(|&b| b == first) {
+                *self = Self::Empty(first & 0x0F);
+            }
+        }
+    }
+
+    /// The nibble array as sent to clients and saved to disk, or `None` for an all-zero section.
+    #[must_use]
+    pub fn bytes(&self) -> Option<std::borrow::Cow<'_, [u8]>> {
+        match self {
+            Self::Full(data) => Some(std::borrow::Cow::Borrowed(data)),
+            Self::Empty(0) => None,
+            Self::Empty(value) => Some(std::borrow::Cow::Owned(vec![
+                *value << 4 | *value;
+                Self::ARRAY_SIZE
+            ])),
+        }
     }
 }
 
@@ -1213,5 +1242,24 @@ mod tests {
                 .unwrap()
                 .id
         );
+    }
+
+    #[test]
+    fn compacted_light_still_serializes_its_value() {
+        let mut sky = LightContainer::new_filled(15);
+        sky.compact();
+        assert!(matches!(sky, LightContainer::Empty(15)));
+        assert_eq!(
+            sky.bytes().as_deref(),
+            Some(&[0xFF; LightContainer::ARRAY_SIZE][..])
+        );
+
+        let mut mixed = LightContainer::new_filled(15);
+        mixed.set(3, 4, 5, 7);
+        mixed.compact();
+        assert!(matches!(mixed, LightContainer::Full(_)));
+        assert_eq!(mixed.get(3, 4, 5), 7);
+
+        assert!(LightContainer::new_empty(0).bytes().is_none());
     }
 }

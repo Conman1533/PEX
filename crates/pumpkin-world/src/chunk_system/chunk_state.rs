@@ -303,7 +303,14 @@ impl Chunk {
         // Move the light data instead of cloning it
         // By taking ownership of proto_chunk, we can move the light data directly
         // This prevents keeping duplicate lighting data in memory
-        let light_data = proto_chunk.light;
+        let mut light_data = proto_chunk.light;
+        for section in light_data
+            .sky_light
+            .iter_mut()
+            .chain(light_data.block_light.iter_mut())
+        {
+            section.compact();
+        }
 
         // Only mark lit if past the lighting stage, and the lighting config is "default" ("full" and "dark" modes skip proper lighting)
         let is_lit = proto_chunk.stage >= StagedChunkEnum::Lighting

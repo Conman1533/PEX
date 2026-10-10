@@ -184,16 +184,16 @@ pub fn light_data_from_chunk(
         for section_index in 0..num_sections {
             let bit_index = section_index + 1;
 
-            if let LightContainer::Full(data) = &light_engine.sky_light[section_index] {
+            if let Some(data) = light_engine.sky_light[section_index].bytes() {
                 sky_light_mask |= 1 << bit_index;
-                sky_light_arrays.push(data.to_vec());
+                sky_light_arrays.push(data.into_owned());
             } else {
                 sky_light_empty_mask |= 1 << bit_index;
             }
 
-            if let LightContainer::Full(data) = &light_engine.block_light[section_index] {
+            if let Some(data) = light_engine.block_light[section_index].bytes() {
                 block_light_mask |= 1 << bit_index;
-                block_light_arrays.push(data.to_vec());
+                block_light_arrays.push(data.into_owned());
             } else {
                 block_light_empty_mask |= 1 << bit_index;
             }
