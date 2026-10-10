@@ -502,18 +502,15 @@ pub fn push_entities_up(
     }
 }
 
-/// Returns the block name whose loot table should be used.
-/// Some blocks (e.g. wall torches) share the loot table of their
-/// non-wall counterpart but do not have their own loot table file.
-#[must_use]
-pub fn loot_table_name(block: &Block) -> &str {
-    match block.name {
-        "wall_torch" => "torch",
-        "soul_wall_torch" => "soul_torch",
-        "copper_wall_torch" => "copper_torch",
-        "redstone_wall_torch" => "redstone_torch",
-        _ => block.name,
-    }
+/// Vanilla wall variants (`wall_torch`, `red_wall_banner`, `oak_wall_sign`, ...) are built with
+/// `dropsLike` and have no loot table of their own; they drop like the standing block.
+pub(crate) fn standing_variant(block: &Block) -> Option<&'static Block> {
+    let i = block.name.find("wall_")?;
+    Block::from_name(&format!(
+        "{}{}",
+        &block.name[..i],
+        &block.name[i + "wall_".len()..]
+    ))
 }
 
 pub fn drop_loot(
@@ -523,8 +520,15 @@ pub fn drop_loot(
     experience: bool,
     params: &LootContextParameters,
 ) {
-    let key = format!("minecraft:blocks/{}", loot_table_name(block));
-    if let Some(loot_table) = world.get_loot_table(&key) {
+    let mut loot_block = block;
+    let mut loot_table = world.get_loot_table(&format!("minecraft:blocks/{}", block.name));
+    if loot_table.is_none()
+        && let Some(standing) = standing_variant(block)
+    {
+        loot_block = standing;
+        loot_table = world.get_loot_table(&format!("minecraft:blocks/{}", standing.name));
+    }
+    if let Some(loot_table) = loot_table {
         let seed: i64 = rand::random();
         let items = crate::world::loot::generate_loot_from_handle(&loot_table, seed, params);
         if !items.is_empty() {
@@ -542,7 +546,7 @@ pub fn drop_loot(
                 let block_entity = world.get_block_entity(pos);
                 for mut stack in event.items {
                     if let Some(block_entity) = &block_entity
-                        && Block::from_item_id(stack.item.id) == Some(block)
+                        && Block::from_item_id(stack.item.id) == Some(loot_block)
                     {
                         block_entity.collect_item_components(&mut stack);
                     }
