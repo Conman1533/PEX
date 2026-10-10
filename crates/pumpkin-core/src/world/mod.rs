@@ -4375,18 +4375,6 @@ impl World {
             .collect()
     }
 
-    /// Entities and players whose bounding box intersects `aabb`. Players are kept apart from
-    /// `entities`, so anything that should be able to hit a player needs this one.
-    pub fn get_entities_and_players_at_box(&self, aabb: &BoundingBox) -> Vec<Arc<dyn EntityBase>> {
-        let mut found = self.get_entities_at_box(aabb);
-        found.extend(
-            self.get_players_at_box(aabb)
-                .into_iter()
-                .map(|player| player as Arc<dyn EntityBase>),
-        );
-        found
-    }
-
     // Gets all Player entities at a Box
     pub fn get_players_at_box(&self, aabb: &BoundingBox) -> Vec<Arc<Player>> {
         let players_guard = self.players.load();
