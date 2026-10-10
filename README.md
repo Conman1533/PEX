@@ -46,6 +46,9 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Hoppers pick up whole dropped stacks** at once from vanilla's pickup area, without duplicating items (upstream PR [#3804](https://github.com/Pumpkin-MC/Pumpkin/pull/3804)).
 - **Villager trades show their real stock**: out-of-stock trades display correctly, and a trading deadlock is fixed (upstream PR [#3765](https://github.com/Pumpkin-MC/Pumpkin/pull/3765)).
 - **The recipe book can't duplicate items**: auto-fill only places what your inventory can actually supply (upstream PR [#3922](https://github.com/Pumpkin-MC/Pumpkin/pull/3922)).
+- **Leashes are saved and leashed mobs don't despawn**: leashed animals stay put when you walk away, survive restarts, and knots can be broken (upstream PR [#3800](https://github.com/Pumpkin-MC/Pumpkin/pull/3800)).
+- **Bundles behave like vanilla**: hold use to empty them, with correct clicking and syncing (upstream PR [#3896](https://github.com/Pumpkin-MC/Pumpkin/pull/3896)).
+- **Scaffolding places like vanilla**, including extending from existing scaffolding (upstream PR [#3810](https://github.com/Pumpkin-MC/Pumpkin/pull/3810)).
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
 - **Wall torches drop torches when broken** (upstream PR [#3890](https://github.com/Pumpkin-MC/Pumpkin/pull/3890)).
