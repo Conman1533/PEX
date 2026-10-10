@@ -49,6 +49,7 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Leashes are saved and leashed mobs don't despawn**: leashed animals stay put when you walk away, survive restarts, and knots can be broken (upstream PR [#3800](https://github.com/Pumpkin-MC/Pumpkin/pull/3800)).
 - **Bundles behave like vanilla**: hold use to empty them, with correct clicking and syncing (upstream PR [#3896](https://github.com/Pumpkin-MC/Pumpkin/pull/3896)).
 - **Scaffolding places like vanilla**, including extending from existing scaffolding (upstream PR [#3810](https://github.com/Pumpkin-MC/Pumpkin/pull/3810)).
+- **Observers and scheduled ticks match vanilla**: observers reset correctly after clones and structures, scheduled ticks fire on the right tick (a delay of N used to run one tick late, throwing off redstone timing), and ticks saved with a chunk resume when it loads (upstream PR [#3863](https://github.com/Pumpkin-MC/Pumpkin/pull/3863)).
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
 - **Banners can be placed on walls** (upstream PR [#3951](https://github.com/Pumpkin-MC/Pumpkin/pull/3951)), and **every wall variant drops its item**: wall torches, banners, signs and heads all drop like their standing block, as vanilla's `dropsLike` does.
