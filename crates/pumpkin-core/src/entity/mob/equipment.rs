@@ -855,6 +855,11 @@ pub fn equip_mob_on_spawn(mob: &dyn EntityBase, world: &Arc<crate::world::World>
     drop(drop_chances);
 
     living.send_equipment_changes(&equipment_changes);
+    if let Some(mob) = mob.get_mob() {
+        for (slot, _) in &equipment_changes {
+            mob.on_equip_item(slot);
+        }
+    }
 }
 
 #[must_use]
@@ -1058,6 +1063,7 @@ pub fn equip_item_if_possible(mob: &dyn Mob, stack: ItemStack) -> ItemStack {
     let mut stack = stack;
     let to_equip = limit_for_slot(&slot, &mut stack);
     mob_entity.set_item_slot_and_drop_when_killed(&slot, to_equip.clone());
+    mob.on_equip_item(&slot);
     mob_entity
         .persistence_required
         .store(true, std::sync::atomic::Ordering::Relaxed);

@@ -1137,6 +1137,10 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn mob_read_nbt(&self, _nbt: &NbtCompound) {}
 
+    /// Vanilla `Mob.onEquipItem`. Must not be called from inside the AI tick, which holds
+    /// the goal selectors outside the mob.
+    fn on_equip_item(&self, _slot: &EquipmentSlot) {}
+
     /// Drops a target the mob is not allowed to attack, such as a creative player.
     fn as_valid_target(&self, target: Option<Arc<dyn EntityBase>>) -> Option<Arc<dyn EntityBase>> {
         let target = target?;
