@@ -827,30 +827,17 @@ impl EntityBase for FishingBobberEntity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::block::registry::BlockRegistry;
-    use crate::world::LevelData;
-    use pumpkin_config::world::LevelConfig;
-    use pumpkin_data::dimension::Dimension;
-    use pumpkin_util::world_seed::Seed;
-    use pumpkin_world::dimension::into_level;
-    use std::sync::Weak;
+    use crate::world::test_world;
 
-    /// A bare world with no loaded chunks, enough for the hook's entity queries.
-    ///
     /// `World::players` is `Vec<Arc<Player>>`, and the test harness has no way to build a
     /// `Player` (`Player::new` needs a live server and connection stack), so the tests below
-    /// stand in with player-type `Entity` values. `get_all_at_box` queries players the same
-    /// way; the real list is covered by the in-game check.
-    fn test_world() -> Arc<World> {
-        let path = tempfile::tempdir().expect("temp dir").keep();
-        let level = into_level(Dimension::OVERWORLD, &LevelConfig::default(), path, 0);
-        Arc::new(World::load(
-            level,
-            Arc::new(arc_swap::ArcSwap::from_pointee(LevelData::default(Seed(0)))),
-            Dimension::OVERWORLD,
-            Arc::new(BlockRegistry::default()),
-            Weak::new(),
-        ))
+    /// stand in with player-type `Entity` values filed like other entities. `get_all_at_box`
+    /// queries players the same way; the real list is covered by the in-game check.
+    fn add_entities(world: &World, entities: Vec<Arc<dyn EntityBase>>) {
+        for entity in &entities {
+            world.entity_sections.add(entity);
+        }
+        world.entities.store(Arc::new(entities));
     }
 
     fn bobber_for(
@@ -964,9 +951,7 @@ mod tests {
             Vector3::new(0.0, 64.0, 0.0),
             &EntityType::PLAYER,
         ));
-        world
-            .entities
-            .store(Arc::new(vec![owner.clone() as Arc<dyn EntityBase>]));
+        add_entities(&world, vec![owner.clone() as Arc<dyn EntityBase>]);
 
         // The hook leaves the eye 0.3 blocks in front and is thrown back over the owner.
         let bobber = bobber_for(&world, Vector3::new(0.0, 65.62, -0.3), &owner);
@@ -1000,10 +985,13 @@ mod tests {
             Vector3::new(0.0, 64.0, 1.0),
             &EntityType::PLAYER,
         ));
-        world.entities.store(Arc::new(vec![
-            owner.clone() as Arc<dyn EntityBase>,
-            other.clone() as Arc<dyn EntityBase>,
-        ]));
+        add_entities(
+            &world,
+            vec![
+                owner.clone() as Arc<dyn EntityBase>,
+                other.clone() as Arc<dyn EntityBase>,
+            ],
+        );
 
         let bobber = bobber_for(&world, Vector3::new(0.0, 65.62, 0.0), &owner);
         let mut velocity = Vector3::new(0.0, 0.0, 1.0);
@@ -1033,10 +1021,13 @@ mod tests {
             Vector3::new(0.0, 64.0, 1.0),
             &EntityType::PLAYER,
         ));
-        world.entities.store(Arc::new(vec![
-            owner.clone() as Arc<dyn EntityBase>,
-            hooked.clone() as Arc<dyn EntityBase>,
-        ]));
+        add_entities(
+            &world,
+            vec![
+                owner.clone() as Arc<dyn EntityBase>,
+                hooked.clone() as Arc<dyn EntityBase>,
+            ],
+        );
 
         let bobber = bobber_for(&world, Vector3::new(0.0, 65.62, 0.0), &owner);
         let mut velocity = Vector3::new(0.0, 0.0, 1.0);
