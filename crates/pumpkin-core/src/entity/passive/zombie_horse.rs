@@ -121,6 +121,11 @@ impl Animal for ZombieHorseEntity {
 }
 
 impl Mob for ZombieHorseEntity {
+    /// Vanilla `ZombieHorse.removeWhenFarAway`: despawns although it is an animal.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        true
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

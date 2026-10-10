@@ -290,6 +290,11 @@ impl TamableAnimal for CatEntity {
 }
 
 impl Mob for CatEntity {
+    /// Vanilla `Cat.removeWhenFarAway`, without the 2400 tick minimum age Pumpkin does not track.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        !self.is_tame()
+    }
+
     fn as_custom_sound(&self) -> Option<&dyn CustomSound> {
         Some(self)
     }

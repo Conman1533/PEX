@@ -138,6 +138,11 @@ impl NeutralMob for IronGolemEntity {
 }
 
 impl Mob for IronGolemEntity {
+    /// Vanilla `AbstractGolem.removeWhenFarAway`.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        false
+    }
+
     fn can_attack(&self, target: &dyn EntityBase) -> bool {
         let target_type = target.get_entity().entity_type;
         if self.is_player_created() && target_type == &EntityType::PLAYER {

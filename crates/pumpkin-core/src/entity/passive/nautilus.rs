@@ -204,6 +204,11 @@ impl CustomSound for NautilusEntity {
 }
 
 impl Mob for NautilusEntity {
+    /// Vanilla `AbstractNautilus.removeWhenFarAway`: despawns although it is an animal.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        true
+    }
+
     fn as_custom_sound(&self) -> Option<&dyn crate::entity::custom_sound::CustomSound> {
         Some(self)
     }

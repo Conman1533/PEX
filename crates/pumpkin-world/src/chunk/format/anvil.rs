@@ -114,6 +114,9 @@ pub struct AnvilChunkFile<S: SingleChunkDataSerializer> {
     chunks_data: [Option<AnvilChunkMetadata>; CHUNK_COUNT],
     end_sector: u32,
     write_action: Mutex<WriteAction>,
+    /// Set when a full rewrite was queued. [`Self::write_all`] packs the chunks in index order,
+    /// so the cached sector offsets no longer describe the file once it has run.
+    packed_layout_pending: bool,
 
     _dummy: PhantomData<S>,
 }
@@ -454,6 +457,26 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
     }
 
     /// Write entire file, disregarding saved offsets
+    /// Sets the cached offsets to the layout [`Self::write_all`] writes: chunks packed in index
+    /// order right after the two header sectors.
+    fn assign_packed_offsets(&mut self) {
+        let mut current_sector: u32 = 2;
+        for chunk in self.chunks_data.iter_mut().flatten() {
+            chunk.file_sector_offset = current_sector;
+            current_sector += chunk.serialized_data.sector_count();
+        }
+        self.end_sector = current_sector;
+    }
+
+    /// Once a queued full rewrite has been written, the cached offsets describe the old file;
+    /// writing in place against them overwrote the location table and other chunks.
+    fn sync_offsets_after_rewrite(&mut self) {
+        if self.packed_layout_pending && !matches!(self.write_action.get_mut(), WriteAction::All) {
+            self.assign_packed_offsets();
+            self.packed_layout_pending = false;
+        }
+    }
+
     async fn write_all(&self, path: &Path) -> Result<(), std::io::Error> {
         let temp_path = path.with_extension("tmp");
         trace!("Writing tmp file to disk: {temp_path:?}");
@@ -505,6 +528,7 @@ impl<S: SingleChunkDataSerializer> Default for AnvilChunkFile<S> {
         Self {
             chunks_data: [const { None }; CHUNK_COUNT],
             write_action: Mutex::new(WriteAction::Pass),
+            packed_layout_pending: false,
             // Two sectors for offset + timestamp
             end_sector: 2,
             _dummy: PhantomData,
@@ -643,6 +667,8 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
             ChunkWritingError::IoError(std::io::Error::other("chunk serialization task failed"))
         })??;
 
+        self.sync_offsets_after_rewrite();
+
         let mut write_action = self.write_action.lock().await;
         if !chunk_config.write_in_place {
             *write_action = WriteAction::All;
@@ -727,7 +753,14 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
                                 })
                                 .collect::<Vec<_>>();
 
-                            if chunks_to_shift.last().is_none_or(|chunk| chunk.0 == index) {
+                            // The scan also ends when it runs out of chunks, so the last one
+                            // only fits the old slot if its size really matches.
+                            let found_swap = chunks_to_shift.last().is_some_and(|chunk| {
+                                chunk.0 != index
+                                    && chunk.1.serialized_data.sector_count()
+                                        == old_chunk.serialized_data.sector_count()
+                            });
+                            if !found_swap {
                                 trace!(
                                     "Unable to find a chunk to swap with; falling back to serialize all",
                                 );
@@ -792,6 +825,10 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
                     }
                 }
             }
+        }
+
+        if matches!(*write_action, WriteAction::All) {
+            self.packed_layout_pending = true;
         }
 
         Ok(())
@@ -1352,7 +1389,7 @@ mod tests {
  */
 #[cfg(test)]
 mod tests {
-    use super::{AnvilChunkFile, Compression, CompressionError, SECTOR_BYTES};
+    use super::{AnvilChunkFile, Compression, CompressionError, SECTOR_BYTES, WriteAction};
     use crate::chunk::ChunkData;
     use crate::chunk::io::ChunkSerializer;
     use bytes::{BufMut, Bytes, BytesMut};
@@ -1431,5 +1468,43 @@ mod tests {
             Compression::Custom.decompress_data(b"chunk data"),
             Err(CompressionError::UnknownCompression)
         ));
+    }
+
+    #[tokio::test]
+    async fn offsets_match_the_file_after_a_full_rewrite() {
+        // Chunk 0 is stored after chunk 1; the full rewrite packs them in index order.
+        let mut buf = BytesMut::with_capacity(SECTOR_BYTES * 4);
+        buf.put_u32((3 << 8) | 1);
+        buf.put_u32((2 << 8) | 1);
+        buf.put_bytes(0, SECTOR_BYTES - 8);
+        buf.put_bytes(0, SECTOR_BYTES);
+        for _ in 0..2 {
+            buf.put_u32(2);
+            buf.put_u8(3);
+            buf.put_u8(0);
+            buf.put_bytes(0, SECTOR_BYTES - 6);
+        }
+        let mut file = AnvilChunkFile::<ChunkData>::read(buf.freeze()).expect("valid region");
+        *file.write_action.get_mut() = WriteAction::All;
+        file.packed_layout_pending = true;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("r.0.0.mca");
+        file.write(&path).await.expect("full rewrite");
+        file.sync_offsets_after_rewrite();
+
+        let written = std::fs::read(&path).expect("region on disk");
+        let on_disk =
+            AnvilChunkFile::<ChunkData>::read(Bytes::from(written)).expect("valid region");
+        for index in 0..2 {
+            let cached = file.chunks_data[index]
+                .as_ref()
+                .map(|c| c.file_sector_offset);
+            let stored = on_disk.chunks_data[index]
+                .as_ref()
+                .map(|c| c.file_sector_offset);
+            assert_eq!(cached, stored, "chunk {index}");
+        }
+        assert_eq!(file.end_sector, on_disk.end_sector);
     }
 }

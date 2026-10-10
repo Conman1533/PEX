@@ -309,6 +309,11 @@ impl ShulkerEntity {
 }
 
 impl Mob for ShulkerEntity {
+    /// Vanilla `AbstractGolem.removeWhenFarAway`.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        false
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_byte("AttachFace", self.attach_face.load(Ordering::Relaxed) as i8);
         nbt.put_byte("PeekAmount", self.peek_amount.load(Ordering::Relaxed) as i8);

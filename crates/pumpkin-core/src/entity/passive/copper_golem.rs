@@ -197,6 +197,11 @@ impl CustomSound for CopperGolemEntity {
 }
 
 impl Mob for CopperGolemEntity {
+    /// Vanilla `AbstractGolem.removeWhenFarAway`.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        false
+    }
+
     fn as_custom_sound(&self) -> Option<&dyn crate::entity::custom_sound::CustomSound> {
         Some(self)
     }

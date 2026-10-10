@@ -233,6 +233,11 @@ impl Animal for AxolotlEntity {
 }
 
 impl Mob for AxolotlEntity {
+    /// Vanilla `Axolotl.removeWhenFarAway`; named axolotls are already persistent.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        !self.is_from_bucket()
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
