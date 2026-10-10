@@ -55,6 +55,7 @@ mod connection_cache;
 pub(crate) mod debug_profiler;
 pub mod enchantment;
 mod key_store;
+pub mod memory;
 pub mod metrics;
 pub mod recipe;
 pub mod scheduler;
@@ -279,6 +280,7 @@ impl Server {
             management_settings,
         ));
 
+        memory::spawn_trimmer();
         let server = Self {
             basic_config,
             advanced_config,
