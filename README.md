@@ -9,7 +9,9 @@
 </div>
 
 [Pumpkin](https://pumpkinmc.org/) is a Minecraft server built entirely in Rust, offering a fast, efficient,
-and customizable experience. It prioritizes performance and player enjoyment while adhering to the core mechanics of the game. This version of it, PEX (Pumkin Experimental) is a hazardously merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. Use at your peril!
+and customizable experience. It prioritizes performance and player enjoyment while adhering to the core mechanics of the game. 
+
+This version of it, PEX (Pumkin Experimental) is a hazardously merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. Use at your peril!
 <div align="center">
 
 ![Pumpkin Chunk Loading](./assets/pumpkin-chunk-loading.webp)
