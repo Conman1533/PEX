@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use pumpkin_protocol::VarInt;
+
 use pumpkin_data::{
     Block, BlockId, BlockStateId,
     effect::StatusEffect,
@@ -130,13 +132,7 @@ pub fn try_changing_state(world: &Arc<World>, current_block: &Block, pos: &Block
 
     world.set_block_state(pos, new_block.default_state.id, BlockFlags::NOTIFY_ALL);
 
-    world.spawn_particle(
-        pos.to_centered_f64(),
-        Vector3::new(0.0, 0.0, 0.0),
-        0.0,
-        1,
-        Particle::Trail,
-    );
+    spawn_transform_particle(world, pos, !is_open);
 
     let mut rng = rand::rng();
     for dx in -EYEBLOSSOM_XZ_RANGE..=EYEBLOSSOM_XZ_RANGE {
@@ -169,4 +165,43 @@ pub fn try_changing_state(world: &Arc<World>, current_block: &Block, pos: &Block
     }
 
     true
+}
+
+/// Vanilla `EyeblossomBlock.Type.spawnTransformParticle`. A trail particle needs its options;
+/// sending it without them made the client fail to decode the packet and disconnect.
+fn spawn_transform_particle(world: &World, pos: &BlockPos, opening: bool) {
+    const OPEN_PARTICLE_COLOR: i32 = 16_545_810;
+    const CLOSED_PARTICLE_COLOR: i32 = 6_250_335;
+
+    let mut rng = rand::rng();
+    let start = pos.to_centered_f64();
+    let lifetime = 0.5 + rng.random::<f64>();
+    let velocity = Vector3::new(
+        rng.random::<f64>() - 0.5,
+        rng.random::<f64>() + 1.0,
+        rng.random::<f64>() - 0.5,
+    );
+    let target = start + velocity * lifetime;
+    let color = if opening {
+        OPEN_PARTICLE_COLOR
+    } else {
+        CLOSED_PARTICLE_COLOR
+    };
+
+    // TrailParticleOption: target as three doubles, color as an int, duration as a var int.
+    let mut data = Vec::with_capacity(29);
+    for v in [target.x, target.y, target.z] {
+        data.extend_from_slice(&v.to_be_bytes());
+    }
+    data.extend_from_slice(&color.to_be_bytes());
+    let _ = VarInt((20.0 * lifetime) as i32).encode(&mut data);
+
+    world.spawn_particles_with_data(
+        Particle::Trail,
+        start,
+        1,
+        Vector3::new(0.0, 0.0, 0.0),
+        0.0,
+        &data,
+    );
 }
