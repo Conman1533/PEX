@@ -125,6 +125,10 @@ impl<'a> MaterialRuleContext<'a> {
         self.biome = biome;
     }
 
+    #[expect(
+        clippy::panic,
+        reason = "surface scheduling guarantees a complete 3x3 biome neighborhood"
+    )]
     fn biome(&mut self, chunk: &ProtoChunk) -> &'static Biome {
         if let Some(biome) = self.biome {
             return biome;
