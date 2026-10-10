@@ -171,6 +171,7 @@ pub mod bossbar;
 pub mod custom_bossbar;
 pub mod dragon_fight;
 pub mod end_podium;
+pub mod entity_sections;
 pub mod entity_tracker;
 pub mod environment;
 pub mod natural_spawner;
@@ -302,6 +303,8 @@ pub struct World {
     pub custom_block_entity_data: DashMap<BlockPos, NbtCompound>,
     /// Entity tracker responsible for tracking entity visibility and sending delta/status packets to watchers.
     pub entity_tracker: entity_tracker::EntityTracker,
+    /// The entities of `entities` by chunk section, for area queries.
+    pub entity_sections: entity_sections::EntitySectionStorage,
 }
 
 #[derive(Clone, Copy)]
@@ -435,6 +438,7 @@ impl World {
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
             entity_tracker: entity_tracker::EntityTracker::new(),
+            entity_sections: entity_sections::EntitySectionStorage::default(),
         }
     }
 
@@ -4362,29 +4366,20 @@ impl World {
 
     // Gets all entities at a Box
     pub fn get_all_at_box(&self, aabb: &BoundingBox) -> Vec<Arc<dyn EntityBase>> {
-        let entities_guard = self.entities.load();
-        let players_guard = self.players.load();
-
-        entities_guard
-            .iter()
-            .map(|e| e.clone() as Arc<dyn EntityBase>)
-            .chain(
-                players_guard
-                    .iter()
-                    .map(|p| p.clone() as Arc<dyn EntityBase>),
-            )
-            .filter(|entity| entity.get_entity().bounding_box.load().intersects(aabb))
-            .collect()
+        let mut entities = self.get_entities_at_box(aabb);
+        entities.extend(
+            self.players
+                .load()
+                .iter()
+                .filter(|player| player.get_entity().bounding_box.load().intersects(aabb))
+                .map(|p| p.clone() as Arc<dyn EntityBase>),
+        );
+        entities
     }
 
     // Gets all non Player entities at a Box
     pub fn get_entities_at_box(&self, aabb: &BoundingBox) -> Vec<Arc<dyn EntityBase>> {
-        self.entities
-            .load()
-            .iter()
-            .filter(|entity| entity.get_entity().bounding_box.load().intersects(aabb))
-            .cloned()
-            .collect()
+        self.entity_sections.get_entities(aabb)
     }
 
     // Gets all Player entities at a Box
@@ -4486,16 +4481,10 @@ impl World {
         pos: Vector3<f64>,
         radius: f64,
     ) -> HashMap<uuid::Uuid, Arc<dyn EntityBase>> {
-        let radius_squared = radius.powi(2);
-
-        self.entities
-            .load()
-            .iter()
-            .filter_map(|entity| {
-                let entity_pos = entity.get_entity().pos.load();
-                (entity_pos.squared_distance_to_vec(&pos) <= radius_squared)
-                    .then(|| (entity.get_entity().entity_uuid, entity.clone()))
-            })
+        self.entity_sections
+            .get_entities_near(pos, radius)
+            .into_iter()
+            .map(|entity| (entity.get_entity().entity_uuid, entity))
             .collect()
     }
 
@@ -4820,6 +4809,7 @@ impl World {
         let _base_entity = entity.get_entity();
         self.entity_tracker.add_entity(&entity, self);
         self.spawn_state.load().add_entity(self, entity.as_ref());
+        self.entity_sections.add(&entity);
 
         self.entities.rcu(|current_entities| {
             let mut new_entities = (**current_entities).clone();
@@ -4911,6 +4901,7 @@ impl World {
         // serialized at once (which would double it on the next reload).
         self.spawn_state.load().add_entity(self, entity.as_ref());
         self.entity_tracker.add_entity(&entity, self);
+        self.entity_sections.add(&entity);
 
         self.entities.rcu(|current_entities| {
             let mut new_entities = (**current_entities).clone();
@@ -4933,6 +4924,7 @@ impl World {
 
         self.spawn_state.load().remove_entity(self, entity);
         self.entity_tracker.remove_entity(entity, self);
+        self.entity_sections.remove(base_entity);
         self.entities.rcu(|current_entities| {
             let mut new_entities = (**current_entities).clone();
             new_entities.retain(|e| e.get_entity().entity_uuid != base_entity.entity_uuid);
@@ -4970,6 +4962,7 @@ impl World {
             .await;
 
         for entity in entities_to_remove {
+            self.entity_sections.remove(entity.get_entity());
             self.entity_tracker.remove_entity(entity.as_ref(), self);
             self.spawn_state.load().remove_entity(self, entity.as_ref());
         }
@@ -7464,6 +7457,27 @@ fn merge_entity_records(data: &mut Vec<NbtCompound>, live: bool, fresh: Vec<NbtC
         }
         data.push(record);
     }
+}
+
+/// A bare world with no loaded chunks, enough for entity queries.
+#[cfg(test)]
+pub(crate) fn test_world() -> Arc<World> {
+    let path = tempfile::tempdir().expect("temp dir").keep();
+    let level = pumpkin_world::dimension::into_level(
+        Dimension::OVERWORLD,
+        &pumpkin_config::world::LevelConfig::default(),
+        path,
+        0,
+    );
+    Arc::new(World::load(
+        level,
+        Arc::new(ArcSwap::from_pointee(LevelData::default(
+            pumpkin_util::world_seed::Seed(0),
+        ))),
+        Dimension::OVERWORLD,
+        Arc::new(crate::block::registry::BlockRegistry::default()),
+        Weak::new(),
+    ))
 }
 
 #[cfg(test)]

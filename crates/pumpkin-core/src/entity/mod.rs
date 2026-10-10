@@ -880,6 +880,8 @@ pub struct Entity {
     pub last_sent_velocity: AtomicCell<Vector3<f64>>,
     /// Persistent custom data container for plugins
     pub custom_data: std::sync::Mutex<NbtCompound>,
+    /// The section this entity is filed under in its world's entity section storage.
+    pub entity_section: std::sync::Mutex<Option<Vector3<i32>>>,
 }
 
 impl Entity {
@@ -1008,6 +1010,7 @@ impl Entity {
             last_sent_pos: AtomicCell::new(position),
             last_sent_velocity: AtomicCell::new(Vector3::default()),
             custom_data: std::sync::Mutex::new(NbtCompound::new()),
+            entity_section: std::sync::Mutex::new(None),
         }
     }
 
@@ -1221,6 +1224,7 @@ impl Entity {
                 self.block_pos.store(new_bp);
 
                 let world = self.world.load();
+                world.entity_sections.on_move(self);
                 let biome = world.level.get_rough_biome(&new_bp);
                 self.current_biome.store(Arc::new(biome));
                 self.last_biome_update_pos.store(new_bp);
