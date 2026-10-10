@@ -10,6 +10,7 @@ use crate::{
         io::{
             Dirtiable, FileIO, LoadedData,
             file_manager::{ChunkFileManager, LevelFileIO},
+            log_save_failure,
         },
         palette::has_random_ticking_fluid,
     },
@@ -36,7 +37,7 @@ use std::{
 };
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, info, trace, warn};
 // use tokio::runtime::Handle;
 use tokio::{
     select,
@@ -863,7 +864,7 @@ impl Level {
             .save_chunks(&level_folder, chunks_to_write)
             .await
         {
-            error!("Failed writing Chunk to disk {error}");
+            log_save_failure(format_args!("Failed writing Chunk to disk {error}"));
         }
     }
 
@@ -880,7 +881,7 @@ impl Level {
             .save_chunks(&level_folder, chunks_to_write)
             .await
         {
-            error!("Failed writing Chunk to disk {error}");
+            log_save_failure(format_args!("Failed writing Chunk to disk {error}"));
         }
     }
 

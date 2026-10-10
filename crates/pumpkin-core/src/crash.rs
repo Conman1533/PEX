@@ -2,6 +2,7 @@ use std::{
     backtrace::{Backtrace, BacktraceStatus},
     fmt::{Display, Write as _},
     fs::{File, create_dir_all},
+    io::Write as _,
     panic::{Location as PanicLocation, PanicHookInfo},
     path::{Path, PathBuf},
     thread::{self, Thread},
@@ -152,7 +153,9 @@ impl CrashReport {
                 );
 
                 if self.captured_backtrace.status() == BacktraceStatus::Captured {
-                    eprintln!(
+                    // A failed write must not panic again inside the panic hook.
+                    let _ = writeln!(
+                        std::io::stderr(),
                         "{}\n{}",
                         RED.console_color("Backtrace:"),
                         self.captured_backtrace

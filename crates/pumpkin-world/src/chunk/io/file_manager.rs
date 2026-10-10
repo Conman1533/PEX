@@ -17,7 +17,7 @@ use crate::{
     level::LevelFolder,
 };
 
-use super::{ChunkSerializer, FileIO, LoadedData, run_blocking};
+use super::{ChunkSerializer, FileIO, LoadedData, log_save_failure, run_blocking};
 
 /// A simple implementation of the `ChunkSerializer` trait that loads and saves data
 /// to disk using parallelism and a lazy-loading cache keyed by file path.
@@ -76,10 +76,13 @@ impl<S: ChunkSerializer<WriteBackend = PathBuf> + 'static> ChunkSerializerLazyLo
         if Arc::strong_count(loader) > 1 {
             return false;
         }
-        loader
-            .internal
-            .get()
-            .is_none_or(|arc| Arc::strong_count(arc) == 1)
+        // Changes that failed to write live only here; dropping them would lose those chunks.
+        loader.internal.get().is_none_or(|arc| {
+            Arc::strong_count(arc) == 1
+                && arc
+                    .try_read()
+                    .is_ok_and(|serializer| !serializer.has_unwritten_changes())
+        })
     }
 
     /// Returns the serializer, initialising it from disk on the first call.
@@ -431,7 +434,17 @@ where
                 // Acquiring + immediately dropping the write-lock acts as a
                 // barrier: it can only succeed once all current lock holders
                 // have released their guards.
-                let _guard = serializer_arc.write().await;
+                let guard = serializer_arc.write().await;
+                // Retry regions whose last flush failed, so a full disk that has been cleared
+                // since doesn't lose them at shutdown.
+                if guard.has_unwritten_changes()
+                    && let Err(err) = guard.write(&loader.path).await
+                {
+                    log_save_failure(format_args!(
+                        "Failed to write {} at shutdown: {err}",
+                        loader.path.display()
+                    ));
+                }
             }
         });
 

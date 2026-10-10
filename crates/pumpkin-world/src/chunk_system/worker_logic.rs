@@ -4,7 +4,7 @@ use super::{ChunkPos, IOLock};
 use crate::ProtoChunk;
 use crate::chunk::format::LightContainer;
 use crate::chunk::io::LoadedData::Loaded;
-use crate::chunk::io::{FileIO, LoadedData, run_blocking};
+use crate::chunk::io::{FileIO, LoadedData, log_save_failure, run_blocking};
 use crate::level::Level;
 use pumpkin_config::lighting::LightingEngineConfig;
 use pumpkin_data::chunk::ChunkStatus;
@@ -214,7 +214,7 @@ pub async fn io_write_work(
                     .save_chunks(&level.level_folder, vec)
                     .await
                 {
-                    error!("Failed to save chunks: {:?}", e);
+                    log_save_failure(format_args!("Failed to save chunks: {e:?}"));
                 }
                 false
             }
