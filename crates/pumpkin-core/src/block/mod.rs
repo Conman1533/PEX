@@ -358,6 +358,7 @@ pub struct PlayerPlacedArgs<'a> {
 
 pub struct OnLandedUponArgs<'a> {
     pub world: &'a Arc<World>,
+    pub position: &'a BlockPos,
     pub fall_distance: f32,
     pub entity: &'a dyn EntityBase,
 }
@@ -450,6 +451,46 @@ pub struct BlockEvent {
     pub pos: BlockPos,
     pub r#type: u8,
     pub data: u8,
+}
+
+/// Vanilla `Block.pushEntitiesUp`: lifts entities out of the space `new_state` fills but `old_state` didn't.
+///
+/// The `ONLY_SECOND` shape difference is approximated by clipping `new_state`'s boxes to above
+/// `old_state`'s top, which is exact for the vanilla callers (farmland, dirt path) that grow upwards.
+pub fn push_entities_up(
+    world: &World,
+    old_state: &BlockState,
+    new_state: &BlockState,
+    pos: &BlockPos,
+) {
+    let old_top = old_state
+        .get_block_collision_shapes_at(pos)
+        .map(|shape| shape.max.y)
+        .fold(0.0, f64::max);
+    let block_origin = pos.0.to_f64();
+    for shape in new_state.get_block_collision_shapes_at(pos) {
+        if shape.max.y <= old_top {
+            continue;
+        }
+        let mut min = shape.min;
+        min.y = min.y.max(old_top);
+        let region = BoundingBox::new(min + block_origin, shape.max + block_origin);
+        let top = region.max.y;
+
+        for player in world.get_players_at_box(&region) {
+            let entity = &player.living_entity.entity;
+            let current = entity.pos.load();
+            let lifted = top - entity.bounding_box.load().min.y;
+            let (yaw, pitch) = (entity.yaw.load(), entity.pitch.load());
+            player.request_teleport(current.add_raw(0.0, lifted, 0.0), yaw, pitch);
+        }
+        for entity in world.get_entities_at_box(&region) {
+            let entity = entity.get_entity();
+            let current = entity.pos.load();
+            let lifted = top - entity.bounding_box.load().min.y;
+            entity.teleport(current.add_raw(0.0, lifted, 0.0), None, None, world);
+        }
+    }
 }
 
 pub fn drop_loot(

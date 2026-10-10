@@ -158,7 +158,6 @@ impl JavaClient {
                         player.as_ref(),
                         height_difference,
                         packet.collision & FLAG_ON_GROUND != 0,
-                        player.gamemode.load() == GameMode::Creative,
                     );
                 }
                 chunker::update_position(player);
@@ -317,7 +316,6 @@ impl JavaClient {
                         player.as_ref(),
                         height_difference,
                         (packet.collision & FLAG_ON_GROUND) != 0,
-                        player.gamemode.load() == GameMode::Creative,
                     );
                 }
                 chunker::update_position(player);
