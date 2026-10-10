@@ -12,6 +12,14 @@
 and customizable experience. It prioritizes performance and player enjoyment while adhering to the core mechanics of the game. 
 
 This version of it, PEX (Pumkin Experimental) is a experimental merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. It is generally stable and efficient, but do note that this is called an experimental version for a reason and may not be as reliable as the official version.
+
+Why PEX? The main advantage of PEX is that by not subjecting every PR to a lengthy approval process outside of guaranteeing the code is workable, maintainable, functional and efficient, PEX servers are:
+1. More feature rich.
+2. Closer to Vanilla Minecraft in operation.
+3. Generally less buggy.
+
+Give it a try!
+
 <div align="center">
 
 
