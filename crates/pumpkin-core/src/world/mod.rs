@@ -5861,6 +5861,23 @@ impl World {
         }
     }
 
+    /// Vanilla `FluidState.getType()`: the still fluid for sources, the flowing one otherwise.
+    ///
+    /// Fluid tags tell these apart (`supports_lily_pad` only lists `water`), unlike
+    /// [`Self::get_fluid`], which always returns the flowing family.
+    pub(crate) fn get_fluid_type_from_state_id(id: BlockStateId) -> &'static Fluid {
+        let (fluid, state) = Self::fluid_state_from_block_state(id);
+        if !state.is_source {
+            fluid
+        } else if fluid.matches_type(&Fluid::WATER) {
+            &Fluid::WATER
+        } else if fluid.matches_type(&Fluid::LAVA) {
+            &Fluid::LAVA
+        } else {
+            fluid
+        }
+    }
+
     fn fluid_state_from_block_state(id: BlockStateId) -> (&'static Fluid, FluidState) {
         let fluid = Self::get_fluid_from_state_id(id);
         let source = if fluid.matches_type(&Fluid::WATER) {
