@@ -49,6 +49,8 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Buttons don't play their click sound twice** for the player pressing them (upstream PR [#3843](https://github.com/Pumpkin-MC/Pumpkin/pull/3843)).
 - **The Wither drops its Nether Star exactly once, on death**, and respects `mob_drops` (upstream PR [#3865](https://github.com/Pumpkin-MC/Pumpkin/pull/3865)).
 
+- **Undead don't burn under roofs.** Positions were rounded instead of floored when converted to blocks, so a mob near the edge of a roof checked the open-sky column next to it. The same fix corrects light checks and where dropped items land.
+
 ### Mob AI
 - **Skeletons pick bow or melee from the weapon they hold**, like vanilla, and switch when it changes. Bogged and Parched shoot more slowly, as in vanilla.
 - **Skeletons hide from the sun, sink in water and target iron golems and baby turtles.** Wither skeletons target piglins.
