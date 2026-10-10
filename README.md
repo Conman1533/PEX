@@ -42,6 +42,10 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Projectiles can hit players**: arrows, tridents, snowballs, eggs, fishing bobbers and evoker fangs used to fly straight through players.
 - **Items merge into a matching off-hand stack** when picked up. Before, they stayed on the ground.
 - **Fishing works**: casting, waiting, bites, reeling in catches and hooking entities, with vanilla particles and sounds (upstream PR [#3821](https://github.com/Pumpkin-MC/Pumpkin/pull/3821)).
+- **Chest boats have working inventories**: open, store, save, and spill their contents when broken (upstream PR [#3961](https://github.com/Pumpkin-MC/Pumpkin/pull/3961)).
+- **Hoppers pick up whole dropped stacks** at once from vanilla's pickup area, without duplicating items (upstream PR [#3804](https://github.com/Pumpkin-MC/Pumpkin/pull/3804)).
+- **Villager trades show their real stock**: out-of-stock trades display correctly, and a trading deadlock is fixed (upstream PR [#3765](https://github.com/Pumpkin-MC/Pumpkin/pull/3765)).
+- **The recipe book can't duplicate items**: auto-fill only places what your inventory can actually supply (upstream PR [#3922](https://github.com/Pumpkin-MC/Pumpkin/pull/3922)).
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
 - **Wall torches drop torches when broken** (upstream PR [#3890](https://github.com/Pumpkin-MC/Pumpkin/pull/3890)).
