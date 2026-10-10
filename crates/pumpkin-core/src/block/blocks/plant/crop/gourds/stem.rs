@@ -8,7 +8,7 @@ use crate::block::{
 use pumpkin_data::{
     Block, BlockDirection, BlockId, BlockStateId,
     block_properties::{HorizontalFacing, WallTorchLikeProperties, WheatLikeProperties},
-    tag::{self, Taggable},
+    tag::{self, Tag, Taggable},
 };
 use pumpkin_util::{
     math::position::BlockPos,
@@ -44,6 +44,14 @@ impl StemBlock {
         let mut props = AttachedStemProperties::default(attached_block);
         props.facing = dir;
         props.to_state_id(attached_block)
+    }
+
+    fn fruit_support_tag(block: &Block) -> &'static Tag {
+        if block == &Block::PUMPKIN_STEM {
+            &tag::Block::MINECRAFT_SUPPORTS_PUMPKIN_STEM_FRUIT
+        } else {
+            &tag::Block::MINECRAFT_SUPPORTS_MELON_STEM_FRUIT
+        }
     }
 
     fn get_gourd(block: &Block) -> &Block {
@@ -92,7 +100,9 @@ impl BlockBehaviour for StemBlock {
     }
 
     fn random_tick(&self, args: RandomTickArgs<'_>) {
-        // TODO add light level check
+        if args.world.get_raw_brightness(args.position, 0) < 9 {
+            return;
+        }
         let f: f32 = get_available_moisture(args.world, args.position, args.block);
         if rand::rng().random_range(0..=(25.0 / f).floor() as i32) == 0 {
             let (block, state) = args.world.get_block_and_state_id(args.position);
@@ -102,7 +112,7 @@ impl BlockBehaviour for StemBlock {
                 args.world.set_block_state(
                     args.position,
                     Self::state_with_age(block, state, age + 1),
-                    BlockFlags::NOTIFY_NEIGHBORS,
+                    BlockFlags::NOTIFY_LISTENERS,
                 );
             } else {
                 let dir = BlockDirection::random_horizontal(&mut RandomGenerator::Xoroshiro(
@@ -111,21 +121,19 @@ impl BlockBehaviour for StemBlock {
                 let plant_block_pos = args.position.offset(dir.to_offset());
                 let plant_block_state = args.world.get_block_state(&plant_block_pos);
                 let under_block: &Block = args.world.get_block(&plant_block_pos.down());
-                if plant_block_state.is_air()
-                    && (under_block == &Block::FARMLAND
-                        || under_block.has_tag(&tag::Block::MINECRAFT_DIRT))
+                if plant_block_state.is_air() && under_block.has_tag(Self::fruit_support_tag(block))
                 {
                     let attached_stem = Self::get_attached_stem(dir, block);
                     let gourd = Self::get_gourd(block);
                     args.world.set_block_state(
                         &plant_block_pos,
                         gourd.default_state.id,
-                        BlockFlags::NOTIFY_NEIGHBORS,
+                        BlockFlags::NOTIFY_ALL,
                     );
                     args.world.set_block_state(
                         args.position,
                         attached_stem,
-                        BlockFlags::NOTIFY_NEIGHBORS,
+                        BlockFlags::NOTIFY_ALL,
                     );
                 }
             }
