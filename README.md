@@ -51,7 +51,7 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 - **Scaffolding places like vanilla**, including extending from existing scaffolding (upstream PR [#3810](https://github.com/Pumpkin-MC/Pumpkin/pull/3810)).
 - **Minecarts climb and roll down slopes**, with vanilla cart physics, cart-to-cart pushing and entity collisions (merged from upstream PR [#3794](https://github.com/Pumpkin-MC/Pumpkin/pull/3794)).
 
-- **Wall torches drop torches when broken** (upstream PR [#3890](https://github.com/Pumpkin-MC/Pumpkin/pull/3890)).
+- **Banners can be placed on walls** (upstream PR [#3951](https://github.com/Pumpkin-MC/Pumpkin/pull/3951)), and **every wall variant drops its item**: wall torches, banners, signs and heads all drop like their standing block, as vanilla's `dropsLike` does.
 - **Damaged tools and armor no longer stack** with undamaged ones (upstream PR [#3666](https://github.com/Pumpkin-MC/Pumpkin/pull/3666)).
 - **Taking damage wakes sleeping players** (upstream PR [#3904](https://github.com/Pumpkin-MC/Pumpkin/pull/3904)).
 - **Buttons don't play their click sound twice** for the player pressing them (upstream PR [#3843](https://github.com/Pumpkin-MC/Pumpkin/pull/3843)).
