@@ -1831,32 +1831,29 @@ impl LivingEntity {
         strength
     }
 
-    pub fn fall(
-        &self,
-        caller: &dyn EntityBase,
-        height_difference: f64,
-        ground: bool,
-        dont_damage: bool,
-    ) {
+    pub fn fall(&self, caller: &dyn EntityBase, height_difference: f64, ground: bool) {
         if ground {
             let fall_distance = self.fall_distance.swap(0.0);
             if fall_distance > 0.0 {
                 self.on_changed_block(caller, self.entity.block_pos.load());
             }
+            // Vanilla calls `Block.fallOn` even for entities that take no fall damage (creative
+            // players, fall-immune mobs), so blocks like farmland still react; the damage itself is
+            // filtered in `handle_fall_damage`.
             if fall_distance <= 0.0
-                || dont_damage
                 || self.should_prevent_fall_damage()
                 || self.should_prevent_fall_damage_in_area()
-                || self.is_immune_to_fall_damage()
             {
                 return;
             }
             let world = self.entity.world.load();
-            let block = world.get_block(&self.entity.get_pos_with_y_offset(0.2).0);
+            let landed_pos = self.entity.get_pos_with_y_offset(0.2).0;
+            let block = world.get_block(&landed_pos);
             let pumpkin_block = world.block_registry.get_pumpkin_block(block.id);
             if let Some(pumpkin_block) = pumpkin_block {
                 pumpkin_block.on_landed_upon(OnLandedUponArgs {
                     world: &world,
+                    position: &landed_pos,
                     fall_distance,
                     entity: caller,
                 });

@@ -1,6 +1,8 @@
 use crate::block::blocks::plant::PlantBlockBase;
+use crate::block::blocks::plant::big_dripleaf::{is_water_source, place_with_random_height};
 use crate::block::{
-    BlockBehaviour, CanPlaceAtArgs, GetStateForNeighborUpdateArgs, OnPlaceArgs, PlacedArgs,
+    BlockBehaviour, BonemealArgs, CanPlaceAtArgs, GetStateForNeighborUpdateArgs, OnPlaceArgs,
+    PlacedArgs,
 };
 use pumpkin_data::BlockStateId;
 use pumpkin_data::block_properties::{DoubleBlockHalf, SmallDripleafLikeProperties};
@@ -44,6 +46,29 @@ impl BlockBehaviour for SmallDripleafBlock {
             args.state_id,
         )
     }
+    fn is_valid_bonemeal_target(&self, _args: BonemealArgs<'_>) -> bool {
+        true
+    }
+
+    fn perform_bonemeal(&self, args: BonemealArgs<'_>) {
+        let props = SmallDripleafLikeProperties::from_state_id(args.state_id);
+        let lower = if props.half == DoubleBlockHalf::Lower {
+            *args.position
+        } else {
+            args.position.down()
+        };
+        let upper = lower.up();
+        // Vanilla clears the upper half without neighbour updates, keeping any water.
+        let upper_fluid = if is_water_source(args.world, &upper) {
+            Block::WATER.default_state.id
+        } else {
+            Block::AIR.default_state.id
+        };
+        args.world
+            .set_block_state(&upper, upper_fluid, BlockFlags::NOTIFY_LISTENERS);
+        place_with_random_height(args.world, &lower, props.facing);
+    }
+
     fn placed(&self, args: PlacedArgs<'_>) {
         {
             let lower_small_dripleaf_props =

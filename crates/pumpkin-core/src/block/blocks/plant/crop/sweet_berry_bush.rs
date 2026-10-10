@@ -1,3 +1,4 @@
+use pumpkin_data::game_event::GameEvent;
 use std::sync::Arc;
 
 use crate::{
@@ -174,17 +175,13 @@ impl CropBlockBase for SweetBerryBushBlock {
     fn random_tick(&self, world: &Arc<World>, pos: &BlockPos) {
         let (block, state) = world.get_block_and_state_id(pos);
         let age = self.get_age(state, block);
-        if age < self.max_age() {
-            let state_above = world.get_block_state(&pos.up());
-
-            if state_above.is_full_cube() || state_above.is_solid() {
-                return;
-            }
+        if age < self.max_age() && world.get_raw_brightness(&pos.up(), 0) >= 9 {
             world.set_block_state(
                 pos,
                 self.state_with_age(block, state, age + 1),
-                BlockFlags::NOTIFY_NEIGHBORS,
+                BlockFlags::NOTIFY_LISTENERS,
             );
+            world.emit_game_event(GameEvent::BlockChange.name(), pos.to_centered_f64());
         }
     }
 }

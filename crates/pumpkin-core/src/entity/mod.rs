@@ -2044,7 +2044,7 @@ impl Entity {
 
         if let Some(living) = caller.get_living_entity() {
             let on_ground = self.on_ground.load(Ordering::SeqCst);
-            living.fall(caller, final_move.y, on_ground, false);
+            living.fall(caller, final_move.y, on_ground);
         }
 
         if motion.y != final_move.y {

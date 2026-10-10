@@ -1,7 +1,10 @@
 use crate::block::{
     BlockBehaviour, CanPlaceAtArgs, GetStateForNeighborUpdateArgs, OnPlaceArgs,
-    OnScheduledTickArgs, PathComputationType,
+    OnScheduledTickArgs, PathComputationType, push_entities_up,
 };
+use pumpkin_data::game_event::GameEvent;
+use pumpkin_data::tag;
+use pumpkin_data::tag::Taggable;
 use pumpkin_data::{Block, BlockDirection, BlockState, BlockStateId};
 use pumpkin_macros::pumpkin_block;
 use pumpkin_util::math::position::BlockPos;
@@ -14,16 +17,27 @@ pub struct DirtPathBlock;
 
 impl BlockBehaviour for DirtPathBlock {
     fn on_scheduled_tick(&self, args: OnScheduledTickArgs<'_>) {
-        // TODO: push up entities
+        let state = args.world.get_block_state(args.position);
+        push_entities_up(args.world, state, Block::DIRT.default_state, args.position);
         args.world.set_block_state(
             args.position,
             Block::DIRT.default_state.id,
             BlockFlags::NOTIFY_ALL,
         );
+        args.world.emit_game_event(
+            GameEvent::BlockChange.name(),
+            args.position.to_centered_f64(),
+        );
     }
 
     fn on_place(&self, args: OnPlaceArgs<'_>) -> BlockStateId {
         if !can_place_at(args.world, args.position) {
+            push_entities_up(
+                args.world,
+                args.block.default_state,
+                Block::DIRT.default_state,
+                args.position,
+            );
             return Block::DIRT.default_state.id;
         }
 
@@ -51,6 +65,6 @@ impl BlockBehaviour for DirtPathBlock {
 }
 
 fn can_place_at(world: &dyn BlockAccessor, block_pos: &BlockPos) -> bool {
-    let state = world.get_block_state(&block_pos.up());
-    !state.is_solid() // TODO: add fence gate block
+    let (block, state) = world.get_block_and_state(&block_pos.up());
+    !state.is_solid() || block.has_tag(&tag::Block::MINECRAFT_FENCE_GATES)
 }

@@ -11,6 +11,7 @@ use crate::block::{
     BlockBehaviour, CanPlaceAtArgs, GetStateForNeighborUpdateArgs, OnScheduledTickArgs,
     RandomTickArgs,
 };
+use crate::world::World;
 
 #[pumpkin_block("minecraft:sugar_cane")]
 pub struct SugarCaneBlock;
@@ -31,8 +32,11 @@ impl BlockBehaviour for SugarCaneBlock {
             let state_id = args.world.get_block_state(args.position).id;
             let age = CactusLikeProperties::from_state_id(state_id).age;
             if age == 15 {
-                args.world
-                    .set_block_state(&args.position.up(), state_id, BlockFlags::NOTIFY_ALL);
+                args.world.set_block_state(
+                    &args.position.up(),
+                    args.block.default_state.id,
+                    BlockFlags::NOTIFY_ALL,
+                );
                 let props = CactusLikeProperties { age: 0 };
                 args.world.set_block_state(
                     args.position,
@@ -75,10 +79,13 @@ fn can_place_at(block_accessor: &dyn BlockAccessor, block_pos: &BlockPos) -> boo
 
     if block_below.has_tag(&tag::Block::MINECRAFT_SUPPORTS_SUGAR_CANE) {
         for direction in HorizontalFacing::all() {
-            let block = block_accessor.get_block(&block_pos.down().offset(direction.to_offset()));
-            // TODO: use fluid
-            if block.has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_SUGAR_CANE_ADJACENTLY)
-                && block.has_tag(&tag::Block::MINECRAFT_SUPPORTS_SUGAR_CANE_ADJACENTLY)
+            let state_id =
+                block_accessor.get_block_state_id(&block_pos.down().offset(direction.to_offset()));
+            if World::get_fluid_type_from_state_id(state_id)
+                .has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_SUGAR_CANE_ADJACENTLY)
+                || state_id
+                    .to_block()
+                    .has_tag(&tag::Block::MINECRAFT_SUPPORTS_SUGAR_CANE_ADJACENTLY)
             {
                 return true;
             }

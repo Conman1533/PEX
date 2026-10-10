@@ -1,4 +1,7 @@
 use pumpkin_data::BlockStateId;
+use pumpkin_data::fluid::Fluid;
+
+use crate::world::World;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_macros::pumpkin_block;
 use pumpkin_util::math::position::BlockPos;
@@ -13,18 +16,11 @@ pub struct LilyPadBlock;
 
 impl BlockBehaviour for LilyPadBlock {
     fn on_entity_collision(&self, args: OnEntityCollisionArgs<'_>) {
-        {
-            // Proberbly not the best solution, but works
-            if args
-                .entity
-                .get_entity()
-                .entity_type
-                .resource_name
-                .ends_with("_boat")
-            {
-                args.world
-                    .break_block(args.position, None, BlockFlags::NOTIFY_ALL);
-            }
+        // Vanilla checks `instanceof AbstractBoat`, which covers chest boats and rafts too.
+        let resource_name = args.entity.get_entity().entity_type.resource_name;
+        if resource_name.ends_with("_boat") || resource_name.ends_with("_raft") {
+            args.world
+                .break_block(args.position, None, BlockFlags::NOTIFY_ALL);
         }
     }
 
@@ -47,11 +43,14 @@ impl BlockBehaviour for LilyPadBlock {
 
 impl PlantBlockBase for LilyPadBlock {
     fn can_plant_on_top(&self, block_accessor: &dyn BlockAccessor, pos: &BlockPos) -> bool {
-        // TODO: get and use fluids not blocks
-        let block = block_accessor.get_block(pos);
-        let above_fluid = block_accessor.get_block(&pos.up());
-        (block.has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_LILY_PAD)
-            || block.has_tag(&tag::Block::MINECRAFT_SUPPORTS_LILY_PAD))
-            && above_fluid.is_air()
+        let state_id = block_accessor.get_block_state_id(pos);
+        let fluid_above =
+            World::get_fluid_type_from_state_id(block_accessor.get_block_state_id(&pos.up()));
+        (World::get_fluid_type_from_state_id(state_id)
+            .has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_LILY_PAD)
+            || state_id
+                .to_block()
+                .has_tag(&tag::Block::MINECRAFT_SUPPORTS_LILY_PAD))
+            && fluid_above == &Fluid::EMPTY
     }
 }
