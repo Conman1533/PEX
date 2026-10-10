@@ -122,6 +122,11 @@ impl Animal for OcelotEntity {
 }
 
 impl Mob for OcelotEntity {
+    /// Vanilla `Ocelot.removeWhenFarAway`, without the 2400 tick minimum age Pumpkin does not track.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        !self.is_trusting.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     fn as_animal(&self) -> Option<&dyn Animal> {
         Some(self)
     }

@@ -94,6 +94,11 @@ impl AllayEntity {
 }
 
 impl Mob for AllayEntity {
+    /// Vanilla `Allay.removeWhenFarAway`.
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        false
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_bool("CanDuplicate", self.can_duplicate());
         nbt.put_int(

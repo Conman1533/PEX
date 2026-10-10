@@ -93,11 +93,16 @@ pub struct MobEntity {
     pub breeding_cooldown: AtomicI32,
     pub breeder: AtomicCell<Option<Uuid>>,
     pub persistence_required: AtomicBool,
+    /// Vanilla `LivingEntity.noActionTime`: ticks since a player was within the no-despawn
+    /// distance. Random despawning only starts once it passes [`Self::RANDOM_DESPAWN_DELAY`].
+    pub no_action_time: AtomicI32,
     pending_riders: std::sync::Mutex<Vec<Arc<dyn EntityBase>>>,
     mob_flags: AtomicU8,
 }
 impl MobEntity {
     const AI_DISABLED_FLAG: u8 = 1;
+    const RANDOM_DESPAWN_DELAY: i32 = 600;
+    const RANDOM_DESPAWN_CHANCE: i32 = 800;
     const LEFT_HANDED_FLAG: u8 = 2;
     const ATTACKING_FLAG: u8 = 4;
     const CAN_PICK_UP_LOOT_FLAG: u8 = 8;
@@ -180,6 +185,7 @@ impl MobEntity {
             breeding_cooldown: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
+            no_action_time: AtomicI32::new(0),
             pending_riders: std::sync::Mutex::new(Vec::new()),
             mob_flags: AtomicU8::new(0),
         }
@@ -237,6 +243,7 @@ impl MobEntity {
 
     /// Vanilla `Mob.serverAiStep`: sensing, goals, navigation and controls.
     pub fn server_ai_step(&self, mob: &dyn Mob, caller: &dyn EntityBase) {
+        self.no_action_time.fetch_add(1, Relaxed);
         let age = self.living_entity.entity.age.load(Relaxed);
         let entity_id = self.living_entity.entity.entity_id;
 
@@ -737,57 +744,52 @@ impl MobEntity {
         false
     }
 
+    /// Vanilla `Mob.checkDespawn`.
     pub fn check_despawn(&self, mob: &dyn Mob) {
         let entity = &self.living_entity.entity;
 
-        if self.persistence_required.load(Relaxed) {
-            return;
-        }
-
-        // Vanilla `Mob.requiresCustomPersistence`: passengers and leashed mobs never despawn.
-        // Without this a mob leashed to a fence is removed as soon as the player walks away
-        // instead of being saved with its chunk.
-        if entity.has_vehicle() || entity.is_leashed() {
-            return;
-        }
-
-        if (**entity.custom_name.load()).is_some() {
-            return;
-        }
+        // Vanilla `isPersistenceRequired() || requiresCustomPersistence()`: passengers and
+        // leashed mobs never despawn. A name tag sets persistence in vanilla; Pumpkin checks
+        // the name directly.
+        let persistent = self.persistence_required.load(Relaxed)
+            || entity.has_vehicle()
+            || entity.is_leashed()
+            || (**entity.custom_name.load()).is_some();
 
         let world = entity.world.load();
         let pos = entity.pos.load();
         let players = world.players.load();
 
-        let nearest_dist_sq = players
+        // Vanilla `getNearestPlayer(this, -1.0)` skips spectators, and with no player at all
+        // nothing despawns.
+        let Some(dist_sq) = players
             .iter()
             .filter(|p| p.gamemode.load() != pumpkin_util::GameMode::Spectator)
-            .map(|p| {
-                let pp = p.get_entity().pos.load();
-                let dx = pp.x - pos.x;
-                let dy = pp.y - pos.y;
-                let dz = pp.z - pos.z;
-                dx * dx + dy * dy + dz * dz
-            })
-            .fold(f64::MAX, f64::min);
+            .map(|p| p.get_entity().pos.load().squared_distance_to_vec(&pos))
+            .reduce(f64::min)
+        else {
+            return;
+        };
 
-        // Mobs like a converting zombie villager refuse to despawn (`removeWhenFarAway`).
-        if !mob.remove_when_far_away(nearest_dist_sq) {
+        let despawn_distance = f64::from(entity.entity_type.category.despawn_distance);
+        if !persistent
+            && dist_sq > despawn_distance * despawn_distance
+            && mob.remove_when_far_away(dist_sq)
+        {
+            entity.remove();
             return;
         }
 
-        if nearest_dist_sq == f64::MAX {
-            mob.get_entity().remove();
-            return;
-        }
-
-        if nearest_dist_sq > 128.0 * 128.0 {
-            mob.get_entity().remove();
-            return;
-        }
-
-        if nearest_dist_sq > 32.0 * 32.0 && rand::random::<i32>().wrapping_abs() % 800 == 0 {
-            mob.get_entity().remove();
+        let no_despawn_distance = f64::from(pumpkin_data::entity::MobCategory::NO_DESPAWN_DISTANCE);
+        if !persistent
+            && self.no_action_time.load(Relaxed) > Self::RANDOM_DESPAWN_DELAY
+            && rand::random_range(0..Self::RANDOM_DESPAWN_CHANCE) == 0
+            && dist_sq > no_despawn_distance * no_despawn_distance
+            && mob.remove_when_far_away(dist_sq)
+        {
+            entity.remove();
+        } else if dist_sq < no_despawn_distance * no_despawn_distance {
+            self.no_action_time.store(0, Relaxed);
         }
     }
 }
@@ -844,8 +846,9 @@ pub trait Mob: EntityBase + Send + Sync {
         EquipmentSlot::HEAD
     }
 
+    /// Vanilla `Mob.removeWhenFarAway`, which `Animal` overrides to `false`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
-        true
+        self.as_animal().is_none()
     }
 
     fn get_max_look_yaw_change(&self) -> f32 {
