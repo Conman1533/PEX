@@ -1281,7 +1281,9 @@ impl Player {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
         if let Some((view_level, sim_level)) = held {
-            let center = self.get_entity().chunk_pos.load();
+            // The chunker added these at the watched center, which can lag the entity's chunk
+            // (teleports, dimension changes); removing at chunk_pos would leak the ticket.
+            let center = self.watched_section.load().center;
             if let Some(view) = view_level {
                 lock.remove_ticket(center, view);
             }
