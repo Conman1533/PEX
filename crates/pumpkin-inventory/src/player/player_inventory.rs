@@ -205,18 +205,28 @@ impl PlayerInventory {
     /// Returns the number of items that couldn't fit.
     fn add_stack_to_slot(&self, slot: usize, stack: ItemStack) -> usize {
         if slot >= Self::MAIN_SIZE {
-            if let Some(slot_type) = self.equipment_slots.get(&slot) {
-                let mut equipment = self
-                    .entity_equipment
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let current = equipment.get(slot_type);
-                if current.is_empty() {
-                    equipment.put(slot_type, stack);
-                    return 0;
-                }
+            let Some(slot_type) = self.equipment_slots.get(&slot) else {
+                return stack.item_count as usize;
+            };
+            let mut equipment = self
+                .entity_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            // Vanilla `Inventory.addResource` merges into equipment slots the same way as
+            // the main inventory, so a matching off-hand stack keeps filling up.
+            let mut current = equipment.get(slot_type);
+            if current.is_empty() {
+                current = stack.copy_with_count(0);
             }
-            return stack.item_count as usize;
+            let to_add = stack
+                .item_count
+                .min(current.get_max_stack_size() - current.item_count);
+            if to_add == 0 {
+                return stack.item_count as usize;
+            }
+            current.increment(to_add);
+            equipment.put(slot_type, current);
+            return (stack.item_count - to_add) as usize;
         }
 
         let mut inv = self
