@@ -256,12 +256,17 @@ impl Mob for MooshroomEntity {
             let pos = entity.pos.load();
             self.stew_effect.store(Some(1));
             world.play_sound(Sound::EntityMooshroomEat, SoundCategory::Neutral, &pos);
-            world.spawn_particle(
-                pos + Vector3::new(0.0, 0.5, 0.0),
-                Vector3::new(0.5, 0.5, 0.5),
-                0.0,
-                4,
+            // Vanilla `SpellParticleOption.create(EFFECT, -1, 1.0)`: color as an int, then power.
+            let mut data = Vec::with_capacity(8);
+            data.extend_from_slice(&(-1i32).to_be_bytes());
+            data.extend_from_slice(&1.0f32.to_be_bytes());
+            world.spawn_particles_with_data(
                 Particle::Effect,
+                pos + Vector3::new(0.0, 0.5, 0.0),
+                4,
+                Vector3::new(0.5, 0.0, 0.5),
+                0.0,
+                &data,
             );
             return true;
         }

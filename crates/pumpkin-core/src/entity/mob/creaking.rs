@@ -4,7 +4,9 @@ use std::sync::{
 };
 
 use crossbeam::atomic::AtomicCell;
+use pumpkin_data::Block;
 use pumpkin_data::attributes::Attributes;
+use pumpkin_data::block_properties::{CreakingHeartLikeProperties, CreakingHeartState};
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::entity::EntityType;
@@ -12,6 +14,7 @@ use pumpkin_data::item::Item;
 use pumpkin_data::particle::Particle;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::VarInt;
 use pumpkin_protocol::java::client::play::CEntityStatus;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -358,15 +361,32 @@ impl CreakingEntity {
     pub fn tear_down(&self) {
         let entity = &self.mob_entity.living_entity.entity;
         let world = entity.world.load();
-        let pos = entity.pos.load();
 
-        world.spawn_particle(
-            pos,
-            Vector3::new(0.3, 0.3, 0.3),
-            0.0,
-            100,
-            Particle::BlockCrumble,
+        // Vanilla `Creaking.tearDown`: block crumble particles need the block state as options.
+        let bbox = entity.bounding_box.load();
+        let center = (bbox.min + bbox.max) * 0.5;
+        let spread = Vector3::new(
+            ((bbox.max.x - bbox.min.x) * 0.3) as f32,
+            ((bbox.max.y - bbox.min.y) * 0.3) as f32,
+            ((bbox.max.z - bbox.min.z) * 0.3) as f32,
         );
+        let mut heart = CreakingHeartLikeProperties::default(&Block::CREAKING_HEART);
+        heart.creaking_heart_state = CreakingHeartState::Awake;
+        for (state, count) in [
+            (Block::PALE_OAK_WOOD.default_state.id, 100),
+            (heart.to_state_id(&Block::CREAKING_HEART), 10),
+        ] {
+            let mut data = Vec::with_capacity(3);
+            let _ = VarInt(i32::from(state.as_u16())).encode(&mut data);
+            world.spawn_particles_with_data(
+                Particle::BlockCrumble,
+                center,
+                count,
+                spread,
+                0.0,
+                &data,
+            );
+        }
 
         self.play_sound(Sound::EntityCreakingDeath);
         entity.remove();
