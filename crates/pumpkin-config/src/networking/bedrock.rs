@@ -156,7 +156,7 @@ impl Default for BedrockConfig {
             view_distance,
             simulation_distance,
             compression: CompressionConfig::default(),
-            motd: "A blazingly fast Pumpkin server!".to_string(),
+            motd: "PEX, an experimental fork of Pumpkin".to_string(),
             username_prefix: String::new(),
             replace_username_spaces: true,
             authentication: BedrockAuthenticationConfig::default(),
