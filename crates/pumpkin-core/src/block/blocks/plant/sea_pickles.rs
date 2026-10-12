@@ -9,16 +9,20 @@ use pumpkin_data::entity::EntityPose;
 use pumpkin_data::tag::Taggable;
 use pumpkin_data::{Block, BlockDirection, BlockState, BlockStateId, tag};
 use pumpkin_macros::pumpkin_block;
-use pumpkin_util::math::position::BlockPos;
-use pumpkin_world::world::BlockFlags;
-use rand::RngExt;
+use pumpkin_util::{
+    math::position::BlockPos,
+    random::{RandomImpl, get_seed, legacy_rand::LegacyRand},
+};
+use pumpkin_world::world::{BlockAccessor, BlockFlags};
 
 type SeaPickleProperties = pumpkin_data::block_properties::SeaPickleLikeProperties;
 
-const MAX_PICKLES: u8 = 4;
-
 #[pumpkin_block("minecraft:sea_pickle")]
 pub struct SeaPickleBlock;
+
+impl SeaPickleBlock {
+    const MAX_PICKLES: u8 = 4;
+}
 
 impl BlockBehaviour for SeaPickleBlock {
     fn is_valid_bonemeal_target(&self, args: BonemealArgs<'_>) -> bool {
@@ -30,34 +34,38 @@ impl BlockBehaviour for SeaPickleBlock {
     }
 
     fn perform_bonemeal(&self, args: BonemealArgs<'_>) {
-        let pos = args.position.0;
-        let mut rng = rand::rng();
+        let mut random = LegacyRand::from_seed(get_seed());
         let mut z_span = 1;
+        let x_start = args.position.0.x - 2;
         let mut z_offset = 0;
-        for (count, x) in (pos.x - 2..=pos.x + 2).enumerate() {
+
+        for x in 0..5 {
             for z in 0..z_span {
-                let end_y = 2 + pos.y - 1;
+                let end_y = args.position.0.y + 1;
                 for y in (end_y - 2)..end_y {
-                    let position = BlockPos::new(x, y, pos.z - z_offset + z);
-                    if &position != args.position
-                        && rng.random_range(0..6) == 0
-                        && args.world.get_block(&position) == &Block::WATER
-                        && args
+                    let position = BlockPos::new(x_start + x, y, args.position.0.z - z_offset + z);
+                    if &position == args.position
+                        || random.next_bounded_i32(6) != 0
+                        || args.world.get_block(&position) != &Block::WATER
+                        || !args
                             .world
                             .get_block(&position.down())
                             .has_tag(&tag::Block::MINECRAFT_CORAL_BLOCKS)
                     {
-                        let mut props = SeaPickleProperties::default(args.block);
-                        props.pickles = rng.random_range(1..=MAX_PICKLES);
-                        args.world.set_block_state(
-                            &position,
-                            props.to_state_id(args.block),
-                            BlockFlags::NOTIFY_ALL,
-                        );
+                        continue;
                     }
+
+                    let mut properties = SeaPickleProperties::default(args.block);
+                    properties.pickles =
+                        (random.next_bounded_i32(i32::from(Self::MAX_PICKLES)) + 1) as u8;
+                    args.world.set_block_state(
+                        &position,
+                        properties.to_state_id(args.block),
+                        BlockFlags::NOTIFY_ALL,
+                    );
                 }
             }
-            if count < 2 {
+            if x < 2 {
                 z_span += 2;
                 z_offset += 1;
             } else {
@@ -66,11 +74,11 @@ impl BlockBehaviour for SeaPickleBlock {
             }
         }
 
-        let mut props = SeaPickleProperties::from_state_id(args.state_id);
-        props.pickles = MAX_PICKLES;
+        let mut properties = SeaPickleProperties::from_state_id(args.state_id);
+        properties.pickles = Self::MAX_PICKLES;
         args.world.set_block_state(
             args.position,
-            props.to_state_id(args.block),
+            properties.to_state_id(args.block),
             BlockFlags::NOTIFY_LISTENERS,
         );
     }
@@ -80,7 +88,7 @@ impl BlockBehaviour for SeaPickleBlock {
             && let BlockIsReplacing::Itself(state_id) = args.replacing
         {
             let mut sea_pickle_prop = SeaPickleProperties::from_state_id(state_id);
-            if sea_pickle_prop.pickles < MAX_PICKLES {
+            if sea_pickle_prop.pickles < Self::MAX_PICKLES {
                 sea_pickle_prop.pickles += 1;
             }
             return sea_pickle_prop.to_state_id(args.block);
@@ -102,7 +110,7 @@ impl BlockBehaviour for SeaPickleBlock {
 
     fn can_update_at(&self, args: CanUpdateAtArgs<'_>) -> bool {
         args.player.get_entity().pose.load() != EntityPose::Crouching
-            && SeaPickleProperties::from_state_id(args.state_id).pickles < MAX_PICKLES
+            && SeaPickleProperties::from_state_id(args.state_id).pickles < Self::MAX_PICKLES
     }
 
     fn get_state_for_neighbor_update(
@@ -122,4 +130,10 @@ impl BlockBehaviour for SeaPickleBlock {
     }
 }
 
-impl PlantBlockBase for SeaPickleBlock {}
+impl PlantBlockBase for SeaPickleBlock {
+    fn can_plant_on_top(&self, block_accessor: &dyn BlockAccessor, pos: &BlockPos) -> bool {
+        block_accessor
+            .get_block_state(pos)
+            .is_center_solid(BlockDirection::Up)
+    }
+}
