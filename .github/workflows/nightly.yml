@@ -16,7 +16,7 @@ env:
 jobs:
   check:
     name: Check for new commits
-    if: github.repository == 'Pumpkin-MC/Pumpkin'
+    if: github.repository == 'Conman1533/PEX'
     runs-on: ubuntu-slim
     outputs:
       changed: ${{ steps.check.outputs.changed }}
@@ -155,5 +155,5 @@ jobs:
           prerelease: true
           files: dist/pumpkin*
           tag_name: nightly
-          name: Nightly Build
+          name: PEX Nightly Build
           body_path: dist/RELEASE.md
