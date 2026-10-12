@@ -55,7 +55,7 @@ impl Default for JavaConfig {
             simulation_distance,
             keep_alive_time: 15,
             compression: CompressionConfig::default(),
-            motd: "A blazingly fast Pumpkin server!".to_string(),
+            motd: "PEX, an experimental fork of Pumpkin".to_string(),
             authentication: AuthenticationConfig::default(),
             packet_limiter: PacketLimiterConfig::default(),
         }

@@ -52,7 +52,7 @@ impl Default for CachedBranding {
 }
 
 impl CachedBranding {
-    const BRAND: &'static str = "Pumpkin";
+    const BRAND: &'static str = "Pumpkin Experimental";
     const BRAND_BYTES: &'static [u8] = &{
         let brand = Self::BRAND.as_bytes();
         let len = brand.len();
@@ -228,7 +228,7 @@ impl Default for CachedStatus {
     fn default() -> Self {
         Self::new(
             &BasicConfiguration::default(),
-            "A blazingly fast Pumpkin server!",
+            "PEX, an experimental fork of Pumpkin",
             1000,
         )
     }
