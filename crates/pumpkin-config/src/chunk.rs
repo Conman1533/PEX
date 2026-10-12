@@ -26,13 +26,23 @@ impl Default for ChunkConfig {
 }
 
 /// Configuration for Anvil chunk storage.
-#[derive(Deserialize, Serialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct AnvilChunkConfig {
     /// Compression settings for chunk data.
     pub compression: ChunkCompression,
-    /// Whether chunks should be written in place.
+    /// Whether to write changed chunks into the region file like vanilla, instead of
+    /// rewriting the whole file on every save.
     pub write_in_place: bool,
+}
+
+impl Default for AnvilChunkConfig {
+    fn default() -> Self {
+        Self {
+            compression: ChunkCompression::default(),
+            write_in_place: true,
+        }
+    }
 }
 
 /// Compression settings for chunk data.
