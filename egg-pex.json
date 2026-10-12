@@ -1,0 +1,73 @@
+{
+    "_comment": "Pterodactyl\/Pelican egg for PEX, based on egg-pumpkin.json",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-10-12T00:00:00+00:00",
+    "name": "PEX (Pumpkin Experimental)",
+    "author": "endercreepern64@gmail.com",
+    "description": "PEX is an experimental fork of Pumpkin, a Minecraft server written in Rust, with fixes for region file writes, entity lookups and full disks. Worlds from Pumpkin load as they are. Before moving a world back to Pumpkin, set write_in_place = false in pumpkin.toml: Pumpkin's in-place writes can corrupt it. https:\/\/github.com\/Conman1533\/PEX",
+    "features": null,
+    "docker_images": {
+        "Alpine": "ghcr.io\/pterodactyl\/yolks:alpine",
+        "Debian": "ghcr.io\/pterodactyl\/yolks:debian"
+    },
+    "file_denylist": [],
+    "startup": ".\/pumpkin",
+    "config": {
+        "files": "{\r\n    \"pumpkin.toml\": {\r\n        \"parser\": \"file\",\r\n        \"find\": {\r\n            \"address = \\\"0.0.0.0:25565\\\"\": \"address = \\\"0.0.0.0:{{server.build.default.port}}\\\"\"\r\n        }\r\n    }\r\n}",
+        "startup": "{\r\n    \"done\": \"Server is now running.\"\r\n}",
+        "logs": "{}",
+        "stop": "stop"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!\/bin\/ash\r\nset -eux\r\n\r\napk add --no-cache curl jq\r\nmkdir -p \/mnt\/server\r\ncd \/mnt\/server\r\n\r\nARCH=$(uname -m)\r\ncase \"$ARCH\" in\r\n    x86_64|amd64)\r\n        PUMPKIN_ARCH=\"X64\"\r\n        ;;\r\n    aarch64|arm64)\r\n        PUMPKIN_ARCH=\"ARM64\"\r\n        ;;\r\n    *)\r\n        echo \"Unsupported architecture: $ARCH\"\r\n        exit 1\r\n        ;;\r\nesac\r\n\r\nBINARY_NAME=\"pumpkin-${PUMPKIN_ARCH}-Linux-musl\"\r\n\r\nif [ -n \"${DOWNLOAD_URL:-}\" ]; then\r\n    URL=\"$DOWNLOAD_URL\"\r\nelif [ \"${VERSION:-nightly}\" = \"latest\" ] || [ \"${VERSION:-nightly}\" = \"nightly\" ]; then\r\n    URL=\"https:\/\/github.com\/${GITHUB_PACKAGE:-Pumpkin-MC\/Pumpkin}\/releases\/download\/nightly\/${BINARY_NAME}\"\r\nelse\r\n    URL=\"https:\/\/github.com\/${GITHUB_PACKAGE:-Pumpkin-MC\/Pumpkin}\/releases\/download\/${VERSION}\/${BINARY_NAME}\"\r\nfi\r\n\r\necho \"Downloading Pumpkin from: $URL\"\r\ncurl -fsSL \"$URL\" -o \/mnt\/server\/pumpkin\r\nchmod +x \/mnt\/server\/pumpkin\r\n\r\n# Quickly start and kill server to generate initial configuration if not present\r\nif [ ! -f \/mnt\/server\/pumpkin.toml ]; then\r\n    timeout 2 .\/pumpkin || true\r\nfi",
+            "container": "ghcr.io\/pterodactyl\/installers:alpine",
+            "entrypoint": "ash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Rust backtrace",
+            "description": "\"0\" -> No backtrace is generated. This is the default behavior.\r\n\"1\" -> Generates a minimal backtrace showing only relevant information about where the panic occurred.\r\n\"full\" -> Generates a detailed backtrace, showing all frames leading to the panic, including functions in the Rust standard library and dependencies.",
+            "env_variable": "RUST_BACKTRACE",
+            "default_value": "1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:1,0,full",
+            "field_type": "text"
+        },
+        {
+            "name": "Pumpkin Version",
+            "description": "The version of Pumpkin to install. Options: 'nightly', 'latest', or a specific release tag (e.g. 'v0.1.0').\r\nScope: installation",
+            "env_variable": "VERSION",
+            "default_value": "nightly",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "GitHub Repository",
+            "description": "GitHub repository to download the release from.",
+            "env_variable": "GITHUB_PACKAGE",
+            "default_value": "Conman1533\/PEX",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Direct Download URL",
+            "description": "Direct URL to download the Pumpkin binary from. If provided, this overrides VERSION and GITHUB_PACKAGE.\r\nScope: installation",
+            "env_variable": "DOWNLOAD_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        }
+    ]
+}
