@@ -665,11 +665,6 @@ impl World {
         }
     }
 
-    /// Serializes the live block entities of a chunk back into that chunk's block
-    /// entity data. The live map is the source of truth while a chunk is loaded -
-    /// `get_block_entity` takes the saved NBT out of the chunk when it wakes an
-    /// entity up - so this has to run before the chunk is dropped, or everything
-    /// the entity did since it was loaded is lost.
     /// Writes every live block entity into its chunk. Block entities only reach disk through a
     /// loaded chunk, so this has to run before the chunks are unloaded.
     pub fn save_all_block_entities(&self) {
@@ -683,6 +678,38 @@ impl World {
         }
     }
 
+    /// Moves a chunk's live block entities back into the chunk as it unloads. Called by the chunk
+    /// scheduler before it saves the chunk, so nothing done since the chunk loaded is lost even when
+    /// the chunk leaves `loaded_chunks` before this world's own cleanup gets to it. The live entities
+    /// are dropped as vanilla drops them with their chunk; reloading recreates them from the NBT.
+    fn unload_block_entities(&self, chunk: &ChunkData) {
+        let chunk_pos = Vector2::new(chunk.x, chunk.z);
+        let Some((_, block_entities)) = self.block_entities.remove(&chunk_pos) else {
+            return;
+        };
+        let mut pending = chunk
+            .pending_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for (position, block_entity) in block_entities {
+            let mut nbt = NbtCompound::new();
+            block_entity.write_internal(&mut nbt);
+            if let Some((_, custom_data)) = self.custom_block_entity_data.remove(&position)
+                && !custom_data.is_empty()
+            {
+                nbt.put_compound("PumpkinCustomData", custom_data);
+            }
+            pending.insert(position, nbt);
+        }
+        drop(pending);
+        chunk.mark_dirty(true);
+    }
+
+    /// Serializes the live block entities of a chunk back into that chunk's block
+    /// entity data. The live map is the source of truth while a chunk is loaded -
+    /// `get_block_entity` takes the saved NBT out of the chunk when it wakes an
+    /// entity up - so this has to run before the chunk is dropped, or everything
+    /// the entity did since it was loaded is lost.
     fn save_block_entities(&self, chunk_pos: Vector2<i32>) {
         let Some(block_entities) = self
             .block_entities
@@ -7294,6 +7321,10 @@ impl WorldPortalExt for WorldPortal {
             self.0.spawn_entity(entity);
         }
     }
+
+    fn before_chunk_unload(&self, chunk: &ChunkData) {
+        self.0.unload_block_entities(chunk);
+    }
 }
 
 struct CubicCurve {
@@ -7660,5 +7691,39 @@ mod tests {
             GameRuleValue::Int(v) => assert_eq!(*v, 20),
             GameRuleValue::Bool(_) => panic!("expected int"),
         }
+    }
+
+    #[tokio::test]
+    async fn unloading_a_chunk_writes_its_live_block_entities_into_it() {
+        use std::sync::Arc;
+
+        use pumpkin_data::{item::Item, item_stack::ItemStack};
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::chunk::{ChunkData, io::Dirtiable};
+
+        use crate::block::entities::{BlockEntity, chest::ChestBlockEntity};
+
+        let world = super::test_world();
+        let position = BlockPos::new(3, 70, 5);
+        let chest = ChestBlockEntity::new(position);
+        chest.items.write().unwrap()[0] = ItemStack::new(5, &Item::EGG);
+        let chest: Arc<dyn BlockEntity> = Arc::new(chest);
+        world
+            .block_entities
+            .entry(Vector2::new(0, 0))
+            .or_default()
+            .insert(position, chest);
+        // The chunk has already left `loaded_chunks`, as it has when the scheduler unloads it.
+        let chunk = ChunkData::empty(0, 0);
+
+        world.unload_block_entities(&chunk);
+
+        let pending = chunk.pending_block_entities.lock().unwrap();
+        let items = pending[&position]
+            .get_list("Items")
+            .expect("chest items saved");
+        assert_eq!(items.len(), 1);
+        assert!(chunk.is_dirty());
+        assert!(!world.block_entities.contains_key(&Vector2::new(0, 0)));
     }
 }

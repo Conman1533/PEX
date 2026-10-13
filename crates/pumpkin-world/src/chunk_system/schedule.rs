@@ -839,10 +839,11 @@ impl GenerationSchedule {
         }
     }
 
-    fn process_unload_queue(&mut self) {
+    fn process_unload_queue(&mut self, level: &Level) {
         if self.unload_chunks.is_empty() {
             return;
         }
+        let portal = level.world_portal.load_full();
 
         let mut unload_chunks = HashSetType::default();
         swap(&mut unload_chunks, &mut self.unload_chunks);
@@ -879,6 +880,10 @@ impl GenerationSchedule {
             if holder.public {
                 self.unpublish_chunk(pos);
                 holder.public = false;
+            }
+            // After unpublishing, so the world cannot load a stale block entity back out of it.
+            if let (Some(portal), Some(Chunk::Level(chunk))) = (portal.as_ref(), &holder.chunk) {
+                portal.before_chunk_unload(chunk);
             }
 
             if let Some(tmp) = holder.chunk {
@@ -1258,7 +1263,7 @@ impl GenerationSchedule {
         loop {
             if level.should_unload.swap(false, Relaxed) {
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level);
             }
             if level.should_save.swap(false, Relaxed) {
                 self.save_all_chunk(false);
@@ -1266,7 +1271,7 @@ impl GenerationSchedule {
             if level.shut_down_chunk_system.load(Relaxed) {
                 info!("Saving chunks before shutdown...");
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level);
                 self.save_all_chunk(true);
                 break;
             }
@@ -1282,7 +1287,7 @@ impl GenerationSchedule {
             // is what puts stale dependency holders into the queue in the first place.
             if self.last_unload.elapsed() >= std::time::Duration::from_secs(1) {
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level);
                 self.last_unload = std::time::Instant::now();
             }
 
