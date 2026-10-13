@@ -28,7 +28,6 @@ pub struct HopperBlockEntity {
     pub items: RwLock<[ItemStack; Self::INVENTORY_SIZE]>,
     pub dirty: AtomicBool,
     pub comparator_dirty: AtomicBool,
-    pub facing: FacingHopper,
     pub cooldown_time: AtomicI32,
     pub ticked_game_time: AtomicI64,
 }
@@ -80,7 +79,6 @@ impl BlockEntity for HopperBlockEntity {
             items: RwLock::new(from_fn(|_| ItemStack::EMPTY.clone())),
             dirty: AtomicBool::new(false),
             comparator_dirty: AtomicBool::new(false),
-            facing: FacingHopper::Down,
             cooldown_time: AtomicI32::from(nbt.get_int("TransferCooldown").unwrap_or(-1)),
             ticked_game_time: AtomicI64::new(0),
         };
@@ -129,11 +127,6 @@ impl BlockEntity for HopperBlockEntity {
         Some(self)
     }
 
-    fn set_block_state(&mut self, block_state: BlockStateId) {
-        // TODO !!!IMPORTANT!!! set block state when loading the chunk
-        self.facing = HopperLikeProperties::from_state_id(block_state).facing;
-    }
-
     fn is_comparator_dirty(&self) -> bool {
         self.comparator_dirty.load(Ordering::Relaxed)
     }
@@ -172,13 +165,12 @@ impl HopperBlockEntity {
     pub const ID: &'static str = "minecraft:hopper";
 
     #[must_use]
-    pub fn new(position: BlockPos, facing: FacingHopper) -> Self {
+    pub fn new(position: BlockPos) -> Self {
         Self {
             position,
             items: RwLock::new(from_fn(|_| ItemStack::EMPTY.clone())),
             dirty: AtomicBool::new(false),
             comparator_dirty: AtomicBool::new(false),
-            facing,
             cooldown_time: AtomicI32::new(-1),
             ticked_game_time: AtomicI64::new(0),
         }
@@ -188,7 +180,7 @@ impl HopperBlockEntity {
             let mut success = if self.is_empty() {
                 false
             } else {
-                self.eject_items(world)
+                self.eject_items(world, state.facing)
             };
             if !self.inventory_full() {
                 success |= self.suck_in_items(world);
@@ -365,10 +357,12 @@ impl HopperBlockEntity {
         Some(extraction.one_item)
     }
 
-    fn eject_items(&self, world: &Arc<World>) -> bool {
+    /// Pushes toward `facing`, read from the block state each tick: a hopper loaded from disk has
+    /// no state of its own, so a cached facing pointed down after every restart.
+    fn eject_items(&self, world: &Arc<World>, facing: FacingHopper) -> bool {
         // TODO getEntityContainer
 
-        if let Some(entity) = world.get_block_entity(&self.position.offset(to_offset(&self.facing)))
+        if let Some(entity) = world.get_block_entity(&self.position.offset(to_offset(&facing)))
             && let Some(container) = entity.get_inventory()
         {
             // TODO check WorldlyContainer
@@ -383,7 +377,7 @@ impl HopperBlockEntity {
             if is_full {
                 return false;
             }
-            let target_pos = self.position.offset(to_offset(&self.facing));
+            let target_pos = self.position.offset(to_offset(&facing));
             for slot in 0..Self::INVENTORY_SIZE {
                 let item = self.get_stack(slot);
                 if item.is_empty() {
@@ -664,7 +658,7 @@ mod tests {
     }
 
     fn hopper_holding(stack: ItemStack) -> HopperBlockEntity {
-        let hopper = HopperBlockEntity::new(BlockPos::new(0, 0, 0), FacingHopper::Down);
+        let hopper = HopperBlockEntity::new(BlockPos::new(0, 0, 0));
         hopper.set_stack(0, stack);
         hopper
     }
