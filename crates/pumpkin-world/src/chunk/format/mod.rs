@@ -128,6 +128,17 @@ fn extract_u16_array(tag: &pumpkin_nbt::tag::NbtTag) -> Option<Box<[BlockStateId
                     pumpkin_nbt::tag::NbtTag::Short(x) => BlockStateId::new_or_air(*x as u16),
                     pumpkin_nbt::tag::NbtTag::Byte(x) => BlockStateId::new_or_air(*x as u16),
                     pumpkin_nbt::tag::NbtTag::Long(x) => BlockStateId::new_or_air(*x as u16),
+                    // Since 26.3 a state without properties is stored as its bare block id.
+                    pumpkin_nbt::tag::NbtTag::String(name) => {
+                        let entry = crate::generation::structure::template::PaletteEntry {
+                            name: name.to_string(),
+                            properties: Vec::new(),
+                        };
+                        crate::generation::structure::template::BlockStateResolver::resolve_simple(
+                            &entry,
+                        )
+                        .map_or(BlockStateId::AIR, |state| state.id)
+                    }
                     pumpkin_nbt::tag::NbtTag::Compound(compound) => {
                         if let Ok(entry) =
                             crate::generation::structure::template::PaletteEntry::from_nbt_compound(
@@ -1192,6 +1203,19 @@ mod tests {
             ])
             .to_state_id(&Block::REPEATER);
         assert_eq!(result[1], repeater_state);
+    }
+
+    #[test]
+    fn extract_u16_array_from_26_3_string_palette() {
+        // 26.3 stores states without properties as bare ids, so a section of only such
+        // blocks has a list of strings for a palette.
+        let list_tag = NbtTag::List(vec![
+            NbtTag::String("minecraft:air".to_string().into()),
+            NbtTag::String("minecraft:stone".to_string().into()),
+        ]);
+        let result = extract_u16_array(&list_tag).expect("should extract palette");
+
+        assert_eq!(&*result, [BlockStateId::AIR, Block::STONE.default_state.id]);
     }
 
     #[test]

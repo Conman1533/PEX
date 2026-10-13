@@ -640,20 +640,20 @@ impl<S: SingleChunkDataSerializer + 'static> ChunkSerializer for AnvilChunkFile<
             let bytes_offset = (sector_offset - 2) * SECTOR_BYTES;
             let bytes_count = sector_count * SECTOR_BYTES;
 
-            if bytes_offset + bytes_count > raw_file_bytes.len() {
+            if bytes_offset >= raw_file_bytes.len() {
                 return Err(ChunkReadingError::ParsingError(
                     ChunkParsingError::ErrorDeserializingChunk(format!(
-                        "Not enough bytes available for the chunk {} ({} vs {})",
-                        i,
-                        bytes_count,
-                        raw_file_bytes.len().saturating_sub(bytes_offset)
+                        "Chunk {i} starts past the end of the region file"
                     )),
                 ));
             }
+            // Since 26.3 vanilla no longer pads the file to a whole sector, so the last chunk can
+            // end inside its final sector. Like `RegionFile.getChunkDataInputStream`, read what is
+            // there and let the declared length decide whether the chunk is complete.
+            let bytes_end = (bytes_offset + bytes_count).min(raw_file_bytes.len());
 
-            let serialized_data = AnvilChunkData::from_bytes(
-                raw_file_bytes.slice(bytes_offset..bytes_offset + bytes_count),
-            )?;
+            let serialized_data =
+                AnvilChunkData::from_bytes(raw_file_bytes.slice(bytes_offset..bytes_end))?;
 
             let layout = chunk_file.layout.get_mut();
             layout
@@ -1422,6 +1422,17 @@ mod tests {
         // a chunk there must not be skipped.
         let file = AnvilChunkFile::<ChunkData>::read(region_with_first_location((2 << 8) | 1, 1))
             .expect("a chunk at the first free sector is well formed");
+
+        assert!(file.chunks_data[0].is_some());
+    }
+
+    #[test]
+    fn a_last_chunk_that_ends_inside_its_sector_is_read() {
+        // 26.3 stops padding region files, so the last chunk's final sector can be cut short.
+        let mut region = BytesMut::from(&region_with_first_location((2 << 8) | 1, 1)[..]);
+        region.truncate(SECTOR_BYTES * 2 + 5);
+        let file = AnvilChunkFile::<ChunkData>::read(region.freeze())
+            .expect("a chunk whose declared length fits is complete");
 
         assert!(file.chunks_data[0].is_some());
     }
