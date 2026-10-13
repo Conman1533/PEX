@@ -46,11 +46,14 @@ jobs:
           - os: ubuntu-latest
             asset: pumpkin-X64-Linux-musl
             target: x86_64-unknown-linux-musl
+          # Fat LTO runs these runners out of memory at the final link; thin LTO fits.
           - os: ubuntu-26.04-arm
             asset: pumpkin-ARM64-Linux
+            lto: thin
           - os: ubuntu-26.04-arm
             asset: pumpkin-ARM64-Linux-musl
             target: aarch64-unknown-linux-musl
+            lto: thin
           - os: windows-latest
             asset: pumpkin-X64-Windows.exe
           - os: windows-11-arm
@@ -73,6 +76,8 @@ jobs:
           key: ${{ matrix.asset }}
       - name: Build release
         shell: bash
+        env:
+          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.lto || 'true' }}
         run: cargo build --verbose --release ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
       - name: Prepare artifact
         shell: bash
@@ -111,6 +116,8 @@ jobs:
       - name: Build release with cargo ndk
         env:
           CARGO_NDK_PLATFORM: 24
+          # Fat LTO runs this runner out of memory at the final link; thin LTO fits.
+          CARGO_PROFILE_RELEASE_LTO: thin
         run: cargo ndk -t arm64-v8a build --release --locked
       - name: Prepare artifact
         run: |
@@ -127,6 +134,8 @@ jobs:
     permissions:
       contents: write
     needs: [build, build_android]
+    # Publish what built: one platform's failure shouldn't hold back the others.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
