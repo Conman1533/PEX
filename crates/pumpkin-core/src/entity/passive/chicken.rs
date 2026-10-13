@@ -5,6 +5,7 @@ use std::sync::{
 
 use pumpkin_data::chicken_sound_variant::ChickenSoundVariant;
 use pumpkin_data::chicken_variant::ChickenVariant;
+use pumpkin_data::game_event::GameEvent;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::{entity::EntityType, item::Item};
@@ -230,10 +231,10 @@ impl Mob for ChickenEntity {
         if (!on_ground) && current_velocity.y < 0.0 {
             entity.set_velocity(current_velocity.multiply(1.0, 0.6, 1.0));
         }
-        if self.egg_lay_time.fetch_sub(1, Ordering::Relaxed) <= 1 {
+        // Vanilla `Chicken.aiStep` only counts down for grown chickens.
+        if !self.is_baby() && self.egg_lay_time.fetch_sub(1, Ordering::Relaxed) <= 1 {
             let next_time = rand::rng().random_range(6000..12000);
             let world = entity.world.load_full();
-            let pos = entity.block_pos.load();
             let entity_id = entity.entity_id;
             let mut drop_event =
                 crate::plugin::api::events::entity::entity_drop_item::EntityDropItemEvent::new(
@@ -247,7 +248,11 @@ impl Mob for ChickenEntity {
                     .fire_blocking(&server, &mut drop_event);
             }
             if !drop_event.cancelled {
-                world.drop_stack(&pos, ItemStack::new(1, &Item::EGG));
+                // `spawnAtLocation` drops at the chicken's own position, so an egg laid on a hopper
+                // lands inside the hopper's pickup area rather than in the block below it.
+                entity.spawn_at_location(ItemStack::new(1, &Item::EGG));
+                entity.play_sound(Sound::EntityChickenEgg);
+                world.emit_game_event(GameEvent::EntityPlace.name(), entity.pos.load());
             }
             self.egg_lay_time.store(next_time, Ordering::Relaxed);
         }
