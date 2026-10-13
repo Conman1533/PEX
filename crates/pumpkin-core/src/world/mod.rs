@@ -602,14 +602,7 @@ impl World {
         self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions())
             .await;
 
-        let chunks: Vec<Vector2<i32>> = self
-            .block_entities
-            .iter()
-            .map(|chunk_block_entities| *chunk_block_entities.key())
-            .collect();
-        for chunk_pos in chunks {
-            self.save_block_entities(chunk_pos);
-        }
+        self.save_all_block_entities();
 
         // Save portal POI to disk
         let save_result = self
@@ -677,6 +670,19 @@ impl World {
     /// `get_block_entity` takes the saved NBT out of the chunk when it wakes an
     /// entity up - so this has to run before the chunk is dropped, or everything
     /// the entity did since it was loaded is lost.
+    /// Writes every live block entity into its chunk. Block entities only reach disk through a
+    /// loaded chunk, so this has to run before the chunks are unloaded.
+    pub fn save_all_block_entities(&self) {
+        let chunks: Vec<Vector2<i32>> = self
+            .block_entities
+            .iter()
+            .map(|chunk_block_entities| *chunk_block_entities.key())
+            .collect();
+        for chunk_pos in chunks {
+            self.save_block_entities(chunk_pos);
+        }
+    }
+
     fn save_block_entities(&self, chunk_pos: Vector2<i32>) {
         let Some(block_entities) = self
             .block_entities
@@ -6885,14 +6891,7 @@ impl World {
         self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions())
             .await;
 
-        let chunks: Vec<Vector2<i32>> = self
-            .block_entities
-            .iter()
-            .map(|chunk_block_entities| *chunk_block_entities.key())
-            .collect();
-        for chunk_pos in chunks {
-            self.save_block_entities(chunk_pos);
-        }
+        self.save_all_block_entities();
 
         if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
             let _ = portal_poi.save_all();
