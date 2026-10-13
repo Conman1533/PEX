@@ -523,6 +523,12 @@ impl PumpkinServer {
             error!("Error saving all players advancements during shutdown: {e}");
         }
 
+        // Kicking the players lets the chunk system unload their chunks before
+        // `World::shutdown` runs, and a block entity written after its chunk is gone is lost.
+        for world in self.server.worlds.load().iter() {
+            world.save_all_block_entities();
+        }
+
         let kick_message = TextComponent::text("Server stopped");
         for player in self.server.get_all_players() {
             player.kick(DisconnectReason::Shutdown, &kick_message);
