@@ -10,6 +10,7 @@ use super::{
 };
 use crate::chunk::io::Dirtiable;
 use crate::level::{Level, LoadedChunkChange, SyncChunk};
+use crate::world::WorldPortalExt;
 use dashmap::DashMap;
 use pumpkin_config::lighting::LightingEngineConfig;
 use pumpkin_util::math::vector2::Vector2;
@@ -839,7 +840,7 @@ impl GenerationSchedule {
         }
     }
 
-    fn process_unload_queue(&mut self) {
+    fn process_unload_queue(&mut self, portal: Option<&dyn WorldPortalExt>) {
         if self.unload_chunks.is_empty() {
             return;
         }
@@ -894,6 +895,12 @@ impl GenerationSchedule {
 
             self.graph.drop_edge_chain(holder.occupied_by);
             holder.occupied_by = EdgeKey::null();
+
+            // After unpublishing, so the world cannot load a stale block entity back out of it, and
+            // before the dirty check, so what the world writes into the chunk is saved.
+            if let (Some(portal), Some(Chunk::Level(chunk))) = (portal, &holder.chunk) {
+                portal.before_chunk_unload(chunk);
+            }
 
             if let Some(tmp) = holder.chunk {
                 match tmp {
@@ -1272,7 +1279,7 @@ impl GenerationSchedule {
         loop {
             if level.should_unload.swap(false, Relaxed) {
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level.world_portal.load_full().as_deref());
             }
             if level.should_save.swap(false, Relaxed) {
                 self.save_all_chunk(false);
@@ -1280,7 +1287,7 @@ impl GenerationSchedule {
             if level.shut_down_chunk_system.load(Relaxed) {
                 info!("Saving chunks before shutdown...");
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level.world_portal.load_full().as_deref());
                 self.save_all_chunk(true);
                 break;
             }
@@ -1296,7 +1303,7 @@ impl GenerationSchedule {
             // is what puts stale dependency holders into the queue in the first place.
             if self.last_unload.elapsed() >= std::time::Duration::from_secs(1) {
                 self.garbage_collect_dependencies();
-                self.process_unload_queue();
+                self.process_unload_queue(level.world_portal.load_full().as_deref());
                 self.last_unload = std::time::Instant::now();
             }
 
@@ -1828,7 +1835,7 @@ mod tests {
         levels.insert(pos, ChunkLoading::FULL_CHUNK_LEVEL);
         channel.set_level((changes, levels));
 
-        schedule.process_unload_queue();
+        schedule.process_unload_queue(None);
 
         assert!(schedule.public_chunk_map.contains_key(&pos));
         assert!(
@@ -1837,5 +1844,91 @@ mod tests {
                 .get(&pos)
                 .is_some_and(|holder| holder.public)
         );
+    }
+    /// Records the chunks handed over before unloading and marks them dirty, as the world does
+    /// after writing their block entities into them.
+    #[derive(Default)]
+    struct UnloadRecorder(Mutex<Vec<ChunkPos>>);
+
+    impl WorldPortalExt for UnloadRecorder {
+        fn can_place_at(
+            &self,
+            _block: &pumpkin_data::Block,
+            _state: &pumpkin_data::BlockState,
+            _block_accessor: &dyn crate::world::BlockAccessor,
+            _block_pos: &pumpkin_util::math::position::BlockPos,
+        ) -> bool {
+            true
+        }
+
+        fn mirror(
+            &self,
+            block: &pumpkin_data::Block,
+            state_id: pumpkin_data::BlockStateId,
+            mirror: pumpkin_data::Mirror,
+        ) -> &'static pumpkin_data::BlockState {
+            block.mirror(state_id, mirror)
+        }
+
+        fn rotate(
+            &self,
+            block: &pumpkin_data::Block,
+            state_id: pumpkin_data::BlockStateId,
+            rotation: pumpkin_data::Rotation,
+        ) -> &'static pumpkin_data::BlockState {
+            block.rotate(state_id, rotation)
+        }
+
+        fn spawn_mobs_for_chunk_generation(
+            &self,
+            _cache: &mut dyn crate::generation::proto_chunk::GenerationCache,
+            _biome: &'static pumpkin_data::chunk::Biome,
+            _chunk_x: i32,
+            _chunk_z: i32,
+        ) {
+        }
+
+        fn before_chunk_unload(&self, chunk: &ChunkData) {
+            self.0.lock().unwrap().push(ChunkPos::new(chunk.x, chunk.z));
+            chunk.mark_dirty(true);
+        }
+    }
+
+    #[test]
+    fn unload_hands_the_world_only_chunks_it_unloads_before_saving_them() {
+        let channel = Arc::new(LevelChannel::new());
+        let mut schedule = idle_schedule(channel.clone());
+        let kept = ChunkPos::new(0, 0);
+        let unloaded = ChunkPos::new(1, 0);
+        for pos in [kept, unloaded] {
+            let chunk = ChunkData::empty_sync(pos.x, pos.y);
+            schedule.chunk_map.insert(
+                pos,
+                ChunkHolder {
+                    current_stage: StagedChunkEnum::Full,
+                    chunk: Some(Chunk::Level(chunk.clone())),
+                    public: true,
+                    ..Default::default()
+                },
+            );
+            schedule.public_chunk_map.insert(pos, chunk);
+            schedule.unload_chunks.insert(pos);
+        }
+        // A player joins into `kept`; its ticket is still in the channel.
+        let mut changes = HashMapType::default();
+        changes.insert(kept, (StagedChunkEnum::None, StagedChunkEnum::Full));
+        let mut levels = ChunkLevel::default();
+        levels.insert(kept, ChunkLoading::FULL_CHUNK_LEVEL);
+        channel.set_level((changes, levels));
+        let world = UnloadRecorder::default();
+
+        schedule.process_unload_queue(Some(&world));
+
+        // The kept chunk's block entities stay live in the world.
+        assert_eq!(*world.0.lock().unwrap(), [unloaded]);
+        // The unloaded chunk was clean until the world wrote into it, and is queued for saving.
+        let queued = schedule.io_lock.0.lock().unwrap();
+        assert!(queued.contains_key(&unloaded));
+        assert!(!queued.contains_key(&kept));
     }
 }
