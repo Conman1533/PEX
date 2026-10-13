@@ -15,8 +15,9 @@ use pumpkin_util::{Difficulty, world_seed::Seed};
 use serde::{Deserialize, Serialize};
 
 use crate::world_info::{
-    DataPacks, MAXIMUM_SUPPORTED_LEVEL_VERSION, MAXIMUM_SUPPORTED_WORLD_DATA_VERSION,
-    MINIMUM_SUPPORTED_LEVEL_VERSION, MINIMUM_SUPPORTED_WORLD_DATA_VERSION, WorldVersion,
+    DataPacks, MAXIMUM_READABLE_WORLD_DATA_VERSION, MAXIMUM_SUPPORTED_LEVEL_VERSION,
+    MAXIMUM_SUPPORTED_WORLD_DATA_VERSION, MINIMUM_SUPPORTED_LEVEL_VERSION,
+    MINIMUM_SUPPORTED_WORLD_DATA_VERSION, WorldVersion,
     data_files::{
         minecraft_data_dir, read_game_rules, read_wandering_trader, read_weather,
         read_world_clocks, read_world_gen_settings, write_custom_boss_events_stub,
@@ -47,7 +48,7 @@ fn check_data_version(data: &NbtCompound) -> Result<(), WorldInfoError> {
         ));
     };
 
-    if (MINIMUM_SUPPORTED_WORLD_DATA_VERSION..=MAXIMUM_SUPPORTED_WORLD_DATA_VERSION)
+    if (MINIMUM_SUPPORTED_WORLD_DATA_VERSION..=MAXIMUM_READABLE_WORLD_DATA_VERSION)
         .contains(&data_version)
     {
         Ok(())
