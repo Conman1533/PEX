@@ -1,8 +1,10 @@
 //! glibc keeps freed memory in its arenas, so a server that unloaded most of its chunks keeps
 //! its peak RSS. Periodically hand the free pages back to the OS from a background thread.
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 use std::time::Duration;
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 const TRIM_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Starts the trimmer. Only does anything on glibc; other allocators return memory themselves.

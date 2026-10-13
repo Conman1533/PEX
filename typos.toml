@@ -9,6 +9,8 @@ fo = "fo"
 undescore = "undescore"
 replaceables = "replaceables"
 convertable = "convertable"
+# "64ths" of a bundle
+ths = "ths"
 
 [default.extend-identifiers]
 # Vanilla method names
