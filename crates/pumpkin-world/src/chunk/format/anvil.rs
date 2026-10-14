@@ -35,6 +35,8 @@ pub const CHUNK_COUNT: usize = REGION_SIZE * REGION_SIZE;
 
 /// The number of bytes in a sector (4 KiB)
 const SECTOR_BYTES: usize = 4096;
+/// Bytes of the length prefix and compression byte that precede every chunk record.
+const CHUNK_HEADER_SIZE: usize = 5;
 
 // 26.2
 pub const WORLD_DATA_VERSION: i32 = 4903;
@@ -293,8 +295,7 @@ impl AnvilChunkData {
     /// Raw size of serialized chunk
     #[inline]
     const fn raw_write_size(&self) -> usize {
-        // 4 bytes for the *length* and 1 byte for the *compression* method
-        self.compressed_data.len() + 4 + 1
+        self.compressed_data.len() + CHUNK_HEADER_SIZE
     }
 
     /// Size of serialized chunk with padding
@@ -312,6 +313,13 @@ impl AnvilChunkData {
 
     fn from_bytes(bytes: Bytes) -> Result<Self, ChunkReadingError> {
         let mut bytes = bytes;
+        // An unpadded file can end inside the header, which `RegionFile.getChunkDataInputStream`
+        // treats as a truncated chunk.
+        if bytes.len() < CHUNK_HEADER_SIZE {
+            return Err(ChunkReadingError::ParsingError(
+                ChunkParsingError::ErrorDeserializingChunk("Chunk header is truncated".to_string()),
+            ));
+        }
         // Minus one for the compression byte, which the length covers, so
         // anything below one does not describe a chunk at all.
         let declared_length = bytes.get_u32() as usize;
@@ -325,13 +333,7 @@ impl AnvilChunkData {
 
         // The compression byte has not been read yet, so the payload can use at
         // most one less than what remains.
-        let Some(available) = bytes.len().checked_sub(1) else {
-            return Err(ChunkReadingError::ParsingError(
-                ChunkParsingError::ErrorDeserializingChunk(
-                    "Chunk record is missing its compression byte".to_string(),
-                ),
-            ));
-        };
+        let available = bytes.len() - 1;
 
         if length > available {
             return Err(ChunkReadingError::ParsingError(
@@ -1435,6 +1437,16 @@ mod tests {
             .expect("a chunk whose declared length fits is complete");
 
         assert!(file.chunks_data[0].is_some());
+    }
+
+    #[test]
+    fn a_chunk_cut_off_inside_its_header_is_an_error_not_a_panic() {
+        // Without padding the tail can end inside a chunk's 5 byte header, which
+        // used to be read without checking that those bytes exist.
+        let mut region = BytesMut::from(&region_with_first_location((2 << 8) | 1, 1)[..]);
+        region.truncate(SECTOR_BYTES * 2 + 3);
+
+        assert!(AnvilChunkFile::<ChunkData>::read(region.freeze()).is_err());
     }
 
     #[test]
