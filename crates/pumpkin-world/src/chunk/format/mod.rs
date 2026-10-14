@@ -318,15 +318,14 @@ impl ChunkData {
                             }
                         });
 
-                    // `Full` skips the length check `LightContainer::new` makes,
-                    // and every reader indexes it up to `ARRAY_SIZE`, so a
-                    // short array from disk is dropped instead of stored.
+                    // `LightContainer::new` asserts the length, so a short array
+                    // from disk is dropped here instead of stored.
                     block_lights[index] = block_light
                         .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
-                        .map_or(LightContainer::Empty(0), LightContainer::Full);
+                        .map_or(LightContainer::Empty(0), LightContainer::from_array);
                     sky_lights[index] = sky_light
                         .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
-                        .map_or(LightContainer::Empty(0), LightContainer::Full);
+                        .map_or(LightContainer::Empty(0), LightContainer::from_array);
 
                     if let Some(bs_compound) = section_compound.get_compound("block_states") {
                         let data = bs_compound
@@ -485,13 +484,6 @@ impl ChunkData {
     fn internal_to_bytes(&self) -> Bytes {
         use pumpkin_nbt::tag::NbtTag;
 
-        fn extract_light_ref(light: Option<&LightContainer>) -> Option<&[u8]> {
-            match light {
-                Some(LightContainer::Full(data)) => Some(data.as_ref()),
-                _ => None,
-            }
-        }
-
         let is_light_correct = self
             .light_populated
             .load(std::sync::atomic::Ordering::Relaxed);
@@ -621,13 +613,21 @@ impl ChunkData {
             section_comp.put_compound("biomes", b_comp);
 
             // block_light
-            if let Some(light_data) = extract_light_ref(light_lock.block_light.get(i)) {
+            if let Some(light_data) = light_lock
+                .block_light
+                .get(i)
+                .and_then(LightContainer::to_array)
+            {
                 let bytes: Box<[i8]> = light_data.iter().map(|&x| x as i8).collect();
                 section_comp.put("BlockLight", NbtTag::ByteArray(bytes));
             }
 
             // sky_light
-            if let Some(light_data) = extract_light_ref(light_lock.sky_light.get(i)) {
+            if let Some(light_data) = light_lock
+                .sky_light
+                .get(i)
+                .and_then(LightContainer::to_array)
+            {
                 let bytes: Box<[i8]> = light_data.iter().map(|&x| x as i8).collect();
                 section_comp.put("SkyLight", NbtTag::ByteArray(bytes));
             }
@@ -905,6 +905,38 @@ impl LightContainer {
         Self::Full(data)
     }
 
+    /// Stores `data`, or just its level when the whole section holds one level, which is
+    /// most sky light: uniformly 15 above the terrain and 0 deep below it.
+    #[must_use]
+    pub fn from_array(data: Box<[u8]>) -> Self {
+        let mut container = Self::new(data);
+        container.compact();
+        container
+    }
+
+    /// Drops the array of a section that holds one level everywhere.
+    pub fn compact(&mut self) {
+        if let Self::Full(data) = self {
+            let first = data[0];
+            if first >> 4 == first & 0x0F && data.iter().all(|&b| b == first) {
+                *self = Self::Empty(first & 0x0F);
+            }
+        }
+    }
+
+    /// The section's nibble array, or `None` when it is dark everywhere.
+    #[must_use]
+    pub fn to_array(&self) -> Option<std::borrow::Cow<'_, [u8]>> {
+        match self {
+            Self::Full(data) => Some(std::borrow::Cow::Borrowed(data)),
+            Self::Empty(0) => None,
+            Self::Empty(level) => Some(std::borrow::Cow::Owned(vec![
+                level << 4 | level;
+                Self::ARRAY_SIZE
+            ])),
+        }
+    }
+
     #[must_use]
     pub fn new_filled(default: u8) -> Self {
         assert!(default <= 15, "Default value must be between 0 and 15");
@@ -986,7 +1018,7 @@ impl LightContainer {
 
     #[inline]
     pub fn fill(&mut self, value: u8) {
-        *self = Self::new_filled(value);
+        *self = Self::new_empty(value);
     }
 }
 
@@ -1055,6 +1087,28 @@ mod tests {
             chunk.section.get_block_absolute_y(0, -64, 0),
             Some(Block::STONE.default_state.id)
         );
+    }
+
+    #[test]
+    fn uniform_sky_light_survives_a_save() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        // Open sky is one level everywhere, so it is kept without its array after loading
+        // and has to be written back out as a full array.
+        let mut section = test_section(0, "minecraft:stone", true);
+        section.put(
+            "SkyLight",
+            NbtTag::ByteArray(vec![-1; LightContainer::ARRAY_SIZE].into_boxed_slice()),
+        );
+        let bytes = test_chunk(vec![section]).write();
+        let chunk = ChunkData::from_bytes(&bytes, Vector2::new(0, 0)).expect("chunk parses");
+        let saved = chunk.to_bytes().expect("chunk saves");
+        let reloaded = ChunkData::from_bytes(&saved, Vector2::new(0, 0)).expect("chunk reloads");
+
+        let light = reloaded.light_engine.lock().unwrap();
+        let section_index = (0 - reloaded.section.min_y) as usize / 16;
+        assert_eq!(light.sky_light[section_index].get(3, 7, 11), 15);
     }
 
     #[test]

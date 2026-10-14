@@ -13,14 +13,15 @@ pub fn write_compound_nbt(
     write.write_compound_nbt_with_version(Some(comp), &version)
 }
 
-/// Retrieves the 2048-byte nibble array from a light container, filling with `default_val` if empty.
+/// Retrieves the 2048-byte nibble array from a light container, filling with `default_val` if
+/// there is no container.
 #[must_use]
 pub fn get_light_bytes(container: Option<&LightContainer>, default_val: u8) -> [u8; 2048] {
     let mut buf = [default_val << 4 | default_val; 2048];
-    if let Some(LightContainer::Full(data)) = container
-        && data.len() == 2048
-    {
-        buf.copy_from_slice(data);
+    match container {
+        Some(LightContainer::Full(data)) if data.len() == 2048 => buf.copy_from_slice(data),
+        Some(LightContainer::Empty(level)) => buf.fill(level << 4 | level),
+        _ => {}
     }
     buf
 }
