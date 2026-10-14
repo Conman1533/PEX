@@ -26,6 +26,7 @@ use pumpkin_world::chunk::{ChunkData, ChunkHeightmapType};
 use pumpkin_world::generation::proto_chunk::GenerationCache;
 use rand::seq::IndexedRandom;
 use rand::{RngExt, rng};
+use rayon::prelude::*;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering::Relaxed};
@@ -366,31 +367,45 @@ impl SpawnState {
             .active_chunks
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for entity in entities.load().iter() {
-            if let Some(mob) = entity.get_mob()
-                && (mob.get_mob_entity().persistence_required.load(Relaxed)
-                    || mob.requires_custom_persistence())
-            {
-                continue;
+        // Reading every entity is the slow part, so it runs on Rayon. The counts are then added
+        // in entity order, which keeps the potential sums the same as a sequential pass.
+        let census: Vec<_> = entities
+            .load()
+            .par_iter()
+            .filter_map(|entity| {
+                if let Some(mob) = entity.get_mob()
+                    && (mob.get_mob_entity().persistence_required.load(Relaxed)
+                        || mob.requires_custom_persistence())
+                {
+                    return None;
+                }
+                let base_entity = entity.get_entity();
+                let entity_type = base_entity.entity_type;
+                if entity_type.category == &MobCategory::MISC {
+                    return None;
+                }
+                let chunk_pos = base_entity.chunk_pos.load();
+                if !active_chunks.contains(&chunk_pos) {
+                    return None;
+                }
+                let charge = base_entity
+                    .current_biome
+                    .load()
+                    .spawn_costs
+                    .get(entity_type.resource_name)
+                    .map(|cost| (base_entity.block_pos.load(), cost.charge));
+                let is_mob = entity.get_mob().is_some() || entity_type.mob;
+                Some((entity_type.category, chunk_pos, is_mob, charge))
+            })
+            .collect();
+        for (category, chunk_pos, is_mob, charge) in census {
+            if let Some((entity_pos, charge)) = charge {
+                potential.add_charge(&entity_pos, charge);
             }
-            let base_entity = entity.get_entity();
-            let entity_type = base_entity.entity_type;
-            if entity_type.category == &MobCategory::MISC {
-                continue;
+            if is_mob {
+                local_mob_cap.add_mob(chunk_pos, world, category);
             }
-            let chunk_pos = base_entity.chunk_pos.load();
-            if !active_chunks.contains(&chunk_pos) {
-                continue;
-            }
-            let entity_pos = base_entity.block_pos.load();
-            let biome = base_entity.current_biome.load();
-            if let Some(cost) = biome.spawn_costs.get(entity_type.resource_name) {
-                potential.add_charge(&entity_pos, cost.charge);
-            }
-            if entity.get_mob().is_some() || entity_type.mob {
-                local_mob_cap.add_mob(chunk_pos, world, entity_type.category);
-            }
-            counter.add(entity_type.category);
+            counter.add(category);
         }
         Self {
             spawnable_chunk_count: chunk_count,
