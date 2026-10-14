@@ -1546,6 +1546,14 @@ impl LivingEntity {
     fn travel_in_fluid(&self, caller: &dyn EntityBase, water: bool) {
         let movement_input = self.movement_input.load();
 
+        if water
+            && caller
+                .get_mob()
+                .is_some_and(|mob| mob.mob_travel_in_water(caller))
+        {
+            return;
+        }
+
         let falling = self.entity.velocity.load().y <= 0.0;
         let gravity = self.get_effective_gravity(caller);
         let effective_speed = self.get_attribute_value(&Attributes::MOVEMENT_SPEED);
@@ -1639,7 +1647,7 @@ impl LivingEntity {
         }
     }
 
-    fn make_move(&self, caller: &dyn EntityBase) {
+    pub(crate) fn make_move(&self, caller: &dyn EntityBase) {
         self.entity.move_entity(caller, self.entity.velocity.load());
 
         self.check_climbing();

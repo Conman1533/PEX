@@ -1,6 +1,8 @@
 use super::{Controls, Goal, to_goal_ticks};
+use crate::block::PathComputationType;
 use crate::entity::ai::util::default_random_pos;
 use crate::entity::{ai::pathfinder::NavigatorGoal, mob::Mob};
+use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 use rand::RngExt;
 
@@ -12,6 +14,7 @@ pub struct WanderAroundGoal {
     target: Option<Vector3<f64>>,
     interval: i32,
     force_trigger: bool,
+    get_position: fn(&dyn Mob) -> Option<Vector3<f64>>,
 }
 
 impl WanderAroundGoal {
@@ -28,7 +31,16 @@ impl WanderAroundGoal {
             target: None,
             interval,
             force_trigger: false,
+            get_position: Self::get_position,
         }
+    }
+
+    /// Vanilla `RandomSwimmingGoal`: a stroll that only picks positions a mob can swim to.
+    #[must_use]
+    pub const fn swimming(speed: f64, interval: i32) -> Self {
+        let mut goal = Self::with_interval(speed, interval);
+        goal.get_position = Self::get_swimmable_position;
+        goal
     }
 
     /// Run once on the next check, ignoring the interval.
@@ -42,6 +54,27 @@ impl WanderAroundGoal {
 
     fn get_position(mob: &dyn Mob) -> Option<Vector3<f64>> {
         default_random_pos::get_pos(mob, 10, 7)
+    }
+
+    /// Vanilla `BehaviorUtils.getRandomSwimmablePos(mob, 10, 7)`. After ten misses it keeps the
+    /// last position even if it isn't water, like vanilla.
+    fn get_swimmable_position(mob: &dyn Mob) -> Option<Vector3<f64>> {
+        let world = mob.get_entity().world.load();
+        let mut position = default_random_pos::get_pos(mob, 10, 7);
+        let mut count = 0;
+        while let Some(pos) = position {
+            let (block, state) = world.get_block_and_state(&BlockPos::floored_v(pos));
+            if world
+                .block_registry
+                .is_pathfindable(block, state, PathComputationType::Water)
+                || count >= 10
+            {
+                break;
+            }
+            count += 1;
+            position = default_random_pos::get_pos(mob, 10, 7);
+        }
+        position
     }
 }
 
@@ -63,7 +96,7 @@ impl Goal for WanderAroundGoal {
             }
         }
 
-        self.target = Self::get_position(mob);
+        self.target = (self.get_position)(mob);
         if self.target.is_none() {
             return false;
         }

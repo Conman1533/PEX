@@ -299,6 +299,7 @@ impl MobEntity {
         };
 
         navigator.tick(&self.living_entity);
+        let wanted_position = navigator.take_wanted_position();
 
         {
             *self
@@ -306,6 +307,13 @@ impl MobEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = navigator;
         };
+
+        if let Some((position, speed)) = wanted_position {
+            self.move_control
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .set_wanted_position(position.x, position.y, position.z, speed);
+        }
 
         mob.custom_server_ai_step(caller);
 
@@ -928,6 +936,16 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Per-mob tick hook called each tick before AI runs. Override for mob-specific logic.
     fn mob_tick(&self, _caller: &dyn EntityBase) {}
 
+    /// Vanilla `LivingEntity.travelInWater` overrides. Returns whether the mob moved itself.
+    fn mob_travel_in_water(&self, _caller: &dyn EntityBase) -> bool {
+        false
+    }
+
+    /// Vanilla `Entity.isPushedByFluid`.
+    fn mob_is_pushed_by_fluids(&self) -> bool {
+        true
+    }
+
     fn post_tick(&self) {}
 
     fn get_preferred_weapon_type(&self) -> Option<&'static pumpkin_data::tag::Tag> {
@@ -1346,6 +1364,10 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn is_pushable(&self) -> bool {
         self.get_mob_entity().living_entity.is_pushable()
+    }
+
+    fn is_pushed_by_fluids(&self) -> bool {
+        self.mob_is_pushed_by_fluids()
     }
 
     fn on_lightning_strike(
