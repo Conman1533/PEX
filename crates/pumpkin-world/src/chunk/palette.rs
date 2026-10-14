@@ -52,6 +52,77 @@ pub struct HeterogeneousPaletteData<V: Hash + Eq + Copy, const DIM: usize> {
 enum PaletteStorage<V, const DIM: usize> {
     Dense(Box<AbstractCube<V, DIM>>),
     Indexed(Box<AbstractCube<u8, DIM>>),
+    /// Two palette indices per byte, low nibble first, in `y, z, x` order. Used while the
+    /// palette has at most [`NIBBLE_PALETTE_MAX`] entries, which most sections do.
+    Nibbles(Box<[u8]>),
+}
+
+const NIBBLE_PALETTE_MAX: usize = 16;
+
+impl<V, const DIM: usize> PaletteStorage<V, DIM> {
+    const fn flat_index(x: usize, y: usize, z: usize) -> usize {
+        (y * DIM + z) * DIM + x
+    }
+
+    /// Index storage for `indices`, packed into nibbles when the palette is small enough.
+    fn from_indices(indices: Box<AbstractCube<u8, DIM>>, palette_len: usize) -> Self {
+        if palette_len > NIBBLE_PALETTE_MAX {
+            Self::Indexed(indices)
+        } else {
+            Self::Nibbles(Self::pack_nibbles(&indices))
+        }
+    }
+
+    fn pack_nibbles(indices: &AbstractCube<u8, DIM>) -> Box<[u8]> {
+        indices
+            .as_flattened()
+            .as_flattened()
+            .chunks(2)
+            .map(|pair| pair[0] | pair.get(1).map_or(0, |high| high << 4))
+            .collect()
+    }
+
+    fn nibble(data: &[u8], i: usize) -> usize {
+        usize::from((data[i >> 1] >> ((i & 1) << 2)) & 0x0F)
+    }
+
+    const fn set_nibble(data: &mut [u8], i: usize, index: u8) {
+        let shift = (i & 1) << 2;
+        data[i >> 1] = (data[i >> 1] & !(0x0F << shift)) | (index << shift);
+    }
+
+    /// The palette indices in `y, z, x` order, or `None` for dense storage.
+    fn indices(&self) -> Option<Box<dyn Iterator<Item = usize> + '_>> {
+        match self {
+            Self::Dense(_) => None,
+            Self::Indexed(indices) => Some(Box::new(
+                indices
+                    .as_flattened()
+                    .as_flattened()
+                    .iter()
+                    .map(|&index| usize::from(index)),
+            )),
+            Self::Nibbles(data) => {
+                Some(Box::new(data.iter().flat_map(|&byte| {
+                    [usize::from(byte & 0x0F), usize::from(byte >> 4)]
+                })))
+            }
+        }
+    }
+
+    /// Unpacks nibble storage into a byte per index.
+    fn nibbles_to_indexed(data: &[u8]) -> Box<AbstractCube<u8, DIM>> {
+        let mut indices = Box::new([[[0u8; DIM]; DIM]; DIM]);
+        for (i, index) in indices
+            .as_flattened_mut()
+            .as_flattened_mut()
+            .iter_mut()
+            .enumerate()
+        {
+            *index = Self::nibble(data, i) as u8;
+        }
+        indices
+    }
 }
 
 impl<V: Hash + Eq + Copy + Default, const DIM: usize> HeterogeneousPaletteData<V, DIM> {
@@ -63,6 +134,12 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> HeterogeneousPaletteData<V
         match &self.storage {
             PaletteStorage::Dense(cube) => cube[y][z][x],
             PaletteStorage::Indexed(indices) => self.palette[indices[y][z][x] as usize],
+            PaletteStorage::Nibbles(data) => {
+                self.palette[PaletteStorage::<V, DIM>::nibble(
+                    data,
+                    PaletteStorage::<V, DIM>::flat_index(x, y, z),
+                )]
+            }
         }
     }
 
@@ -94,10 +171,23 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> HeterogeneousPaletteData<V
         };
 
         // Handle storage upgrades or updates
+        if new_index >= NIBBLE_PALETTE_MAX
+            && let PaletteStorage::Nibbles(data) = &self.storage
+        {
+            self.storage =
+                PaletteStorage::Indexed(PaletteStorage::<V, DIM>::nibbles_to_indexed(data));
+        }
         let mut upgraded = false;
         match &mut self.storage {
             PaletteStorage::Dense(cube) => {
                 cube[y][z][x] = value;
+            }
+            PaletteStorage::Nibbles(data) => {
+                PaletteStorage::<V, DIM>::set_nibble(
+                    data,
+                    PaletteStorage::<V, DIM>::flat_index(x, y, z),
+                    new_index as u8,
+                );
             }
             PaletteStorage::Indexed(indices) => {
                 if new_index <= 255 {
@@ -137,15 +227,29 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> HeterogeneousPaletteData<V
             }
 
             // If we are indexed, we need to update all indices because swap_remove changed indices
-            if !upgraded && let PaletteStorage::Indexed(indices) = &mut self.storage {
-                for row in indices.iter_mut() {
-                    for col in row.iter_mut() {
-                        for idx in col.iter_mut() {
+            if !upgraded {
+                match &mut self.storage {
+                    PaletteStorage::Indexed(indices) => {
+                        for idx in indices.as_flattened_mut().as_flattened_mut() {
                             if *idx as usize == last_index {
                                 *idx = original_index as u8;
                             }
                         }
                     }
+                    PaletteStorage::Nibbles(data) => {
+                        for i in 0..DIM * DIM * DIM {
+                            if PaletteStorage::<V, DIM>::nibble(data, i) == last_index {
+                                PaletteStorage::<V, DIM>::set_nibble(data, i, original_index as u8);
+                            }
+                        }
+                    }
+                    PaletteStorage::Dense(_) => {}
+                }
+                if self.palette.len() <= NIBBLE_PALETTE_MAX
+                    && let PaletteStorage::Indexed(indices) = &self.storage
+                {
+                    self.storage =
+                        PaletteStorage::Nibbles(PaletteStorage::<V, DIM>::pack_nibbles(indices));
                 }
             }
         }
@@ -194,7 +298,7 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
                     indices.as_flattened_mut().as_flattened_mut()[i] = idx as u8;
                 }
                 Self::Heterogeneous(Box::new(HeterogeneousPaletteData {
-                    storage: PaletteStorage::Indexed(indices),
+                    storage: PaletteStorage::from_indices(indices, palette.len()),
                     palette,
                     counts,
                 }))
@@ -241,7 +345,7 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
         }
 
         let storage = if palette.len() <= 256 && std::mem::size_of::<V>() > 1 {
-            PaletteStorage::Indexed(indices)
+            PaletteStorage::from_indices(indices, palette.len())
         } else {
             PaletteStorage::Dense(cube)
         };
@@ -270,6 +374,14 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
                 let blocks_per_i64 = 64 / bits_per_entry;
 
                 let packed_indices: Box<[i64]> = match &data.storage {
+                    PaletteStorage::Nibbles(nibbles) if bits_per_entry == 4 => nibbles
+                        .chunks(8)
+                        .map(|bytes| {
+                            let mut word = [0u8; 8];
+                            word[..bytes.len()].copy_from_slice(bytes);
+                            i64::from_le_bytes(word)
+                        })
+                        .collect(),
                     PaletteStorage::Dense(cube) => cube
                         .as_flattened()
                         .as_flattened()
@@ -286,21 +398,25 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
                             })
                         })
                         .collect(),
-                    PaletteStorage::Indexed(indices) => indices
-                        .as_flattened()
-                        .as_flattened()
-                        .chunks(blocks_per_i64 as usize)
-                        .map(|chunk| {
-                            chunk.iter().enumerate().fold(0, |acc, (index, key_index)| {
-                                let key_index = *key_index as usize;
-                                debug_assert!((1 << bits_per_entry) > key_index);
+                    PaletteStorage::Indexed(_) | PaletteStorage::Nibbles(_) => {
+                        let key_indices: Vec<usize> =
+                            data.storage.indices().into_iter().flatten().collect();
+                        key_indices
+                            .chunks(blocks_per_i64 as usize)
+                            .map(|chunk| {
+                                chunk
+                                    .iter()
+                                    .enumerate()
+                                    .fold(0, |acc, (index, &key_index)| {
+                                        debug_assert!((1 << bits_per_entry) > key_index);
 
-                                let packed_offset_index =
-                                    (key_index as u64) << (bits_per_entry as u64 * index as u64);
-                                acc | packed_offset_index as i64
+                                        let packed_offset_index = (key_index as u64)
+                                            << (bits_per_entry as u64 * index as u64);
+                                        acc | packed_offset_index as i64
+                                    })
                             })
-                        })
-                        .collect(),
+                            .collect()
+                    }
                 };
 
                 (data.palette.clone().into_boxed_slice(), packed_indices)
@@ -327,16 +443,19 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
         let index_mask = (1 << bits_per_key) - 1;
         let keys_per_i64 = 64 / bits_per_key;
 
+        // Four-bit packed data already is the nibble layout: 16 indices per long, lowest first.
+        if bits_per_key == 4 && std::mem::size_of::<V>() > 1 {
+            return Self::from_nibble_packed_data(palette, packed_data);
+        }
+
         // Optimized path for indexed storage if palette is small enough
         if palette.len() <= 256 && std::mem::size_of::<V>() > 1 {
-            let mut indices = Box::new([[[0u8; DIM]; DIM]; DIM]);
             let mut counts = vec![0u16; palette.len()];
-            let indices_flat = indices.as_flattened_mut().as_flattened_mut();
-
             let mut packed_data_iter = packed_data.iter();
             let mut current_packed_word = *packed_data_iter.next().unwrap_or(&0);
 
-            for (i, index_out) in indices_flat.iter_mut().enumerate().take(Self::VOLUME) {
+            // Called once per block, in order.
+            let mut index_at = |i: usize| -> u8 {
                 let bit_index_in_word = i % keys_per_i64 as usize;
                 if bit_index_in_word == 0 && i > 0 {
                     current_packed_word = *packed_data_iter.next().unwrap_or(&0);
@@ -348,18 +467,35 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
 
                 let idx = lookup_index as usize;
                 if idx < palette.len() {
-                    *index_out = idx as u8;
                     counts[idx] += 1;
+                    idx as u8
                 } else {
                     warn!("Lookup index out of bounds! Defaulting...");
-                    // value is already 0, and counts[0] will be updated correctly if we track it
+                    0
                 }
-            }
-            // fix counts[0] if it was skipped in out-of-bounds cases (rare)
-            // But actually we should just ensure it's correct.
+            };
+
+            let storage = if palette.len() <= NIBBLE_PALETTE_MAX {
+                let mut nibbles = vec![0u8; Self::VOLUME / 2].into_boxed_slice();
+                for (i, byte) in nibbles.iter_mut().enumerate() {
+                    *byte = index_at(2 * i) | index_at(2 * i + 1) << 4;
+                }
+                PaletteStorage::Nibbles(nibbles)
+            } else {
+                let mut indices = Box::new([[[0u8; DIM]; DIM]; DIM]);
+                for (i, index_out) in indices
+                    .as_flattened_mut()
+                    .as_flattened_mut()
+                    .iter_mut()
+                    .enumerate()
+                {
+                    *index_out = index_at(i);
+                }
+                PaletteStorage::Indexed(indices)
+            };
 
             return Self::Heterogeneous(Box::new(HeterogeneousPaletteData {
-                storage: PaletteStorage::Indexed(indices),
+                storage,
                 palette: palette.to_vec(),
                 counts,
             }));
@@ -418,6 +554,31 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
         }))
     }
 
+    fn from_nibble_packed_data(palette: &[V], packed_data: &[i64]) -> Self {
+        let mut nibbles = vec![0u8; Self::VOLUME / 2].into_boxed_slice();
+        for (bytes, word) in nibbles.chunks_mut(8).zip(packed_data) {
+            bytes.copy_from_slice(&word.to_le_bytes()[..bytes.len()]);
+        }
+        let mut counts = vec![0u16; palette.len()];
+        for byte in &mut nibbles {
+            for shift in [0, 4] {
+                let idx = usize::from((*byte >> shift) & 0x0F);
+                if idx < palette.len() {
+                    counts[idx] += 1;
+                } else {
+                    warn!("Lookup index out of bounds! Defaulting...");
+                    *byte &= !(0x0F << shift);
+                    counts[0] += 1;
+                }
+            }
+        }
+        Self::Heterogeneous(Box::new(HeterogeneousPaletteData {
+            storage: PaletteStorage::Nibbles(nibbles),
+            palette: palette.to_vec(),
+            counts,
+        }))
+    }
+
     pub fn get(&self, x: usize, y: usize, z: usize) -> V {
         match self {
             Self::Homogeneous(value) => *value,
@@ -459,12 +620,12 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
                 PaletteStorage::Dense(cube) => {
                     Box::new(cube.as_flattened().as_flattened().iter().copied())
                 }
-                PaletteStorage::Indexed(indices) => Box::new(
-                    indices
-                        .as_flattened()
-                        .as_flattened()
-                        .iter()
-                        .map(|&idx| data.palette[idx as usize]),
+                PaletteStorage::Indexed(_) | PaletteStorage::Nibbles(_) => Box::new(
+                    data.storage
+                        .indices()
+                        .into_iter()
+                        .flatten()
+                        .map(|idx| data.palette[idx]),
                 ),
             },
         }
@@ -494,12 +655,12 @@ impl<'a, V: Hash + Eq + Copy + Default, const DIM: usize> IntoIterator
                 PaletteStorage::Dense(cube) => {
                     Box::new(cube.as_flattened().as_flattened().iter().copied())
                 }
-                PaletteStorage::Indexed(indices) => Box::new(
-                    indices
-                        .as_flattened()
-                        .as_flattened()
-                        .iter()
-                        .map(|&idx| data.palette[idx as usize]),
+                PaletteStorage::Indexed(_) | PaletteStorage::Nibbles(_) => Box::new(
+                    data.storage
+                        .indices()
+                        .into_iter()
+                        .flatten()
+                        .map(|idx| data.palette[idx]),
                 ),
             },
         }
@@ -1056,6 +1217,53 @@ mod tests {
             Block::LAVA.default_state.id,
         ];
         assert_bulk_matches_mutations(|x, y, z| states[(x + y + z) % states.len()]);
+    }
+
+    #[test]
+    fn edits_match_a_plain_array_as_the_palette_grows_and_shrinks() {
+        const VOLUME: usize = BlockPalette::VOLUME;
+        let mut palette = BlockPalette::default();
+        let mut expected = vec![Block::AIR.default_state.id; VOLUME];
+        let mut seed: u32 = 0x2545_f491;
+        let mut next = |bound: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed as usize % bound
+        };
+
+        // Growing to 40 states crosses the 16-entry nibble limit. Shrinking drops a random state
+        // each round, so entries leave from anywhere in the palette and the rest move.
+        let mut allowed: Vec<u16> = Vec::new();
+        for round in 0..77 {
+            if round < 40 {
+                allowed.push(round + 1);
+            } else {
+                allowed.swap_remove(next(allowed.len()));
+            }
+            let start = next(VOLUME);
+            let mut edits: Vec<usize> = (0..VOLUME)
+                .map(|offset| (start + offset * 7) % VOLUME)
+                .filter(|&i| !allowed.contains(&expected[i].as_u16()))
+                .collect();
+            edits.extend((0..600).map(|_| next(VOLUME)));
+            for i in edits {
+                let state = BlockStateId::new_or_air(allowed[next(allowed.len())]);
+                let (x, y, z) = (i % 16, i / 256, (i / 16) % 16);
+                assert_eq!(palette.set(x, y, z, state), expected[i]);
+                expected[i] = state;
+            }
+            assert_eq!(palette.iter().collect::<Vec<_>>(), expected);
+
+            let distinct_now = expected
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            let bits = pumpkin_util::encompassing_bits(distinct_now).max(4);
+            let (values, packed) = palette.to_palette_and_packed_data(bits);
+            let reloaded = BlockPalette::from_palette_and_packed_data(&values, &packed, 4);
+            assert_eq!(reloaded.iter().collect::<Vec<_>>(), expected);
+        }
     }
 
     #[test]
