@@ -3611,6 +3611,11 @@ pub const SPEED_MODIFIER_SPRINTING_ID: &str = "minecraft:sprinting";
 pub const SPEED_MODIFIER_SPRINTING_AMOUNT: f64 = 0.300_000_011_920_928_96;
 
 impl LivingEntity {
+    /// Vanilla `LivingEntity.isAlive`: dying entities are not alive while their death animation plays.
+    pub fn is_alive(&self) -> bool {
+        self.entity.is_alive() && self.health.load() > 0.0
+    }
+
     pub fn set_sprinting(&self, is_sprinting: bool) {
         self.entity.set_sprinting(is_sprinting);
         self.update_attribute(&Attributes::MOVEMENT_SPEED, |speed| {

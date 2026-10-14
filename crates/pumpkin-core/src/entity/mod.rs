@@ -3303,7 +3303,14 @@ impl Entity {
         );
     }
 
-    pub fn tick_leash(&self) {
+    // Vanilla `LivingEntity.isAlive` where it exists, so a dying mob or holder counts as gone.
+    fn is_leash_participant_alive(entity: &dyn EntityBase) -> bool {
+        entity
+            .get_living_entity()
+            .map_or_else(|| entity.get_entity().is_alive(), LivingEntity::is_alive)
+    }
+
+    pub fn tick_leash(&self, caller: &dyn EntityBase) {
         let holder = {
             let Ok(guard) = self.leashed_to.try_lock() else {
                 return;
@@ -3314,16 +3321,12 @@ impl Entity {
         if let Some(holder) = holder {
             let holder_entity = holder.get_entity();
 
-            // The mob itself is gone: just clear the link, without refunding a lead.
-            if !self.is_alive() {
-                self.unleash();
-                return;
-            }
-
-            // Vanilla `Leashable.tickLeash`: when the holder is gone (for example the knot was
-            // broken) the mob is released, and a lead is only dropped when the entity-drop game
-            // rule allows it, otherwise the leash is removed without an item.
-            if !holder_entity.is_alive() {
+            // Vanilla `Leashable.tickLeash`: when the mob dies or the holder is gone (for example
+            // the knot was broken) the mob is released, and a lead is only dropped when the
+            // entity-drop game rule allows it, otherwise the leash is removed without an item.
+            if !Self::is_leash_participant_alive(caller)
+                || !Self::is_leash_participant_alive(holder.as_ref())
+            {
                 if self.world.load().level_info.load().game_rules.entity_drops {
                     self.drop_leash_with_item();
                 } else {

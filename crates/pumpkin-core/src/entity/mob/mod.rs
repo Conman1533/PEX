@@ -1407,7 +1407,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         let mob_entity = self.get_mob_entity();
         let entity = &mob_entity.living_entity.entity;
         entity.try_restore_leash();
-        entity.tick_leash();
+        entity.tick_leash(caller);
         sun_burn::tick(self);
 
         if mob_entity.breeding_cooldown.load(Relaxed) > 0 {
