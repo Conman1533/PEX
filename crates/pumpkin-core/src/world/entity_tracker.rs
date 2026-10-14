@@ -7,7 +7,6 @@ use std::sync::atomic::{
 use bytes::BufMut;
 use crossbeam::atomic::AtomicCell;
 use dashmap::DashMap;
-use dashmap::DashSet;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::packet::CURRENT_MC_VERSION;
 use pumpkin_protocol::bedrock::client::CSetActorMotion;
@@ -67,13 +66,55 @@ impl MoveSync {
     }
 }
 
+/// Players an entity has been sent to, usually a handful. A `DashSet` would allocate four
+/// shards per core up front for every tracked entity.
+#[derive(Default)]
+pub struct SeenBy(std::sync::RwLock<FxHashSet<Uuid>>);
+
+impl SeenBy {
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, FxHashSet<Uuid>> {
+        self.0
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn write(&self) -> std::sync::RwLockWriteGuard<'_, FxHashSet<Uuid>> {
+        self.0
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    #[must_use]
+    pub fn contains(&self, id: &Uuid) -> bool {
+        self.read().contains(id)
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.read().is_empty()
+    }
+
+    /// Returns whether the player was not already in the set.
+    pub fn insert(&self, id: Uuid) -> bool {
+        self.write().insert(id)
+    }
+
+    pub fn remove(&self, id: &Uuid) -> Option<Uuid> {
+        self.write().take(id)
+    }
+
+    pub fn clear(&self) {
+        self.write().clear();
+    }
+}
+
 pub struct TrackedEntity {
     pub entity: Arc<dyn EntityBase>,
     pub entity_id: i32,
     pub tracking_range: u32,
     pub update_interval: u32,
     pub track_deltas: bool,
-    pub seen_by: DashSet<Uuid>,
+    pub seen_by: SeenBy,
     /// Bedrock players in `seen_by`.
     bedrock_watchers: AtomicU32,
     pub last_section_pos: AtomicCell<Vector3<i32>>,
@@ -117,7 +158,7 @@ impl TrackedEntity {
             tracking_range: range,
             update_interval,
             track_deltas,
-            seen_by: DashSet::new(),
+            seen_by: SeenBy::default(),
             bedrock_watchers: AtomicU32::new(0),
             last_section_pos: AtomicCell::new(last_section_pos),
             tick_count: AtomicU32::new(0),
