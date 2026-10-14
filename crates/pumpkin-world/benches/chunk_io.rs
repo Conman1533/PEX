@@ -1,6 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use flate2::{
+    Compression,
+    read::{ZlibDecoder, ZlibEncoder},
+};
 use pumpkin_data::{BlockStateId, dimension::Dimension};
 use pumpkin_util::{math::vector2::Vector2, world_seed::Seed};
 use pumpkin_world::{
@@ -9,7 +13,7 @@ use pumpkin_world::{
     generation::get_world_gen,
     world::WorldPortalExt,
 };
-use std::hint::black_box;
+use std::{hint::black_box, io::Read};
 
 struct BlockRegistry;
 
@@ -74,5 +78,40 @@ fn bench_chunk_deserialization(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_chunk_deserialization);
+fn bench_chunk_zlib(c: &mut Criterion) {
+    let dimension = Dimension::OVERWORLD;
+    let world_gen = get_world_gen(Seed(42), dimension, false, Vec::new(), String::new());
+    let chunk = generate_single_chunk(&world_gen, &BlockRegistry, 0, 0, StagedChunkEnum::Full);
+    let Chunk::Level(chunk) = chunk else {
+        panic!("full generation must return a level chunk");
+    };
+    let bytes = chunk
+        .to_bytes()
+        .expect("failed to serialize benchmark chunk");
+    let mut compressed = Vec::new();
+    ZlibEncoder::new(bytes.as_ref(), Compression::default())
+        .read_to_end(&mut compressed)
+        .expect("failed to compress benchmark chunk");
+
+    c.bench_function("chunk_zlib_compress", |b| {
+        b.iter(|| {
+            let mut out = Vec::new();
+            ZlibEncoder::new(black_box(bytes.as_ref()), Compression::default())
+                .read_to_end(&mut out)
+                .expect("failed to compress benchmark chunk");
+            black_box(out);
+        });
+    });
+    c.bench_function("chunk_zlib_decompress", |b| {
+        b.iter(|| {
+            let mut out = Vec::with_capacity(bytes.len());
+            ZlibDecoder::new(black_box(compressed.as_slice()))
+                .read_to_end(&mut out)
+                .expect("failed to decompress benchmark chunk");
+            black_box(out);
+        });
+    });
+}
+
+criterion_group!(benches, bench_chunk_deserialization, bench_chunk_zlib);
 criterion_main!(benches);
