@@ -1178,20 +1178,25 @@ impl Entity {
     }
 
     #[must_use]
-    pub const fn get_entity_dimensions(pose: EntityPose) -> EntityDimensions {
-        match pose {
-            EntityPose::Sleeping => EntityDimensions::new(0.2, 0.2, 0.2),
-            EntityPose::FallFlying | EntityPose::Swimming | EntityPose::SpinAttack => {
-                EntityDimensions::new(0.6, 0.6, 0.4)
-            }
-            EntityPose::Crouching => EntityDimensions::new(0.6, 1.5, 1.27),
-            EntityPose::Dying => EntityDimensions::new(0.2, 0.2, 1.62),
-            _ => EntityDimensions::new(0.6, 1.8, 1.62),
+    pub fn get_dimensions(&self, pose: EntityPose) -> EntityDimensions {
+        if pose == EntityPose::Sleeping {
+            return EntityDimensions::new(0.2, 0.2, 0.2);
         }
+        if self.entity_type == &EntityType::PLAYER {
+            match pose {
+                EntityPose::FallFlying | EntityPose::Swimming | EntityPose::SpinAttack => {
+                    return EntityDimensions::new(0.6, 0.6, 0.4);
+                }
+                EntityPose::Crouching => return EntityDimensions::new(0.6, 1.5, 1.27),
+                EntityPose::Dying => return EntityDimensions::new(0.2, 0.2, 1.62),
+                _ => {}
+            }
+        }
+        Self::type_dimensions(self.entity_type)
     }
 
     pub fn get_eye_height(&self) -> f64 {
-        f64::from(Self::get_entity_dimensions(self.pose.load()).eye_height)
+        f64::from(self.entity_dimension.load().eye_height)
     }
 
     /// Updates the entity's position, block position, and chunk position.
@@ -1528,7 +1533,7 @@ impl Entity {
                 continue;
             }
 
-            let check_suffocation = !suffocating && crate::block::is_suffocating(block, state);
+            let check_suffocation = !suffocating && state.is_suffocating();
 
             World::check_collision(
                 &bounding_box,
@@ -2888,7 +2893,7 @@ impl Entity {
             }
         }
 
-        let dimension = Self::get_entity_dimensions(pose);
+        let dimension = self.get_dimensions(pose);
         let position = self.pos.load();
         let aabb = BoundingBox::new_from_pos(position.x, position.y, position.z, &dimension);
         self.pose.store(pose);
@@ -3121,12 +3126,12 @@ impl Entity {
         let world = self.world.load();
 
         for pos in BlockPos::iterate(min, max) {
-            let (block, state) = world.get_block_and_state(&pos);
+            let state = world.get_block_state(&pos);
             if state.is_air() {
                 continue;
             }
 
-            if crate::block::is_suffocating(block, state) {
+            if state.is_suffocating() {
                 return true;
             }
         }
@@ -3729,7 +3734,7 @@ impl Entity {
                 let mut found = None;
 
                 'search: for (pose, y_offsets) in poses_and_heights {
-                    let dims = Self::get_entity_dimensions(pose);
+                    let dims = passenger_entity.get_dimensions(pose);
 
                     for y_offset in y_offsets {
                         for &(ox, oz) in &offsets {
@@ -3780,7 +3785,7 @@ impl Entity {
                     ];
 
                     for pose in poses {
-                        let dims = Self::get_entity_dimensions(pose);
+                        let dims = passenger_entity.get_dimensions(pose);
                         let bbox = BoundingBox::new_from_pos(
                             self.pos.load().x,
                             vehicle_top,

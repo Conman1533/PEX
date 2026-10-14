@@ -513,65 +513,6 @@ pub fn push_entities_up(
     }
 }
 
-/// Vanilla `BlockStateBase.isSuffocating`.
-///
-/// The per-block overrides are the `isSuffocating(...)` calls in `Blocks.java`; everything else
-/// uses the default predicate from `BlockBehaviour.Properties`.
-#[must_use]
-pub fn is_suffocating(block: &Block, state: &BlockState) -> bool {
-    match block.id {
-        // `leavesProperties()` and the leaves, glass, grates and roots that set it directly.
-        BlockId::OAK_LEAVES
-        | BlockId::SPRUCE_LEAVES
-        | BlockId::BIRCH_LEAVES
-        | BlockId::JUNGLE_LEAVES
-        | BlockId::ACACIA_LEAVES
-        | BlockId::DARK_OAK_LEAVES
-        | BlockId::MANGROVE_LEAVES
-        | BlockId::RED_POPLAR_LEAVES
-        | BlockId::ORANGE_POPLAR_LEAVES
-        | BlockId::YELLOW_POPLAR_LEAVES
-        | BlockId::AZALEA_LEAVES
-        | BlockId::FLOWERING_AZALEA_LEAVES
-        | BlockId::CHERRY_LEAVES
-        | BlockId::PALE_OAK_LEAVES
-        | BlockId::MANGROVE_ROOTS
-        | BlockId::GLASS
-        | BlockId::TINTED_GLASS
-        | BlockId::WHITE_STAINED_GLASS
-        | BlockId::ORANGE_STAINED_GLASS
-        | BlockId::MAGENTA_STAINED_GLASS
-        | BlockId::LIGHT_BLUE_STAINED_GLASS
-        | BlockId::YELLOW_STAINED_GLASS
-        | BlockId::LIME_STAINED_GLASS
-        | BlockId::PINK_STAINED_GLASS
-        | BlockId::GRAY_STAINED_GLASS
-        | BlockId::LIGHT_GRAY_STAINED_GLASS
-        | BlockId::CYAN_STAINED_GLASS
-        | BlockId::PURPLE_STAINED_GLASS
-        | BlockId::BLUE_STAINED_GLASS
-        | BlockId::BROWN_STAINED_GLASS
-        | BlockId::GREEN_STAINED_GLASS
-        | BlockId::RED_STAINED_GLASS
-        | BlockId::BLACK_STAINED_GLASS
-        | BlockId::COPPER_GRATE
-        | BlockId::EXPOSED_COPPER_GRATE
-        | BlockId::WEATHERED_COPPER_GRATE
-        | BlockId::OXIDIZED_COPPER_GRATE
-        | BlockId::WAXED_COPPER_GRATE
-        | BlockId::WAXED_EXPOSED_COPPER_GRATE
-        | BlockId::WAXED_WEATHERED_COPPER_GRATE
-        | BlockId::WAXED_OXIDIZED_COPPER_GRATE
-        | BlockId::MOVING_PISTON => false,
-        BlockId::FARMLAND | BlockId::SOUL_SAND | BlockId::DIRT_PATH | BlockId::MUD => true,
-        // `NOT_EXTENDED_PISTON`
-        BlockId::PISTON | BlockId::STICKY_PISTON => {
-            !blocks::piston::piston::PistonProps::from_state_id(state.id).extended
-        }
-        _ => block.has_tag(&tag::Block::MINECRAFT_CAUSES_SUFFOCATION) && state.is_full_cube(),
-    }
-}
-
 /// Vanilla wall variants (`wall_torch`, `red_wall_banner`, `oak_wall_sign`, ...) are built with
 /// `dropsLike` and have no loot table of their own; they drop like the standing block.
 pub(crate) fn standing_variant(block: &Block) -> Option<&'static Block> {
