@@ -31,7 +31,9 @@ use pumpkin_util::GameMode;
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::math::{pack_degrees, position::chunk_section_from_pos};
+use rayon::prelude::*;
 use rustc_hash::FxHashSet;
+use tokio::runtime::Handle;
 use uuid::Uuid;
 
 use crate::entity::player::Player;
@@ -948,38 +950,49 @@ impl EntityTracker {
         }
     }
 
-    pub fn update_all(&self, world: &World) {
+    /// Vanilla `ChunkMap.tick`. Checking sections and sending changes only touch the tracked
+    /// entity itself, so those passes run on Rayon; pairing updates stay in map order.
+    pub fn update_all(&self, world: &World, handle: &Handle) {
+        // A snapshot, so no map shard lock is held while packets go out
+        // (`send_dirty_entity_data` looks the entity up in this map again).
+        let tracked: Vec<Arc<TrackedEntity>> = self
+            .entity_map
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect();
         let players = world.players.load();
-        let mut moved_players = Vec::new();
 
-        for entry in &self.entity_map {
-            let tracked = entry.value();
-            let new_pos = chunk_section_from_pos(&tracked.entity.get_entity().block_pos.load());
-            let old_pos = tracked.last_section_pos.load();
-            if old_pos != new_pos {
-                tracked.update_players(players.as_ref(), world);
-                if let Some(player) = tracked.entity.get_player()
-                    && let Some(player_arc) = world.get_player_by_uuid(player.gameprofile.id)
-                {
-                    moved_players.push(player_arc);
-                }
-                tracked.last_section_pos.store(new_pos);
+        let moved: Vec<_> = tracked
+            .par_iter()
+            .filter_map(|tracked| {
+                let new_pos = chunk_section_from_pos(&tracked.entity.get_entity().block_pos.load());
+                (tracked.last_section_pos.load() != new_pos).then_some((tracked, new_pos))
+            })
+            .collect();
+        let mut moved_players = Vec::new();
+        for (tracked, new_pos) in moved {
+            tracked.update_players(players.as_ref(), world);
+            if let Some(player) = tracked.entity.get_player()
+                && let Some(player_arc) = world.get_player_by_uuid(player.gameprofile.id)
+            {
+                moved_players.push(player_arc);
             }
+            tracked.last_section_pos.store(new_pos);
         }
 
         if !moved_players.is_empty() {
-            for entry in &self.entity_map {
-                entry.value().update_players(&moved_players, world);
+            for tracked in &tracked {
+                tracked.update_players(&moved_players, world);
             }
         }
 
-        for entry in &self.entity_map {
-            let tracked = entry.value();
+        tracked.par_iter().for_each(|tracked| {
+            let _guard = handle.enter();
             if tracked.entity.get_player().is_none() {
                 tracked.send_changes(world);
             } else if tracked.entity.get_entity().synched_data.is_dirty() {
                 tracked.entity.get_entity().send_dirty_entity_data();
             }
-        }
+        });
     }
 }

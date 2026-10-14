@@ -1654,7 +1654,7 @@ impl World {
         let entity_elapsed = t_entities.elapsed();
 
         let t_tracker = std::time::Instant::now();
-        self.entity_tracker.update_all(self);
+        self.entity_tracker.update_all(self, &handle);
         let tracker_elapsed = t_tracker.elapsed();
 
         let mut block_entities: Vec<Arc<dyn BlockEntity>> = Vec::new();
