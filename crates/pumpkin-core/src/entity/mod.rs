@@ -14,7 +14,6 @@ use living::LivingEntity;
 use player::Player;
 use pumpkin_data::BlockState;
 use pumpkin_data::biome::Biome;
-use pumpkin_data::block_properties::blocks_movement;
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::dimension::Dimension;
 use pumpkin_data::entity::EntityStatus;
@@ -1529,10 +1528,7 @@ impl Entity {
                 continue;
             }
 
-            // TODO: this is default predicate, vanilla overwrites it for some blocks,
-            // see .suffocates(...) in Blocks.java
-            let check_suffocation =
-                !suffocating && blocks_movement(state, block.id) && state.is_full_cube();
+            let check_suffocation = !suffocating && crate::block::is_suffocating(block, state);
 
             World::check_collision(
                 &bounding_box,
@@ -3130,7 +3126,7 @@ impl Entity {
                 continue;
             }
 
-            if blocks_movement(state, block.id) && state.is_full_cube() {
+            if crate::block::is_suffocating(block, state) {
                 return true;
             }
         }
