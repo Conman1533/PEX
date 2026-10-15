@@ -481,23 +481,36 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
             };
             let sector_count = chunk.serialized_data.sector_count();
             let sector_offset = layout.used_sectors.allocate(sector_count);
-            let location = chunk.location(path, index, sector_offset)?;
             trace!("Writing chunk {index} - {sector_offset}:{sector_count}");
 
-            let _ = write
-                .seek(SeekFrom::Start(
-                    u64::from(sector_offset) * SECTOR_BYTES as u64,
-                ))
-                .await?;
-            chunk.serialized_data.write(&mut write).await?;
+            let written = async {
+                let location = chunk.location(path, index, sector_offset)?;
+                let _ = write
+                    .seek(SeekFrom::Start(
+                        u64::from(sector_offset) * SECTOR_BYTES as u64,
+                    ))
+                    .await?;
+                chunk.serialized_data.write(&mut write).await?;
 
-            let _ = write.seek(SeekFrom::Start(index as u64 * 4)).await?;
-            write.write_u32(location).await?;
-            let _ = write
-                .seek(SeekFrom::Start((SECTOR_BYTES + index * 4) as u64))
-                .await?;
-            write.write_u32(chunk.timestamp).await?;
-            write.flush().await?;
+                let _ = write.seek(SeekFrom::Start(index as u64 * 4)).await?;
+                write.write_u32(location).await?;
+                let _ = write
+                    .seek(SeekFrom::Start((SECTOR_BYTES + index * 4) as u64))
+                    .await?;
+                write.write_u32(chunk.timestamp).await?;
+                write.flush().await?;
+                Ok::<_, std::io::Error>(location)
+            }
+            .await;
+            let location = match written {
+                Ok(location) => location,
+                Err(err) => {
+                    // The header still points at the old copy, so the retry must not be pushed
+                    // past sectors nobody uses.
+                    layout.used_sectors.free(sector_offset, sector_count);
+                    return Err(err);
+                }
+            };
 
             let old_location = std::mem::replace(&mut layout.locations[index], location);
             if old_location != 0 {
@@ -1426,6 +1439,8 @@ mod tests {
         .expect("valid region");
         assert!(on_disk.chunks_data[0].is_some());
         assert!(on_disk.chunks_data[1].is_none());
+        // The sectors the refused write took are free again, so the next chunk follows chunk 0.
+        assert_eq!(file.layout.get_mut().used_sectors.allocate(1), 3);
     }
 
     /// A region file whose first location entry is `location`, whose other
