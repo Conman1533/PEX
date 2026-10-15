@@ -560,17 +560,21 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
             bytes.copy_from_slice(&word.to_le_bytes()[..bytes.len()]);
         }
         let mut counts = vec![0u16; palette.len()];
+        let mut out_of_bounds = 0usize;
         for byte in &mut nibbles {
             for shift in [0, 4] {
                 let idx = usize::from((*byte >> shift) & 0x0F);
                 if idx < palette.len() {
                     counts[idx] += 1;
                 } else {
-                    warn!("Lookup index out of bounds! Defaulting...");
+                    out_of_bounds += 1;
                     *byte &= !(0x0F << shift);
                     counts[0] += 1;
                 }
             }
+        }
+        if out_of_bounds > 0 {
+            warn!("{out_of_bounds} lookup indices out of bounds! Defaulting...");
         }
         Self::Heterogeneous(Box::new(HeterogeneousPaletteData {
             storage: PaletteStorage::Nibbles(nibbles),
@@ -1165,7 +1169,7 @@ pub(crate) const BIOME_NETWORK_MAX_BITS: u8 = 7;
 
 #[cfg(test)]
 mod tests {
-    use super::{BlockPalette, NetworkPalette};
+    use super::{BlockPalette, NetworkPalette, PaletteStorage};
     use pumpkin_data::{Block, BlockStateId};
 
     fn network_palette_values(palette: NetworkPalette<u16>) -> Option<Box<[u16]>> {
@@ -1264,6 +1268,41 @@ mod tests {
             let reloaded = BlockPalette::from_palette_and_packed_data(&values, &packed, 4);
             assert_eq!(reloaded.iter().collect::<Vec<_>>(), expected);
         }
+    }
+
+    #[test]
+    fn nibble_fast_paths_match_the_four_bit_layout() {
+        // Vanilla `BitStorage` at 4 bits: entry i sits at bit 4 * (i % 16) of long i / 16.
+        let palette = BlockPalette::from_fn(|x, y, z| {
+            BlockStateId::new_or_air(((x * 7 + y * 3 + z) % 15 + 1) as u16)
+        });
+        let (values, fast_packed) = palette.to_palette_and_packed_data(4);
+
+        let mut expected = vec![0i64; BlockPalette::VOLUME / 16];
+        for (i, value) in palette.iter().enumerate() {
+            let index = values.iter().position(|&v| v == value).unwrap() as i64;
+            expected[i / 16] |= index << (4 * (i % 16));
+        }
+        assert_eq!(fast_packed.as_ref(), expected.as_slice());
+
+        // The same section through the generic packer, from byte-per-index storage.
+        let mut generic = palette.clone();
+        let BlockPalette::Heterogeneous(data) = &mut generic else {
+            panic!("the section has 15 states");
+        };
+        let PaletteStorage::Nibbles(nibbles) = &data.storage else {
+            panic!("15 states fit in nibbles");
+        };
+        data.storage = PaletteStorage::Indexed(
+            PaletteStorage::<BlockStateId, 16>::nibbles_to_indexed(nibbles),
+        );
+        assert_eq!(generic.to_palette_and_packed_data(4).1, fast_packed);
+
+        let reloaded = BlockPalette::from_palette_and_packed_data(&values, &expected, 4);
+        assert_eq!(
+            reloaded.iter().collect::<Vec<_>>(),
+            palette.iter().collect::<Vec<_>>()
+        );
     }
 
     #[test]
