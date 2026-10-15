@@ -30,10 +30,10 @@ use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::math::wrap_degrees;
 
+use crate::entity::vehicle::container::VehicleInventory;
 use crate::entity::vehicle::vehicle::VehicleEntity;
 use crate::entity::velocity;
 use chest::ChestMinecart;
-use container::MinecartInventory;
 use furnace::FurnaceMinecart;
 use hopper::HopperMinecart;
 use rideable::RideableMinecart;
@@ -225,7 +225,7 @@ impl MinecartEntity {
         }
     }
 
-    const fn container(&self) -> Option<&Arc<MinecartInventory>> {
+    const fn container(&self) -> Option<&Arc<VehicleInventory>> {
         match &self.kind {
             MinecartKind::Chest(minecart) => Some(minecart.inventory()),
             MinecartKind::Hopper(minecart) => Some(minecart.inventory()),

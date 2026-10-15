@@ -5,22 +5,22 @@ use pumpkin_util::text::TextComponent;
 
 use crate::entity::{
     player::Player,
-    vehicle::boat::container::{BoatInventory, BoatScreenFactory},
+    vehicle::{boat::container::BoatScreenFactory, container::VehicleInventory},
 };
 
 #[derive(Clone)]
 pub(super) struct ChestBoat {
-    inventory: Arc<BoatInventory>,
+    inventory: Arc<VehicleInventory>,
 }
 
 impl ChestBoat {
     pub(super) fn new() -> Self {
         Self {
-            inventory: Arc::new(BoatInventory::new(27)),
+            inventory: Arc::new(VehicleInventory::new(27)),
         }
     }
 
-    pub(super) const fn inventory(&self) -> &Arc<BoatInventory> {
+    pub(super) const fn inventory(&self) -> &Arc<VehicleInventory> {
         &self.inventory
     }
 
@@ -30,6 +30,10 @@ impl ChestBoat {
         default_boat_name: TextComponent,
         player: &Arc<Player>,
     ) -> bool {
+        if !player.is_spectator() {
+            self.inventory.unpack_loot();
+        }
+
         player
             .open_handled_screen(
                 &BoatScreenFactory {
