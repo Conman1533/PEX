@@ -40,6 +40,10 @@ impl MerchantOffer {
         self.uses = 0;
     }
 
+    pub const fn set_to_out_of_stock(&mut self) {
+        self.uses = self.max_uses;
+    }
+
     pub fn write(
         &self,
         mut write: impl std::io::Write,
@@ -183,9 +187,8 @@ impl<'a> crate::ServerPacket<'a> for CMerchantOffers {
                 (base_cost_a, output, cost_b)
             };
 
-            // Stock status is also represented by uses/max_uses below.
             // The packet does not transmit the reward_exp setting.
-            let _out_of_stock = bytebuf.get_bool()?;
+            let out_of_stock = bytebuf.get_bool()?;
             let uses = bytebuf.get_i32_be()?;
             let max_uses = bytebuf.get_i32_be()?;
             let xp = bytebuf.get_i32_be()?;
@@ -193,7 +196,7 @@ impl<'a> crate::ServerPacket<'a> for CMerchantOffers {
             let price_multiplier = bytebuf.get_f32_be()?;
             let demand = bytebuf.get_i32_be()?;
 
-            offers.push(MerchantOffer {
+            let mut offer = MerchantOffer {
                 base_cost_a,
                 output,
                 cost_b,
@@ -204,7 +207,11 @@ impl<'a> crate::ServerPacket<'a> for CMerchantOffers {
                 special_price,
                 price_multiplier,
                 demand,
-            });
+            };
+            if out_of_stock {
+                offer.set_to_out_of_stock();
+            }
+            offers.push(offer);
         }
 
         let villager_level = bytebuf.get_var_int()?;
@@ -276,34 +283,66 @@ mod tests {
         assert_eq!(cursor.get_var_int().unwrap(), VarInt(0));
     }
 
+    /// The packet `offer()` produces, as vanilla's `ClientboundMerchantOffersPacket.write` and
+    /// `MerchantOffer.writeToStream` lay it out, with the given stock fields.
+    fn vanilla_packet_bytes(out_of_stock: bool, uses: i32) -> Vec<u8> {
+        let mut bytes = vec![1, 1]; // container id, offer count
+        VarInt::from(Item::EMERALD.id).encode(&mut bytes).unwrap();
+        bytes.extend_from_slice(&[12, 0]); // ItemCost: count, no components
+        bytes.push(1); // ItemStack: count
+        VarInt::from(Item::BOOK.id).encode(&mut bytes).unwrap();
+        bytes.extend_from_slice(&[0, 0]); // no components added, none removed
+        bytes.push(0); // no second cost
+        bytes.push(u8::from(out_of_stock));
+        bytes.extend_from_slice(&uses.to_be_bytes());
+        bytes.extend_from_slice(&12i32.to_be_bytes()); // max uses
+        bytes.extend_from_slice(&1i32.to_be_bytes()); // xp
+        bytes.extend_from_slice(&0i32.to_be_bytes()); // special price
+        bytes.extend_from_slice(&[0x3D, 0x4C, 0xCC, 0xCD]); // price multiplier 0.05
+        bytes.extend_from_slice(&0i32.to_be_bytes()); // demand
+        bytes.extend_from_slice(&[1, 0, 1, 1]); // level, xp, show progress, can restock
+        bytes
+    }
+
     #[test]
-    fn merchant_stock_status_round_trip_is_independent_of_reward_exp() {
+    fn merchant_offers_match_vanilla_stream_codec() {
         use crate::ServerPacket;
 
-        let version = JavaMinecraftVersion::V_26_2;
-        for uses in [0, 11, 12, 13] {
-            for reward_exp in [false, true] {
-                let mut offer = offer();
-                offer.uses = uses;
-                offer.reward_exp = reward_exp;
-                let packet =
-                    CMerchantOffers::new(VarInt(1), vec![offer], VarInt(1), VarInt(0), true, true);
-                let mut bytes = Vec::new();
-                packet.write_packet_data(&mut bytes, &version).unwrap();
+        let version = JavaMinecraftVersion::V_26_3;
+        for (uses, out_of_stock) in [(0, false), (11, false), (12, true)] {
+            let expected = vanilla_packet_bytes(out_of_stock, uses);
+            let mut offer = offer();
+            offer.uses = uses;
+            let packet =
+                CMerchantOffers::new(VarInt(1), vec![offer], VarInt(1), VarInt(0), true, true);
+            let mut bytes = Vec::new();
+            packet.write_packet_data(&mut bytes, &version).unwrap();
+            assert_eq!(bytes, expected);
 
-                let mut input = bytes.as_slice();
-                let decoded = CMerchantOffers::read(&mut input, &version).unwrap();
-                assert!(input.is_empty());
-                assert!(decoded.offers[0].reward_exp);
-                assert_eq!(decoded.offers[0].uses, uses);
-                assert_eq!(decoded.offers[0].max_uses, 12);
-                assert_eq!(decoded.offers[0].is_out_of_stock(), uses >= 12);
+            let mut input = expected.as_slice();
+            let decoded = CMerchantOffers::read(&mut input, &version).unwrap();
+            assert!(input.is_empty());
+            assert!(decoded.offers[0].reward_exp);
+            assert_eq!(decoded.offers[0].uses, uses);
+            assert_eq!(decoded.offers[0].max_uses, 12);
+            assert_eq!(decoded.offers[0].is_out_of_stock(), out_of_stock);
 
-                let mut encoded = Vec::new();
-                decoded.write_packet_data(&mut encoded, &version).unwrap();
-                assert_eq!(encoded, bytes);
-            }
+            let mut encoded = Vec::new();
+            decoded.write_packet_data(&mut encoded, &version).unwrap();
+            assert_eq!(encoded, expected);
         }
+    }
+
+    #[test]
+    fn out_of_stock_flag_sets_uses_to_max_uses_like_vanilla() {
+        use crate::ServerPacket;
+
+        // Vanilla `MerchantOffer.createFromStream` calls `setToOutOfStock` on the flag alone.
+        let input = vanilla_packet_bytes(true, 5);
+        let decoded =
+            CMerchantOffers::read(&mut input.as_slice(), &JavaMinecraftVersion::V_26_3).unwrap();
+        assert_eq!(decoded.offers[0].uses, 12);
+        assert!(decoded.offers[0].is_out_of_stock());
     }
 
     #[test]
