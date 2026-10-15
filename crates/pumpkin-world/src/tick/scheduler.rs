@@ -49,6 +49,27 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
         res
     }
 
+    /// Passes a tick without running it, for a chunk that isn't simulated. Vanilla keeps the
+    /// absolute trigger tick, so the ticks due now carry over and run with the next slot's.
+    pub fn skip_tick(&self) {
+        let mut inner_guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let current_offset = self.offset.load(Ordering::SeqCst);
+        let next_offset = (current_offset + 1) % MAX_TICK_DELAY;
+        self.offset.store(next_offset, Ordering::SeqCst);
+
+        if let Some(inner) = inner_guard.as_mut() {
+            let mut overdue = std::mem::take(&mut inner.tick_queue[current_offset]);
+            if !overdue.is_empty() {
+                // Older ticks first, as vanilla drains by trigger tick.
+                overdue.append(&mut inner.tick_queue[next_offset]);
+                inner.tick_queue[next_offset] = overdue;
+            }
+        }
+    }
+
     pub fn schedule_tick(&self, tick: &ScheduledTick<&'a T>, sub_tick_order: u64) {
         let mut inner_guard = self
             .inner
@@ -212,6 +233,19 @@ mod tests {
         scheduler.schedule_tick(&tick(2), 0);
         assert!(scheduler.step_tick().is_empty());
         assert_eq!(scheduler.step_tick().len(), 1);
+    }
+
+    #[test]
+    fn overdue_ticks_run_on_the_first_tick_after_a_skip() {
+        // Vanilla keeps the trigger tick while a chunk isn't simulated, so a tick that came due
+        // during the skip runs as soon as the chunk ticks again, not `delay` ticks later.
+        let scheduler = ChunkTickScheduler::default();
+        scheduler.schedule_tick(&tick(3), 0);
+        for _ in 0..10 {
+            scheduler.skip_tick();
+        }
+        assert_eq!(scheduler.step_tick().len(), 1);
+        assert!(!scheduler.has_ticks());
     }
 
     #[test]

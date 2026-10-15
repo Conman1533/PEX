@@ -588,11 +588,14 @@ impl Level {
             .collect();
         for pos in scheduled_chunk_pos {
             if let Some(chunk) = self.loaded_chunks.get(&pos) {
-                // Vanilla keeps ticks pending until the chunk is simulated (`LevelTicks.tickCheck`).
+                let chunk = chunk.value();
+                // Vanilla only runs ticks in chunks it simulates (`LevelTicks.tickCheck`), but
+                // their trigger tick keeps counting, so a skipped tick is overdue, not paused.
                 if !active_chunks.contains(&pos) {
+                    chunk.block_ticks.skip_tick();
+                    chunk.fluid_ticks.skip_tick();
                     continue;
                 }
-                let chunk = chunk.value();
                 ticks.block_ticks.append(&mut chunk.block_ticks.step_tick());
                 ticks.fluid_ticks.append(&mut chunk.fluid_ticks.step_tick());
 
