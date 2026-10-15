@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pumpkin_protocol::VarInt;
+use pumpkin_protocol::java::client::play::TrailParticleOption;
 
 use pumpkin_data::{
     Block, BlockId, BlockStateId,
@@ -181,27 +181,25 @@ fn spawn_transform_particle(world: &World, pos: &BlockPos, opening: bool) {
         rng.random::<f64>() + 1.0,
         rng.random::<f64>() - 0.5,
     );
-    let target = start + velocity * lifetime;
-    let color = if opening {
-        OPEN_PARTICLE_COLOR
-    } else {
-        CLOSED_PARTICLE_COLOR
+    let particle = TrailParticleOption {
+        target: start + velocity * lifetime,
+        color: if opening {
+            OPEN_PARTICLE_COLOR
+        } else {
+            CLOSED_PARTICLE_COLOR
+        },
+        duration: (20.0 * lifetime) as i32,
     };
 
-    // TrailParticleOption: target as three doubles, color as an int, duration as a var int.
-    let mut data = Vec::with_capacity(29);
-    for v in [target.x, target.y, target.z] {
-        data.extend_from_slice(&v.to_be_bytes());
+    let mut data = Vec::new();
+    if particle.write(&mut data).is_ok() {
+        world.spawn_particles_with_data(
+            Particle::Trail,
+            start,
+            1,
+            Vector3::new(0.0, 0.0, 0.0),
+            0.0,
+            &data,
+        );
     }
-    data.extend_from_slice(&color.to_be_bytes());
-    let _ = VarInt((20.0 * lifetime) as i32).encode(&mut data);
-
-    world.spawn_particles_with_data(
-        Particle::Trail,
-        start,
-        1,
-        Vector3::new(0.0, 0.0, 0.0),
-        0.0,
-        &data,
-    );
 }
