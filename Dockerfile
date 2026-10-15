@@ -9,7 +9,7 @@ RUN apk add --no-cache curl ca-certificates && \
         "arm64") BIN_ARCH="ARM64" ;; \
         *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
     esac && \
-    curl -fsSL "https://github.com/Pumpkin-MC/Pumpkin/releases/download/${PUMPKIN_TAG}/pumpkin-${BIN_ARCH}-Linux-musl" \
+    curl -fsSL "https://github.com/Conman1533/PEX/releases/download/${PUMPKIN_TAG}/pumpkin-${BIN_ARCH}-Linux-musl" \
         -o /usr/local/bin/pumpkin && \
     chmod +x /usr/local/bin/pumpkin && \
     apk del curl

@@ -2,7 +2,7 @@
 
 # Pumpkin (Experimental)
 
-![CI](https://github.com/Pumpkin-MC/Pumpkin/actions/workflows/rust.yml/badge.svg)
+![CI](https://github.com/Conman1533/PEX/actions/workflows/rust.yml/badge.svg)
 [![Discord](https://img.shields.io/discord/1268592337445978193.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/wT8XjrjKkf)
 [![License: GPL](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/gpl-3-0)
 
@@ -11,7 +11,7 @@
 [Pumpkin](https://pumpkinmc.org/) is a Minecraft server built entirely in Rust, offering a fast, efficient,
 and customizable experience. It prioritizes performance and player enjoyment while adhering to the core mechanics of the game. 
 
-This version of it, PEX (Pumpkin Experimental) is a experimental merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. It is generally stable and efficient, but do note that this is called an experimental version for a reason and may not be as reliable as the official version.
+This version of it, PEX (Pumpkin Experimental) is an experimental merged version for features that I want. This is not intended for full deployment like the actual properly maintained and merged versions are. It is generally stable and efficient, but do note that this is called an experimental version for a reason and may not be as reliable as the official version.
 <div align="center">
 
 
