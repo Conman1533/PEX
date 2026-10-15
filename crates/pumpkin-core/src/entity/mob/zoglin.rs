@@ -142,6 +142,10 @@ impl Mob for ZoglinEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn finalize_spawn(
         &self,
         _world: &Arc<World>,

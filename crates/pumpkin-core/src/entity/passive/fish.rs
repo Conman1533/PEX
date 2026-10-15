@@ -74,7 +74,10 @@ pub fn travel(mob: &dyn Mob, caller: &dyn EntityBase) -> bool {
 /// Vanilla's `AbstractFish.aiStep` on dry land, where a stranded fish hops about.
 pub fn flop(mob: &dyn Mob, sound: Sound) {
     let entity = mob.get_entity();
-    if entity.touching_water.load(Ordering::Relaxed) || !entity.on_ground.load(Ordering::Relaxed) {
+    if entity.touching_water.load(Ordering::Relaxed)
+        || !entity.on_ground.load(Ordering::Relaxed)
+        || !entity.vertical_collision.load(Ordering::Relaxed)
+    {
         return;
     }
     let mut rng = mob.get_random();

@@ -65,6 +65,10 @@ impl Mob for MagmaCubeEntity {
         self.slime.get_mob_entity()
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_tick(&self, caller: &dyn EntityBase) {
         self.slime.mob_tick(caller);
     }

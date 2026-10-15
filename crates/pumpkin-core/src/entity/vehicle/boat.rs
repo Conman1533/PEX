@@ -194,6 +194,7 @@ impl EntityBase for BoatEntity {
             let world = self.vehicle.entity.world.load();
             if world.level_info.load().game_rules.entity_drops {
                 let position = self.vehicle.entity.block_pos.load();
+                boat.inventory().unpack_loot();
                 let inventory: Arc<dyn Inventory> = boat.inventory().clone();
                 world.scatter_inventory(&position, &inventory);
             }

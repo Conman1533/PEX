@@ -169,6 +169,10 @@ impl Mob for WardenEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn check_spawn_obstruction(&self, world: &World) -> bool {
         let entity = &self.mob_entity.living_entity.entity;
         let bounding_box = entity.bounding_box.load();

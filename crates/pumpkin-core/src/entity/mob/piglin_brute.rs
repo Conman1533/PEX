@@ -177,6 +177,10 @@ impl Mob for PiglinBruteEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         if self.is_immune_to_zombification() {

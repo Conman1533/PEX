@@ -391,6 +391,7 @@ impl FishingBobberEntity {
         match state {
             HookState::HookedIn(hooked_id) => {
                 if let Some(hooked) = world.get_entity_by_id(hooked_id)
+                    && !hooked.get_entity().is_removed()
                     && can_interact_with_level(&*hooked)
                     && hooked.get_entity().world.load().dimension
                         == self.entity.world.load().dimension
@@ -450,8 +451,9 @@ impl FishingBobberEntity {
         }
         self.state.store(state);
 
-        // Vanilla `FishingBobberEntity.tick`: gravity while airborne and unhooked.
-        if !in_water && !entity.on_ground.load(Ordering::Relaxed) {
+        // Vanilla `FishingHook.tick`: gravity out of water while airborne. A hooked bobber
+        // returned above, which covers vanilla's `hookedIn == null` term.
+        if !fluid.matches_type(&Fluid::WATER) && !entity.on_ground.load(Ordering::Relaxed) {
             velocity.y -= Self::GRAVITY;
         }
 

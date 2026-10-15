@@ -3430,7 +3430,11 @@ impl EntityBase for LivingEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone();
-            if let Some(item) = item_in_use.as_ref() {
+            // Vanilla `Item.finishUsingItem` only consumes an item that has the `consumable`
+            // component. Anything else, like a bundle or a goat horn, just stops being used.
+            if let Some(item) = item_in_use.as_ref()
+                && item.get_data_component::<ConsumableImpl>().is_some()
+            {
                 // Consume item
                 let mut is_potion = false;
                 if let Some(food) = item.get_data_component::<FoodImpl>()
@@ -3607,6 +3611,11 @@ pub const SPEED_MODIFIER_SPRINTING_ID: &str = "minecraft:sprinting";
 pub const SPEED_MODIFIER_SPRINTING_AMOUNT: f64 = 0.300_000_011_920_928_96;
 
 impl LivingEntity {
+    /// Vanilla `LivingEntity.isAlive`: dying entities are not alive while their death animation plays.
+    pub fn is_alive(&self) -> bool {
+        self.entity.is_alive() && self.health.load() > 0.0
+    }
+
     pub fn set_sprinting(&self, is_sprinting: bool) {
         self.entity.set_sprinting(is_sprinting);
         self.update_attribute(&Attributes::MOVEMENT_SPEED, |speed| {

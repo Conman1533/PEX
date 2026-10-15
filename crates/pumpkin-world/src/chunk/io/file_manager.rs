@@ -197,6 +197,33 @@ impl<S: ChunkSerializer<WriteBackend = PathBuf>> ChunkFileManager<S> {
             );
         }
     }
+
+    /// Flushes every cached region whose last flush failed, so a full disk that has been
+    /// cleared since doesn't lose those chunks. A region another task holds for writing is
+    /// skipped; that task flushes it when it's done.
+    async fn retry_unwritten_changes(&self) {
+        let loaders: Vec<Arc<ChunkSerializerLazyLoader<S>>> =
+            { self.file_locks.read().await.values().cloned().collect() };
+
+        let retry_tasks = loaders.into_iter().map(|loader| async move {
+            let Some(serializer) = loader.internal.get() else {
+                return;
+            };
+            let Ok(serializer) = serializer.try_read() else {
+                return;
+            };
+            if serializer.has_unwritten_changes()
+                && let Err(err) = serializer.write(&loader.path).await
+            {
+                log_save_failure(format_args!(
+                    "Failed to write {}: {err}",
+                    loader.path.display()
+                ));
+            }
+        });
+
+        join_all(retry_tasks).await;
+    }
 }
 
 impl<P, S> FileIO for ChunkFileManager<S>
@@ -411,6 +438,11 @@ where
 
         // Collect all region results; surface the first error encountered.
         let results: Vec<Result<(), ChunkWritingError>> = join_all(tasks).await;
+
+        // A region whose flush failed is only flushed again by this path when one of its
+        // chunks is dirty, so the others would wait for shutdown.
+        self.retry_unwritten_changes().await;
+
         results.into_iter().find(Result::is_err).unwrap_or(Ok(()))
     }
 
@@ -434,21 +466,12 @@ where
                 // Acquiring + immediately dropping the write-lock acts as a
                 // barrier: it can only succeed once all current lock holders
                 // have released their guards.
-                let guard = serializer_arc.write().await;
-                // Retry regions whose last flush failed, so a full disk that has been cleared
-                // since doesn't lose them at shutdown.
-                if guard.has_unwritten_changes()
-                    && let Err(err) = guard.write(&loader.path).await
-                {
-                    log_save_failure(format_args!(
-                        "Failed to write {} at shutdown: {err}",
-                        loader.path.display()
-                    ));
-                }
+                drop(serializer_arc.write().await);
             }
         });
 
         join_all(drain_tasks).await;
+        self.retry_unwritten_changes().await;
     }
 }
 

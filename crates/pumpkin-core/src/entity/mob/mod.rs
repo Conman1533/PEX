@@ -747,6 +747,14 @@ impl MobEntity {
     /// Vanilla `Mob.checkDespawn`.
     pub fn check_despawn(&self, mob: &dyn Mob) {
         let entity = &self.living_entity.entity;
+        let world = entity.world.load();
+
+        if world.level_info.load().difficulty == Difficulty::Peaceful
+            && !mob.is_allowed_in_peaceful()
+        {
+            entity.remove();
+            return;
+        }
 
         // Vanilla `isPersistenceRequired() || requiresCustomPersistence()`: passengers and
         // leashed mobs never despawn. A name tag sets persistence in vanilla; Pumpkin checks
@@ -756,7 +764,6 @@ impl MobEntity {
             || entity.is_leashed()
             || (**entity.custom_name.load()).is_some();
 
-        let world = entity.world.load();
         let pos = entity.pos.load();
         let players = world.players.load();
 
@@ -849,6 +856,13 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Vanilla `Mob.removeWhenFarAway`, which `Animal` overrides to `false`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         self.as_animal().is_none()
+    }
+
+    /// Vanilla `EntityType.isAllowedInPeaceful`, which `EntityTypes` clears with `notInPeaceful()`
+    /// for most monsters. The flag isn't extracted into `pumpkin-data` yet, so those mobs override
+    /// this.
+    fn is_allowed_in_peaceful(&self) -> bool {
+        true
     }
 
     fn get_max_look_yaw_change(&self) -> f32 {
@@ -1407,7 +1421,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         let mob_entity = self.get_mob_entity();
         let entity = &mob_entity.living_entity.entity;
         entity.try_restore_leash();
-        entity.tick_leash();
+        entity.tick_leash(caller);
         sun_burn::tick(self);
 
         if mob_entity.breeding_cooldown.load(Relaxed) > 0 {

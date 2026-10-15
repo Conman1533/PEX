@@ -261,6 +261,10 @@ impl Mob for ZombieVillagerEntity {
         &self.mob_entity.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn spawn_as_baby(&self) -> bool {
         self.mob_entity.spawn_as_baby()
     }

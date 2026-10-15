@@ -68,6 +68,10 @@ impl Mob for EndermiteEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_int("Lifetime", self.lifetime.load(Ordering::Relaxed));
     }

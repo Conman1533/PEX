@@ -6,6 +6,7 @@
 use fun::FunConfig;
 
 use logging::LoggingConfig;
+use metrics::MetricsConfig;
 use pumpkin_util::world_seed::Seed;
 use pumpkin_util::{Difficulty, GameMode, PermissionLvl, random};
 use recipe::RecipeConfig;
@@ -19,6 +20,8 @@ use tracing::{debug, error, warn};
 pub mod fun;
 /// Server logging configuration options.
 pub mod logging;
+/// Tick metrics configuration options.
+pub mod metrics;
 /// Networking and protocol configuration options.
 pub mod networking;
 /// Plugin management configuration options.
@@ -176,6 +179,8 @@ pub struct AdvancedConfiguration {
     pub plugins: PluginsConfig,
     /// Advancement configuration
     pub advancement: AdvancementConfig,
+    /// Tick metrics configuration.
+    pub metrics: MetricsConfig,
 }
 
 /// Basic configuration for core server settings.

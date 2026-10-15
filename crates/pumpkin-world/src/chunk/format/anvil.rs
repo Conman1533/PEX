@@ -14,7 +14,7 @@ use tokio::{
     io::{AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufWriter},
     sync::Mutex,
 };
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::chunk::{
     ChunkParsingError, ChunkReadingError, ChunkSerializingError, ChunkWritingError,
@@ -35,6 +35,11 @@ pub const CHUNK_COUNT: usize = REGION_SIZE * REGION_SIZE;
 
 /// The number of bytes in a sector (4 KiB)
 const SECTOR_BYTES: usize = 4096;
+/// Bytes of the length prefix and compression byte that precede every chunk record.
+const CHUNK_HEADER_SIZE: usize = 5;
+/// Vanilla `RegionFile.EXTERNAL_CHUNK_THRESHOLD`: the location table keeps one byte for the
+/// sector count, so a chunk this large goes to an external `.mcc` file.
+const EXTERNAL_CHUNK_THRESHOLD: u32 = 256;
 
 // 26.2
 pub const WORLD_DATA_VERSION: i32 = 4903;
@@ -104,6 +109,26 @@ impl WriteAction {
 struct AnvilChunkMetadata {
     serialized_data: AnvilChunkData,
     timestamp: u32,
+}
+
+impl AnvilChunkMetadata {
+    /// The location table entry for this chunk at `sector_offset`, vanilla's
+    /// `RegionFile.packSectorOffset`. Vanilla moves a chunk of `EXTERNAL_CHUNK_THRESHOLD` or
+    /// more sectors to a `.mcc` file; Pumpkin doesn't write those, so it refuses the chunk
+    /// instead of letting the sector count overflow into the offset.
+    fn location(&self, path: &Path, index: usize, sector_offset: u32) -> std::io::Result<u32> {
+        let sector_count = self.serialized_data.sector_count();
+        if sector_count >= EXTERNAL_CHUNK_THRESHOLD {
+            let message = format!(
+                "Chunk {index} in {} is {} bytes ({sector_count} sectors), too large for a region file",
+                path.display(),
+                self.serialized_data.raw_write_size()
+            );
+            error!("{message}");
+            return Err(std::io::Error::other(message));
+        }
+        Ok((sector_offset << 8) | sector_count)
+    }
 }
 
 /// Tracks which sectors of a region file are in use, like vanilla's `RegionBitmap`.
@@ -293,8 +318,7 @@ impl AnvilChunkData {
     /// Raw size of serialized chunk
     #[inline]
     const fn raw_write_size(&self) -> usize {
-        // 4 bytes for the *length* and 1 byte for the *compression* method
-        self.compressed_data.len() + 4 + 1
+        self.compressed_data.len() + CHUNK_HEADER_SIZE
     }
 
     /// Size of serialized chunk with padding
@@ -312,6 +336,13 @@ impl AnvilChunkData {
 
     fn from_bytes(bytes: Bytes) -> Result<Self, ChunkReadingError> {
         let mut bytes = bytes;
+        // An unpadded file can end inside the header, which `RegionFile.getChunkDataInputStream`
+        // treats as a truncated chunk.
+        if bytes.len() < CHUNK_HEADER_SIZE {
+            return Err(ChunkReadingError::ParsingError(
+                ChunkParsingError::ErrorDeserializingChunk("Chunk header is truncated".to_string()),
+            ));
+        }
         // Minus one for the compression byte, which the length covers, so
         // anything below one does not describe a chunk at all.
         let declared_length = bytes.get_u32() as usize;
@@ -325,13 +356,7 @@ impl AnvilChunkData {
 
         // The compression byte has not been read yet, so the payload can use at
         // most one less than what remains.
-        let Some(available) = bytes.len().checked_sub(1) else {
-            return Err(ChunkReadingError::ParsingError(
-                ChunkParsingError::ErrorDeserializingChunk(
-                    "Chunk record is missing its compression byte".to_string(),
-                ),
-            ));
-        };
+        let available = bytes.len() - 1;
 
         if length > available {
             return Err(ChunkReadingError::ParsingError(
@@ -458,21 +483,34 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
             let sector_offset = layout.used_sectors.allocate(sector_count);
             trace!("Writing chunk {index} - {sector_offset}:{sector_count}");
 
-            let _ = write
-                .seek(SeekFrom::Start(
-                    u64::from(sector_offset) * SECTOR_BYTES as u64,
-                ))
-                .await?;
-            chunk.serialized_data.write(&mut write).await?;
+            let written = async {
+                let location = chunk.location(path, index, sector_offset)?;
+                let _ = write
+                    .seek(SeekFrom::Start(
+                        u64::from(sector_offset) * SECTOR_BYTES as u64,
+                    ))
+                    .await?;
+                chunk.serialized_data.write(&mut write).await?;
 
-            let location = (sector_offset << 8) | sector_count;
-            let _ = write.seek(SeekFrom::Start(index as u64 * 4)).await?;
-            write.write_u32(location).await?;
-            let _ = write
-                .seek(SeekFrom::Start((SECTOR_BYTES + index * 4) as u64))
-                .await?;
-            write.write_u32(chunk.timestamp).await?;
-            write.flush().await?;
+                let _ = write.seek(SeekFrom::Start(index as u64 * 4)).await?;
+                write.write_u32(location).await?;
+                let _ = write
+                    .seek(SeekFrom::Start((SECTOR_BYTES + index * 4) as u64))
+                    .await?;
+                write.write_u32(chunk.timestamp).await?;
+                write.flush().await?;
+                Ok::<_, std::io::Error>(location)
+            }
+            .await;
+            let location = match written {
+                Ok(location) => location,
+                Err(err) => {
+                    // The header still points at the old copy, so the retry must not be pushed
+                    // past sectors nobody uses.
+                    layout.used_sectors.free(sector_offset, sector_count);
+                    return Err(err);
+                }
+            };
 
             let old_location = std::mem::replace(&mut layout.locations[index], location);
             if old_location != 0 {
@@ -491,25 +529,19 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
         path: &Path,
         layout: &mut RegionLayout,
     ) -> Result<(), std::io::Error> {
-        let temp_path = path.with_extension("tmp");
-        trace!("Writing tmp file to disk: {temp_path:?}");
-
-        let file = tokio::fs::File::create(&temp_path).await?;
-        let mut write = BufWriter::new(file);
-
-        // Build the 8 KiB header in memory
+        // Build the 8 KiB header in memory. The chunks are packed in index order right after it.
+        let mut new_layout = RegionLayout::new();
         let mut header = Vec::with_capacity(SECTOR_BYTES * 2);
-        let mut current_sector: u32 = 2;
 
         // Location Table
-        for metadata in &self.chunks_data {
+        for (index, metadata) in self.chunks_data.iter().enumerate() {
             if let Some(chunk) = metadata {
-                let sector_count = chunk.serialized_data.sector_count();
-                header.put_u32((current_sector << 8) | sector_count);
-                current_sector += sector_count;
-            } else {
-                header.put_u32(0);
+                let sector_offset = new_layout
+                    .used_sectors
+                    .allocate(chunk.serialized_data.sector_count());
+                new_layout.locations[index] = chunk.location(path, index, sector_offset)?;
             }
+            header.put_u32(new_layout.locations[index]);
         }
 
         // Timestamp Table
@@ -520,6 +552,12 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
                 header.put_u32(0);
             }
         }
+
+        let temp_path = path.with_extension("tmp");
+        trace!("Writing tmp file to disk: {temp_path:?}");
+
+        let file = tokio::fs::File::create(&temp_path).await?;
+        let mut write = BufWriter::new(file);
 
         // Write all 8 KiB in a single async call
         write.write_all(&header).await?;
@@ -532,15 +570,7 @@ impl<S: SingleChunkDataSerializer> AnvilChunkFile<S> {
         write.flush().await?;
         tokio::fs::rename(temp_path, path).await?;
 
-        // The chunks are now packed in index order right after the header.
-        *layout = RegionLayout::new();
-        for (index, chunk) in self.chunks_data.iter().enumerate() {
-            if let Some(chunk) = chunk {
-                let sector_count = chunk.serialized_data.sector_count();
-                let sector_offset = layout.used_sectors.allocate(sector_count);
-                layout.locations[index] = (sector_offset << 8) | sector_count;
-            }
-        }
+        *layout = new_layout;
         Ok(())
     }
 }
@@ -1263,8 +1293,8 @@ mod tests {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnvilChunkFile, Compression, CompressionError, SECTOR_BYTES, SingleChunkDataSerializer,
-        WriteAction,
+        AnvilChunkFile, Compression, CompressionError, EXTERNAL_CHUNK_THRESHOLD, SECTOR_BYTES,
+        SingleChunkDataSerializer, WriteAction,
     };
     use crate::chunk::io::{ChunkSerializer, Dirtiable};
     use crate::chunk::{ChunkData, ChunkReadingError, ChunkSerializingError};
@@ -1389,6 +1419,30 @@ mod tests {
         assert_eq!(file_sectors, 2 + 4 + 1);
     }
 
+    #[tokio::test]
+    async fn a_chunk_too_large_for_the_location_table_is_refused() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("r.0.0.mca");
+        let mut file = AnvilChunkFile::<SizedChunk>::default();
+        save(&mut file, 0, 1, 1).await;
+        file.write(&path).await.expect("first flush");
+
+        // Its sector count would overflow into the offset and the chunk would read back as absent.
+        save(&mut file, 1, EXTERNAL_CHUNK_THRESHOLD as usize, 2).await;
+        assert!(file.write(&path).await.is_err());
+        file.layout.get_mut().write_action = WriteAction::All;
+        assert!(file.write(&path).await.is_err());
+
+        let on_disk = AnvilChunkFile::<SizedChunk>::read(Bytes::from(
+            std::fs::read(&path).expect("region on disk"),
+        ))
+        .expect("valid region");
+        assert!(on_disk.chunks_data[0].is_some());
+        assert!(on_disk.chunks_data[1].is_none());
+        // The sectors the refused write took are free again, so the next chunk follows chunk 0.
+        assert_eq!(file.layout.get_mut().used_sectors.allocate(1), 3);
+    }
+
     /// A region file whose first location entry is `location`, whose other
     /// 1023 entries are absent, and whose single payload sector starts with
     /// `declared_len` followed by the "no compression" marker.
@@ -1435,6 +1489,16 @@ mod tests {
             .expect("a chunk whose declared length fits is complete");
 
         assert!(file.chunks_data[0].is_some());
+    }
+
+    #[test]
+    fn a_chunk_cut_off_inside_its_header_is_an_error_not_a_panic() {
+        // Without padding the tail can end inside a chunk's 5 byte header, which
+        // used to be read without checking that those bytes exist.
+        let mut region = BytesMut::from(&region_with_first_location((2 << 8) | 1, 1)[..]);
+        region.truncate(SECTOR_BYTES * 2 + 3);
+
+        assert!(AnvilChunkFile::<ChunkData>::read(region.freeze()).is_err());
     }
 
     #[test]

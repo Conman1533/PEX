@@ -281,6 +281,7 @@ impl Server {
         ));
 
         memory::spawn_trimmer();
+        let metrics = metrics::Metrics::new(&advanced_config.metrics);
         let server = Self {
             basic_config,
             advanced_config,
@@ -315,7 +316,7 @@ impl Server {
             white_list,
             tick_rate_manager,
             tick_times_nanos: std::sync::Mutex::new([0; 100]),
-            metrics: metrics::Metrics::new(),
+            metrics,
             aggregated_tick_times_nanos: AtomicI64::new(0),
             tick_count: AtomicI32::new(0),
             debug_profiler: debug_profiler::DebugProfiler::new(),

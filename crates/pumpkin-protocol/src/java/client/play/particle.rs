@@ -65,6 +65,25 @@ impl<'a> CParticle<'a> {
     }
 }
 
+/// Vanilla `TrailParticleOption`, the options a `trail` particle carries.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrailParticleOption {
+    pub target: Vector3<f64>,
+    pub color: i32,
+    pub duration: i32,
+}
+
+impl TrailParticleOption {
+    /// Writes the option like vanilla's `TrailParticleOption.STREAM_CODEC`, for `CParticle::data`.
+    pub fn write(&self, mut write: impl Write) -> Result<(), WritingError> {
+        write.write_f64_be(self.target.x)?;
+        write.write_f64_be(self.target.y)?;
+        write.write_f64_be(self.target.z)?;
+        write.write_i32_be(self.color)?;
+        write.write_var_int(&VarInt(self.duration))
+    }
+}
+
 #[must_use]
 pub const fn particle_name_for_v1_7(particle: pumpkin_data::particle::Particle) -> &'static str {
     use pumpkin_data::particle::Particle::{
@@ -300,7 +319,7 @@ mod tests {
 
     use crate::{ClientPacket, VarInt};
 
-    use super::CParticle;
+    use super::{CParticle, TrailParticleOption};
 
     #[test]
     fn particle_encoding_legacy_1_7_string() {
@@ -348,6 +367,26 @@ mod tests {
         let mut slice = bytes.as_slice();
         let id = slice.get_i32_be().unwrap();
         assert_eq!(id, Particle::ExplosionEmitter as i32);
+    }
+
+    #[test]
+    fn trail_option_matches_vanilla_stream_codec() {
+        let option = TrailParticleOption {
+            target: Vector3::new(1.0, 2.0, 3.0),
+            color: 0x00FC_7812,
+            duration: 20,
+        };
+        let mut bytes = Vec::new();
+        option.write(&mut bytes).unwrap();
+
+        // Vec3 as three doubles, the color as an int, the duration as a var int.
+        assert_eq!(
+            bytes,
+            [
+                0x3F, 0xF0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 0, 0x40, 0x08, 0, 0, 0, 0, 0,
+                0, 0x00, 0xFC, 0x78, 0x12, 0x14
+            ]
+        );
     }
 
     #[test]

@@ -114,6 +114,10 @@ impl Mob for ZombifiedPiglinEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn spawn_as_baby(&self) -> bool {
         self.mob_entity.set_baby_by_age();
         true

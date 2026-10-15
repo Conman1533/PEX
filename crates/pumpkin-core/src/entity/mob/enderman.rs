@@ -417,6 +417,10 @@ impl Mob for EndermanEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn set_mob_target(&self, target: Option<Arc<dyn EntityBase>>) {
         self.set_target(self.as_valid_target(target));
     }

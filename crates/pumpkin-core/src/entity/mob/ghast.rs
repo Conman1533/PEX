@@ -126,6 +126,10 @@ impl Mob for GhastEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn get_mob_gravity(&self) -> f64 {
         0.0 // Ghasts fly, no gravity applied in standard travel
     }

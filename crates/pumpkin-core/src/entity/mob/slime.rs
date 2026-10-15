@@ -298,6 +298,10 @@ impl Mob for SlimeEntity {
         &self.entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         self.o_squish.store(self.squish.load());
         self.squish

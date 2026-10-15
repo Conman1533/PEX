@@ -47,6 +47,10 @@ impl Mob for DrownedEntity {
         &self.entity.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn spawn_as_baby(&self) -> bool {
         self.entity.spawn_as_baby()
     }

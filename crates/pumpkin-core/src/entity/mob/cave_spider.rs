@@ -83,6 +83,10 @@ impl Mob for CaveSpiderEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn on_attack(&self, target: &dyn EntityBase) {
         if let Some(living) = target.get_living_entity() {
             let world = self.mob_entity.living_entity.entity.world.load();

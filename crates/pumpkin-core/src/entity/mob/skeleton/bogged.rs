@@ -1,5 +1,5 @@
 use crate::entity::{
-    Entity,
+    Entity, EntityBase,
     mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
 };
 use pumpkin_data::data_component_impl::EquipmentSlot;
@@ -27,8 +27,16 @@ impl Mob for BoggedSkeletonEntity {
         &self.entity.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         self.entity.mob_read_nbt(nbt);
+    }
+
+    fn mob_tick(&self, caller: &dyn EntityBase) {
+        self.entity.mob_tick(caller);
     }
 
     fn on_equip_item(&self, slot: &EquipmentSlot) {

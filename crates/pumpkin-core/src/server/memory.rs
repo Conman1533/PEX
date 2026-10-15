@@ -6,11 +6,14 @@ use std::time::Duration;
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 const TRIM_INTERVAL: Duration = Duration::from_secs(60);
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+static SPAWNED: std::sync::Once = std::sync::Once::new();
 
-/// Starts the trimmer. Only does anything on glibc; other allocators return memory themselves.
+/// Starts the trimmer once per process. Only does anything on glibc; other allocators return
+/// memory themselves.
 pub fn spawn_trimmer() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    {
+    SPAWNED.call_once(|| {
         let spawned = std::thread::Builder::new()
             .name("pex-malloc-trim".into())
             .spawn(|| {
@@ -25,5 +28,5 @@ pub fn spawn_trimmer() {
         if let Err(e) = spawned {
             tracing::warn!("Could not start the memory trimmer: {e}");
         }
-    }
+    });
 }

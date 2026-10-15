@@ -777,6 +777,8 @@ pub struct Entity {
     pub velocity: AtomicCell<Vector3<f64>>,
     /// Tracks a horizontal collision
     pub horizontal_collision: AtomicBool,
+    /// Vanilla `verticalCollision`: the last move was cut short on the Y axis.
+    pub vertical_collision: AtomicBool,
     /// Indicates whether the entity is on the ground (may not always be accurate).
     pub on_ground: AtomicBool,
     /// Indicates whether the entity is touching water
@@ -938,6 +940,7 @@ impl Entity {
             touching_lava: AtomicBool::new(false),
             lava_height: AtomicCell::new(0.0),
             horizontal_collision: AtomicBool::new(false),
+            vertical_collision: AtomicBool::new(false),
             pos: AtomicCell::new(position),
             last_pos: AtomicCell::new(position),
             movement: AtomicCell::new(Vector3::default()),
@@ -1301,6 +1304,7 @@ impl Entity {
         self.on_ground.store(false, Ordering::SeqCst);
         self.supporting_block_pos.store(None);
         self.horizontal_collision.store(false, Ordering::SeqCst);
+        self.vertical_collision.store(false, Ordering::SeqCst);
 
         let bounding_box = self.bounding_box.load();
 
@@ -1405,6 +1409,8 @@ impl Entity {
 
         self.horizontal_collision
             .store(horizontal_collision, Ordering::SeqCst);
+        self.vertical_collision
+            .store(movement.y != adjusted_movement.y, Ordering::SeqCst);
 
         adjusted_movement
     }
@@ -1890,6 +1896,7 @@ impl Entity {
         if self.no_physics.load(Ordering::Relaxed) {
             self.move_pos(motion);
             self.horizontal_collision.store(false, Ordering::Relaxed);
+            self.vertical_collision.store(false, Ordering::Relaxed);
             self.on_ground.store(false, Ordering::Relaxed);
 
             return;
@@ -3303,7 +3310,14 @@ impl Entity {
         );
     }
 
-    pub fn tick_leash(&self) {
+    // Vanilla `LivingEntity.isAlive` where it exists, so a dying mob or holder counts as gone.
+    fn is_leash_participant_alive(entity: &dyn EntityBase) -> bool {
+        entity
+            .get_living_entity()
+            .map_or_else(|| entity.get_entity().is_alive(), LivingEntity::is_alive)
+    }
+
+    pub fn tick_leash(&self, caller: &dyn EntityBase) {
         let holder = {
             let Ok(guard) = self.leashed_to.try_lock() else {
                 return;
@@ -3314,16 +3328,12 @@ impl Entity {
         if let Some(holder) = holder {
             let holder_entity = holder.get_entity();
 
-            // The mob itself is gone: just clear the link, without refunding a lead.
-            if !self.is_alive() {
-                self.unleash();
-                return;
-            }
-
-            // Vanilla `Leashable.tickLeash`: when the holder is gone (for example the knot was
-            // broken) the mob is released, and a lead is only dropped when the entity-drop game
-            // rule allows it, otherwise the leash is removed without an item.
-            if !holder_entity.is_alive() {
+            // Vanilla `Leashable.tickLeash`: when the mob dies or the holder is gone (for example
+            // the knot was broken) the mob is released, and a lead is only dropped when the
+            // entity-drop game rule allows it, otherwise the leash is removed without an item.
+            if !Self::is_leash_participant_alive(caller)
+                || !Self::is_leash_participant_alive(holder.as_ref())
+            {
                 if self.world.load().level_info.load().game_rules.entity_drops {
                     self.drop_leash_with_item();
                 } else {

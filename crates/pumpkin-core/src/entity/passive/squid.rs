@@ -86,17 +86,20 @@ impl SquidMovement {
         let mut rng = mob.get_random();
 
         let fleeing = in_water && self.flee(living);
-        if !fleeing
-            && (rng.random_range(0..50) == 0
+        if !fleeing {
+            if mob.get_mob_entity().no_action_time.load(Ordering::Relaxed) > 100 {
+                self.movement_vector.store(Vector3::default());
+            } else if rng.random_range(0..50) == 0
                 || !in_water
-                || self.movement_vector.load() == Vector3::default())
-        {
-            let angle = rng.random::<f32>() * TAU;
-            self.movement_vector.store(Vector3::new(
-                f64::from(angle.cos() * 0.2),
-                f64::from(-0.1 + rng.random::<f32>() * 0.2),
-                f64::from(angle.sin() * 0.2),
-            ));
+                || self.movement_vector.load() == Vector3::default()
+            {
+                let angle = rng.random::<f32>() * TAU;
+                self.movement_vector.store(Vector3::new(
+                    f64::from(angle.cos() * 0.2),
+                    f64::from(-0.1 + rng.random::<f32>() * 0.2),
+                    f64::from(angle.sin() * 0.2),
+                ));
+            }
         }
 
         let mut tentacle = self.tentacle_movement.load() + self.tentacle_speed.load();

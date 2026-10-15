@@ -89,6 +89,10 @@ impl Mob for BlazeEntity {
         &self.entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_tick(&self, caller: &dyn EntityBase) {
         let base_entity = &self.entity.living_entity.entity;
         if !base_entity.is_alive() {
