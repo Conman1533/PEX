@@ -464,29 +464,38 @@ impl BundleContentsImpl {
     pub fn can_item_be_in_bundle(stack: &crate::item_stack::ItemStack) -> bool {
         !stack.is_empty() && stack.get_data_component::<Self>().is_none()
     }
+    // Vanilla `BundleContents.Mutable.findStackIndex`.
+    fn find_stack_index(&self, items_to_add: &crate::item_stack::ItemStack) -> Option<usize> {
+        if !items_to_add.is_stackable() {
+            return None;
+        }
+        self.items
+            .iter()
+            .position(|stack| stack.are_items_and_components_equal(items_to_add))
+    }
     // Vanilla `BundleContents.Mutable.tryInsert`. Inserts what fits and returns the amount taken.
-    pub fn try_insert(&mut self, stack: &mut crate::item_stack::ItemStack) -> u8 {
-        if !Self::can_item_be_in_bundle(stack) {
+    pub fn try_insert(&mut self, items_to_add: &mut crate::item_stack::ItemStack) -> u8 {
+        if !Self::can_item_be_in_bundle(items_to_add) {
             return 0;
         }
-        let item_weight = Self::weight_of(stack);
-        let amount_to_add = stack
+        let item_weight = Self::weight_of(items_to_add);
+        let amount_to_add = items_to_add
             .item_count
             .min(self.get_max_amount_to_add(item_weight));
-        let mut inserted = 0;
-        while stack.item_count > 0 && inserted < amount_to_add {
-            if let Some(top) = self.items.first_mut()
-                && crate::item_stack::ItemStack::are_items_and_components_equal(top, stack)
-                && top.item_count < top.get_max_stack_size()
-            {
-                top.item_count += 1;
-            } else {
-                self.items.insert(0, stack.copy_with_count(1));
-            }
-            stack.item_count -= 1;
-            inserted += 1;
+        if amount_to_add == 0 {
+            return 0;
         }
-        inserted
+        if let Some(stack_index) = self.find_stack_index(items_to_add) {
+            let removed_stack = self.items.remove(stack_index);
+            let merged_stack =
+                removed_stack.copy_with_count(removed_stack.item_count + amount_to_add);
+            items_to_add.decrement(amount_to_add);
+            self.items.insert(0, merged_stack);
+        } else {
+            let split = items_to_add.split(amount_to_add);
+            self.items.insert(0, split);
+        }
+        amount_to_add
     }
     // Vanilla `BundleContents.Mutable.removeOne`.
     pub fn remove_one(&mut self) -> Option<crate::item_stack::ItemStack> {
@@ -957,6 +966,21 @@ mod tests {
         );
         assert!(contents.items.is_empty());
         assert!(contents.remove_one().is_none());
+    }
+
+    #[test]
+    fn a_bundle_merges_into_a_matching_stack_below_the_top() {
+        let mut contents = empty();
+        assert_eq!(contents.try_insert(&mut ItemStack::new(1, &Item::STONE)), 1);
+        assert_eq!(contents.try_insert(&mut ItemStack::new(1, &Item::DIRT)), 1);
+        assert_eq!(contents.try_insert(&mut ItemStack::new(1, &Item::STONE)), 1);
+
+        let items: Vec<_> = contents
+            .items
+            .iter()
+            .map(|stack| (stack.item.id, stack.item_count))
+            .collect();
+        assert_eq!(items, vec![(Item::STONE.id, 2), (Item::DIRT.id, 1)]);
     }
 
     #[test]
