@@ -495,8 +495,8 @@ impl HopperBlockEntity {
                 if let Some(from_hopper) =
                     from.and_then(|from| from.as_any().downcast_ref::<Self>())
                 {
-                    if from_hopper.cooldown_time.load(Ordering::Relaxed)
-                        >= hopper.cooldown_time.load(Ordering::Relaxed)
+                    if hopper.ticked_game_time.load(Ordering::Relaxed)
+                        >= from_hopper.ticked_game_time.load(Ordering::Relaxed)
                     {
                         hopper.cooldown_time.store(7, Ordering::Relaxed);
                     } else {
