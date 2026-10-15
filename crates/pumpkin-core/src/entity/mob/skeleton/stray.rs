@@ -3,7 +3,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
 
 use crate::entity::{
-    Entity,
+    Entity, EntityBase,
     mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
 };
 
@@ -30,6 +30,10 @@ impl Mob for StraySkeletonEntity {
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         self.entity.mob_read_nbt(nbt);
+    }
+
+    fn mob_tick(&self, caller: &dyn EntityBase) {
+        self.entity.mob_tick(caller);
     }
 
     fn on_equip_item(&self, slot: &EquipmentSlot) {

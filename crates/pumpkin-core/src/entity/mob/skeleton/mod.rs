@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
 use pumpkin_data::data_component_impl::EquipmentSlot;
@@ -9,7 +9,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::Difficulty;
 
 use crate::entity::{
-    Entity,
+    Entity, EntityBase,
     ai::goal::{
         Goal, active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
         bow_attack::BowAttackGoal, flee_sun::FleeSunGoal, look_around::RandomLookAroundGoal,
@@ -32,6 +32,10 @@ pub struct SkeletonEntityBase {
     pub mob_entity: MobEntity,
     hard_attack_interval: i32,
     attack_interval: i32,
+    /// Vanilla runs `onEquipItem` on the server thread, but `/item replace` and `/loot replace`
+    /// reach it while the AI tick holds the goal selectors, so the reassessment waits for the next
+    /// tick.
+    reassess_weapon_goal_queued: AtomicBool,
 }
 
 impl SkeletonEntityBase {
@@ -71,6 +75,7 @@ impl SkeletonEntityBase {
             mob_entity,
             hard_attack_interval,
             attack_interval,
+            reassess_weapon_goal_queued: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(mob);
         let mob_weak: Weak<dyn Mob> = {
@@ -198,8 +203,18 @@ impl Mob for SkeletonEntityBase {
         self.reassess_weapon_goal();
     }
 
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        if self
+            .reassess_weapon_goal_queued
+            .swap(false, Ordering::Relaxed)
+        {
+            self.reassess_weapon_goal();
+        }
+    }
+
     fn on_equip_item(&self, _slot: &EquipmentSlot) {
-        self.reassess_weapon_goal();
+        self.reassess_weapon_goal_queued
+            .store(true, Ordering::Relaxed);
     }
 
     fn populate_default_equipment_slots(
