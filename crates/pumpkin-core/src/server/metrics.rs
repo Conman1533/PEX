@@ -1,7 +1,7 @@
-//! PEX tick metrics: slow tick reports and a per-minute summary, written to `metrics/` in the
-//! server directory by a background thread so the tick loop never waits on disk.
+//! PEX tick metrics: slow tick reports and a per-minute summary.
 //!
-//! `PEX_METRICS=0` turns it off, `PEX_SLOW_TICK_MS` sets the slow tick threshold (default 100).
+//! A background thread writes them to `metrics/` in the server directory so the tick loop never
+//! waits on disk. The `metrics` section of the config turns it off and sets the slow tick threshold.
 
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
@@ -10,10 +10,14 @@ use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use pumpkin_config::metrics::MetricsConfig;
 use tracing::warn;
 
-const DEFAULT_SLOW_TICK_MS: i64 = 100;
 const SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
+/// Vanilla `SharedConstants.TICKS_PER_SECOND`.
+const TICKS_PER_SECOND: usize = 20;
+/// Tick samples one summary covers at the default tick rate.
+const SUMMARY_WINDOW_TICKS: usize = SUMMARY_INTERVAL.as_secs() as usize * TICKS_PER_SECOND;
 const LAGGY_TICK_NANOS: i64 = 50_000_000;
 const CHANNEL_CAPACITY: usize = 256;
 
@@ -46,15 +50,11 @@ pub struct Metrics {
 
 impl Metrics {
     #[must_use]
-    pub fn new() -> Self {
-        if std::env::var("PEX_METRICS").is_ok_and(|v| v == "0") {
+    pub fn new(config: &MetricsConfig) -> Self {
+        if !config.enabled {
             return Self::disabled();
         }
-        let slow_nanos = std::env::var("PEX_SLOW_TICK_MS")
-            .ok()
-            .and_then(|v| v.parse::<i64>().ok())
-            .unwrap_or(DEFAULT_SLOW_TICK_MS)
-            * 1_000_000;
+        let slow_nanos = i64::from(config.slow_tick_ms) * 1_000_000;
         let (sender, receiver) = sync_channel(CHANNEL_CAPACITY);
         let spawned = std::thread::Builder::new()
             .name("pex-metrics".into())
@@ -104,12 +104,6 @@ impl Metrics {
         }) {
             warn!("Metrics writer stopped");
         }
-    }
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -168,7 +162,7 @@ fn writer_loop(receiver: &Receiver<TickSample>, slow_nanos: i64) {
             "unix_time,ticks,avg_mspt,p99_mspt,max_mspt,ticks_over_50ms,players,entities,block_entities,loaded_chunks,rss_mib",
         ),
     );
-    let mut window: Vec<i64> = Vec::with_capacity(1300);
+    let mut window: Vec<i64> = Vec::with_capacity(SUMMARY_WINDOW_TICKS);
     let mut last_worlds: Vec<WorldTickReport> = Vec::new();
     let mut next_summary = Instant::now() + SUMMARY_INTERVAL;
 
