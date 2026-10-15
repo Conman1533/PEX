@@ -7,7 +7,7 @@ use pumpkin_data::chicken_sound_variant::ChickenSoundVariant;
 use pumpkin_data::chicken_variant::ChickenVariant;
 use pumpkin_data::game_event::GameEvent;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::{entity::EntityType, item::Item};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -231,8 +231,11 @@ impl Mob for ChickenEntity {
         if (!on_ground) && current_velocity.y < 0.0 {
             entity.set_velocity(current_velocity.multiply(1.0, 0.6, 1.0));
         }
-        // Vanilla `Chicken.aiStep` only counts down for grown chickens.
-        if !self.is_baby() && self.egg_lay_time.fetch_sub(1, Ordering::Relaxed) <= 1 {
+        // Vanilla `Chicken.aiStep` only counts down for live, grown chickens.
+        if self.mob_entity.living_entity.is_alive()
+            && !self.is_baby()
+            && self.egg_lay_time.fetch_sub(1, Ordering::Relaxed) <= 1
+        {
             let next_time = rand::rng().random_range(6000..12000);
             let world = entity.world.load_full();
             let entity_id = entity.entity_id;
@@ -251,7 +254,14 @@ impl Mob for ChickenEntity {
                 // `spawnAtLocation` drops at the chicken's own position, so an egg laid on a hopper
                 // lands inside the hopper's pickup area rather than in the block below it.
                 entity.spawn_at_location(ItemStack::new(1, &Item::EGG));
-                entity.play_sound(Sound::EntityChickenEgg);
+                let mut rng = rand::rng();
+                world.play_sound_fine(
+                    Sound::EntityChickenEgg,
+                    SoundCategory::Neutral,
+                    &entity.pos.load(),
+                    1.0,
+                    (rng.random::<f32>() - rng.random::<f32>()) * 0.2 + 1.0,
+                );
                 world.emit_game_event(GameEvent::EntityPlace.name(), entity.pos.load());
             }
             self.egg_lay_time.store(next_time, Ordering::Relaxed);
