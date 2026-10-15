@@ -161,7 +161,9 @@ jobs:
       - name: Draft a nightly GitHub release
         uses: softprops/action-gh-release@v3
         with:
-          prerelease: true
+          # The nightly is the release the repo page links to as "Latest".
+          prerelease: false
+          make_latest: true
           files: dist/pumpkin*
           tag_name: nightly
           name: PEX Nightly Build
