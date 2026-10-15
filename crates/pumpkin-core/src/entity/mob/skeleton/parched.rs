@@ -28,6 +28,10 @@ impl Mob for ParchedSkeletonEntity {
         &self.entity.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         self.entity.mob_read_nbt(nbt);
     }

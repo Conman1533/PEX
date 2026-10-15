@@ -161,6 +161,10 @@ impl Mob for CreeperEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_on_lightning_strike(
         &self,
         caller: &dyn EntityBase,

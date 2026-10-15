@@ -174,6 +174,10 @@ impl Mob for HoglinEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn spawn_as_baby(&self) -> bool {
         self.is_baby.store(true, Ordering::Relaxed);
         self.mob_entity.set_baby_by_age();

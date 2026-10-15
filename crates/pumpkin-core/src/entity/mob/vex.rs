@@ -61,4 +61,8 @@ impl Mob for VexEntity {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }
+
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
 }

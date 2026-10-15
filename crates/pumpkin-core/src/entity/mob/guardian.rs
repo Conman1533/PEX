@@ -97,6 +97,10 @@ impl Mob for GuardianEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn on_damage(&self, _damage_type: DamageType, source: Option<&dyn EntityBase>) {
         if let Some(src) = source
             && let Some(living) = src.get_living_entity()

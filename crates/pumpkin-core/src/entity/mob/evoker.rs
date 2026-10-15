@@ -173,6 +173,10 @@ impl Mob for EvokerEntity {
         &self.mob_entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let ticks = self.spell_casting_tick_count.load(Ordering::Relaxed);
         if ticks > 0 {

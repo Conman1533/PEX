@@ -69,6 +69,10 @@ impl Mob for SilverfishEntity {
         &self.entity
     }
 
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
+    }
+
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let entity = &self.entity.living_entity.entity;
         if !entity.is_alive() {
