@@ -245,7 +245,10 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> HeterogeneousPaletteData<V
                     }
                     PaletteStorage::Dense(_) => {}
                 }
-                if self.palette.len() <= NIBBLE_PALETTE_MAX
+                // Vanilla never shrinks storage on `set`. Repacking only once the palette is
+                // well below the nibble limit stops a section at 16 states from converting
+                // 4096 entries on every edit; the packed output is the same either way.
+                if self.palette.len() <= NIBBLE_PALETTE_MAX / 2
                     && let PaletteStorage::Indexed(indices) = &self.storage
                 {
                     self.storage =
