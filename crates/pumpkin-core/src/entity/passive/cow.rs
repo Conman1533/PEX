@@ -157,6 +157,12 @@ impl Animal for CowEntity {
 }
 
 impl Mob for CowEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant = CowSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

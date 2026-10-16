@@ -111,6 +111,17 @@ impl Animal for TurtleEntity {
 }
 
 impl Mob for TurtleEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let entity = self.get_entity();
+        (!entity.is_in_water() && entity.on_ground.load(Ordering::Relaxed) && !self.is_baby())
+            .then_some(pumpkin_data::sound::Sound::EntityTurtleAmbientLand)
+    }
+
+    /// Vanilla `Turtle.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        200
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

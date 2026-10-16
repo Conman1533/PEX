@@ -238,6 +238,14 @@ impl Animal for AxolotlEntity {
 }
 
 impl Mob for AxolotlEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_in_water() {
+            pumpkin_data::sound::Sound::EntityAxolotlIdleWater
+        } else {
+            pumpkin_data::sound::Sound::EntityAxolotlIdleAir
+        })
+    }
+
     /// Vanilla `Axolotl.removeWhenFarAway`; named axolotls are already persistent.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         !self.is_from_bucket()

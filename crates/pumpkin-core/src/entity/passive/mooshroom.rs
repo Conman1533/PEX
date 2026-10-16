@@ -187,6 +187,12 @@ impl MooshroomEntity {
 }
 
 impl Mob for MooshroomEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(
+            pumpkin_data::cow_sound_variant::CowSoundVariant::Classic.ambient_sound(self.is_baby()),
+        )
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

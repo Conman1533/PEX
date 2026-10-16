@@ -140,6 +140,15 @@ impl AgeableMob for OcelotEntity {
 }
 
 impl Mob for OcelotEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityOcelotAmbient)
+    }
+
+    /// Vanilla `Ocelot.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        900
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

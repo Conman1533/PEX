@@ -77,6 +77,11 @@ pub mod zoglin;
 pub mod zombie;
 pub mod zombified_piglin;
 
+/// The ambient sound interval of vanilla `Mob`.
+const DEFAULT_AMBIENT_SOUND_INTERVAL: i32 = 80;
+/// The ambient sound interval of vanilla `Animal`, `AbstractGolem` and the water creatures.
+pub const ANIMAL_AMBIENT_SOUND_INTERVAL: i32 = 120;
+
 pub struct MobEntity {
     pub living_entity: LivingEntity,
     pub goals_selector: std::sync::Mutex<GoalSelector>,
@@ -93,6 +98,8 @@ pub struct MobEntity {
     pub love_ticks: AtomicI32,
     /// Vanilla `Animal.loveCause`.
     pub breeder: AtomicCell<Option<Uuid>>,
+    /// Vanilla `Mob.ambientSoundTime`.
+    pub ambient_sound_time: AtomicI32,
     pub persistence_required: AtomicBool,
     /// Vanilla `LivingEntity.noActionTime`: ticks since a player was within the no-despawn
     /// distance. Random despawning only starts once it passes [`Self::RANDOM_DESPAWN_DELAY`].
@@ -183,6 +190,7 @@ impl MobEntity {
             position_target: AtomicCell::new(BlockPos::ZERO),
             position_target_range: AtomicI32::new(-1),
             love_ticks: AtomicI32::new(0),
+            ambient_sound_time: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
             no_action_time: AtomicI32::new(0),
@@ -994,6 +1002,27 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
+    /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        None
+    }
+
+    /// Vanilla `Mob.getAmbientSoundInterval`, which `Animal` raises to 120 ticks.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        if self.as_animal().is_some() {
+            ANIMAL_AMBIENT_SOUND_INTERVAL
+        } else {
+            DEFAULT_AMBIENT_SOUND_INTERVAL
+        }
+    }
+
+    /// Vanilla `Mob.resetAmbientSoundTime`.
+    fn reset_ambient_sound_time(&self) {
+        self.get_mob_entity()
+            .ambient_sound_time
+            .store(-self.get_ambient_sound_interval(), Relaxed);
+    }
+
     fn as_ageable(&self) -> Option<&dyn crate::entity::ageable::AgeableMob> {
         None
     }
@@ -1431,6 +1460,16 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         entity.tick_leash(caller);
         sun_burn::tick(self);
 
+        // Vanilla `Mob.baseTick`.
+        if entity.is_alive()
+            && rand::random_range(0..1000) < mob_entity.ambient_sound_time.fetch_add(1, Relaxed)
+        {
+            self.reset_ambient_sound_time();
+            if let Some(sound) = self.get_ambient_sound() {
+                mob_entity.living_entity.make_sound(sound);
+            }
+        }
+
         mob_entity.check_despawn(self);
 
         if let Some(neutral) = self.as_neutral() {
@@ -1508,6 +1547,8 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             if let Some(animal) = self.as_animal() {
                 animal.reset_love();
             }
+            // Vanilla `Mob.playHurtSound`.
+            self.reset_ambient_sound_time();
             self.on_damage(damage_type, source);
         }
         damaged

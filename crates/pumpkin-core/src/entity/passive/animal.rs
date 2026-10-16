@@ -5,8 +5,6 @@ use pumpkin_data::dye_color::DyeColor;
 use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
-use pumpkin_data::sound::SoundCategory;
 use pumpkin_inventory::crafting::crafting_inventory::CraftingInventory;
 use pumpkin_inventory::crafting::crafting_screen_handler::match_crafting_recipe;
 use pumpkin_inventory::inventory::Inventory;
@@ -34,19 +32,6 @@ pub trait Animal: Mob {
 
     /// Vanilla `Animal.playEatingSound`, silent unless the animal overrides it.
     fn play_eating_sound(&self) {}
-
-    /// Vanilla `Mob.makeSound`: plays `sound` with the mob's voice pitch.
-    fn make_sound(&self, sound: Sound) {
-        let living = &self.get_mob_entity().living_entity;
-        let entity = &living.entity;
-        entity.world.load().play_sound_fine(
-            sound,
-            SoundCategory::Neutral,
-            &entity.pos.load(),
-            1.0,
-            living.get_pitch(),
-        );
-    }
 
     /// Animals prefer grass, then bright spots.
     fn animal_walk_target_value(&self, pos: &pumpkin_util::math::position::BlockPos) -> f32 {

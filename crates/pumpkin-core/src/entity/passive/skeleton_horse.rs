@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering},
@@ -126,6 +127,19 @@ impl Animal for SkeletonHorseEntity {
 }
 
 impl Mob for SkeletonHorseEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_submerged_in_water() {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseAmbientWater
+        } else {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseAmbient
+        })
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

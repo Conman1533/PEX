@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use crate::entity::passive::horse::can_parent;
 use std::sync::{
     Arc, Weak,
@@ -140,6 +141,15 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityCamelAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

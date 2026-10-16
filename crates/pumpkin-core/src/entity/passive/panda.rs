@@ -87,6 +87,22 @@ impl PandaGene {
         }
     }
 
+    /// Vanilla `Panda.Gene.isRecessive`.
+    #[must_use]
+    pub const fn is_recessive(self) -> bool {
+        matches!(self, Self::Brown | Self::Weak)
+    }
+
+    /// Vanilla `Panda.Gene.getVariantFromGenes`: a recessive gene only shows when both match.
+    #[must_use]
+    pub fn get_variant_from_genes(main_gene: Self, hidden_gene: Self) -> Self {
+        if !main_gene.is_recessive() || main_gene == hidden_gene {
+            main_gene
+        } else {
+            Self::Normal
+        }
+    }
+
     #[must_use]
     pub fn random_gene() -> Self {
         let mut rng = rand::rng();
@@ -180,6 +196,12 @@ impl PandaEntity {
         );
     }
 
+    /// Vanilla `Panda.getVariant`: the gene the panda shows.
+    #[must_use]
+    pub fn get_variant(&self) -> PandaGene {
+        PandaGene::get_variant_from_genes(self.get_main_gene(), self.get_hidden_gene())
+    }
+
     #[must_use]
     pub fn get_hidden_gene(&self) -> PandaGene {
         PandaGene::from_id(self.hidden_gene.load(Ordering::Relaxed))
@@ -262,6 +284,14 @@ impl Animal for PandaEntity {
 }
 
 impl Mob for PandaEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(match self.get_variant() {
+            PandaGene::Aggressive => pumpkin_data::sound::Sound::EntityPandaAggressiveAmbient,
+            PandaGene::Worried => pumpkin_data::sound::Sound::EntityPandaWorriedAmbient,
+            _ => pumpkin_data::sound::Sound::EntityPandaAmbient,
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

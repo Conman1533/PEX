@@ -125,6 +125,15 @@ impl SnowGolemEntity {
 }
 
 impl Mob for SnowGolemEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntitySnowGolemAmbient)
+    }
+
+    /// Vanilla `AbstractGolem.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

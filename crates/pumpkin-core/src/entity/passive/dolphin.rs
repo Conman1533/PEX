@@ -85,6 +85,19 @@ impl DolphinEntity {
 }
 
 impl Mob for DolphinEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_in_water() {
+            pumpkin_data::sound::Sound::EntityDolphinAmbientWater
+        } else {
+            pumpkin_data::sound::Sound::EntityDolphinAmbient
+        })
+    }
+
+    /// Vanilla `WaterAnimal.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_bool("GotFish", self.got_fish());
         nbt.put_int("Moistness", self.moistness_level.load(Ordering::Relaxed));

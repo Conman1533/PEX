@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use crate::entity::passive::horse::can_parent;
 use crate::entity::passive::llama::llama_tamed;
 use std::sync::{
@@ -277,6 +278,15 @@ impl Animal for TraderLlamaEntity {
 }
 
 impl Mob for TraderLlamaEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityLlamaAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

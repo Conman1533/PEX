@@ -9,6 +9,7 @@ use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
@@ -234,6 +235,25 @@ impl Animal for FoxEntity {
 }
 
 impl Mob for FoxEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        if self.is_sleeping() {
+            return Some(pumpkin_data::sound::Sound::EntityFoxSleep);
+        }
+        let entity = self.get_entity();
+        let world = entity.world.load();
+        if !world.is_bright_outside() && self.get_random().random::<f32>() < 0.1 {
+            let search_box = entity.bounding_box.load().expand(16.0, 16.0, 16.0);
+            if world
+                .get_players_at_box(&search_box)
+                .iter()
+                .all(|player| player.is_spectator())
+            {
+                return Some(pumpkin_data::sound::Sound::EntityFoxScreech);
+            }
+        }
+        Some(pumpkin_data::sound::Sound::EntityFoxAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

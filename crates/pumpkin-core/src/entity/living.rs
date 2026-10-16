@@ -219,6 +219,17 @@ impl LivingEntity {
         entity_type.death_sound.unwrap_or(Sound::EntityGenericDeath)
     }
 
+    /// Vanilla `LivingEntity.makeSound`: plays `sound` with this entity's voice pitch.
+    pub fn make_sound(&self, sound: Sound) {
+        self.entity.world.load().play_sound_fine(
+            sound,
+            SoundCategory::Neutral,
+            &self.entity.pos.load(),
+            1.0,
+            self.get_pitch(),
+        );
+    }
+
     pub(crate) fn get_pitch(&self) -> f32 {
         let is_baby = self
             .get_mob()

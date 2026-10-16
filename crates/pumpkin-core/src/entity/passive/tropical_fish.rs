@@ -24,6 +24,15 @@ impl TropicalFishEntity {
 }
 
 impl Mob for TropicalFishEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityTropicalFishAmbient)
+    }
+
+    /// Vanilla `WaterAnimal.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

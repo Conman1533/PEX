@@ -175,6 +175,14 @@ impl Animal for GoatEntity {
 }
 
 impl Mob for GoatEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_screaming() {
+            pumpkin_data::sound::Sound::EntityGoatScreamingAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityGoatAmbient
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

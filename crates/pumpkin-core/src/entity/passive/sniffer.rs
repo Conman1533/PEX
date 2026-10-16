@@ -359,6 +359,14 @@ impl Animal for SnifferEntity {
 }
 
 impl Mob for SnifferEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        (!matches!(
+            self.get_state(),
+            SnifferState::Digging | SnifferState::Searching
+        ))
+        .then_some(pumpkin_data::sound::Sound::EntitySnifferIdle)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

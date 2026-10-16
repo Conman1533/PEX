@@ -31,6 +31,8 @@ use crate::entity::{
 };
 
 pub const FLAG_TAME: u8 = 2;
+/// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+pub const HORSE_AMBIENT_SOUND_INTERVAL: i32 = 400;
 /// The number of vanilla `Variant` coat colors.
 const VARIANT_COUNT: i32 = 7;
 /// The number of vanilla `Markings`.
@@ -237,6 +239,19 @@ impl Animal for HorseEntity {
 }
 
 impl Mob for HorseEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityBabyHorseAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityHorseAmbient
+        })
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

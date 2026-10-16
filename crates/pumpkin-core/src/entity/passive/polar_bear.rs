@@ -146,6 +146,14 @@ impl NeutralMob for PolarBearEntity {
 }
 
 impl Mob for PolarBearEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityPolarBearAmbientBaby
+        } else {
+            pumpkin_data::sound::Sound::EntityPolarBearAmbient
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

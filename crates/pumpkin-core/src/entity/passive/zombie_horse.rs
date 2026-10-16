@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering},
@@ -140,6 +141,15 @@ impl Animal for ZombieHorseEntity {
 }
 
 impl Mob for ZombieHorseEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityZombieHorseAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     /// Vanilla `ZombieHorse.removeWhenFarAway`: despawns although it is an animal.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         true

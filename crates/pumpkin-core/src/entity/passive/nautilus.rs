@@ -74,33 +74,6 @@ impl NautilusEntity {
         self.owner.store(owner);
     }
 
-    pub fn get_ambient_sound(&self) -> Sound {
-        let is_baby = self
-            .mob_entity
-            .living_entity
-            .entity
-            .age
-            .load(Ordering::Relaxed)
-            < 0;
-        let is_water = self
-            .mob_entity
-            .living_entity
-            .entity
-            .touching_water
-            .load(Ordering::Relaxed);
-        if is_baby {
-            if is_water {
-                Sound::EntityBabyNautilusAmbient
-            } else {
-                Sound::EntityBabyNautilusAmbientLand
-            }
-        } else if is_water {
-            Sound::EntityNautilusAmbient
-        } else {
-            Sound::EntityNautilusAmbientLand
-        }
-    }
-
     pub fn get_dash_sound(&self) -> Sound {
         let is_water = self
             .mob_entity
@@ -173,7 +146,7 @@ impl Animal for NautilusEntity {
     }
 
     fn play_eating_sound(&self) {
-        self.make_sound(if self.is_baby() {
+        self.mob_entity.living_entity.make_sound(if self.is_baby() {
             Sound::EntityBabyNautilusEat
         } else {
             Sound::EntityNautilusEat
@@ -224,6 +197,16 @@ impl AgeableMob for NautilusEntity {
 }
 
 impl Mob for NautilusEntity {
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        let under_water = self.get_entity().is_under_water();
+        Some(match (self.is_baby(), under_water) {
+            (true, true) => Sound::EntityBabyNautilusAmbient,
+            (true, false) => Sound::EntityBabyNautilusAmbientLand,
+            (false, true) => Sound::EntityNautilusAmbient,
+            (false, false) => Sound::EntityNautilusAmbientLand,
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

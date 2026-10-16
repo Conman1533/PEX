@@ -230,6 +230,23 @@ impl NeutralMob for WolfEntity {
 }
 
 impl Mob for WolfEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant = WolfSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        let is_baby = self.is_baby();
+        Some(if self.is_angry() {
+            sound_variant.growl_sound(is_baby)
+        } else if self.get_random().random_range(0..3) == 0 {
+            if self.is_tame() && self.mob_entity.living_entity.health.load() < 20.0 {
+                sound_variant.whine_sound(is_baby)
+            } else {
+                sound_variant.pant_sound(is_baby)
+            }
+        } else {
+            sound_variant.ambient_sound(is_baby)
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

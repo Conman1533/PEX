@@ -133,6 +133,24 @@ impl Animal for HappyGhastEntity {
 }
 
 impl Mob for HappyGhastEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityGhastlingAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityHappyGhastAmbient
+        })
+    }
+
+    /// Vanilla `HappyGhast.getAmbientSoundInterval`: six times longer while ridden.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        let interval = crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL;
+        if self.get_entity().has_passengers() {
+            interval * 6
+        } else {
+            interval
+        }
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

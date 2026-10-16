@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -154,6 +155,15 @@ impl Animal for MuleEntity {
 }
 
 impl Mob for MuleEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityMuleAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

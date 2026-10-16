@@ -109,6 +109,11 @@ impl Animal for StriderEntity {
 }
 
 impl Mob for StriderEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla also keeps quiet while tempted, which the goal does not expose here.
+        (!self.is_panicking()).then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

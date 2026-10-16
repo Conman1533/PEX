@@ -172,11 +172,19 @@ impl Animal for PigEntity {
     fn play_eating_sound(&self) {
         let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
             .unwrap_or_default();
-        self.make_sound(sound_variant.eat_sound(self.is_baby()));
+        self.mob_entity
+            .living_entity
+            .make_sound(sound_variant.eat_sound(self.is_baby()));
     }
 }
 
 impl Mob for PigEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

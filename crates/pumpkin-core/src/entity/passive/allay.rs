@@ -94,6 +94,22 @@ impl AllayEntity {
 }
 
 impl Mob for AllayEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let holds_item = !self
+            .mob_entity
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&pumpkin_data::data_component_impl::EquipmentSlot::MAIN_HAND)
+            .is_empty();
+        Some(if holds_item {
+            pumpkin_data::sound::Sound::EntityAllayAmbientWithItem
+        } else {
+            pumpkin_data::sound::Sound::EntityAllayAmbientWithoutItem
+        })
+    }
+
     /// Vanilla `Allay.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

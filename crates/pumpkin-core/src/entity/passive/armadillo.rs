@@ -303,11 +303,17 @@ impl Animal for ArmadilloEntity {
     }
 
     fn play_eating_sound(&self) {
-        self.make_sound(Sound::EntityArmadilloEat);
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityArmadilloEat);
     }
 }
 
 impl Mob for ArmadilloEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        (!self.is_scared()).then_some(pumpkin_data::sound::Sound::EntityArmadilloAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

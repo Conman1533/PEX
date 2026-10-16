@@ -89,6 +89,16 @@ impl ParrotEntity {
 }
 
 impl Mob for ParrotEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Parrot.getAmbient` also imitates a nearby monster one time in a thousand.
+        Some(pumpkin_data::sound::Sound::EntityParrotAmbient)
+    }
+
+    /// Vanilla `Animal.getAmbientSoundInterval`; parrots are animals there.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     /// Vanilla `Animal.removeWhenFarAway`: parrots are animals there, unlike in Pumpkin.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

@@ -214,6 +214,10 @@ impl Animal for RabbitEntity {
 }
 
 impl Mob for RabbitEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityRabbitAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
