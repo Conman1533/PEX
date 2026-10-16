@@ -5,6 +5,7 @@ use pumpkin_data::chunk::Biome;
 use pumpkin_data::placed_feature::PlacedFeature;
 
 // The order of biomes in this array is used by FeatureSorter to break ties between otherwise independent features.
+// It must match the order `OverworldBiomeBuilder.addBiomes` first emits each biome.
 const OVERWORLD_BIOMES: &[&Biome] = &[
     &Biome::MUSHROOM_FIELDS,
     &Biome::DEEP_FROZEN_OCEAN,
@@ -48,6 +49,7 @@ const OVERWORLD_BIOMES: &[&Biome] = &[
     &Biome::FROZEN_RIVER,
     &Biome::RIVER,
     &Biome::ICE_SPIKES,
+    &Biome::DAPPLED_FOREST,
     &Biome::OLD_GROWTH_PINE_TAIGA,
     &Biome::SUNFLOWER_PLAINS,
     &Biome::OLD_GROWTH_BIRCH_FOREST,
@@ -61,7 +63,6 @@ const OVERWORLD_BIOMES: &[&Biome] = &[
     &Biome::LUSH_CAVES,
     &Biome::SULFUR_CAVES,
     &Biome::DEEP_DARK,
-    &Biome::DAPPLED_FOREST,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
