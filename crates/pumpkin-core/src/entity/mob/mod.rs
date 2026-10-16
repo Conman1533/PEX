@@ -577,10 +577,11 @@ impl MobEntity {
             return false;
         }
 
+        // The first sky check reads raw sky light, but this one is darkened by the time of day.
         let current_brightness = if is_thundering {
-            (sky_light - 10).max(block_light)
+            world.get_raw_brightness(pos, 10)
         } else {
-            sky_light.max(block_light)
+            world.get_max_local_raw_brightness(pos)
         };
 
         // TODO
