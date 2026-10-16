@@ -2178,6 +2178,14 @@ impl Entity {
         self.fire_ticks.store(0, Ordering::Relaxed);
     }
 
+    /// Vanilla `Entity.isFree`: whether the bounding box moved by `offset` hits no block and holds
+    /// no liquid.
+    pub fn is_free(&self, offset: Vector3<f64>) -> bool {
+        let bounding_box = self.bounding_box.load().shift(offset);
+        let world = self.world.load();
+        world.is_space_empty(bounding_box) && !world.contains_any_liquid(bounding_box)
+    }
+
     /// Maximum freeze ticks (7 seconds at 20 tps)
     pub const MAX_FROZEN_TICKS: i32 = 140;
 
