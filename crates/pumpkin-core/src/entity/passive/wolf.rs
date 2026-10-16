@@ -23,10 +23,11 @@ use crate::entity::{
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, beg::BegGoal,
         breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_owner::FollowOwnerGoal,
-        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
+        leap_at_target::LeapAtTargetGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal,
         owner_hurt_by_target::OwnerHurtByTargetGoal, owner_hurt_target::OwnerHurtTargetGoal,
-        revenge::RevengeGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        revenge::RevengeGoal, sit_when_ordered_to::SitWhenOrderedToGoal, swim::SwimGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{
         Mob, MobEntity,
@@ -34,7 +35,8 @@ use crate::entity::{
     },
     passive::{
         animal::Animal,
-        tamable::{TamableAnimal, TamableData},
+        tamable::{TamableAnimal, TamableData, is_untamed},
+        turtle::baby_on_land_selector,
     },
     player::Player,
 };
@@ -84,19 +86,22 @@ impl WolfEntity {
                     .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES)
                     .teleporting_to_owner(),
             );
+            // 2: SitWhenOrderedToGoal
+            goal_selector.add_goal(2, Box::new(SitWhenOrderedToGoal::new()));
             // 3: Avoid Llama
             goal_selector.add_goal(
                 3,
                 Box::new(AvoidEntityGoal::new(&EntityType::LLAMA, 24.0, 1.5, 1.5)),
             );
+            // 4: LeapAtTargetGoal
+            goal_selector.add_goal(4, Box::new(LeapAtTargetGoal::new(0.4)));
             // 5: MeleeAttackGoal
             goal_selector.add_goal(5, Box::new(MeleeAttackGoal::new(1.0, true)));
             // 6: FollowOwnerGoal
             goal_selector.add_goal(6, FollowOwnerGoal::new(1.0, 10.0, 2.0));
             // 7: BreedGoal
             goal_selector.add_goal(7, BreedGoal::new(1.0));
-            // 8: FollowParentGoal & WanderAroundGoal
-            goal_selector.add_goal(8, Box::new(FollowParentGoal::new(1.1)));
+            // 8: WanderAroundGoal
             goal_selector.add_goal(8, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             // 9: BegGoal
             goal_selector.add_goal(9, BegGoal::new(8.0));
@@ -127,15 +132,31 @@ impl WolfEntity {
             // 5: NonTameRandomTarget (Sheep, Rabbit, Fox)
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::SHEEP, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::SHEEP, false)
+                    .gated_by(is_untamed),
             );
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::RABBIT, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::RABBIT, false)
+                    .gated_by(is_untamed),
             );
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::FOX, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::FOX, false)
+                    .gated_by(is_untamed),
+            );
+            // 6: NonTameRandomTarget (baby Turtle on land)
+            target_selector.add_goal(
+                6,
+                Box::new(ActiveTargetGoal::new(
+                    &mob_arc.mob_entity,
+                    &EntityType::TURTLE,
+                    10,
+                    false,
+                    false,
+                    Some(baby_on_land_selector),
+                ))
+                .gated_by(is_untamed),
             );
             // 7: NearestAttackableTarget (Skeleton)
             target_selector.add_goal(

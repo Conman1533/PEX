@@ -10,6 +10,11 @@ use crate::entity::EntityBase;
 use crate::entity::passive::animal::Animal;
 use crate::entity::player::Player;
 
+/// Gate for goals vanilla only runs while the animal is untamed (`NonTameRandomTargetGoal`).
+pub fn is_untamed(mob: &dyn crate::entity::mob::Mob) -> bool {
+    !mob.is_tamed()
+}
+
 pub const SITTING_FLAG: u8 = 1;
 pub const TAME_FLAG: u8 = 4;
 pub const TELEPORT_WHEN_DISTANCE_IS_SQ: f64 = 144.0;

@@ -17,10 +17,17 @@ use crate::entity::{
         look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal,
         try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
     },
+    living::LivingEntity,
     mob::{Mob, MobEntity},
     passive::animal::Animal,
     player::Player,
 };
+use crate::world::World;
+
+/// Vanilla `Turtle.BABY_ON_LAND_SELECTOR`: baby turtles out of the water are prey.
+pub fn baby_on_land_selector(target: &LivingEntity, _world: &World) -> bool {
+    target.entity.age.load(Ordering::Relaxed) < 0 && !target.is_in_water()
+}
 
 pub struct TurtleEntity {
     pub mob_entity: MobEntity,

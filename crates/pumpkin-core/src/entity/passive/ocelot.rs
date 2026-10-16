@@ -15,12 +15,12 @@ use crate::entity::{
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, breed::BreedGoal,
-        escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        tempt::TemptGoal, wander_around::WanderAroundGoal,
+        leap_at_target::LeapAtTargetGoal, look_at_entity::LookAtEntityGoal,
+        ocelot_attack::OcelotAttackGoal, swim::SwimGoal, tempt::TemptGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
-    passive::animal::Animal,
+    passive::{animal::Animal, turtle::baby_on_land_selector},
     player::Player,
 };
 
@@ -56,8 +56,6 @@ impl OcelotEntity {
 
             // Goal 1: FloatGoal (SwimGoal)
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
-            // Goal 1: PanicGoal (EscapeDangerGoal)
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
             // Goal 3: OcelotTemptGoal
             goal_selector.add_goal(
                 3,
@@ -70,12 +68,20 @@ impl OcelotEntity {
             // Goal 4: OcelotAvoidEntityGoal (when not trusting)
             goal_selector.add_goal(
                 4,
-                Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 0.8, 1.33)),
+                Box::new(
+                    AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 0.8, 1.33).gated_by(|mob| {
+                        mob.cast_any()
+                            .downcast_ref::<Self>()
+                            .is_some_and(|ocelot| !ocelot.is_trusting())
+                    }),
+                ),
             );
+            // Goal 7: LeapAtTargetGoal
+            goal_selector.add_goal(7, Box::new(LeapAtTargetGoal::new(0.3)));
+            // Goal 8: OcelotAttackGoal
+            goal_selector.add_goal(8, Box::new(OcelotAttackGoal::new()));
             // Goal 9: BreedGoal
             goal_selector.add_goal(9, BreedGoal::new(0.8));
-            // Goal 9: FollowParentGoal
-            goal_selector.add_goal(9, Box::new(FollowParentGoal::new(0.8)));
             // Goal 10: WaterAvoidingRandomStrollGoal (WanderAroundGoal)
             goal_selector.add_goal(
                 10,
@@ -89,8 +95,6 @@ impl OcelotEntity {
                 11,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 10.0),
             );
-            // Goal 11: RandomLookAroundGoal
-            goal_selector.add_goal(11, Box::new(RandomLookAroundGoal::default()));
         };
 
         {
@@ -107,7 +111,14 @@ impl OcelotEntity {
             );
             target_selector.add_goal(
                 1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::TURTLE, false),
+                Box::new(ActiveTargetGoal::new(
+                    &mob_arc.mob_entity,
+                    &EntityType::TURTLE,
+                    10,
+                    false,
+                    false,
+                    Some(baby_on_land_selector),
+                )),
             );
         };
 
