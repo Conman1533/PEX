@@ -6,6 +6,7 @@ use std::sync::{
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
+use pumpkin_data::tag;
 use pumpkin_nbt::compound::NbtCompound;
 
 use crate::entity::{
@@ -66,7 +67,16 @@ impl PolarBearEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, Box::new(MeleeAttackGoal::new(1.25, true)));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
+            goal_selector.add_goal(
+                1,
+                EscapeDangerGoal::new(2.0).with_panic_causes(|mob| {
+                    if is_baby(mob) {
+                        &tag::DamageType::MINECRAFT_PANIC_CAUSES
+                    } else {
+                        &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES
+                    }
+                }),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(

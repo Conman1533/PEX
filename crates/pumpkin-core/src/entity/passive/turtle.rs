@@ -54,7 +54,7 @@ impl TurtleEntity {
 
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, EscapeDangerGoal::new(1.2));
+            goal_selector.add_goal(0, EscapeDangerGoal::new(1.2).seeking_water(7));
             goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
                 4,

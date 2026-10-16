@@ -76,7 +76,12 @@ impl WolfEntity {
             // 1: SwimGoal (FloatGoal)
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
             // 1: EscapeDangerGoal (TamableAnimalPanicGoal)
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
+            goal_selector.add_goal(
+                1,
+                EscapeDangerGoal::new(1.5)
+                    .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES)
+                    .teleporting_to_owner(),
+            );
             // 3: Avoid Llama
             goal_selector.add_goal(
                 3,
