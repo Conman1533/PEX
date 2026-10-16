@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::{create_offspring, get_mixed_color};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicU8, Ordering},
@@ -121,6 +123,20 @@ impl Animal for SheepEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_SHEEP_FOOD)
     }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::SHEEP, world);
+        if let Some(lamb) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            lamb.set_color(get_mixed_color(self.get_color(), partner.get_color()));
+        }
+        Some(baby)
+    }
 }
 
 impl Mob for SheepEntity {
@@ -191,6 +207,6 @@ impl Mob for SheepEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, Sound::EntitySheepAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
@@ -5,7 +7,6 @@ use std::sync::{
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -189,6 +190,27 @@ impl Animal for RabbitEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_RABBIT_FOOD)
     }
+
+    /// Vanilla `Rabbit.getBreedOffspring`: a parent's variant, or one time in 20 the variant a
+    /// new rabbit would spawn with.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::RABBIT, world);
+        if let Some(offspring) = baby.cast_any().downcast_ref::<Self>() {
+            let mut rng = self.get_random();
+            if rng.random_range(0..20) != 0 {
+                let variant = match partner.cast_any().downcast_ref::<Self>() {
+                    Some(partner) if rng.random::<bool>() => partner.get_variant(),
+                    _ => self.get_variant(),
+                };
+                offspring.set_variant(variant);
+            }
+        }
+        Some(baby)
+    }
 }
 
 impl Mob for RabbitEntity {
@@ -236,6 +258,6 @@ impl Mob for RabbitEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityRabbitAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

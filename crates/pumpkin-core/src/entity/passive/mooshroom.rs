@@ -1,3 +1,6 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
+use rand::RngExt;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
@@ -147,6 +150,40 @@ impl Animal for MooshroomEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_COW_FOOD)
     }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::MOOSHROOM, world);
+        if let Some(child) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(mate) = partner.cast_any().downcast_ref::<Self>()
+        {
+            child.set_variant(self.get_offspring_variant(mate));
+        }
+        Some(baby)
+    }
+}
+
+impl MooshroomEntity {
+    /// Vanilla `MushroomCow.getOffspringVariant`: rarely mutates when both parents match.
+    fn get_offspring_variant(&self, mate: &Self) -> MooshroomVariant {
+        let variant = self.get_variant();
+        let mate_variant = mate.get_variant();
+        let mut rng = self.get_random();
+        if variant == mate_variant && rng.random_range(0..1024) == 0 {
+            if variant == MooshroomVariant::Brown {
+                MooshroomVariant::Red
+            } else {
+                MooshroomVariant::Brown
+            }
+        } else if rng.random::<bool>() {
+            variant
+        } else {
+            mate_variant
+        }
+    }
 }
 
 impl Mob for MooshroomEntity {
@@ -271,6 +308,6 @@ impl Mob for MooshroomEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityCowAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

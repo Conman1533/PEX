@@ -101,6 +101,17 @@ impl Animal for FrogEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FROG_FOOD)
     }
+
+    fn play_eating_sound(&self) {
+        let entity = self.get_entity();
+        entity.world.load().play_sound_fine(
+            Sound::EntityFrogEat,
+            pumpkin_data::sound::SoundCategory::Neutral,
+            &entity.pos.load(),
+            2.0,
+            1.0,
+        );
+    }
 }
 
 impl Mob for FrogEntity {
@@ -143,6 +154,6 @@ impl Mob for FrogEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityFrogAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

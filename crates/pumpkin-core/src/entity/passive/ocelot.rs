@@ -209,10 +209,6 @@ impl Mob for OcelotEntity {
             return true;
         }
 
-        self.animal_interact(
-            player,
-            item_stack,
-            pumpkin_data::sound::Sound::EntityOcelotAmbient,
-        )
+        self.animal_interact(player, item_stack)
     }
 }

@@ -89,8 +89,9 @@ pub struct MobEntity {
     pub brain: std::sync::Mutex<Brain>,
     pub position_target: AtomicCell<BlockPos>,
     pub position_target_range: AtomicI32,
+    /// Vanilla `Animal.inLove`.
     pub love_ticks: AtomicI32,
-    pub breeding_cooldown: AtomicI32,
+    /// Vanilla `Animal.loveCause`.
     pub breeder: AtomicCell<Option<Uuid>>,
     pub persistence_required: AtomicBool,
     /// Vanilla `LivingEntity.noActionTime`: ticks since a player was within the no-despawn
@@ -182,7 +183,6 @@ impl MobEntity {
             position_target: AtomicCell::new(BlockPos::ZERO),
             position_target_range: AtomicI32::new(-1),
             love_ticks: AtomicI32::new(0),
-            breeding_cooldown: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
             no_action_time: AtomicI32::new(0),
@@ -534,20 +534,6 @@ impl MobEntity {
 
     pub fn is_in_love(&self) -> bool {
         self.love_ticks.load(Relaxed) > 0
-    }
-
-    pub fn set_love_ticks(&self, ticks: i32, breeder: Option<Uuid>) {
-        self.love_ticks.store(ticks, Relaxed);
-        self.breeder.store(breeder);
-    }
-
-    pub fn reset_love_ticks(&self) {
-        self.love_ticks.store(0, Relaxed);
-    }
-
-    pub fn is_breeding_ready(&self) -> bool {
-        self.living_entity.entity.age.load(Relaxed) >= 0
-            && self.breeding_cooldown.load(Relaxed) <= 0
     }
 
     pub fn is_in_attack_range(&self, target: &dyn EntityBase) -> bool {
@@ -1236,7 +1222,8 @@ pub trait Mob: EntityBase + Send + Sync {
         }
     }
 
-    fn breed(&self, father_id: i32, mother_id: i32, child_id: i32) {
+    /// Fires `EntityBreedEvent`; false when a plugin cancelled it.
+    fn breed(&self, father_id: i32, mother_id: i32, child_id: i32) -> bool {
         let mob = self.get_mob_entity();
         let mut event = crate::plugin::api::events::entity::entity_breed::EntityBreedEvent::new(
             father_id, mother_id, child_id,
@@ -1244,6 +1231,7 @@ pub trait Mob: EntityBase + Send + Sync {
         if let Some(server) = mob.living_entity.entity.world.load().server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
+        !event.cancelled
     }
 
     fn dye(
@@ -1262,7 +1250,8 @@ pub trait Mob: EntityBase + Send + Sync {
         }
     }
 
-    fn enter_love_mode(&self, human_entity_id: Option<i32>, ticks_in_love: i32) {
+    /// Fires `EntityEnterLoveModeEvent`; false when a plugin cancelled it.
+    fn enter_love_mode(&self, human_entity_id: Option<i32>, ticks_in_love: i32) -> bool {
         let mob = self.get_mob_entity();
         let mut event = crate::plugin::api::events::entity::entity_enter_love_mode::EntityEnterLoveModeEvent::new(
             mob.living_entity.entity.entity_id,
@@ -1272,6 +1261,7 @@ pub trait Mob: EntityBase + Send + Sync {
         if let Some(server) = mob.living_entity.entity.world.load().server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
+        !event.cancelled
     }
 
     fn transform(&self, new_entity_id: i32, transform_reason: String) {
@@ -1441,26 +1431,6 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         entity.tick_leash(caller);
         sun_burn::tick(self);
 
-        if mob_entity.breeding_cooldown.load(Relaxed) > 0 {
-            mob_entity.breeding_cooldown.fetch_sub(1, Relaxed);
-        }
-
-        if mob_entity.love_ticks.load(Relaxed) > 0 {
-            let ticks = mob_entity.love_ticks.fetch_sub(1, Relaxed);
-            if ticks % 10 == 0 {
-                let entity = &mob_entity.living_entity.entity;
-                let pos = entity.pos.load();
-                let world = entity.world.load();
-                world.spawn_particle(
-                    pos + Vector3::new(0.0, f64::from(entity.height()) + 0.5, 0.0),
-                    Vector3::new(0.5, 0.5, 0.5),
-                    1.0,
-                    1,
-                    pumpkin_data::particle::Particle::Heart,
-                );
-            }
-        }
-
         mob_entity.check_despawn(self);
 
         if let Some(neutral) = self.as_neutral() {
@@ -1489,9 +1459,13 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             mob_entity.server_ai_step(self, caller);
         }
 
-        // Vanilla `AgeableMob.aiStep` ages the mob after the AI step, with or without AI.
+        // Vanilla `AgeableMob.aiStep` ages the mob after the AI step, with or without AI, and
+        // `Animal.aiStep` then counts down the love time.
         if let Some(ageable) = self.as_ageable() {
             ageable.ageable_ai_step();
+        }
+        if let Some(animal) = self.as_animal() {
+            animal.animal_ai_step();
         }
 
         mob_entity.living_entity.tick(caller, server);
@@ -1530,6 +1504,10 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             cause,
         );
         if damaged {
+            // Vanilla `Animal.actuallyHurt`.
+            if let Some(animal) = self.as_animal() {
+                animal.reset_love();
+            }
             self.on_damage(damage_type, source);
         }
         damaged
@@ -1557,24 +1535,6 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn cast_any(&self) -> &dyn std::any::Any {
         self
-    }
-
-    fn is_in_love(&self) -> bool {
-        self.get_mob_entity().is_in_love()
-    }
-
-    fn is_breeding_ready(&self) -> bool {
-        self.get_mob_entity().is_breeding_ready()
-    }
-
-    fn reset_love(&self) {
-        self.get_mob_entity().reset_love_ticks();
-    }
-
-    fn set_breeding_cooldown(&self, ticks: i32) {
-        self.get_mob_entity()
-            .breeding_cooldown
-            .store(ticks, Relaxed);
     }
 
     fn is_panicking(&self) -> bool {

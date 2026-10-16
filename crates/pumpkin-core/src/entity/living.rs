@@ -219,7 +219,7 @@ impl LivingEntity {
         entity_type.death_sound.unwrap_or(Sound::EntityGenericDeath)
     }
 
-    fn get_pitch(&self) -> f32 {
+    pub(crate) fn get_pitch(&self) -> f32 {
         let is_baby = self
             .get_mob()
             .and_then(|x| x.as_ageable())

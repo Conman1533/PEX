@@ -161,12 +161,23 @@ impl NautilusEntity {
 }
 
 impl Animal for NautilusEntity {
+    /// Vanilla `AbstractNautilus.isFood`: taming items while wild and grown, food otherwise.
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        item_stack.item == &pumpkin_data::item::Item::NAUTILUS_SHELL
-            || item_stack.item == &pumpkin_data::item::Item::PUFFERFISH
-            || item_stack.item == &pumpkin_data::item::Item::COD
-            || item_stack.item == &pumpkin_data::item::Item::SALMON
-            || item_stack.item == &pumpkin_data::item::Item::TROPICAL_FISH
+        use pumpkin_data::tag::{self, Taggable};
+        let tag = if !self.is_tame() && !self.is_baby() {
+            &tag::Item::MINECRAFT_NAUTILUS_TAMING_ITEMS
+        } else {
+            &tag::Item::MINECRAFT_NAUTILUS_FOOD
+        };
+        item_stack.get_item().has_tag(tag)
+    }
+
+    fn play_eating_sound(&self) {
+        self.make_sound(if self.is_baby() {
+            Sound::EntityBabyNautilusEat
+        } else {
+            Sound::EntityNautilusEat
+        });
     }
 }
 
@@ -375,7 +386,7 @@ impl Mob for NautilusEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, self.get_ambient_sound())
+        self.animal_interact(player, item_stack)
     }
 
     fn is_saddled(&self) -> bool {

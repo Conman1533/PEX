@@ -146,13 +146,10 @@ impl AgeableMob for MuleEntity {
 impl Animal for MuleEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::SUGAR
-            || item_stack.item == &Item::HAY_BLOCK
-            || item_stack.item == &Item::APPLE
-            || item_stack.item == &Item::GOLDEN_CARROT
-            || item_stack.item == &Item::GOLDEN_APPLE
-            || item_stack.item == &Item::ENCHANTED_GOLDEN_APPLE
+    }
+    /// Vanilla `AbstractHorse.canMate`: only horses, donkeys, llamas and camels override it.
+    fn can_mate(&self, _partner: &dyn Mob) -> bool {
+        false
     }
 }
 
@@ -251,6 +248,6 @@ impl Mob for MuleEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityMuleAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

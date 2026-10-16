@@ -560,18 +560,6 @@ pub trait EntityBase: Send + Sync + std::any::Any {
 
     fn set_paddle_state(&self, _left: bool, _right: bool) {}
 
-    fn is_in_love(&self) -> bool {
-        false
-    }
-
-    fn is_breeding_ready(&self) -> bool {
-        false
-    }
-
-    fn reset_love(&self) {}
-
-    fn set_breeding_cooldown(&self, _ticks: i32) {}
-
     fn is_panicking(&self) -> bool {
         false
     }
@@ -2360,6 +2348,24 @@ impl Entity {
             self.data.load(Relaxed).into(),
             spawn.velocity,
         )
+    }
+
+    /// Vanilla `Entity.getRandomX`.
+    #[must_use]
+    pub fn get_random_x(&self, scale: f64) -> f64 {
+        self.pos.load().x + f64::from(self.width()) * (2.0 * rand::random::<f64>() - 1.0) * scale
+    }
+
+    /// Vanilla `Entity.getRandomY`.
+    #[must_use]
+    pub fn get_random_y(&self) -> f64 {
+        self.pos.load().y + f64::from(self.height()) * rand::random::<f64>()
+    }
+
+    /// Vanilla `Entity.getRandomZ`.
+    #[must_use]
+    pub fn get_random_z(&self, scale: f64) -> f64 {
+        self.pos.load().z + f64::from(self.width()) * (2.0 * rand::random::<f64>() - 1.0) * scale
     }
 
     pub fn width(&self) -> f32 {

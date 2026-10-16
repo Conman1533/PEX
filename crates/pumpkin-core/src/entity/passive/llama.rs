@@ -1,3 +1,5 @@
+use crate::entity::passive::horse::can_parent;
+use crate::entity::passive::trader_llama::TraderLlamaEntity;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -261,9 +263,29 @@ impl AgeableMob for LlamaEntity {
     }
 }
 
+/// Whether `mob` is a tamed llama or trader llama, `None` when it is neither.
+#[must_use]
+pub fn llama_tamed(mob: &dyn Mob) -> Option<bool> {
+    mob.cast_any()
+        .downcast_ref::<LlamaEntity>()
+        .map(LlamaEntity::is_tame)
+        .or_else(|| {
+            mob.cast_any()
+                .downcast_ref::<TraderLlamaEntity>()
+                .map(TraderLlamaEntity::is_tame)
+        })
+}
+
 impl Animal for LlamaEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_LLAMA_FOOD)
+    }
+
+    /// Vanilla `Llama.canMate`: with any llama, trader llamas included.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && llama_tamed(partner)
+                .is_some_and(|tamed| can_parent(self, self.is_tame()) && can_parent(partner, tamed))
     }
 }
 
@@ -381,7 +403,7 @@ impl Mob for LlamaEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityLlamaAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
 

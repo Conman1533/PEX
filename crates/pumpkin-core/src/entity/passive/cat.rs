@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::{animal_can_mate, create_offspring, get_mixed_color};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -258,20 +260,6 @@ impl CatEntity {
             VarInt(sound_variant as u8 as i32),
         );
     }
-
-    pub fn play_eating_sound(&self) {
-        let mob_entity = self.get_mob_entity();
-        let entity = &mob_entity.living_entity.entity;
-        let is_baby = entity.age.load(Ordering::Relaxed) < 0;
-        let sound_variant = CatSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-            .unwrap_or_default();
-        let world = entity.world.load();
-        world.play_sound(
-            sound_variant.eat_sound(is_baby),
-            pumpkin_data::sound::SoundCategory::Neutral,
-            &entity.pos.load(),
-        );
-    }
 }
 
 impl CustomSound for CatEntity {
@@ -295,6 +283,55 @@ impl Animal for CatEntity {
         item_stack
             .get_item()
             .has_tag(&tag::Item::MINECRAFT_CAT_FOOD)
+    }
+
+    /// Vanilla `Cat.canMate`: both tamed.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        self.is_tame()
+            && partner
+                .cast_any()
+                .downcast_ref::<Self>()
+                .is_some_and(TamableAnimal::is_tame)
+            && animal_can_mate(&self.mob_entity, partner)
+    }
+
+    /// Vanilla `Cat.getBreedOffspring`: a parent's variant, and a tamed parent's owner.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::CAT, world);
+        if let Some(kitten) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            kitten.set_variant(parent.variant.load(Ordering::Relaxed));
+            if self.is_tame() {
+                kitten.set_tame(true, self.get_owner());
+                kitten.set_collar_color(get_mixed_color(
+                    self.get_collar_color(),
+                    partner.get_collar_color(),
+                ));
+            }
+        }
+        Some(baby)
+    }
+
+    fn play_eating_sound(&self) {
+        let entity = self.get_entity();
+        let is_baby = entity.age.load(Ordering::Relaxed) < 0;
+        let sound_variant = CatSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        entity.world.load().play_sound(
+            sound_variant.eat_sound(is_baby),
+            pumpkin_data::sound::SoundCategory::Neutral,
+            &entity.pos.load(),
+        );
     }
 }
 
@@ -440,9 +477,7 @@ impl Mob for CatEntity {
                     && self.mob_entity.living_entity.health.load()
                         < self.mob_entity.living_entity.get_max_health()
                 {
-                    item_stack.decrement_unless_creative(player.gamemode.load(), 1);
-                    self.mob_entity.living_entity.heal(2.0);
-                    self.play_eating_sound();
+                    self.feed(player, item_stack, 1.0, 1.0);
                     return true;
                 }
 

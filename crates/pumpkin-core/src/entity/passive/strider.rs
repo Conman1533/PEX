@@ -187,7 +187,7 @@ impl Mob for StriderEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityStriderAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
 

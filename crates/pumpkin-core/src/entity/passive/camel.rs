@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::can_parent;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -127,7 +128,14 @@ impl AgeableMob for CamelEntity {
 impl Animal for CamelEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_CAMEL_FOOD)
-            || item_stack.item == &Item::CACTUS
+    }
+
+    /// Vanilla `Camel.canMate`. Camels always count as tamed.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && partner.cast_any().is::<Self>()
+            && can_parent(self, true)
+            && can_parent(partner, true)
     }
 }
 
@@ -196,6 +204,6 @@ impl Mob for CamelEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityCamelAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

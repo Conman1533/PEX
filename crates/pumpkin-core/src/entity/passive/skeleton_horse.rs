@@ -118,6 +118,11 @@ impl Animal for SkeletonHorseEntity {
     fn is_food(&self, _item_stack: &ItemStack) -> bool {
         false
     }
+
+    /// Vanilla `AbstractHorse.canMate`: only horses, donkeys, llamas and camels override it.
+    fn can_mate(&self, _partner: &dyn Mob) -> bool {
+        false
+    }
 }
 
 impl Mob for SkeletonHorseEntity {
@@ -197,6 +202,6 @@ impl Mob for SkeletonHorseEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntitySkeletonHorseAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

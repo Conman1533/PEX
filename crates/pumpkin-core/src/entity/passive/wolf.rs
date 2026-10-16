@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::{create_offspring, get_mixed_color};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicU8, Ordering},
@@ -165,8 +167,53 @@ impl AgeableMob for WolfEntity {
 
 impl Animal for WolfEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        let item = item_stack.get_item();
-        item.has_tag(&tag::Item::MINECRAFT_WOLF_FOOD) || item == &Item::BONE
+        item_stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_WOLF_FOOD)
+    }
+
+    /// Vanilla `Wolf.canMate`: both tamed, the partner not sitting.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        let Some(wolf) = partner.cast_any().downcast_ref::<Self>() else {
+            return false;
+        };
+        wolf.get_entity().entity_id != self.get_entity().entity_id
+            && self.is_tame()
+            && wolf.is_tame()
+            && !wolf.is_in_sitting_pose()
+            && self.mob_entity.is_in_love()
+            && wolf.mob_entity.is_in_love()
+    }
+
+    /// Vanilla `Wolf.getBreedOffspring`: a parent's variant, and a tamed parent's owner.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::WOLF, world);
+        if let Some(puppy) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            let variant_id = parent.variant.load(Ordering::Relaxed);
+            if let Some(variant) = WolfVariant::all().iter().find(|v| v.id() == variant_id) {
+                puppy.set_variant(*variant);
+            }
+            if self.is_tame() {
+                puppy.set_owner(self.get_owner());
+                TamableAnimal::set_tame(puppy, true);
+                puppy.set_collar_color(get_mixed_color(
+                    self.get_collar_color(),
+                    partner.get_collar_color(),
+                ));
+            }
+        }
+        Some(baby)
     }
 }
 
@@ -333,17 +380,12 @@ impl Mob for WolfEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         let item = item_stack.get_item();
-        let sound_variant = WolfSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-            .unwrap_or_default();
-        let ambient = sound_variant.ambient_sound(self.is_baby());
         if self.is_tame() {
             if self.is_food(item_stack)
                 && self.mob_entity.living_entity.health.load()
                     < self.mob_entity.living_entity.get_max_health()
             {
-                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
-                self.mob_entity.living_entity.heal(2.0);
-                self.play_eating_sound(ambient);
+                self.feed(player, item_stack, 2.0, 2.0);
                 return true;
             }
 
@@ -356,7 +398,7 @@ impl Mob for WolfEntity {
                     return true;
                 }
 
-                let parent_interaction = self.animal_interact(player, item_stack, ambient);
+                let parent_interaction = self.animal_interact(player, item_stack);
                 if !parent_interaction {
                     self.set_ordered_to_sit(!self.is_ordered_to_sit());
                     return true;
@@ -376,7 +418,7 @@ impl Mob for WolfEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, ambient)
+        self.animal_interact(player, item_stack)
     }
 }
 

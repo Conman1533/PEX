@@ -1,3 +1,5 @@
+use crate::entity::passive::horse::can_parent;
+use crate::entity::passive::llama::llama_tamed;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -265,6 +267,13 @@ impl Animal for TraderLlamaEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_LLAMA_FOOD)
     }
+
+    /// Vanilla `Llama.canMate`: with any llama, trader llamas included.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && llama_tamed(partner)
+                .is_some_and(|tamed| can_parent(self, self.is_tame()) && can_parent(partner, tamed))
+    }
 }
 
 impl Mob for TraderLlamaEntity {
@@ -381,7 +390,7 @@ impl Mob for TraderLlamaEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityLlamaAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
 

@@ -5,7 +5,6 @@ use std::sync::{
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -210,9 +209,9 @@ impl Mob for HappyGhastEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         if self.is_baby() {
-            return self.animal_interact(player, item_stack, Sound::EntityGhastlingAmbient);
+            return self.animal_interact(player, item_stack);
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityHappyGhastAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

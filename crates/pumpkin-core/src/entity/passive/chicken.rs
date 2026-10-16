@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering, Ordering::Relaxed},
@@ -137,6 +139,27 @@ impl Animal for ChickenEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_CHICKEN_FOOD)
     }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::CHICKEN, world);
+        if let Some(child) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            child.set_variant(
+                ChickenVariant::from_id(parent.variant.load(Ordering::Relaxed)).unwrap_or_default(),
+            );
+        }
+        Some(baby)
+    }
 }
 
 impl Mob for ChickenEntity {
@@ -264,13 +287,6 @@ impl Mob for ChickenEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        let sound_variant =
-            ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-                .unwrap_or_default();
-        self.animal_interact(
-            player,
-            item_stack,
-            sound_variant.ambient_sound(self.is_baby()),
-        )
+        self.animal_interact(player, item_stack)
     }
 }

@@ -212,7 +212,7 @@ impl ArmadilloEntity {
 
     pub fn roll_up(&self) {
         if !self.is_scared() {
-            self.mob_entity.reset_love_ticks();
+            self.reset_love();
             let entity = self.get_entity();
             let world = entity.world.load();
             world.play_sound(
@@ -300,6 +300,10 @@ impl Animal for ArmadilloEntity {
         item_stack
             .item
             .has_tag(&tag::Item::MINECRAFT_ARMADILLO_FOOD)
+    }
+
+    fn play_eating_sound(&self) {
+        self.make_sound(Sound::EntityArmadilloEat);
     }
 }
 
@@ -430,6 +434,6 @@ impl Mob for ArmadilloEntity {
         if self.is_scared() {
             return false;
         }
-        self.animal_interact(player, item_stack, Sound::EntityArmadilloAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

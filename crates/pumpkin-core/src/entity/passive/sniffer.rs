@@ -1,3 +1,4 @@
+use crate::entity::passive::animal::animal_can_mate;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
@@ -12,6 +13,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
@@ -26,6 +28,7 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
+use crate::world::World;
 
 pub const SNIFFER_BABY_START_AGE: i32 = -48000;
 pub const DIGGING_DROP_SEED_OFFSET_TICKS: i32 = 120;
@@ -287,26 +290,6 @@ impl SnifferEntity {
             );
         }
     }
-
-    pub fn spawn_child_from_breeding(&self, partner: &dyn EntityBase) {
-        let entity = self.get_entity();
-        let world = entity.world.load();
-        let pos = entity.pos.load();
-
-        let item_stack = ItemStack::new(1, &Item::SNIFFER_EGG);
-        let egg_entity = Entity::new(world.clone(), pos, &EntityType::ITEM);
-        let egg_arc = Arc::new(ItemEntity::new(egg_entity, item_stack));
-        world.spawn_entity_non_save(egg_arc as Arc<dyn EntityBase>);
-
-        world.play_sound(Sound::BlockSnifferEggPlop, SoundCategory::Neutral, &pos);
-
-        self.mob_entity.reset_love_ticks();
-        self.mob_entity
-            .breeding_cooldown
-            .store(6000, Ordering::Relaxed);
-        partner.reset_love();
-        partner.set_breeding_cooldown(6000);
-    }
 }
 
 impl AgeableMob for SnifferEntity {
@@ -322,6 +305,56 @@ impl AgeableMob for SnifferEntity {
 impl Animal for SnifferEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_SNIFFER_FOOD)
+    }
+
+    /// Vanilla `Sniffer.canMate`: only while both are idle, scenting or happy.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        let can_breed_in = |state| {
+            matches!(
+                state,
+                SnifferState::Idling | SnifferState::Scenting | SnifferState::FeelingHappy
+            )
+        };
+        partner
+            .cast_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|sniffer| {
+                can_breed_in(self.get_state()) && can_breed_in(sniffer.get_state())
+            })
+            && animal_can_mate(&self.mob_entity, partner)
+    }
+
+    fn play_eating_sound(&self) {
+        let entity = self.get_entity();
+        let pitch = self.get_random().random_range(0.8..1.2);
+        entity.world.load().play_sound_fine(
+            Sound::EntitySnifferEat,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            1.0,
+            pitch,
+        );
+    }
+
+    /// Vanilla `Sniffer.spawnChildFromBreeding`: lays an egg instead of a baby.
+    fn spawn_child_from_breeding(&self, world: &Arc<World>, partner: &dyn Mob) {
+        let entity = self.get_entity();
+        let pos = entity.pos.load();
+        let egg = Arc::new(ItemEntity::new(
+            Entity::new(world.clone(), pos, &EntityType::ITEM),
+            ItemStack::new(1, &Item::SNIFFER_EGG),
+        ));
+        self.finalize_spawn_child_from_breeding(world, partner, None);
+        let mut rng = self.get_random();
+        let pitch = (rng.random::<f32>() - rng.random::<f32>()).mul_add(0.2, 0.5);
+        world.play_sound_fine(
+            Sound::BlockSnifferEggPlop,
+            SoundCategory::Neutral,
+            &pos,
+            1.0,
+            pitch,
+        );
+        world.spawn_entity(egg);
     }
 }
 
@@ -394,6 +427,6 @@ impl Mob for SnifferEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntitySnifferEat)
+        self.animal_interact(player, item_stack)
     }
 }
