@@ -8,7 +8,6 @@ pub mod bonus_chest;
 pub mod chorus_plant;
 pub mod coral;
 pub mod delta_feature;
-pub mod desert_well;
 pub mod disk;
 pub mod drip_stone;
 pub mod end_gateway;

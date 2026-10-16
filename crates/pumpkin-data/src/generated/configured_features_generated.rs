@@ -15,7 +15,7 @@ fn build_configured_features()
         HeightRangeBlockPredicate, InsideWorldBoundsBlockPredicate, MatchingBlockTagPredicate,
         MatchingBlocksBlockPredicate, MatchingBlocksWrapper, MatchingFluidsBlockPredicate,
         NotBlockPredicate, OffsetBlocksBlockPredicate, ReplaceableBlockPredicate,
-        SolidBlockPredicate, WouldSurviveBlockPredicate,
+        SolidBlockPredicate, VolumeMatchBlockPredicate, WouldSurviveBlockPredicate,
     };
     use crate::generation::block_state_provider::{
         BlockStateProvider, BlockStateRule, DualNoiseBlockStateProvider, NoiseBlockStateProvider,

@@ -19,7 +19,6 @@ use super::features::{
         coral_tree::CoralTreeFeature,
     },
     delta_feature::DeltaFeatureFeature,
-    desert_well::DesertWellFeature,
     disk::DiskFeature,
     drip_stone::{
         cluster::DripstoneClusterFeature, large::LargeDripstoneFeature,
@@ -112,7 +111,6 @@ pub enum ConfiguredFeature {
     ChorusPlant(ChorusPlantFeature),
     ReplaceSingleBlock(ReplaceSingleBlockFeature),
     VoidStartPlatform(VoidStartPlatformFeature),
-    DesertWell(DesertWellFeature),
     Fossil(FossilFeature),
     HugeRedMushroom(HugeRedMushroomFeature),
     HugeBrownMushroom(HugeBrownMushroomFeature),
@@ -281,9 +279,6 @@ impl ConfiguredFeature {
                 random,
                 pos,
             ),
-            Self::DesertWell(_feature) => {
-                DesertWellFeature::generate(chunk, min_y, height, feature_name, random, pos)
-            }
             Self::Fossil(feature) => feature.generate(chunk, min_y, height, random, pos),
             Self::Bamboo(feature) => feature.generate(
                 chunk,

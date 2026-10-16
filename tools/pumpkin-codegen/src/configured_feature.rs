@@ -112,7 +112,7 @@ pub fn build() -> TokenStream {
                 AllOfBlockPredicate, AnyOfBlockPredicate, BlockPredicate,
                 HasSturdyFacePredicate, InsideWorldBoundsBlockPredicate,
                 MatchingBlockTagPredicate, MatchingBlocksBlockPredicate, MatchingBlocksWrapper,
-                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate,
+                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate, VolumeMatchBlockPredicate,
                 ReplaceableBlockPredicate, SolidBlockPredicate, WouldSurviveBlockPredicate,
                 HeightRangeBlockPredicate,
             };
@@ -1112,9 +1112,6 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
         }
         "minecraft:void_start_platform" => {
             quote! { ConfiguredFeature::VoidStartPlatform(crate::generation::feature::features::void_start_platform::VoidStartPlatformFeature {}) }
-        }
-        "minecraft:desert_well" => {
-            quote! { ConfiguredFeature::DesertWell(crate::generation::feature::features::desert_well::DesertWellFeature) }
         }
         "minecraft:overlay" => {
             let features_arr = config["features"]
