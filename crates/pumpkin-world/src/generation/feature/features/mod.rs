@@ -53,6 +53,7 @@ pub mod simple_random_selector;
 pub mod single_block_pillar;
 pub mod spring_feature;
 pub mod stepped_column_cluster;
+pub mod template;
 pub mod tree;
 pub mod twisting_vines;
 pub mod underwater_magma;
