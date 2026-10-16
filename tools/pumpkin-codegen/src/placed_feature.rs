@@ -235,6 +235,14 @@ fn value_to_placement_modifier(v: &Value) -> TokenStream {
                 })
             }
         }
+        "minecraft:random_chance" => {
+            let chance = v["chance"].as_f64().unwrap_or(1.0) as f32;
+            quote! {
+                PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                    chance: #chance,
+                })
+            }
+        }
         "minecraft:rarity_filter" => {
             let chance = v["chance"].as_u64().unwrap_or(1) as u32;
             quote! {
