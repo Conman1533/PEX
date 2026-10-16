@@ -34,6 +34,7 @@ pub mod raid;
 pub mod random_sequences;
 pub mod stopwatches;
 pub mod time;
+pub mod vibration;
 pub mod villager_poi;
 
 use crate::block::RandomTickArgs;
@@ -5244,6 +5245,7 @@ impl World {
         replaced_block_state_id
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn break_block(
         self: &Arc<Self>,
         position: &BlockPos,
@@ -5318,6 +5320,17 @@ impl World {
         };
 
         let broken_state_id = self.set_block_state(position, new_state_id, flags);
+        // Level.destroyBlock
+        if broken_state_id != new_state_id {
+            self.game_event(
+                pumpkin_data::game_event::GameEvent::BlockDestroy,
+                position.to_centered_f64(),
+                vibration::GameEventContext::of(
+                    cause.map(|player| player.clone() as Arc<dyn EntityBase>),
+                    Some(broken_state_id),
+                ),
+            );
+        }
         let broken_block = Block::from_state_id(broken_state_id);
         if !broken_block.is_air()
             && broken_state_id != new_state_id
@@ -6881,9 +6894,50 @@ impl World {
     }
 
     pub fn emit_game_event(&self, event_key: impl Into<String>, position: Vector3<f64>) {
+        let event_key = event_key.into();
+        match pumpkin_data::game_event::GameEvent::from_name(&event_key) {
+            Some(event) => self.game_event(event, position, vibration::GameEventContext::default()),
+            None => self.fire_game_event_plugins(event_key, position),
+        }
+    }
+
+    /// `ServerLevel.gameEvent`: tells plugins, then offers the event to every vibration listener
+    /// in range (`GameEventDispatcher.post`).
+    #[expect(clippy::needless_pass_by_value, reason = "callers build the context inline")]
+    pub fn game_event(
+        &self,
+        event: pumpkin_data::game_event::GameEvent,
+        position: Vector3<f64>,
+        context: vibration::GameEventContext,
+    ) {
+        let context = &context;
+        self.fire_game_event_plugins(event.name().to_string(), position);
+        let radius = vibration::notification_radius(event);
+        let center = BlockPos::floored_v(position);
+        let mut listeners = Vec::new();
+        for chunk_x in (center.0.x - radius) >> 4..=(center.0.x + radius) >> 4 {
+            for chunk_z in (center.0.z - radius) >> 4..=(center.0.z + radius) >> 4 {
+                if let Some(entities) = self.block_entities.get(&Vector2::new(chunk_x, chunk_z)) {
+                    listeners.extend(entities.values().cloned());
+                }
+            }
+        }
+        for block_entity in listeners {
+            let Some(user) = block_entity.as_vibration_user() else {
+                continue;
+            };
+            // EuclideanGameEventListenerRegistry.getPostableListenerPosition
+            let listener = BlockPos::floored_v(user.listener_pos());
+            let radius = user.listener_radius();
+            if listener.squared_distance(&center) <= radius * radius {
+                vibration::handle_game_event(user, self, event, context, position);
+            }
+        }
+    }
+
+    fn fire_game_event_plugins(&self, event_key: String, position: Vector3<f64>) {
         let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
-            event_key.into(),
-            position,
+            event_key, position,
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);

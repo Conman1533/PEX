@@ -121,6 +121,10 @@ impl JavaClient {
 
                 let new_on_ground = packet.collision & FLAG_ON_GROUND != 0;
                 entity.on_ground.store(new_on_ground, Ordering::Relaxed);
+                let movement = pos.sub(&last_pos);
+                if movement.length_squared() < 64.0 {
+                    entity.emit_movement_events(player.as_ref(), movement);
+                }
                 if new_on_ground && entity.is_fall_flying() {
                     entity.set_fall_flying(false);
                 }
@@ -264,6 +268,10 @@ impl JavaClient {
                 entity
                     .on_ground
                     .store((packet.collision & FLAG_ON_GROUND) != 0, Ordering::Relaxed);
+                let movement = pos.sub(&last_pos);
+                if movement.length_squared() < 64.0 {
+                    entity.emit_movement_events(player.as_ref(), movement);
+                }
 
                 entity.set_rotation(wrap_degrees(packet.yaw) % 360.0, wrap_degrees(packet.pitch));
 

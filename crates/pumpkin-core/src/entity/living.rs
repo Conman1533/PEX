@@ -1657,7 +1657,12 @@ impl LivingEntity {
     }
 
     pub(crate) fn make_move(&self, caller: &dyn EntityBase) {
+        let before = self.entity.pos.load();
         self.entity.move_entity(caller, self.entity.velocity.load());
+        if caller.get_player().is_none() {
+            self.entity
+                .emit_movement_events(caller, self.entity.pos.load().sub(&before));
+        }
 
         self.check_climbing();
     }
@@ -1816,6 +1821,20 @@ impl LivingEntity {
             let fall_distance = self.fall_distance.swap(0.0);
             if fall_distance > 0.0 {
                 self.on_changed_block(caller, self.entity.block_pos.load());
+                // Entity.checkFallDamage
+                let world = self.entity.world.load_full();
+                let landed_on = self
+                    .entity
+                    .get_supporting_block_pos()
+                    .unwrap_or_else(|| self.entity.block_pos.load().down());
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::HitGround,
+                    self.entity.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        Some(world.get_block_state_id(&landed_on)),
+                    ),
+                );
             }
             // Vanilla calls `Block.fallOn` even for entities that take no fall damage (creative
             // players, fall-immune mobs), so blocks like farmland still react; the damage itself is

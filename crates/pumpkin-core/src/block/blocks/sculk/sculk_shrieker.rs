@@ -41,7 +41,8 @@ impl BlockMetadata for SculkShriekerBlock {
 }
 
 impl SculkShriekerBlock {
-    fn try_get_player(world: &World, entity: &Entity) -> Option<Arc<Player>> {
+    /// `SculkShriekerBlockEntity.tryGetPlayer`: the player, or the player riding the entity.
+    pub fn try_get_player(world: &World, entity: &Entity) -> Option<Arc<Player>> {
         if let Some(player) = world.get_player_by_id(entity.entity_id) {
             return Some(player);
         }
@@ -107,7 +108,11 @@ impl SculkShriekerBlock {
         world.set_block_state(pos, props.to_state_id(block), BlockFlags::NOTIFY_LISTENERS);
         world.schedule_block_tick(block, *pos, SHRIEKING_TICKS, TickPriority::Normal);
         world.sync_world_event(WorldEvent::ParticlesSculkShriek, *pos, 0);
-        world.emit_game_event(GameEvent::Shriek.name(), pos.to_centered_f64());
+        world.game_event(
+            GameEvent::Shriek,
+            pos.to_centered_f64(),
+            crate::world::vibration::GameEventContext::of(Some(player.clone()), None),
+        );
     }
 
     fn try_respond(world: &Arc<World>, pos: &BlockPos, can_summon: bool) {
