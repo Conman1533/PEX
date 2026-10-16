@@ -458,6 +458,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
+          make_latest: false
           files: dist/pumpkin*
           tag_name: canary
           name: Canary Build
