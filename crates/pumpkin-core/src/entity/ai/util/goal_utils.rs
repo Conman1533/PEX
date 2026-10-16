@@ -57,10 +57,13 @@ pub fn is_water(world: &World, pos: &BlockPos) -> bool {
         .is_some_and(|fluid| fluid.has_tag(&tag::Fluid::MINECRAFT_WATER))
 }
 
+/// Vanilla reads the walking path type here whatever the mob's navigation, so an air block
+/// next to water counts as a water border.
+///
 /// Takes the navigation lock, so callers must not already hold it.
 #[must_use]
 pub fn has_malus(mob: &dyn Mob, context: &mut PathfindingContext, pos: &BlockPos) -> bool {
-    let path_type = context.get_path_type_from_state(Vector3::new(pos.0.x, pos.0.y, pos.0.z));
+    let path_type = context.get_land_node_type(Vector3::new(pos.0.x, pos.0.y, pos.0.z));
     let malus = mob
         .get_mob_entity()
         .navigator
