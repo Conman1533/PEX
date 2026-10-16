@@ -129,14 +129,14 @@ impl TraderLlamaEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
             goal_selector.add_goal(
                 3,
                 Box::new(RangedAttackGoal::new(ranged_weak, 1.25, 40, 20.0)),
             );
+            goal_selector.add_goal(3, EscapeDangerGoal::new(1.2));
+            goal_selector.add_goal(4, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                4,
+                5,
                 Box::new(TemptGoal::new(
                     1.25,
                     |_, stack| {
@@ -147,13 +147,15 @@ impl TraderLlamaEntity {
                     false,
                 )),
             );
-            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
+            goal_selector.add_goal(6, Box::new(FollowParentGoal::new(1.0)));
             goal_selector.add_goal(7, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 8,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
             goal_selector.add_goal(9, Box::new(RandomLookAroundGoal::default()));
+            // Vanilla `TraderLlama.registerGoals` adds this on top of the llama goals.
+            goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
 
             target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
             target_selector.add_goal(
