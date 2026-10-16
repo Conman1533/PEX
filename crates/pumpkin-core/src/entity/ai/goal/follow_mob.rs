@@ -3,6 +3,7 @@ use crate::entity::EntityBase;
 use crate::entity::ai::pathfinder::NavigatorGoal;
 use crate::entity::mob::Mob;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 pub struct FollowMobGoal {
     goal_control: Controls,
@@ -43,7 +44,8 @@ impl Goal for FollowMobGoal {
             if c_entity.entity_type == my_type {
                 continue;
             }
-            if candidate.get_living_entity().is_some() {
+            // Vanilla only follows other `Mob`s that are not invisible, never players.
+            if candidate.get_mob().is_some() && !c_entity.invisible.load(Ordering::Relaxed) {
                 self.following_mob = Some(candidate.clone());
                 return true;
             }

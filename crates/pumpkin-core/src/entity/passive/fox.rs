@@ -15,8 +15,8 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
+        avoid_entity::AvoidEntityGoal, breed::BreedGoal, escape_danger::EscapeDangerGoal,
+        follow_parent::FollowParentGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
         wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
@@ -96,15 +96,22 @@ impl FoxEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(1.0)));
+            goal_selector.add_goal(2, EscapeDangerGoal::new(2.2));
+            goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                7,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                4,
+                Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 1.6, 1.4)),
             );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(
+                4,
+                Box::new(AvoidEntityGoal::new(&EntityType::POLAR_BEAR, 8.0, 1.6, 1.4)),
+            );
+            goal_selector.add_goal(8, Box::new(FollowParentGoal::new(1.25)));
+            goal_selector.add_goal(11, Box::new(WanderAroundGoal::water_avoiding(1.0)));
+            goal_selector.add_goal(
+                12,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 24.0),
+            );
         };
 
         mob_arc

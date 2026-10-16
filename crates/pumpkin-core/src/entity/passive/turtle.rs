@@ -13,9 +13,9 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal,
-        try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        breed::BreedGoal, escape_danger::EscapeDangerGoal, look_at_entity::LookAtEntityGoal,
+        swim::SwimGoal, tempt::TemptGoal, try_find_water::TryFindWaterGoal,
+        wander_around::WanderAroundGoal,
     },
     living::LivingEntity,
     mob::{Mob, MobEntity},
@@ -61,21 +61,20 @@ impl TurtleEntity {
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
             goal_selector.add_goal(0, EscapeDangerGoal::new(1.2).seeking_water(7));
-            goal_selector.add_goal(3, BreedGoal::new(1.0));
+            goal_selector.add_goal(1, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                4,
+                2,
                 Box::new(TemptGoal::new(
                     1.1,
                     |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_TURTLE_FOOD),
                     false,
                 )),
             );
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                8,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(9, Box::new(WanderAroundGoal::with_interval(1.0, 100)));
         };
 
         mob_arc

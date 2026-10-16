@@ -163,20 +163,20 @@ impl PandaEntity {
             );
             goal_selector.add_goal(2, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                3,
+                4,
                 Box::new(TemptGoal::new(
                     1.0,
                     |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_PANDA_FOOD),
                     false,
                 )),
             );
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
-                7,
+                9,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(10, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(13, Box::new(FollowParentGoal::new(1.25)));
+            goal_selector.add_goal(14, Box::new(WanderAroundGoal::water_avoiding(1.0)));
         };
 
         mob_arc

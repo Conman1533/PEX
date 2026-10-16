@@ -59,17 +59,17 @@ impl SnowGolemEntity {
                 Box::new(RangedAttackGoal::new(ranged_weak, 1.25, 20, 10.0)),
             );
             goal_selector.add_goal(
-                5,
+                2,
                 Box::new(WanderAroundGoal::water_avoiding_with_probability(
                     1.0,
                     1.000_000_1e-5,
                 )),
             );
             goal_selector.add_goal(
-                6,
+                3,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(6, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
 
             target_selector.add_goal(
                 1,

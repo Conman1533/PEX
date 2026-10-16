@@ -14,9 +14,9 @@ use pumpkin_util::math::vector3::Vector3;
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
-        swim::SwimGoal, try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
+        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal,
+        try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     player::Player,
@@ -50,15 +50,15 @@ impl DolphinEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
+            // Not in vanilla: it stands in for `BreathAirGoal`, which is not ported yet.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.6));
-            goal_selector.add_goal(2, Box::new(MeleeAttackGoal::new(1.2, true)));
             goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
             goal_selector.add_goal(
                 5,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(6, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(6, Box::new(MeleeAttackGoal::new(1.2, true)));
         };
 
         {

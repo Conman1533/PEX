@@ -9,7 +9,7 @@ use pumpkin_data::tag::{self, Taggable};
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
+        escape_danger::EscapeDangerGoal, follow_mob::FollowMobGoal,
         look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
@@ -46,12 +46,12 @@ impl ParrotEntity {
 
             goal_selector.add_goal(0, EscapeDangerGoal::new(1.25).teleporting_to_owner());
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                2,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                1,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(3, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(3, Box::new(FollowMobGoal::new(1.0, 3.0, 7.0)));
         };
 
         mob_arc

@@ -72,9 +72,9 @@ impl PigEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.25));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
+            goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                3,
+                4,
                 Box::new(TemptGoal::new(
                     1.2,
                     |_, stack| stack.get_item() == &Item::CARROT_ON_A_STICK,
@@ -82,20 +82,20 @@ impl PigEntity {
                 )),
             );
             goal_selector.add_goal(
-                3,
+                4,
                 Box::new(TemptGoal::new(
                     1.2,
                     |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_PIG_FOOD),
                     false,
                 )),
             );
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::water_avoiding(1.0)));
+            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.1)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
-                6,
+                7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
         };
 
         mob_arc

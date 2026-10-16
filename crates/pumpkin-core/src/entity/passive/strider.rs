@@ -53,6 +53,7 @@ impl StriderEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
+            // Not in vanilla, which floats striders on lava in `Strider.floatStrider` instead.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.65));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
@@ -68,13 +69,17 @@ impl StriderEntity {
                     false,
                 )),
             );
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
+            goal_selector.add_goal(7, Box::new(WanderAroundGoal::with_interval(1.0, 60)));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                8,
+                LookAtEntityGoal::with_default(mob_weak.clone(), &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(
+                9,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::STRIDER, 8.0),
+            );
         };
 
         mob_arc
