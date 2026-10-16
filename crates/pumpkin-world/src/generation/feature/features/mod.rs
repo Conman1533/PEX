@@ -48,6 +48,7 @@ pub mod sculk;
 pub mod sculk_patch;
 pub mod sea_pickle;
 pub mod seagrass;
+pub mod sequence;
 pub mod simple_block;
 pub mod simple_random_selector;
 pub mod single_block_pillar;

@@ -41,6 +41,7 @@ fn build_configured_features()
         random_selector::{RandomFeature, RandomFeatureEntry},
         sea_pickle::SeaPickleFeature,
         seagrass::SeagrassFeature,
+        sequence::SequenceFeature,
         simple_block::SimpleBlockFeature,
         simple_random_selector::SimpleRandomFeature,
         single_block_pillar::SingleBlockPillarFeature,
@@ -80,8 +81,8 @@ fn build_configured_features()
         CountPlacementModifier, EnvironmentScanPlacementModifier, Feature,
         HeightRangePlacementModifier, HeightmapPlacementModifier, NoiseBasedCountPlacementModifier,
         NoiseThresholdCountPlacementModifier, OffsetPlacementModifier, PlacedFeature,
-        PlacedFeatureWrapper, PlacementModifier, RandomOffsetPlacementModifier,
-        RarityFilterPlacementModifier, SquarePlacementModifier,
+        PlacedFeatureWrapper, PlacementModifier, RandomChancePlacementModifier,
+        RandomOffsetPlacementModifier, RarityFilterPlacementModifier, SquarePlacementModifier,
         SurfaceThresholdFilterPlacementModifier, SurfaceWaterDepthFilterPlacementModifier,
     };
     use crate::generation::feature::size::{
@@ -755,7 +756,7 @@ fn build_configured_features()
             extra_edge_column_chance: 0.7f32,
         }),
     );
-    map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBlockDecoration , ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: WeightedRandomSelector (WeightedRandomFeature { features : vec ! [WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: AIR . default_state , }) , schedule_tick : None , }))) , placement : vec ! [] , }) , weight : 20i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Named (pumpkin_data :: configured_feature :: ConfiguredFeature :: SeaPickle) , placement : vec ! [] , }) , weight : 3i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: NoOp)) , placement : vec ! [] , }) , weight : 57i32 }] , total_weight : 80i32 , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (1i32) , z : IntProvider :: Constant (0i32) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Biome (BiomePlacementModifier) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (- 1i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Biome (BiomePlacementModifier) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (1i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (0i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Biome (BiomePlacementModifier) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (1i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Biome (BiomePlacementModifier) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (- 1i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (0i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , })] , })) ;
+    map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBlockDecoration , ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: WeightedRandomSelector (WeightedRandomFeature { features : vec ! [WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: AIR . default_state , }) , schedule_tick : None , }))) , placement : vec ! [] , }) , weight : 20i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Named (pumpkin_data :: configured_feature :: ConfiguredFeature :: SeaPickle) , placement : vec ! [] , }) , weight : 3i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: NoOp)) , placement : vec ! [] , }) , weight : 57i32 }] , total_weight : 80i32 , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (1i32) , z : IntProvider :: Constant (0i32) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: RandomChance (RandomChancePlacementModifier { chance : 0.2f32 , }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (- 1i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: RandomChance (RandomChancePlacementModifier { chance : 0.2f32 , }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (1i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (0i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: RandomChance (RandomChancePlacementModifier { chance : 0.2f32 , }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (1i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Pillar (PillarBlockStateProvider { state : pumpkin_data :: Block :: AIR . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: RandomChance (RandomChancePlacementModifier { chance : 0.2f32 , }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (- 1i32) , y : IntProvider :: Constant (0i32) , z : IntProvider :: Constant (0i32) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , }) })] , })] , })) ;
     map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBrainBlock , ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: BRAIN_CORAL_BLOCK . default_state }) , schedule_tick : None , }))) , placement : vec ! [] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Named (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBlockDecoration) , placement : vec ! [] , })] , })) ;
     map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBubbleBlock , ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: BUBBLE_CORAL_BLOCK . default_state }) , schedule_tick : None , }))) , placement : vec ! [] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Named (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBlockDecoration) , placement : vec ! [] , })] , })) ;
     map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralFireBlock , ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: FIRE_CORAL_BLOCK . default_state }) , schedule_tick : None , }))) , placement : vec ! [] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Named (pumpkin_data :: configured_feature :: ConfiguredFeature :: CoralBlockDecoration) , placement : vec ! [] , })] , })) ;
@@ -3776,13 +3777,56 @@ fn build_configured_features()
             },
         ),
     );
-    map.insert(
-        pumpkin_data::configured_feature::ConfiguredFeature::SculkPatchAncientCity,
-        ConfiguredFeature::NoOp,
-    );
+    map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: SculkPatchAncientCity , ConfiguredFeature :: Sequence (SequenceFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SculkPatch (crate :: generation :: feature :: features :: sculk_patch :: SculkPatchFeature { charge_count : 10i32 , amount_per_charge : 32i32 , spread_attempts : 64i32 , growth_rounds : 0i32 , spread_rounds : 1i32 , }))) , placement : vec ! [] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Overlay (crate :: generation :: feature :: features :: overlay :: OverlayFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : { let mut props = std :: collections :: HashMap :: new () ; props . insert ("bloom" . to_string () , "false" . to_string ()) ; BlockStateCodec { name : & pumpkin_data :: Block :: SCULK_CATALYST , properties : Some (props) , } . get_state () } }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: RandomChance (RandomChancePlacementModifier { chance : 0.5f32 , }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: HasSturdyFace (HasSturdyFacePredicate { offset : OffsetBlocksBlockPredicate { offset : Some (Vector3 :: new (0i32 , - 1i32 , 0i32)) } , direction : BlockDirection :: Up , }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : { let mut props = std :: collections :: HashMap :: new () ; props . insert ("can_summon" . to_string () , "true" . to_string ()) ; props . insert ("shrieking" . to_string () , "false" . to_string ()) ; props . insert ("waterlogged" . to_string () , "false" . to_string ()) ; BlockStateCodec { name : & pumpkin_data :: Block :: SCULK_SHRIEKER , properties : Some (props) , } . get_state () } }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Count (CountPlacementModifier { count : IntProvider :: Object (NormalIntProvider :: Uniform (UniformIntProvider { min_inclusive : 1i32 , max_inclusive : 3i32 })) }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Object (NormalIntProvider :: Uniform (UniformIntProvider { min_inclusive : - 2i32 , max_inclusive : 2i32 })) , y : IntProvider :: Object (NormalIntProvider :: Uniform (UniformIntProvider { min_inclusive : - 2i32 , max_inclusive : 2i32 })) , z : IntProvider :: Object (NormalIntProvider :: Uniform (UniformIntProvider { min_inclusive : - 2i32 , max_inclusive : 2i32 })) }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: AllOf (AllOfBlockPredicate { predicates : vec ! [BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_AIR , }) , BlockPredicate :: HasSturdyFace (HasSturdyFacePredicate { offset : OffsetBlocksBlockPredicate { offset : Some (Vector3 :: new (0i32 , - 1i32 , 0i32)) } , direction : BlockDirection :: Up , })] , }) })] , })] , }))) , placement : vec ! [] , })] , })) ;
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::SculkPatchDeepDark,
-        ConfiguredFeature::NoOp,
+        ConfiguredFeature::Sequence(SequenceFeature {
+            features: vec![
+                PlacedFeatureWrapper::Direct(PlacedFeature {
+                    feature: Feature::Inlined(Box::new(ConfiguredFeature::SculkPatch(
+                        crate::generation::feature::features::sculk_patch::SculkPatchFeature {
+                            charge_count: 10i32,
+                            amount_per_charge: 32i32,
+                            spread_attempts: 64i32,
+                            growth_rounds: 0i32,
+                            spread_rounds: 1i32,
+                        },
+                    ))),
+                    placement: vec![],
+                }),
+                PlacedFeatureWrapper::Direct(PlacedFeature {
+                    feature: Feature::Inlined(Box::new(ConfiguredFeature::SimpleBlock(
+                        SimpleBlockFeature {
+                            to_place: BlockStateProvider::Simple(SimpleStateProvider {
+                                state: {
+                                    let mut props = std::collections::HashMap::new();
+                                    props.insert("bloom".to_string(), "false".to_string());
+                                    BlockStateCodec {
+                                        name: &pumpkin_data::Block::SCULK_CATALYST,
+                                        properties: Some(props),
+                                    }
+                                    .get_state()
+                                },
+                            }),
+                            schedule_tick: None,
+                        },
+                    ))),
+                    placement: vec![
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.5f32,
+                        }),
+                        PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
+                            predicate: BlockPredicate::HasSturdyFace(HasSturdyFacePredicate {
+                                offset: OffsetBlocksBlockPredicate {
+                                    offset: Some(Vector3::new(0i32, -1i32, 0i32)),
+                                },
+                                direction: BlockDirection::Up,
+                            }),
+                        }),
+                    ],
+                }),
+            ],
+        }),
     );
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::SculkVein,
@@ -4242,7 +4286,74 @@ fn build_configured_features()
     );
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::SulfurPool,
-        ConfiguredFeature::NoOp,
+        ConfiguredFeature::Sequence(SequenceFeature {
+            features: vec![
+                PlacedFeatureWrapper::Direct(PlacedFeature {
+                    feature: Feature::Inlined(Box::new(ConfiguredFeature::Lake(
+                        crate::generation::feature::features::lake::LakeFeature {
+                            fluid: BlockStateProvider::Simple(SimpleStateProvider {
+                                state: {
+                                    let mut props = std::collections::HashMap::new();
+                                    props.insert("level".to_string(), "0".to_string());
+                                    BlockStateCodec {
+                                        name: &pumpkin_data::Block::WATER,
+                                        properties: Some(props),
+                                    }
+                                    .get_state()
+                                },
+                            }),
+                            barrier: BlockStateProvider::Simple(SimpleStateProvider {
+                                state: pumpkin_data::Block::SULFUR.default_state,
+                            }),
+                        },
+                    ))),
+                    placement: vec![],
+                }),
+                PlacedFeatureWrapper::Direct(PlacedFeature {
+                    feature: Feature::Inlined(Box::new(ConfiguredFeature::SimpleBlock(
+                        SimpleBlockFeature {
+                            to_place: BlockStateProvider::Simple(SimpleStateProvider {
+                                state: {
+                                    let mut props = std::collections::HashMap::new();
+                                    props.insert(
+                                        "potent_sulfur_state".to_string(),
+                                        "wet".to_string(),
+                                    );
+                                    BlockStateCodec {
+                                        name: &pumpkin_data::Block::POTENT_SULFUR,
+                                        properties: Some(props),
+                                    }
+                                    .get_state()
+                                },
+                            }),
+                            schedule_tick: None,
+                        },
+                    ))),
+                    placement: vec![PlacementModifier::EnvironmentScan(
+                        EnvironmentScanPlacementModifier {
+                            direction_of_search: BlockDirection::Down,
+                            target_condition: BlockPredicate::AllOf(AllOfBlockPredicate {
+                                predicates: vec![
+                                    BlockPredicate::Solid(SolidBlockPredicate {
+                                        offset: OffsetBlocksBlockPredicate { offset: None },
+                                    }),
+                                    BlockPredicate::MatchingFluids(MatchingFluidsBlockPredicate {
+                                        offset: OffsetBlocksBlockPredicate {
+                                            offset: Some(Vector3::new(0i32, 1i32, 0i32)),
+                                        },
+                                        fluids: MatchingBlocksWrapper::Single(
+                                            "minecraft:water".to_string(),
+                                        ),
+                                    }),
+                                ],
+                            }),
+                            allowed_search_condition: None,
+                            max_steps: 4i32,
+                        },
+                    )],
+                }),
+            ],
+        }),
     );
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::SulfurSpike,
@@ -4351,28 +4462,384 @@ fn build_configured_features()
             features: vec![
                 WeightedRandomFeatureEntry {
                     feature: PlacedFeatureWrapper::Direct(PlacedFeature {
-                        feature: Feature::Inlined(Box::new(ConfiguredFeature::NoOp)),
+                        feature: Feature::Inlined(Box::new(ConfiguredFeature::Sequence(
+                            SequenceFeature {
+                                features: vec![
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::SimpleBlock(SimpleBlockFeature {
+                                                to_place: BlockStateProvider::Simple(
+                                                    SimpleStateProvider {
+                                                        state: pumpkin_data::Block::TUFF
+                                                            .default_state,
+                                                    },
+                                                ),
+                                                schedule_tick: None,
+                                            }),
+                                        )),
+                                        placement: vec![
+                                            PlacementModifier::Count(CountPlacementModifier {
+                                                count: IntProvider::Constant(64i32),
+                                            }),
+                                            PlacementModifier::Offset(OffsetPlacementModifier {
+                                                x: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -7i32,
+                                                            max_inclusive: 7i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                y: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -3i32,
+                                                            max_inclusive: 3i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                z: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -7i32,
+                                                            max_inclusive: 7i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                            }),
+                                            PlacementModifier::EnvironmentScan(
+                                                EnvironmentScanPlacementModifier {
+                                                    direction_of_search: BlockDirection::Down,
+                                                    target_condition: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                    allowed_search_condition: None,
+                                                    max_steps: 4i32,
+                                                },
+                                            ),
+                                            PlacementModifier::BlockPredicateFilter(
+                                                BlockFilterPlacementModifier {
+                                                    predicate: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                        ],
+                                    }),
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::NoOp,
+                                        )),
+                                        placement: vec![PlacementModifier::Offset(
+                                            OffsetPlacementModifier {
+                                                x: IntProvider::Constant(0i32),
+                                                y: IntProvider::Constant(-7i32),
+                                                z: IntProvider::Constant(0i32),
+                                            },
+                                        )],
+                                    }),
+                                ],
+                            },
+                        ))),
                         placement: vec![],
                     }),
                     weight: 200i32,
                 },
                 WeightedRandomFeatureEntry {
                     feature: PlacedFeatureWrapper::Direct(PlacedFeature {
-                        feature: Feature::Inlined(Box::new(ConfiguredFeature::NoOp)),
+                        feature: Feature::Inlined(Box::new(ConfiguredFeature::Sequence(
+                            SequenceFeature {
+                                features: vec![
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::SimpleBlock(SimpleBlockFeature {
+                                                to_place: BlockStateProvider::Simple(
+                                                    SimpleStateProvider {
+                                                        state: pumpkin_data::Block::TUFF
+                                                            .default_state,
+                                                    },
+                                                ),
+                                                schedule_tick: None,
+                                            }),
+                                        )),
+                                        placement: vec![
+                                            PlacementModifier::Count(CountPlacementModifier {
+                                                count: IntProvider::Constant(80i32),
+                                            }),
+                                            PlacementModifier::Offset(OffsetPlacementModifier {
+                                                x: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -8i32,
+                                                            max_inclusive: 8i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                y: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -3i32,
+                                                            max_inclusive: 3i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                z: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -8i32,
+                                                            max_inclusive: 8i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                            }),
+                                            PlacementModifier::EnvironmentScan(
+                                                EnvironmentScanPlacementModifier {
+                                                    direction_of_search: BlockDirection::Down,
+                                                    target_condition: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                    allowed_search_condition: None,
+                                                    max_steps: 4i32,
+                                                },
+                                            ),
+                                            PlacementModifier::BlockPredicateFilter(
+                                                BlockFilterPlacementModifier {
+                                                    predicate: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                        ],
+                                    }),
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::NoOp,
+                                        )),
+                                        placement: vec![PlacementModifier::Offset(
+                                            OffsetPlacementModifier {
+                                                x: IntProvider::Constant(0i32),
+                                                y: IntProvider::Constant(-7i32),
+                                                z: IntProvider::Constant(0i32),
+                                            },
+                                        )],
+                                    }),
+                                ],
+                            },
+                        ))),
                         placement: vec![],
                     }),
                     weight: 90i32,
                 },
                 WeightedRandomFeatureEntry {
                     feature: PlacedFeatureWrapper::Direct(PlacedFeature {
-                        feature: Feature::Inlined(Box::new(ConfiguredFeature::NoOp)),
+                        feature: Feature::Inlined(Box::new(ConfiguredFeature::Sequence(
+                            SequenceFeature {
+                                features: vec![
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::SimpleBlock(SimpleBlockFeature {
+                                                to_place: BlockStateProvider::Simple(
+                                                    SimpleStateProvider {
+                                                        state: pumpkin_data::Block::TUFF
+                                                            .default_state,
+                                                    },
+                                                ),
+                                                schedule_tick: None,
+                                            }),
+                                        )),
+                                        placement: vec![
+                                            PlacementModifier::Count(CountPlacementModifier {
+                                                count: IntProvider::Constant(96i32),
+                                            }),
+                                            PlacementModifier::Offset(OffsetPlacementModifier {
+                                                x: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -9i32,
+                                                            max_inclusive: 9i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                y: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -3i32,
+                                                            max_inclusive: 3i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                z: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -9i32,
+                                                            max_inclusive: 9i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                            }),
+                                            PlacementModifier::EnvironmentScan(
+                                                EnvironmentScanPlacementModifier {
+                                                    direction_of_search: BlockDirection::Down,
+                                                    target_condition: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                    allowed_search_condition: None,
+                                                    max_steps: 4i32,
+                                                },
+                                            ),
+                                            PlacementModifier::BlockPredicateFilter(
+                                                BlockFilterPlacementModifier {
+                                                    predicate: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                        ],
+                                    }),
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::NoOp,
+                                        )),
+                                        placement: vec![PlacementModifier::Offset(
+                                            OffsetPlacementModifier {
+                                                x: IntProvider::Constant(0i32),
+                                                y: IntProvider::Constant(-7i32),
+                                                z: IntProvider::Constant(0i32),
+                                            },
+                                        )],
+                                    }),
+                                ],
+                            },
+                        ))),
                         placement: vec![],
                     }),
                     weight: 20i32,
                 },
                 WeightedRandomFeatureEntry {
                     feature: PlacedFeatureWrapper::Direct(PlacedFeature {
-                        feature: Feature::Inlined(Box::new(ConfiguredFeature::NoOp)),
+                        feature: Feature::Inlined(Box::new(ConfiguredFeature::Sequence(
+                            SequenceFeature {
+                                features: vec![
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::SimpleBlock(SimpleBlockFeature {
+                                                to_place: BlockStateProvider::Simple(
+                                                    SimpleStateProvider {
+                                                        state: pumpkin_data::Block::TUFF
+                                                            .default_state,
+                                                    },
+                                                ),
+                                                schedule_tick: None,
+                                            }),
+                                        )),
+                                        placement: vec![
+                                            PlacementModifier::Count(CountPlacementModifier {
+                                                count: IntProvider::Constant(128i32),
+                                            }),
+                                            PlacementModifier::Offset(OffsetPlacementModifier {
+                                                x: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -10i32,
+                                                            max_inclusive: 10i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                y: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -3i32,
+                                                            max_inclusive: 3i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                                z: IntProvider::Object(
+                                                    NormalIntProvider::Trapezoid(
+                                                        TrapezoidIntProvider {
+                                                            min_inclusive: -10i32,
+                                                            max_inclusive: 10i32,
+                                                            plateau: 0i32,
+                                                        },
+                                                    ),
+                                                ),
+                                            }),
+                                            PlacementModifier::EnvironmentScan(
+                                                EnvironmentScanPlacementModifier {
+                                                    direction_of_search: BlockDirection::Down,
+                                                    target_condition: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                    allowed_search_condition: None,
+                                                    max_steps: 4i32,
+                                                },
+                                            ),
+                                            PlacementModifier::BlockPredicateFilter(
+                                                BlockFilterPlacementModifier {
+                                                    predicate: BlockPredicate::Solid(
+                                                        SolidBlockPredicate {
+                                                            offset: OffsetBlocksBlockPredicate {
+                                                                offset: None,
+                                                            },
+                                                        },
+                                                    ),
+                                                },
+                                            ),
+                                        ],
+                                    }),
+                                    PlacedFeatureWrapper::Direct(PlacedFeature {
+                                        feature: Feature::Inlined(Box::new(
+                                            ConfiguredFeature::NoOp,
+                                        )),
+                                        placement: vec![PlacementModifier::Offset(
+                                            OffsetPlacementModifier {
+                                                x: IntProvider::Constant(0i32),
+                                                y: IntProvider::Constant(-7i32),
+                                                z: IntProvider::Constant(0i32),
+                                            },
+                                        )],
+                                    }),
+                                ],
+                            },
+                        ))),
                         placement: vec![],
                     }),
                     weight: 5i32,
@@ -4958,7 +5425,9 @@ fn build_configured_features()
                             z: IntProvider::Constant(0i32),
                         }),
                         PlacementModifier::Biome(BiomePlacementModifier),
-                        PlacementModifier::Biome(BiomePlacementModifier),
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.9f32,
+                        }),
                         PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
                             predicate: BlockPredicate::AllOf(AllOfBlockPredicate {
                                 predicates: vec![
@@ -5025,7 +5494,9 @@ fn build_configured_features()
                             z: IntProvider::Constant(0i32),
                         }),
                         PlacementModifier::Biome(BiomePlacementModifier),
-                        PlacementModifier::Biome(BiomePlacementModifier),
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.9f32,
+                        }),
                         PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
                             predicate: BlockPredicate::AllOf(AllOfBlockPredicate {
                                 predicates: vec![
@@ -5092,7 +5563,9 @@ fn build_configured_features()
                             z: IntProvider::Constant(0i32),
                         }),
                         PlacementModifier::Biome(BiomePlacementModifier),
-                        PlacementModifier::Biome(BiomePlacementModifier),
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.9f32,
+                        }),
                         PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
                             predicate: BlockPredicate::AllOf(AllOfBlockPredicate {
                                 predicates: vec![
@@ -5159,7 +5632,9 @@ fn build_configured_features()
                             z: IntProvider::Constant(0i32),
                         }),
                         PlacementModifier::Biome(BiomePlacementModifier),
-                        PlacementModifier::Biome(BiomePlacementModifier),
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.9f32,
+                        }),
                         PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
                             predicate: BlockPredicate::AllOf(AllOfBlockPredicate {
                                 predicates: vec![
@@ -5226,7 +5701,9 @@ fn build_configured_features()
                             z: IntProvider::Constant(0i32),
                         }),
                         PlacementModifier::Biome(BiomePlacementModifier),
-                        PlacementModifier::Biome(BiomePlacementModifier),
+                        PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                            chance: 0.9f32,
+                        }),
                         PlacementModifier::BlockPredicateFilter(BlockFilterPlacementModifier {
                             predicate: BlockPredicate::AllOf(AllOfBlockPredicate {
                                 predicates: vec![

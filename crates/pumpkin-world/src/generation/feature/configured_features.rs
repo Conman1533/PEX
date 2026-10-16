@@ -61,6 +61,7 @@ use super::features::{
     sculk_patch::SculkPatchFeature,
     sea_pickle::SeaPickleFeature,
     seagrass::SeagrassFeature,
+    sequence::SequenceFeature,
     simple_block::SimpleBlockFeature,
     simple_random_selector::SimpleRandomFeature,
     single_block_pillar::SingleBlockPillarFeature,
@@ -165,6 +166,7 @@ pub enum ConfiguredFeature {
     PointedDripstone(SmallDripstoneFeature),
     SculkPatch(SculkPatchFeature),
     Overlay(OverlayFeature),
+    Sequence(SequenceFeature),
     ProjectedRandomPatchySquare(ProjectedRandomPatchySquareFeature),
     RandomNeighborSpread(RandomNeighborSpreadFeature),
     SingleBlockPillar(SingleBlockPillarFeature),
@@ -498,6 +500,15 @@ impl ConfiguredFeature {
                 feature.generate(chunk, min_y, height, feature_name, random, pos)
             }
             Self::Overlay(feature) => feature.generate(
+                chunk,
+                block_registry,
+                min_y,
+                height,
+                feature_name,
+                random,
+                pos,
+            ),
+            Self::Sequence(feature) => feature.generate(
                 chunk,
                 block_registry,
                 min_y,
