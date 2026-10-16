@@ -252,6 +252,9 @@ impl MobEntity {
     /// Vanilla `Mob.serverAiStep`: sensing, goals, navigation and controls.
     pub fn server_ai_step(&self, mob: &dyn Mob, caller: &dyn EntityBase) {
         self.no_action_time.fetch_add(1, Relaxed);
+        // Vanilla `JumpControl.tick` sets the jump flag once per AI step, so a jump only lasts
+        // for the step that asked for it.
+        self.living_entity.jumping.store(false, Relaxed);
         let tick_count = self.living_entity.entity.tick_count.load(Relaxed);
         let entity_id = self.living_entity.entity.entity_id;
 

@@ -535,7 +535,6 @@ impl PathNavigation {
     pub fn finish_navigation(&mut self, entity: &LivingEntity) {
         self.stop();
         entity.movement_input.store(Vector3::new(0.0, 0.0, 0.0));
-        entity.jumping.store(false, Ordering::Relaxed);
     }
 
     pub fn set_pathfinding_malus(&mut self, path_type: PathType, malus: f32) {
@@ -1155,8 +1154,6 @@ impl PathNavigation {
                     && horizontal_dist_sq < jump_distance * jump_distance
                 {
                     entity.jumping.store(true, Ordering::SeqCst);
-                } else {
-                    entity.jumping.store(false, Ordering::SeqCst);
                 }
             } else {
                 self.finish_navigation(entity);
@@ -2124,8 +2121,6 @@ impl PathNavigationTrait for WallClimberNavigation {
                 entity.movement_input.store(Vector3::new(0.0, 0.0, speed));
                 if dy > 0.0 {
                     entity.jumping.store(true, Ordering::SeqCst);
-                } else {
-                    entity.jumping.store(false, Ordering::SeqCst);
                 }
             }
         }
