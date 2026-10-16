@@ -151,8 +151,9 @@ pub fn build() -> TokenStream {
                 EnvironmentScanPlacementModifier, HeightRangePlacementModifier,
                 HeightmapPlacementModifier, NoiseBasedCountPlacementModifier,
                 NoiseThresholdCountPlacementModifier, OffsetPlacementModifier,
-                RandomOffsetPlacementModifier,
-                RandomChancePlacementModifier, RarityFilterPlacementModifier, SquarePlacementModifier,
+                RandomOffsetPlacementModifier, RandomChancePlacementModifier,
+                CuboidPlacementModifier, RandomlySelectedPlacementModifier,
+                RarityFilterPlacementModifier, SquarePlacementModifier,
                 SurfaceThresholdFilterPlacementModifier, SurfaceWaterDepthFilterPlacementModifier,
                 PlacedFeatureWrapper,
             };
@@ -178,6 +179,7 @@ pub fn build() -> TokenStream {
                 simple_random_selector::SimpleRandomFeature,
                 single_block_pillar::SingleBlockPillarFeature,
                 spring_feature::{BlockWrapper, SpringFeatureFeature},
+                template::{TemplateEntry, TemplateFeature},
                 geode::GeodeFeature,
                 tree::TreeFeature,
                 vegetation_patch::VegetationPatchFeature,
@@ -1190,10 +1192,71 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
             }
         }
         "minecraft:template" => {
-            quote! { ConfiguredFeature::NoOp }
+            let templates: Vec<TokenStream> = config["templates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| {
+                    let data = &entry["data"];
+                    let id = data["id"].as_str().unwrap();
+                    let rotations: Vec<TokenStream> = match data.get("rotations") {
+                        // Rotation.values()
+                        None => ["none", "clockwise_90", "180", "counterclockwise_90"]
+                            .into_iter()
+                            .map(value_to_rotation)
+                            .collect(),
+                        Some(rotations) => rotations
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|r| value_to_rotation(r.as_str().unwrap()))
+                            .collect(),
+                    };
+                    let weight = entry["weight"].as_i64().unwrap() as i32;
+                    quote! {
+                        Weighted {
+                            data: TemplateEntry { template: #id, rotations: vec![#(#rotations),*] },
+                            weight: #weight,
+                        }
+                    }
+                })
+                .collect();
+            let processors = match config.get("processors") {
+                None => quote! { std::sync::Arc::from([]) },
+                Some(Value::String(name)) => {
+                    quote! { crate::generation::structure::template::load_processor_list(#name) }
+                }
+                Some(inline) => {
+                    // A multi-line raw string keeps the line short enough for rustfmt.
+                    let json: TokenStream =
+                        format!("r#\"{}\"#", serde_json::to_string_pretty(inline).unwrap())
+                            .parse()
+                            .unwrap();
+                    quote! { TemplateFeature::inline_processors(#json) }
+                }
+            };
+            quote! {
+                ConfiguredFeature::Template(TemplateFeature {
+                    templates: vec![#(#templates),*],
+                    processors: #processors,
+                })
+            }
         }
         other => {
             let msg = format!("unknown configured feature type: {other}");
+            quote! { compile_error!(#msg) }
+        }
+    }
+}
+
+fn value_to_rotation(s: &str) -> TokenStream {
+    match s {
+        "none" => quote! { pumpkin_data::Rotation::None },
+        "clockwise_90" => quote! { pumpkin_data::Rotation::Clockwise90 },
+        "180" => quote! { pumpkin_data::Rotation::Rotate180 },
+        "counterclockwise_90" => quote! { pumpkin_data::Rotation::CounterClockwise90 },
+        other => {
+            let msg = format!("unknown rotation: {other}");
             quote! { compile_error!(#msg) }
         }
     }
@@ -2034,7 +2097,7 @@ fn value_to_feature_ref(v: &Value) -> TokenStream {
 /// – `v` – a JSON object for one modifier entry, expected to contain a `"type"` field.
 ///
 /// # Returns
-/// A `TokenStream` for the appropriate `PlacementModifier` variant; defaults to `PlacementModifier::Biome` for unrecognised types.
+/// A `PlacementModifier` variant token stream, or `compile_error!` for unknown types.
 fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
     let type_str = v["type"].as_str().unwrap_or("");
     match type_str {
@@ -2086,6 +2149,25 @@ fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
         "minecraft:rarity_filter" => {
             let ch = v["chance"].as_u64().unwrap_or(1) as u32;
             quote! { PlacementModifier::RarityFilter(RarityFilterPlacementModifier { chance: #ch }) }
+        }
+        "minecraft:cuboid" => {
+            let xz = value_to_int_provider(&v["xz_size"]);
+            let y = value_to_int_provider(&v["y_size"]);
+            let edges = v["include_edges"].as_bool().unwrap_or(true);
+            let interior = v["include_interior"].as_bool().unwrap_or(true);
+            quote! { PlacementModifier::Cuboid(CuboidPlacementModifier { xz_size: #xz, y_size: #y, include_edges: #edges, include_interior: #interior }) }
+        }
+        "minecraft:randomly_selected" => {
+            let placements: Vec<TokenStream> = v["placements"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(value_to_placement_modifier_cf)
+                .collect();
+            if placements.is_empty() {
+                return quote! { compile_error!("randomly_selected needs at least one placement") };
+            }
+            quote! { PlacementModifier::RandomlySelected(RandomlySelectedPlacementModifier { placements: vec![#(#placements),*] }) }
         }
         "minecraft:block_predicate_filter" => {
             let pred = value_to_block_predicate(&v["predicate"]);
@@ -2148,6 +2230,9 @@ fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
             let steps = v["max_steps"].as_i64().unwrap_or(1) as i32;
             quote! { PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier { direction_of_search: #dir, target_condition: #tc, allowed_search_condition: #asc, max_steps: #steps }) }
         }
-        _ => quote! { PlacementModifier::Biome(BiomePlacementModifier) },
+        other => {
+            let msg = format!("unknown placement modifier: {other}");
+            quote! { compile_error!(#msg) }
+        }
     }
 }

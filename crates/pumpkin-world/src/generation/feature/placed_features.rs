@@ -176,12 +176,14 @@ pub enum PlacementModifier {
     NoiseBasedCount(NoiseBasedCountPlacementModifier),
     NoiseThresholdCount(NoiseThresholdCountPlacementModifier),
     CountOnEveryLayer(CountOnEveryLayerPlacementModifier),
+    Cuboid(CuboidPlacementModifier),
     EnvironmentScan(EnvironmentScanPlacementModifier),
     Heightmap(HeightmapPlacementModifier),
     HeightRange(HeightRangePlacementModifier),
     InSquare(SquarePlacementModifier),
     RandomOffset(RandomOffsetPlacementModifier),
     Offset(OffsetPlacementModifier),
+    RandomlySelected(RandomlySelectedPlacementModifier),
     FixedPlacement(Vec<BlockPos>),
 }
 
@@ -220,12 +222,16 @@ impl PlacementModifier {
             Self::NoiseBasedCount(modifier) => Box::new(modifier.get_positions(random, pos)),
             Self::NoiseThresholdCount(modifier) => modifier.get_positions(random, pos),
             Self::CountOnEveryLayer(modifier) => modifier.get_positions(random, chunk, pos),
+            Self::Cuboid(modifier) => modifier.get_positions(random, pos),
             Self::EnvironmentScan(modifier) => modifier.get_positions(chunk, block_registry, pos),
             Self::Heightmap(modifier) => modifier.get_positions(chunk, min_y, height, random, pos),
             Self::HeightRange(modifier) => modifier.get_positions(min_y, height, random, pos),
             Self::InSquare(_) => SquarePlacementModifier::get_positions(random, pos),
             Self::RandomOffset(modifier) => modifier.get_positions(random, pos),
             Self::Offset(modifier) => modifier.get_positions(random, pos),
+            Self::RandomlySelected(modifier) => {
+                modifier.get_positions(chunk, block_registry, min_y, height, feature, random, pos)
+            }
             Self::FixedPlacement(positions) => Box::new(positions.clone().into_iter()),
         }
     }
@@ -344,6 +350,73 @@ impl OffsetPlacementModifier {
         let y = pos.0.y + self.y.get(random);
         let z = pos.0.z + self.z.get(random);
         Box::new(iter::once(BlockPos(Vector3::new(x, y, z))))
+    }
+}
+
+pub struct CuboidPlacementModifier {
+    pub xz_size: IntProvider,
+    pub y_size: IntProvider,
+    pub include_edges: bool,
+    pub include_interior: bool,
+}
+
+impl CuboidPlacementModifier {
+    pub fn get_positions(
+        &self,
+        random: &mut RandomGenerator,
+        pos: BlockPos,
+    ) -> Box<dyn Iterator<Item = BlockPos>> {
+        let height = self.y_size.get(random);
+        let width = self.xz_size.get(random);
+        let length = self.xz_size.get(random);
+        let mut positions = Vec::new();
+
+        for x in 0..=width {
+            for y in 0..=height {
+                for z in 0..=length {
+                    let x_face = x == 0 || x == width;
+                    let y_face = y == 0 || y == height;
+                    let z_face = z == 0 || z == length;
+                    // An edge is where two faces meet.
+                    let is_edge = (x_face && (y_face || z_face)) || (y_face && z_face);
+                    let is_interior = !x_face && !y_face && !z_face;
+                    if (self.include_edges || !is_edge) && (self.include_interior || !is_interior) {
+                        positions.push(BlockPos::new(pos.0.x + x, pos.0.y + y, pos.0.z + z));
+                    }
+                }
+            }
+        }
+        Box::new(positions.into_iter())
+    }
+}
+
+pub struct RandomlySelectedPlacementModifier {
+    pub placements: Vec<PlacementModifier>,
+}
+
+impl RandomlySelectedPlacementModifier {
+    #[expect(clippy::too_many_arguments)]
+    pub fn get_positions<T: GenerationCache>(
+        &self,
+        chunk: &T,
+        block_registry: &dyn WorldPortalExt,
+        min_y: i8,
+        height: u16,
+        feature: pumpkin_data::placed_feature::PlacedFeature,
+        random: &mut RandomGenerator,
+        pos: BlockPos,
+    ) -> Box<dyn Iterator<Item = BlockPos>> {
+        // Util.getRandom
+        let index = random.next_bounded_i32(self.placements.len() as i32) as usize;
+        self.placements[index].get_positions(
+            chunk,
+            block_registry,
+            min_y,
+            height,
+            feature,
+            random,
+            pos,
+        )
     }
 }
 
