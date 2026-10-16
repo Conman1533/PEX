@@ -27,7 +27,6 @@ use crate::entity::{
     player::Player,
 };
 
-pub const SNIFFER_FOOD: &[&Item] = &[&Item::TORCHFLOWER_SEEDS, &Item::PITCHER_POD];
 pub const SNIFFER_BABY_START_AGE: i32 = -48000;
 pub const DIGGING_DROP_SEED_OFFSET_TICKS: i32 = 120;
 
@@ -100,7 +99,14 @@ impl SnifferEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, BreedGoal::new(1.0));
-            goal_selector.add_goal(2, Box::new(TemptGoal::new(1.2, SNIFFER_FOOD, false)));
+            goal_selector.add_goal(
+                2,
+                Box::new(TemptGoal::new(
+                    1.2,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_SNIFFER_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(3, Box::new(FollowParentGoal::new(1.1)));
             goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
@@ -316,7 +322,6 @@ impl AgeableMob for SnifferEntity {
 impl Animal for SnifferEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_SNIFFER_FOOD)
-            || SNIFFER_FOOD.iter().any(|i| i.id == item_stack.item.id)
     }
 }
 

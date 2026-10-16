@@ -23,8 +23,7 @@ use crate::entity::{
 
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::WHEAT];
+use pumpkin_data::tag::{self, Taggable};
 
 pub struct SheepEntity {
     pub mob_entity: MobEntity,
@@ -56,7 +55,14 @@ impl SheepEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.25));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.1, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.1,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_SHEEP_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
             goal_selector.add_goal(5, Box::new(EatGrassGoal::default()));
             goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
@@ -113,11 +119,7 @@ impl AgeableMob for SheepEntity {
 
 impl Animal for SheepEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        use pumpkin_data::tag::Taggable;
-        item_stack
-            .item
-            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_SHEEP_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_SHEEP_FOOD)
     }
 }
 

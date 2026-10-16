@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
@@ -21,8 +20,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-pub const HAPPY_GHAST_FOOD: &[&Item] = &[&Item::SNOWBALL];
 
 /// Represents a Happy Ghast, a passive flying mob.
 ///
@@ -65,7 +62,16 @@ impl HappyGhastEntity {
                 1,
                 Box::new(TemptGoal::with_stop_distance(
                     1.0,
-                    HAPPY_GHAST_FOOD,
+                    |mob, stack| {
+                        let tag = if !mob.get_mob_entity().is_wearing_body_armor()
+                            && !mob.as_ageable().is_some_and(AgeableMob::is_baby)
+                        {
+                            &tag::Item::MINECRAFT_HAPPY_GHAST_TEMPT_ITEMS
+                        } else {
+                            &tag::Item::MINECRAFT_HAPPY_GHAST_FOOD
+                        };
+                        stack.get_item().has_tag(tag)
+                    },
                     false,
                     7.0,
                 )),
@@ -124,7 +130,6 @@ impl Animal for HappyGhastEntity {
         item_stack
             .item
             .has_tag(&tag::Item::MINECRAFT_HAPPY_GHAST_FOOD)
-            || HAPPY_GHAST_FOOD.iter().any(|i| i.id == item_stack.item.id)
     }
 }
 

@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::{EntityStatus, EntityType};
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
@@ -23,8 +22,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::COD, &Item::SALMON];
 
 /// Represents an Ocelot, a shy passive mob found in jungles.
 ///
@@ -59,7 +56,14 @@ impl OcelotEntity {
             // Goal 1: PanicGoal (EscapeDangerGoal)
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
             // Goal 3: OcelotTemptGoal
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(0.6, TEMPT_ITEMS, true)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    0.6,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD),
+                    true,
+                )),
+            );
             // Goal 4: OcelotAvoidEntityGoal (when not trusting)
             goal_selector.add_goal(
                 4,
@@ -114,10 +118,9 @@ impl OcelotEntity {
 
 impl Animal for OcelotEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        let item = item_stack.get_item();
-        item.has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD)
-            || item == &Item::COD
-            || item == &Item::SALMON
+        item_stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD)
     }
 }
 

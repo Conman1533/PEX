@@ -4,7 +4,7 @@ use super::{Controls, Goal, to_goal_ticks};
 use crate::entity::EntityBase;
 use crate::entity::{ai::pathfinder::NavigatorGoal, mob::Mob, player::Player};
 use pumpkin_data::attributes::Attributes;
-use pumpkin_data::item::Item;
+use pumpkin_data::item_stack::ItemStack;
 use pumpkin_util::math::vector3::Vector3;
 
 const DEFAULT_STOP_DISTANCE: f64 = 2.5;
@@ -13,10 +13,13 @@ const SCARE_RANGE_SQ: f64 = 36.0;
 const SCARE_MOVE_SQ: f64 = 0.010_000_000_000_000_002;
 const SCARE_ROTATION: f32 = 5.0;
 
+/// Vanilla's `Predicate<ItemStack>`. It also gets the tempted mob, which vanilla's lambdas capture.
+pub type TemptItems = fn(&dyn Mob, &ItemStack) -> bool;
+
 pub struct TemptGoal {
     goal_control: Controls,
     speed: f64,
-    tempt_items: &'static [&'static Item],
+    items: TemptItems,
     can_scare: bool,
     stop_distance: f64,
     target_player: Option<Arc<Player>>,
@@ -29,21 +32,21 @@ pub struct TemptGoal {
 
 impl TemptGoal {
     #[must_use]
-    pub fn new(speed: f64, tempt_items: &'static [&'static Item], can_scare: bool) -> Self {
-        Self::with_stop_distance(speed, tempt_items, can_scare, DEFAULT_STOP_DISTANCE)
+    pub fn new(speed: f64, items: TemptItems, can_scare: bool) -> Self {
+        Self::with_stop_distance(speed, items, can_scare, DEFAULT_STOP_DISTANCE)
     }
 
     #[must_use]
     pub fn with_stop_distance(
         speed: f64,
-        tempt_items: &'static [&'static Item],
+        items: TemptItems,
         can_scare: bool,
         stop_distance: f64,
     ) -> Self {
         Self {
             goal_control: Controls::MOVE | Controls::LOOK,
             speed,
-            tempt_items,
+            items,
             can_scare,
             stop_distance,
             target_player: None,
@@ -60,13 +63,9 @@ impl TemptGoal {
         self.running
     }
 
-    fn is_tempt_item(&self, stack: &pumpkin_data::item_stack::ItemStack) -> bool {
-        stack.item_count > 0 && self.tempt_items.iter().any(|i| i.id == stack.item.id)
-    }
-
-    fn is_holding_tempt_item(&self, player: &Player) -> bool {
-        self.is_tempt_item(&player.inventory().held_item())
-            || self.is_tempt_item(&player.inventory().off_hand_item())
+    fn should_follow(&self, mob: &dyn Mob, player: &Player) -> bool {
+        (self.items)(mob, &player.inventory().held_item())
+            || (self.items)(mob, &player.inventory().off_hand_item())
     }
 
     /// Non-combat, line of sight ignored, ranged by `tempt_range` and filtered on the held item.
@@ -80,7 +79,7 @@ impl TemptGoal {
         world.get_nearest_player(
             mob_entity.living_entity.entity.pos.load(),
             range,
-            |player| player.living_entity.is_part_of_game() && self.is_holding_tempt_item(player),
+            |player| player.living_entity.is_part_of_game() && self.should_follow(mob, player),
         )
     }
 

@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
@@ -24,8 +23,6 @@ use crate::entity::{
 };
 
 use pumpkin_data::frog_variant::FrogVariant;
-
-pub const FROG_FOOD: &[&Item] = &[&Item::SLIME_BALL];
 
 /// Represents a Frog, an amphibious mob that can eat small slimes and magma cubes.
 ///
@@ -60,7 +57,14 @@ impl FrogEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(TemptGoal::new(1.0, FROG_FOOD, false)));
+            goal_selector.add_goal(
+                1,
+                Box::new(TemptGoal::new(
+                    1.0,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_FROG_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
                 3,
@@ -96,7 +100,6 @@ impl AgeableMob for FrogEntity {
 impl Animal for FrogEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FROG_FOOD)
-            || FROG_FOOD.iter().any(|i| i.id == item_stack.item.id)
     }
 }
 

@@ -33,8 +33,6 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::COD, &Item::SALMON];
-
 fn get_dye_color_from_item(item: &Item) -> Option<u8> {
     let key = item.registry_key;
     if key.contains("white") {
@@ -114,7 +112,14 @@ impl CatEntity {
             // Goal 1: TamableAnimalPanicGoal (EscapeDangerGoal)
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
             // Goal 4: CatTemptGoal
-            goal_selector.add_goal(4, Box::new(TemptGoal::new(0.6, TEMPT_ITEMS, true)));
+            goal_selector.add_goal(
+                4,
+                Box::new(TemptGoal::new(
+                    0.6,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_CAT_FOOD),
+                    true,
+                )),
+            );
             // Goal 4: CatAvoidEntityGoal (when untamed)
             goal_selector.add_goal(
                 4,
@@ -278,8 +283,9 @@ impl CustomSound for CatEntity {
 
 impl Animal for CatEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        let item = item_stack.get_item();
-        item.has_tag(&tag::Item::MINECRAFT_CAT_FOOD) || item == &Item::COD || item == &Item::SALMON
+        item_stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_CAT_FOOD)
     }
 }
 

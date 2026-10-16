@@ -92,7 +92,14 @@ impl BeeEntity {
                 Box::new(MeleeAttackGoal::new(1.4, true).gated_by(can_sting)),
             );
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, &[], false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_BEE_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(9, Box::new(SwimGoal::default()));
@@ -184,8 +191,7 @@ impl AgeableMob for BeeEntity {
 
 impl Animal for BeeEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        item_stack.item.has_tag(&tag::Item::MINECRAFT_FLOWERS)
-            || item_stack.item.has_tag(&tag::Item::MINECRAFT_BEE_FOOD)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_BEE_FOOD)
     }
 }
 

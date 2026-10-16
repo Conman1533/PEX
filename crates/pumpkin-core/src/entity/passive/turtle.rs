@@ -23,8 +23,6 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::SEAGRASS];
-
 pub struct TurtleEntity {
     pub mob_entity: MobEntity,
     pub ageable_data: AgeableData,
@@ -58,7 +56,14 @@ impl TurtleEntity {
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
             goal_selector.add_goal(2, EscapeDangerGoal::new(1.2));
             goal_selector.add_goal(3, BreedGoal::new(1.0));
-            goal_selector.add_goal(4, Box::new(TemptGoal::new(1.1, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                4,
+                Box::new(TemptGoal::new(
+                    1.1,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_TURTLE_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
                 6,

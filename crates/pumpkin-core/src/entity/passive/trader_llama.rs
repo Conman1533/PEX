@@ -29,8 +29,6 @@ use crate::entity::{
     projectile::llama_spit::LlamaSpitEntity,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::HAY_BLOCK];
-
 pub const FLAG_TAME: u8 = 2;
 pub const FLAG_BRED: u8 = 8;
 pub const FLAG_EATING: u8 = 16;
@@ -134,7 +132,18 @@ impl TraderLlamaEntity {
                 3,
                 Box::new(RangedAttackGoal::new(ranged_weak, 1.25, 40, 20.0)),
             );
-            goal_selector.add_goal(4, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                4,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_LLAMA_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
+            );
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
             goal_selector.add_goal(7, Box::new(WanderAroundGoal::new(0.7)));
             goal_selector.add_goal(
@@ -255,11 +264,6 @@ impl AgeableMob for TraderLlamaEntity {
 impl Animal for TraderLlamaEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_LLAMA_FOOD)
-            || item_stack
-                .item
-                .has_tag(&tag::Item::MINECRAFT_LLAMA_TEMPT_ITEMS)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::HAY_BLOCK
     }
 }
 

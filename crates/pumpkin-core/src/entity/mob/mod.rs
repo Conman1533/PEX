@@ -384,6 +384,23 @@ impl MobEntity {
         self.set_guaranteed_drop(slot);
     }
 
+    /// Vanilla `Mob.isWearingBodyArmor`.
+    #[must_use]
+    pub fn is_wearing_body_armor(&self) -> bool {
+        let stack = self
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&EquipmentSlot::BODY);
+        !stack.is_empty()
+            && equipment::is_equippable_in_slot(
+                self.living_entity.entity.entity_type,
+                &stack,
+                &EquipmentSlot::BODY,
+            )
+    }
+
     fn write_drop_chances(&self, nbt: &mut NbtCompound) {
         let chances = self
             .living_entity

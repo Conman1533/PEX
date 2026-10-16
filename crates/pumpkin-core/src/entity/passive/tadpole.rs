@@ -21,8 +21,6 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::SLIME_BALL];
-
 pub struct TadpoleEntity {
     pub mob_entity: MobEntity,
     pub ageable_data: AgeableData,
@@ -51,7 +49,14 @@ impl TadpoleEntity {
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
-            goal_selector.add_goal(2, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                2,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_FROG_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(3, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
                 4,
@@ -65,7 +70,6 @@ impl TadpoleEntity {
 
     fn is_food(item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FROG_FOOD)
-            || item_stack.item == &Item::SLIME_BALL
     }
 }
 
