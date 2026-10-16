@@ -491,7 +491,8 @@ impl World {
         for id in removed_players {
             tracker.remove_player(id, &mut active_chunks);
         }
-        tracker.sync_forced_chunks(&forced_chunks, &mut active_chunks, &mut newly_active);
+        let (unforced, newly_forced) =
+            tracker.sync_forced_chunks(&forced_chunks, &mut active_chunks, &mut newly_active);
 
         for pos in newly_active {
             if self.level.is_chunk_loaded(&pos) && tracker.loaded_active_chunks.insert(pos) {
@@ -538,11 +539,32 @@ impl World {
         drop(active_chunks);
         drop(tracker);
 
+        self.update_chunk_forced(&unforced, &newly_forced);
+
         self.spawn_state.store(Arc::new(SpawnState::new(
             spawnable_chunks,
             &self.entities,
             self,
         )));
+    }
+
+    /// Vanilla `ServerChunkCache.updateChunkForced`: a forced chunk holds a ticket, so it loads
+    /// and stays loaded without a player nearby.
+    fn update_chunk_forced(&self, unforced: &[Vector2<i32>], newly_forced: &[Vector2<i32>]) {
+        if unforced.is_empty() && newly_forced.is_empty() {
+            return;
+        }
+        let mut chunk_loading = self
+            .level
+            .chunk_loading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for &pos in unforced {
+            chunk_loading.remove_force_ticket(pos);
+        }
+        for &pos in newly_forced {
+            chunk_loading.add_force_ticket(pos);
+        }
     }
 
     pub fn get_lighting_config(&self) -> LightingEngineConfig {
