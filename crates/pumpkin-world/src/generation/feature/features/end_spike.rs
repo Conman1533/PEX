@@ -138,7 +138,7 @@ impl EndSpikeFeature {
         pos: BlockPos,
     ) -> bool {
         let spikes = if self.spikes.is_empty() {
-            Self::get_spikes_for_seed(0).to_vec()
+            Self::get_spikes_for_seed(chunk.seed()).to_vec()
         } else {
             self.spikes.clone()
         };
