@@ -145,7 +145,7 @@ impl TraderLlamaEntity {
                 )),
             );
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(7, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(7, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 8,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),

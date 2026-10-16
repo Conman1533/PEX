@@ -126,7 +126,7 @@ impl RabbitEntity {
                 Box::new(AvoidEntityGoal::new(&EntityType::FOX, 10.0, 2.2, 2.2)),
             );
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(0.8)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.6)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.6)));
             goal_selector.add_goal(
                 11,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 10.0),

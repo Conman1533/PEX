@@ -80,7 +80,7 @@ impl MuleEntity {
                 )),
             );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),

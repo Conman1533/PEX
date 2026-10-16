@@ -78,7 +78,7 @@ impl ChickenEntity {
                 )),
             );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
                 6,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),

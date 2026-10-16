@@ -90,7 +90,7 @@ impl WolfEntity {
             goal_selector.add_goal(7, BreedGoal::new(1.0));
             // 8: FollowParentGoal & WanderAroundGoal
             goal_selector.add_goal(8, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(8, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             // 9: BegGoal
             goal_selector.add_goal(9, BegGoal::new(8.0));
             // 10: LookAtPlayer & RandomLookAround

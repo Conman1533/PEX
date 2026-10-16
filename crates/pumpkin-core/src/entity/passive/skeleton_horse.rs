@@ -62,7 +62,7 @@ impl SkeletonHorseEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),

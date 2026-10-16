@@ -74,7 +74,13 @@ impl OcelotEntity {
             // Goal 9: FollowParentGoal
             goal_selector.add_goal(9, Box::new(FollowParentGoal::new(0.8)));
             // Goal 10: WaterAvoidingRandomStrollGoal (WanderAroundGoal)
-            goal_selector.add_goal(10, Box::new(WanderAroundGoal::new(0.8)));
+            goal_selector.add_goal(
+                10,
+                Box::new(WanderAroundGoal::water_avoiding_with_probability(
+                    0.8,
+                    1.000_000_1e-5,
+                )),
+            );
             // Goal 11: LookAtPlayerGoal
             goal_selector.add_goal(
                 11,
