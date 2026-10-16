@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use pumpkin_data::{Block, BlockDirection, BlockId, BlockState, BlockStateId};
 use pumpkin_util::{
     math::{int_provider::IntProvider, position::BlockPos},
-    random::RandomGenerator,
+    random::{RandomGenerator, legacy_rand::LegacyRand},
 };
 
 use crate::generation::feature::features::spring_feature::BlockWrapper;
@@ -102,7 +102,12 @@ impl GeodeFeature {
     ) -> bool {
         let origin = pos;
         let num_points = self.distribution_points.get(random);
-        let noise = NormalNoise::create(random, -4, &[1.0]);
+        // Vanilla seeds this from the level seed, not the feature random.
+        let noise = NormalNoise::create(
+            &mut RandomGenerator::Legacy(LegacyRand::from_seed(chunk.seed())),
+            -4,
+            &[1.0],
+        );
 
         // Precompute sets of raw block ids for fast lookups
         let mut invalid_raw_ids: HashSet<BlockId> = HashSet::new();

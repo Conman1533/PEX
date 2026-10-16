@@ -101,6 +101,10 @@ pub trait GenerationCache: HeightLimitView + BlockAccessor {
     fn get_sea_level(&self) -> i32 {
         self.get_center_chunk().get_sea_level()
     }
+    /// The world seed, vanilla's `WorldGenLevel.getSeed()`.
+    fn seed(&self) -> u64 {
+        self.get_center_chunk().seed()
+    }
 }
 
 const AIR_BLOCK: Block = Block::AIR;
@@ -140,6 +144,7 @@ pub struct ProtoChunk {
     pub z: i32,
     pub default_block: &'static BlockState,
     biome_mixer_seed: i64,
+    seed: u64,
     pub(crate) flat_block_map: Vec<BlockStateId>,
     pub flat_biome_map: Box<[u8]>,
     pub flat_surface_height_map: [i16; CHUNK_AREA],
@@ -201,6 +206,11 @@ impl ProtoChunk {
         self.sea_level
     }
 
+    #[must_use]
+    pub const fn seed(&self) -> u64 {
+        self.seed
+    }
+
     #[cfg(test)]
     pub(crate) fn has_structure(&self, key: StructureKeys) -> bool {
         self.structure_starts.contains_key(&key)
@@ -245,6 +255,7 @@ impl ProtoChunk {
             z,
             default_block,
             biome_mixer_seed,
+            seed: generator.seed(),
             flat_block_map: Vec::new(),
             flat_biome_map: vec![
                 Biome::PLAINS.id;
