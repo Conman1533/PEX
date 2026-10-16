@@ -152,8 +152,8 @@ impl SquidMovement {
         let entity = &living.entity;
         let attacker_id = living.last_attacker_id.load(Ordering::Relaxed);
         // Vanilla forgets an attacker a hundred ticks after the hit.
-        let since_hit =
-            entity.age.load(Ordering::Relaxed) - living.last_attacked_time.load(Ordering::Relaxed);
+        let since_hit = entity.tick_count.load(Ordering::Relaxed)
+            - living.last_attacked_time.load(Ordering::Relaxed);
         if attacker_id == 0 || since_hit > 100 {
             return false;
         }

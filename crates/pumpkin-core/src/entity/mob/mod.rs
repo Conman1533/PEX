@@ -244,7 +244,7 @@ impl MobEntity {
     /// Vanilla `Mob.serverAiStep`: sensing, goals, navigation and controls.
     pub fn server_ai_step(&self, mob: &dyn Mob, caller: &dyn EntityBase) {
         self.no_action_time.fetch_add(1, Relaxed);
-        let age = self.living_entity.entity.age.load(Relaxed);
+        let tick_count = self.living_entity.entity.tick_count.load(Relaxed);
         let entity_id = self.living_entity.entity.entity_id;
 
         self.sensing
@@ -269,7 +269,7 @@ impl MobEntity {
         };
 
         // 2. Perform AI logic
-        if (age + entity_id) % 2 != 0 && age > 1 {
+        if (tick_count + entity_id) % 2 != 0 && tick_count > 1 {
             target_selector.tick_goals(mob, false);
             goals_selector.tick_goals(mob, false);
         } else {
@@ -679,7 +679,7 @@ impl MobEntity {
                 .store(target.get_entity().entity_id, Relaxed);
             self.living_entity
                 .last_attack_time
-                .store(self.living_entity.entity.age.load(Relaxed), Relaxed);
+                .store(self.living_entity.entity.tick_count.load(Relaxed), Relaxed);
         }
 
         damaged
@@ -1487,6 +1487,11 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         // PolarBear run it outside the AI step, so the shared call stays for them).
         if !mob_entity.is_no_ai() {
             mob_entity.server_ai_step(self, caller);
+        }
+
+        // Vanilla `AgeableMob.aiStep` ages the mob after the AI step, with or without AI.
+        if let Some(ageable) = self.as_ageable() {
+            ageable.ageable_ai_step();
         }
 
         mob_entity.living_entity.tick(caller, server);

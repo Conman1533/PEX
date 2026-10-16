@@ -124,6 +124,9 @@ pub trait AgeableMob: Mob {
     }
 
     fn ageable_ai_step(&self) {
+        if !self.get_entity().is_alive() {
+            return;
+        }
         if self.can_age_up() {
             let age = self.get_age() + 1;
             self.set_age(age);

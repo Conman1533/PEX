@@ -276,7 +276,7 @@ impl Goal for EvokerAttackSpellGoal {
             return false;
         }
         let entity = &evoker.mob_entity.living_entity.entity;
-        if entity.age.load(Ordering::Relaxed) < self.next_attack_tick {
+        if entity.tick_count.load(Ordering::Relaxed) < self.next_attack_tick {
             return false;
         }
         let target = evoker.mob_entity.get_target();
@@ -291,13 +291,13 @@ impl Goal for EvokerAttackSpellGoal {
         self.warmup_delay = 20;
         if let Some(evoker) = self.evoker.upgrade() {
             evoker.set_spell_casting_time(40);
-            let age = evoker
+            let tick_count = evoker
                 .mob_entity
                 .living_entity
                 .entity
-                .age
+                .tick_count
                 .load(Ordering::Relaxed);
-            self.next_attack_tick = age + 100;
+            self.next_attack_tick = tick_count + 100;
             evoker.set_is_casting_spell(IllagerSpell::Fangs);
             evoker
                 .mob_entity
@@ -421,7 +421,7 @@ impl Goal for EvokerSummonSpellGoal {
             return false;
         }
         let entity = &evoker.mob_entity.living_entity.entity;
-        if entity.age.load(Ordering::Relaxed) < self.next_attack_tick {
+        if entity.tick_count.load(Ordering::Relaxed) < self.next_attack_tick {
             return false;
         }
         let target = evoker.mob_entity.get_target();
@@ -450,13 +450,13 @@ impl Goal for EvokerSummonSpellGoal {
         self.warmup_delay = 20;
         if let Some(evoker) = self.evoker.upgrade() {
             evoker.set_spell_casting_time(100);
-            let age = evoker
+            let tick_count = evoker
                 .mob_entity
                 .living_entity
                 .entity
-                .age
+                .tick_count
                 .load(Ordering::Relaxed);
-            self.next_attack_tick = age + 340;
+            self.next_attack_tick = tick_count + 340;
             evoker.set_is_casting_spell(IllagerSpell::SummonVex);
             evoker
                 .mob_entity
@@ -520,7 +520,7 @@ impl Goal for EvokerWololoSpellGoal {
             return false;
         }
         let entity = &evoker.mob_entity.living_entity.entity;
-        if entity.age.load(Ordering::Relaxed) < self.next_attack_tick {
+        if entity.tick_count.load(Ordering::Relaxed) < self.next_attack_tick {
             return false;
         }
         let target = evoker.mob_entity.get_target();
@@ -562,13 +562,13 @@ impl Goal for EvokerWololoSpellGoal {
         self.warmup_delay = 40;
         if let Some(evoker) = self.evoker.upgrade() {
             evoker.set_spell_casting_time(60);
-            let age = evoker
+            let tick_count = evoker
                 .mob_entity
                 .living_entity
                 .entity
-                .age
+                .tick_count
                 .load(Ordering::Relaxed);
-            self.next_attack_tick = age + 140;
+            self.next_attack_tick = tick_count + 140;
             evoker.set_is_casting_spell(IllagerSpell::Wololo);
             evoker
                 .mob_entity

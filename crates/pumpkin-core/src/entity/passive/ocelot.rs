@@ -12,6 +12,7 @@ use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
+    ageable::{AgeableData, AgeableMob},
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, breed::BreedGoal,
         escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
@@ -28,6 +29,7 @@ use crate::entity::{
 /// Wiki: <https://minecraft.wiki/w/Ocelot>
 pub struct OcelotEntity {
     pub mob_entity: MobEntity,
+    pub ageable_data: AgeableData,
     pub is_trusting: AtomicBool,
 }
 
@@ -36,6 +38,7 @@ impl OcelotEntity {
         let mob_entity = MobEntity::new(entity);
         let ocelot = Self {
             mob_entity,
+            ageable_data: AgeableData::default(),
             is_trusting: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(ocelot);
@@ -130,7 +133,17 @@ impl Animal for OcelotEntity {
     }
 }
 
+impl AgeableMob for OcelotEntity {
+    fn get_ageable_data(&self) -> &AgeableData {
+        &self.ageable_data
+    }
+}
+
 impl Mob for OcelotEntity {
+    fn as_ageable(&self) -> Option<&dyn AgeableMob> {
+        Some(self)
+    }
+
     /// Vanilla `Ocelot.removeWhenFarAway`, without the 2400 tick minimum age Pumpkin does not track.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         !self.is_trusting.load(std::sync::atomic::Ordering::Relaxed)
