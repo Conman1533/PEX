@@ -639,6 +639,10 @@ impl LivingEntity {
     /// Sends the Hand animation to all others, used when Eating for example
     pub fn set_active_hand(&self, hand: Hand, stack: ItemStack, duration: i32) {
         self.item_use_time.store(duration, Ordering::Relaxed);
+        let cause_use_vibration = stack.item.id != Item::GOAT_HORN.id
+            && stack
+                .get_data_component::<pumpkin_data::data_component_impl::KineticWeaponImpl>()
+                .is_none();
         *self
             .item_in_use
             .lock()
@@ -653,6 +657,17 @@ impl LivingEntity {
             .clear();
         self.set_living_flag(Self::USING_ITEM_FLAG, true);
         self.set_living_flag(Self::OFF_HAND_ACTIVE_FLAG, hand == Hand::Left);
+        if cause_use_vibration {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ItemInteractStart,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, &self.entity),
+                    None,
+                ),
+            );
+        }
     }
 
     fn set_living_flag(&self, flag: u8, value: bool) {
@@ -696,10 +711,11 @@ impl LivingEntity {
     }
 
     pub fn clear_active_hand(&self) {
-        *self
+        let prev_item = self
             .item_in_use
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         *self
             .active_hand
             .lock()
@@ -711,6 +727,22 @@ impl LivingEntity {
         self.item_use_time.store(0, Ordering::Relaxed);
 
         self.set_living_flag(Self::USING_ITEM_FLAG, false);
+        if let Some(stack) = prev_item
+            && stack.item.id != Item::GOAT_HORN.id
+            && stack
+                .get_data_component::<pumpkin_data::data_component_impl::KineticWeaponImpl>()
+                .is_none()
+        {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ItemInteractFinish,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, &self.entity),
+                    None,
+                ),
+            );
+        }
     }
 
     pub fn was_recently_stabbed(&self, target_id: i32, now: i32, allowed_ticks: i32) -> bool {
@@ -1995,7 +2027,7 @@ impl LivingEntity {
         cause: Option<&dyn EntityBase>,
     ) {
         let world = self.entity.world.load();
-        let Some(dyn_self) = world.get_entity_by_id(self.entity.entity_id) else {
+        let Some(dyn_self) = crate::world::vibration::entity_handle(&world, &self.entity) else {
             return;
         };
         if self
@@ -2005,6 +2037,11 @@ impl LivingEntity {
         {
             self.movement_input.store(Vector3::default());
             self.jumping.store(false, Relaxed);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::EntityDie,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(Some(dyn_self.clone()), None),
+            );
 
             let kill_credit = self.get_kill_credit();
             let killer = cause.or(source).or(kill_credit.as_deref());
@@ -3309,6 +3346,15 @@ impl LivingEntity {
             }
         }
 
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::EntityDamage,
+            self.entity.pos.load(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, caller),
+                None,
+            ),
+        );
+
         if new_health <= 0.0 {
             let mut death_event =
                 crate::plugin::api::events::entity::entity_death::EntityDeathEvent::new(
@@ -3464,7 +3510,7 @@ impl EntityBase for LivingEntity {
             // Vanilla `Item.finishUsingItem` only consumes an item that has the `consumable`
             // component. Anything else, like a bundle or a goat horn, just stops being used.
             if let Some(item) = item_in_use.as_ref()
-                && item.get_data_component::<ConsumableImpl>().is_some()
+                && let Some(consumable) = item.get_data_component::<ConsumableImpl>()
             {
                 // Consume item
                 let mut is_potion = false;
@@ -3580,8 +3626,36 @@ impl EntityBase for LivingEntity {
                     }
                 }
 
+                let world = self.entity.world.load();
+                let consume_event = if consumable.animation
+                    == pumpkin_data::data_component_impl::ConsumeAnimation::Drink
+                {
+                    pumpkin_data::game_event::GameEvent::Drink
+                } else {
+                    pumpkin_data::game_event::GameEvent::Eat
+                };
+                world.game_event(
+                    consume_event,
+                    self.entity.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        None,
+                    ),
+                );
                 self.clear_active_hand();
             }
+        }
+
+        if self.entity.is_fall_flying() && self.entity.age.load(Relaxed) % 10 == 0 {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ElytraGlide,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, caller),
+                    None,
+                ),
+            );
         }
 
         if self.hurt_cooldown.load(Relaxed) > 0 {

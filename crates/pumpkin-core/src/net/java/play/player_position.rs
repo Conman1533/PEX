@@ -260,17 +260,21 @@ impl JavaClient {
 
                 let height_difference = pos.y - last_pos.y;
                 if entity.on_ground.load(Ordering::Relaxed)
-                    && (packet.collision & FLAG_ON_GROUND) != 0
+                    && (packet.collision & FLAG_ON_GROUND) == 0
                     && height_difference > 0.0
                 {
                     player.jump();
                 }
+                let new_on_ground = (packet.collision & FLAG_ON_GROUND) != 0;
                 entity
                     .on_ground
-                    .store((packet.collision & FLAG_ON_GROUND) != 0, Ordering::Relaxed);
+                    .store(new_on_ground, Ordering::Relaxed);
                 let movement = pos.sub(&last_pos);
                 if movement.length_squared() < 64.0 {
                     entity.emit_movement_events(player.as_ref(), movement);
+                }
+                if new_on_ground && entity.is_fall_flying() {
+                    entity.set_fall_flying(false);
                 }
 
                 entity.set_rotation(wrap_degrees(packet.yaw) % 360.0, wrap_degrees(packet.pitch));

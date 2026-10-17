@@ -67,6 +67,11 @@ impl JukeboxBlock {
     fn stop_playing(block: &Block, position: &BlockPos, world: &Arc<World>) {
         Self::set_record_state(false, block, position, world);
         world.sync_world_event(WorldEvent::SoundStopJukeboxSong, *position, 0);
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::JukeboxStopPlay,
+            position.to_centered_f64(),
+            crate::world::vibration::GameEventContext::default(),
+        );
     }
 
     /// Starts playing music
@@ -167,6 +172,11 @@ impl BlockBehaviour for JukeboxBlock {
         // Stop the music
         args.world
             .sync_world_event(WorldEvent::SoundStopJukeboxSong, *args.position, 0);
+        args.world.game_event(
+            pumpkin_data::game_event::GameEvent::JukeboxStopPlay,
+            args.position.to_centered_f64(),
+            crate::world::vibration::GameEventContext::default(),
+        );
     }
 
     /// Vanilla: `JukeboxBlock.onStateReplaced()` -> `ItemScatterer.onStateReplaced()`

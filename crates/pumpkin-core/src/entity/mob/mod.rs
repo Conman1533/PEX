@@ -1078,6 +1078,15 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
+    /// Vanilla `Entity.dampensVibrations`, overridden by `Warden`.
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        None
+    }
+
     /// Vanilla `Mob.finalizeSpawn`, run before the mob enters the world on spawns that
     /// vanilla finalizes. Overrides call `finalize_spawn_base` first. Riders queued with
     /// `add_pending_rider` are added by the world together with the mob.
@@ -1407,6 +1416,14 @@ pub trait Mob: EntityBase + Send + Sync {
 impl<T: Mob + Send + 'static> EntityBase for T {
     fn get_mob(&self) -> Option<&dyn Mob> {
         Some(self)
+    }
+
+    fn dampens_vibrations(&self) -> bool {
+        Mob::dampens_vibrations(self)
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        Mob::as_vibration_user(self)
     }
 
     fn is_pushed_by_fluids(&self) -> bool {

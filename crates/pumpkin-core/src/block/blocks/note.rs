@@ -37,6 +37,11 @@ impl NoteBlock {
                 return;
             }
             world.add_synced_block_event(*pos, 0, 0);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::NoteBlockPlay,
+                pos.to_centered_f64(),
+                crate::world::vibration::GameEventContext::default(),
+            );
         }
     }
     fn get_note_pitch(note: u16) -> f32 {

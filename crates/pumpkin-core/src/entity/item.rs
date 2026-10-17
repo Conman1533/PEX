@@ -30,6 +30,9 @@ use std::sync::{
     },
 };
 
+use crossbeam::atomic::AtomicCell;
+use uuid::Uuid;
+
 use super::{Entity, EntityBase, living::LivingEntity, player::Player};
 
 pub struct ItemEntity {
@@ -40,6 +43,7 @@ pub struct ItemEntity {
     item_stack: Mutex<ItemStack>,
     pickup_delay: AtomicU8,
     health: AtomicF32,
+    thrower: AtomicCell<Option<Uuid>>,
     never_despawn: AtomicBool,
     never_pickup: AtomicBool,
     merge_reserved: AtomicBool,
@@ -107,6 +111,7 @@ impl ItemEntity {
             item_age: AtomicU32::new(0),
             pickup_delay: AtomicU8::new(Self::DEFAULT_PICKUP_DELAY),
             health: AtomicF32::new(5.0),
+            thrower: AtomicCell::new(None),
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
@@ -129,6 +134,7 @@ impl ItemEntity {
             item_age: AtomicU32::new(0),
             pickup_delay: AtomicU8::new(pickup_delay), // Vanilla pickup delay is 10 ticks
             health: AtomicF32::new(5.0),
+            thrower: AtomicCell::new(None),
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
@@ -144,6 +150,7 @@ impl ItemEntity {
             item_age: AtomicU32::new(0),
             pickup_delay: AtomicU8::new(0),
             health: AtomicF32::new(5.0),
+            thrower: AtomicCell::new(None),
             never_despawn: AtomicBool::new(false),
             never_pickup: AtomicBool::new(false),
             merge_reserved: AtomicBool::new(false),
@@ -160,6 +167,15 @@ impl ItemEntity {
 
     pub fn set_pickup_delay(&self, pickup_delay: u8) {
         self.pickup_delay.store(pickup_delay, Ordering::Relaxed);
+    }
+
+    pub fn set_thrower(&self, thrower: Uuid) {
+        self.thrower.store(Some(thrower));
+    }
+
+    #[must_use]
+    pub fn get_thrower(&self) -> Option<Uuid> {
+        self.thrower.load()
     }
 
     pub const fn get_entity(&self) -> &Entity {
@@ -605,7 +621,7 @@ impl EntityBase for ItemEntity {
 
     fn damage_with_context(
         &self,
-        _caller: &dyn EntityBase,
+        caller: &dyn EntityBase,
         amount: f32,
         damage_type: DamageType,
         _position: Option<Vector3<f64>>,
@@ -663,7 +679,14 @@ impl EntityBase for ItemEntity {
             }
         };
 
-        world.emit_game_event(GameEvent::EntityDamage.name(), entity.pos.load());
+        world.game_event(
+            GameEvent::EntityDamage,
+            entity.pos.load(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, caller),
+                None,
+            ),
+        );
         if destroyed {
             self.on_destroyed(&world);
             entity.remove();
@@ -750,6 +773,14 @@ impl EntityBase for ItemEntity {
         Some(self)
     }
 
+    fn dampens_vibrations(&self) -> bool {
+        self.item_stack
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .item
+            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_DAMPENS_VIBRATIONS)
+    }
+
     fn get_gravity(&self) -> f64 {
         0.04
     }
@@ -773,6 +804,9 @@ impl EntityBase for ItemEntity {
             self.pickup_delay.load(Ordering::Relaxed) as i16,
         );
         nbt.put_short("Health", self.health.load(Relaxed) as i16);
+        if let Some(thrower) = self.thrower.load() {
+            nbt.put_uuid("Thrower", thrower);
+        }
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
@@ -801,6 +835,7 @@ impl EntityBase for ItemEntity {
         if let Some(health) = nbt.get_short("Health") {
             self.health.store(health as f32, Relaxed);
         }
+        self.thrower.store(nbt.get_uuid("Thrower"));
     }
 
     fn cast_any(&self) -> &dyn std::any::Any {

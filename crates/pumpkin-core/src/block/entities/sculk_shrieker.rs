@@ -36,13 +36,16 @@ impl BlockEntity for SculkShriekerBlockEntity {
             position,
             warning_level: Mutex::new(warning_level),
             shrieking_can_summon: AtomicBool::new(false),
-            vibration: Mutex::default(),
+            vibration: Mutex::new(VibrationData::read_nbt(nbt)),
         }
     }
 
     fn write_nbt(&self, nbt: &mut NbtCompound) {
         if let Ok(warning_level) = self.warning_level.lock() {
             nbt.put_int("warning_level", *warning_level);
+        }
+        if let Ok(vibration) = self.vibration.lock() {
+            vibration.write_nbt(nbt);
         }
     }
 
@@ -106,7 +109,7 @@ impl VibrationUser for SculkShriekerBlockEntity {
             && context
                 .source
                 .as_ref()
-                .and_then(|source| SculkShriekerBlock::try_get_player(world, source.get_entity()))
+                .and_then(|source| SculkShriekerBlock::try_get_player(world, source.as_ref()))
                 .is_some()
     }
 
@@ -116,10 +119,12 @@ impl VibrationUser for SculkShriekerBlockEntity {
         _origin: &BlockPos,
         _event: GameEvent,
         source: Option<&Arc<dyn EntityBase>>,
+        projectile_owner: Option<&Arc<dyn EntityBase>>,
         _distance: f32,
     ) {
-        if let Some(player) =
-            source.and_then(|source| SculkShriekerBlock::try_get_player(world, source.get_entity()))
+        if let Some(player) = projectile_owner
+            .or(source)
+            .and_then(|entity| SculkShriekerBlock::try_get_player(world, entity.as_ref()))
         {
             SculkShriekerBlock::try_shriek(world, &self.position, &player);
         }

@@ -34,13 +34,16 @@ impl BlockEntity for SculkSensorBlockEntity {
         Self {
             position,
             last_vibration_frequency: Mutex::new(last_vibration_frequency),
-            vibration: Mutex::default(),
+            vibration: Mutex::new(VibrationData::read_nbt(nbt)),
         }
     }
 
     fn write_nbt(&self, nbt: &mut NbtCompound) {
         if let Ok(last_vibration_frequency) = self.last_vibration_frequency.lock() {
             nbt.put_int("last_vibration_frequency", *last_vibration_frequency);
+        }
+        if let Ok(vibration) = self.vibration.lock() {
+            vibration.write_nbt(nbt);
         }
     }
 
@@ -95,6 +98,7 @@ impl VibrationUser for SculkSensorBlockEntity {
         _origin: &BlockPos,
         event: GameEvent,
         source: Option<&Arc<dyn EntityBase>>,
+        projectile_owner: Option<&Arc<dyn EntityBase>>,
         distance: f32,
     ) {
         SculkSensorBlock::receive_vibration(
@@ -102,7 +106,7 @@ impl VibrationUser for SculkSensorBlockEntity {
             &self.position,
             &self.last_vibration_frequency,
             event,
-            source,
+            source.or(projectile_owner),
             vibration::redstone_strength_for_distance(distance, self.listener_radius()),
         );
     }
@@ -119,11 +123,7 @@ impl SculkSensorBlockEntity {
         Self {
             position,
             last_vibration_frequency: Mutex::new(0),
-            vibration: Mutex::new(VibrationData {
-                current: None,
-                selector: vibration::VibrationSelector::new(),
-                travel_time_in_ticks: 0,
-            }),
+            vibration: Mutex::new(VibrationData::new()),
         }
     }
 }

@@ -352,6 +352,13 @@ impl FishingBobberEntity {
             entity.remove();
             return;
         };
+        if entity.age.fetch_add(1, Ordering::Relaxed) == 0 {
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileShoot,
+                entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(Some(owner.clone()), None),
+            );
+        }
         self.update_left_owner(&world, &*owner, entity.velocity.load());
         let Some(player) = owner.cast_any().downcast_ref::<Player>() else {
             entity.remove();
@@ -550,12 +557,31 @@ impl FishingBobberEntity {
 
         if let Some(id) = hooked {
             self.set_hooked_entity(Some(id));
+            let hit_pos = start_pos + (*velocity * closest_t);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileLand,
+                hit_pos,
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(world, caller),
+                    None,
+                ),
+            );
             // Clear the momentum so if the hooked entity is removed the hook doesn't carry on moving.
             *velocity = Vector3::new(0.0, 0.0, 0.0);
         } else if hit_block {
             // Vanilla `FishingHook.onHitBlock`: stop the hook at the block face instead of carrying
             // its tangential motion to the edge.
             *velocity = *velocity * closest_t;
+            let hit_pos = start_pos + *velocity;
+            let target_pos = BlockPos::floored_v(hit_pos);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileLand,
+                target_pos.to_centered_f64(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(world, caller),
+                    Some(world.get_block_state_id(&target_pos)),
+                ),
+            );
         }
     }
 

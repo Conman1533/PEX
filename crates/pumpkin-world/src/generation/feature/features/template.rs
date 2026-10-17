@@ -163,7 +163,8 @@ const UPDATE_SHAPE_ORDER: [BlockDirection; 6] = [
 
 fn is_water_source<T: GenerationCache>(chunk: &T, pos: &Vector3<i32>) -> bool {
     let (fluid, state) = chunk.get_fluid_and_fluid_state(pos);
-    fluid.id == Fluid::WATER.id && state.is_source
+    (fluid.id == Fluid::WATER.id && state.is_source)
+        || holds_water_source(GenerationCache::get_block_state(chunk, pos))
 }
 
 /// Whether the block's own fluid is a source: water at level 0, or a waterlogged block.
@@ -373,5 +374,224 @@ fn speleothem_thickness<T: GenerationCache>(
         }
     } else {
         SpeleothemThickness::Frustum
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generation::{
+        feature::{
+            configured_features::CONFIGURED_FEATURES,
+            placed_features::{PLACED_FEATURES, PlacementModifier},
+        },
+        get_world_gen,
+        proto_chunk::ProtoChunk,
+    };
+    use crate::world::WorldPortalExt;
+    use pumpkin_data::{BlockId, dimension::Dimension};
+    use pumpkin_util::{random::xoroshiro128::Xoroshiro, world_seed::Seed};
+
+    struct TestBlockRegistry;
+    impl WorldPortalExt for TestBlockRegistry {
+        fn can_place_at(
+            &self,
+            _block: &pumpkin_data::Block,
+            _state: &pumpkin_data::BlockState,
+            _block_accessor: &dyn crate::world::BlockAccessor,
+            _block_pos: &BlockPos,
+        ) -> bool {
+            true
+        }
+
+        fn mirror(
+            &self,
+            block: &pumpkin_data::Block,
+            state_id: BlockStateId,
+            mirror: pumpkin_data::Mirror,
+        ) -> &'static pumpkin_data::BlockState {
+            block.mirror(state_id, mirror)
+        }
+
+        fn rotate(
+            &self,
+            block: &pumpkin_data::Block,
+            state_id: BlockStateId,
+            rotation: pumpkin_data::Rotation,
+        ) -> &'static pumpkin_data::BlockState {
+            block.rotate(state_id, rotation)
+        }
+
+        fn spawn_mobs_for_chunk_generation(
+            &self,
+            _cache: &mut dyn crate::generation::proto_chunk::GenerationCache,
+            _biome: &'static pumpkin_data::chunk::Biome,
+            _chunk_x: i32,
+            _chunk_z: i32,
+        ) {
+        }
+    }
+
+    #[test]
+    fn sulfur_spring_places_tuff_patch_and_spring_template_with_spikes_and_water() {
+        let world_gen = get_world_gen(
+            Seed(2026),
+            Dimension::OVERWORLD,
+            false,
+            Vec::new(),
+            String::new(),
+        );
+        let mut chunk = ProtoChunk::new(0, 0, &world_gen);
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in 40..=64 {
+                    chunk.set_block_state(x, y, z, Block::STONE.default_state);
+                }
+            }
+        }
+
+        let feature = CONFIGURED_FEATURES
+            .get(&pumpkin_data::configured_feature::ConfiguredFeature::SulfurSpring)
+            .expect("sulfur_spring configured feature");
+        let mut random = RandomGenerator::Xoroshiro(Xoroshiro::from_seed(42));
+        let placed = feature.generate(
+            &mut chunk,
+            &TestBlockRegistry,
+            -64,
+            384,
+            pumpkin_data::placed_feature::PlacedFeature::RootedSulfurSpring,
+            &mut random,
+            BlockPos::new(8, 65, 8),
+        );
+        assert!(placed, "sulfur_spring should place on a solid cave floor");
+
+        let mut tuff_count = 0;
+        let mut sulfur_count = 0;
+        let mut water_count = 0;
+        let mut spike_count = 0;
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in 45..=70 {
+                    let state_id = GenerationCache::get_block_state(&chunk, &Vector3::new(x, y, z));
+                    let block_id = state_id.to_block_id();
+                    if block_id == BlockId::TUFF {
+                        tuff_count += 1;
+                    } else if block_id == BlockId::SULFUR {
+                        sulfur_count += 1;
+                    } else if block_id == BlockId::WATER {
+                        water_count += 1;
+                    } else if block_id == BlockId::SULFUR_SPIKE {
+                        spike_count += 1;
+                    }
+                }
+            }
+        }
+
+        assert!(tuff_count > 0, "sequence step 1 should place tuff patch");
+        assert!(
+            sulfur_count > 0,
+            "sequence step 2 should place sulfur blocks"
+        );
+        assert!(water_count > 0, "spring template should place water");
+        assert!(
+            spike_count > 0 || !chunk.fluid_ticks.is_empty(),
+            "spring template should schedule water fluid ticks"
+        );
+    }
+
+    #[test]
+    fn desert_well_volume_match_rejects_air_pockets_and_places_on_solid_sand() {
+        let world_gen = get_world_gen(
+            Seed(2026),
+            Dimension::OVERWORLD,
+            false,
+            Vec::new(),
+            String::new(),
+        );
+        let mut chunk = ProtoChunk::new(0, 0, &world_gen);
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in 55..=64 {
+                    chunk.set_block_state(x, y, z, Block::SAND.default_state);
+                }
+            }
+        }
+
+        let placed_well = PLACED_FEATURES
+            .get(&pumpkin_data::placed_feature::PlacedFeature::DesertWell)
+            .expect("desert_well placed feature");
+        let filter = placed_well
+            .placement
+            .iter()
+            .find_map(|m| match m {
+                PlacementModifier::BlockPredicateFilter(f) => Some(&f.predicate),
+                _ => None,
+            })
+            .expect("desert_well BlockPredicateFilter");
+
+        // After the (0, -1, 0) offset, the well checks pos = (8, 64, 8), which requires
+        // minecraft:sand at (8, 64, 8) and no #minecraft:air in (6..=10, 62..=63, 6..=10).
+        let check_pos = BlockPos::new(8, 64, 8);
+        chunk.set_block_state(7, 62, 8, Block::AIR.default_state);
+        assert!(
+            !filter.test(&TestBlockRegistry, &chunk, &check_pos),
+            "volume_match must reject desert well placement over an air pocket"
+        );
+
+        chunk.set_block_state(7, 62, 8, Block::SAND.default_state);
+        assert!(
+            filter.test(&TestBlockRegistry, &chunk, &check_pos),
+            "volume_match must accept desert well placement when underground volume has no air"
+        );
+
+        let configured_well = CONFIGURED_FEATURES
+            .get(&pumpkin_data::configured_feature::ConfiguredFeature::DesertWell)
+            .expect("desert_well configured feature");
+        let mut random = RandomGenerator::Xoroshiro(Xoroshiro::from_seed(7));
+        let generated = configured_well.generate(
+            &mut chunk,
+            &TestBlockRegistry,
+            -64,
+            384,
+            pumpkin_data::placed_feature::PlacedFeature::DesertWell,
+            &mut random,
+            check_pos,
+        );
+        assert!(
+            generated,
+            "desert_well should generate at valid sand position"
+        );
+
+        let mut sandstone = 0;
+        let mut water = 0;
+        let mut suspicious_sand = 0;
+        for x in 4..=12 {
+            for z in 4..=12 {
+                for y in 60..=70 {
+                    let block_id = GenerationCache::get_block_state(&chunk, &Vector3::new(x, y, z))
+                        .to_block_id();
+                    if block_id == BlockId::SANDSTONE || block_id == BlockId::SANDSTONE_SLAB {
+                        sandstone += 1;
+                    } else if block_id == BlockId::WATER {
+                        water += 1;
+                    } else if block_id == BlockId::SUSPICIOUS_SAND {
+                        suspicious_sand += 1;
+                    }
+                }
+            }
+        }
+        assert!(sandstone > 0, "desert_well should place sandstone");
+        assert!(water > 0, "desert_well should place water");
+        assert_eq!(
+            suspicious_sand, 2,
+            "desert_well should place 2 suspicious sand blocks"
+        );
+        assert!(
+            chunk.pending_block_entities.iter().any(|nbt| {
+                nbt.get_string("id") == Some("minecraft:brushable_block")
+                    && nbt.get_string("LootTable") == Some("minecraft:archaeology/desert_well")
+            }),
+            "desert_well suspicious sand should carry its archaeology loot table NBT"
+        );
     }
 }

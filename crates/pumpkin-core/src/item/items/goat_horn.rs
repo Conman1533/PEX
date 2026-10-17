@@ -29,10 +29,19 @@ impl ItemBehaviour for GoatHornItem {
             .and_then(Instrument::from_name)
             .unwrap_or(Instrument::PonderGoatHorn);
 
-        player.world().play_sound(
+        let world = player.world();
+        world.play_sound(
             instrument.sound(),
             SoundCategory::Players,
             &player.position(),
+        );
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::InstrumentPlay,
+            player.position(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, player),
+                None,
+            ),
         );
         player.living_entity.set_active_hand(
             pumpkin_util::Hand::Right,

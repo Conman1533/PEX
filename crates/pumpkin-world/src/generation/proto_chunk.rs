@@ -449,6 +449,18 @@ impl ProtoChunk {
     }
 
     pub fn add_block_entity(&mut self, nbt: NbtCompound) {
+        if let Some(x) = nbt.get_int("x")
+            && let Some(y) = nbt.get_int("y")
+            && let Some(z) = nbt.get_int("z")
+            && let Some(existing) = self.pending_block_entities.iter_mut().find(|existing| {
+                existing.get_int("x") == Some(x)
+                    && existing.get_int("y") == Some(y)
+                    && existing.get_int("z") == Some(z)
+            })
+        {
+            *existing = nbt;
+            return;
+        }
         self.pending_block_entities.push(nbt);
     }
 
@@ -699,7 +711,38 @@ impl ProtoChunk {
                 .reserve_exact(section_end - self.flat_block_map.len());
             self.flat_block_map.resize(section_end, BlockStateId::AIR);
         }
+        let old_state_id = self.flat_block_map[index];
         self.flat_block_map[index] = block_state.id;
+
+        let world_x = (self.x << 4) | local_x;
+        let world_z = (self.z << 4) | local_z;
+        if block_state.block_entity_type != u16::MAX {
+            if let Some(&be_name) = pumpkin_data::block_properties::BLOCK_ENTITY_TYPES
+                .get(block_state.block_entity_type as usize)
+            {
+                let exists = self.pending_block_entities.iter().any(|nbt| {
+                    nbt.get_int("x") == Some(world_x)
+                        && nbt.get_int("y") == Some(y)
+                        && nbt.get_int("z") == Some(world_z)
+                });
+                if !exists {
+                    let mut nbt = NbtCompound::new();
+                    nbt.put_string("id", format!("minecraft:{be_name}"));
+                    nbt.put_int("x", world_x);
+                    nbt.put_int("y", y);
+                    nbt.put_int("z", world_z);
+                    self.pending_block_entities.push(nbt);
+                }
+            }
+        } else if old_state_id != BlockStateId::AIR
+            && old_state_id.to_state().block_entity_type != u16::MAX
+        {
+            self.pending_block_entities.retain(|nbt| {
+                !(nbt.get_int("x") == Some(world_x)
+                    && nbt.get_int("y") == Some(y)
+                    && nbt.get_int("z") == Some(world_z))
+            });
+        }
     }
 
     #[inline]

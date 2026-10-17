@@ -340,6 +340,14 @@ impl ItemBehaviour for EmptyBucketItem {
             SoundCategory::Blocks,
             &block_pos.to_f64(),
         );
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::FluidPickup,
+            block_pos.to_centered_f64(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, player),
+                None,
+            ),
+        );
 
         give_player_bucket_item(player, item);
     }
@@ -432,6 +440,14 @@ impl ItemBehaviour for FilledBucketItem {
             get_empty_sound(item),
             SoundCategory::Blocks,
             &place_pos.to_f64(),
+        );
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::FluidPlace,
+            place_pos.to_centered_f64(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, player),
+                None,
+            ),
         );
 
         if let Some((entity_type, _)) = get_mob_for_bucket(item) {

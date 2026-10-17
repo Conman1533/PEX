@@ -5,7 +5,7 @@ use crate::block::entities::sculk_shrieker::SculkShriekerBlockEntity;
 use crate::block::{
     BlockBehaviour, BlockMetadata, OnEntityStepArgs, OnPlaceArgs, OnScheduledTickArgs,
 };
-use crate::entity::Entity;
+use crate::entity::EntityBase;
 use crate::entity::mob::warden::WardenEntity;
 use crate::entity::mob::warden_spawn_tracker::{MAX_WARNING_LEVEL, WardenSpawnTracker};
 use crate::entity::player::Player;
@@ -41,17 +41,35 @@ impl BlockMetadata for SculkShriekerBlock {
 }
 
 impl SculkShriekerBlock {
-    /// `SculkShriekerBlockEntity.tryGetPlayer`: the player, or the player riding the entity.
-    pub fn try_get_player(world: &World, entity: &Entity) -> Option<Arc<Player>> {
+    /// `SculkShriekerBlockEntity.tryGetPlayer`: the player, their rider, a projectile's owner, or
+    /// a dropped item's thrower.
+    pub fn try_get_player(world: &World, source: &dyn EntityBase) -> Option<Arc<Player>> {
+        let entity = source.get_entity();
         if let Some(player) = world.get_player_by_id(entity.entity_id) {
             return Some(player);
         }
-        let passengers = entity
-            .passengers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let rider = passengers.first()?;
-        world.get_player_by_id(rider.get_entity().entity_id)
+        {
+            let passengers = entity
+                .passengers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(rider) = passengers.first()
+                && let Some(player) = world.get_player_by_id(rider.get_entity().entity_id)
+            {
+                return Some(player);
+            }
+        }
+        if let Some(owner_id) = source.get_owner_id()
+            && let Some(player) = world.get_player_by_id(owner_id)
+        {
+            return Some(player);
+        }
+        if let Some(item) = source.get_item_entity()
+            && let Some(thrower) = item.get_thrower()
+        {
+            return world.get_player_by_uuid(thrower);
+        }
+        None
     }
 
     fn with_shrieker<R>(
@@ -194,7 +212,7 @@ impl BlockBehaviour for SculkShriekerBlock {
     }
 
     fn on_entity_step(&self, args: OnEntityStepArgs<'_>) {
-        if let Some(player) = Self::try_get_player(args.world, args.entity.get_entity()) {
+        if let Some(player) = Self::try_get_player(args.world, args.entity) {
             Self::try_shriek(args.world, args.position, &player);
         }
     }
@@ -211,5 +229,265 @@ impl BlockBehaviour for SculkShriekerBlock {
             );
             Self::try_respond(args.world, args.position, props.can_summon);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::entities::BlockEntity;
+    use crate::block::entities::sculk_sensor::SculkSensorBlockEntity;
+    use crate::entity::Entity;
+    use crate::entity::item::ItemEntity;
+    use crate::entity::passive::allay::AllayEntity;
+    use crate::entity::projectile::arrow::ArrowEntity;
+    use crate::world::{test_player, test_world, vibration};
+    use pumpkin_data::{Block, item::Item, item_stack::ItemStack};
+    use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
+    use pumpkin_world::chunk::ChunkData;
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn ancient_city_sensor_and_shrieker_four_warnings_summon_warden_and_entities_listen() {
+        let world = test_world();
+        for cx in -2..=2 {
+            for cz in -2..=2 {
+                world
+                    .level
+                    .loaded_chunks
+                    .insert(Vector2::new(cx, cz), ChunkData::empty_sync(cx, cz));
+            }
+        }
+
+        for x in -8..=8 {
+            for z in -8..=8 {
+                world.set_block_state(
+                    &BlockPos::new(x, 63, z),
+                    Block::DEEPSLATE_BRICKS.default_state.id,
+                    BlockFlags::empty(),
+                );
+            }
+        }
+
+        let sensor_pos = BlockPos::new(0, 64, 0);
+        world.set_block_state(
+            &sensor_pos,
+            Block::SCULK_SENSOR.default_state.id,
+            BlockFlags::empty(),
+        );
+        let sensor_be = Arc::new(SculkSensorBlockEntity::new(sensor_pos));
+        world.add_block_entity(sensor_be.clone());
+
+        let shrieker_pos = BlockPos::new(2, 64, 0);
+        let mut shrieker_props = SculkShriekerLikeProperties::default(&Block::SCULK_SHRIEKER);
+        shrieker_props.can_summon = true;
+        world.set_block_state(
+            &shrieker_pos,
+            shrieker_props.to_state_id(&Block::SCULK_SHRIEKER),
+            BlockFlags::empty(),
+        );
+        let shrieker_be = Arc::new(SculkShriekerBlockEntity::new(shrieker_pos));
+        world.add_block_entity(shrieker_be.clone());
+
+        let player = test_player(&world, Vector3::new(1.5, 64.0, 1.5));
+
+        // 1. Wool item entity dampens vibrations
+        let wool_item = Arc::new(ItemEntity::new(
+            Entity::new(
+                world.clone(),
+                Vector3::new(0.5, 64.0, 1.5),
+                &EntityType::ITEM,
+            ),
+            ItemStack::new(1, &Item::WHITE_WOOL),
+        ));
+        wool_item.set_thrower(player.gameprofile.id);
+        world.game_event(
+            GameEvent::HitGround,
+            Vector3::new(0.5, 64.0, 1.5),
+            vibration::GameEventContext::of(Some(wool_item as Arc<dyn EntityBase>), None),
+        );
+        for _ in 0..5 {
+            world.level_time.lock().unwrap().world_age += 1;
+            sensor_be.tick(&world);
+        }
+        let sh_state = world.get_block_state(&shrieker_pos);
+        assert!(
+            !SculkShriekerLikeProperties::from_state_id(sh_state.id).shrieking,
+            "wool item landing must not trigger sensor or shrieker"
+        );
+
+        // 2. Four warnings from player vibrations (step, projectile, dropped item, container)
+        let cobble_item = Arc::new(ItemEntity::new(
+            Entity::new(
+                world.clone(),
+                Vector3::new(0.5, 64.0, 1.5),
+                &EntityType::ITEM,
+            ),
+            ItemStack::new(1, &Item::COBBLESTONE),
+        ));
+        cobble_item.set_thrower(player.gameprofile.id);
+        world.spawn_entity(cobble_item.clone() as Arc<dyn EntityBase>);
+
+        let arrow = Arc::new(ArrowEntity::new(
+            Entity::new(
+                world.clone(),
+                Vector3::new(0.5, 64.0, 1.5),
+                &EntityType::ARROW,
+            ),
+            Some(player.entity_id()),
+        ));
+        world.spawn_entity(arrow.clone() as Arc<dyn EntityBase>);
+
+        let events: [(GameEvent, Arc<dyn EntityBase>); 4] = [
+            (GameEvent::Step, player.clone() as Arc<dyn EntityBase>),
+            (GameEvent::ProjectileLand, arrow as Arc<dyn EntityBase>),
+            (GameEvent::HitGround, cobble_item as Arc<dyn EntityBase>),
+            (
+                GameEvent::ContainerOpen,
+                player.clone() as Arc<dyn EntityBase>,
+            ),
+        ];
+
+        for (idx, (event, source)) in events.into_iter().enumerate() {
+            let expected_warning = (idx + 1) as i32;
+            // Reset sensor phase to Inactive so it can immediately trigger for the next test step
+            world.set_block_state(
+                &sensor_pos,
+                Block::SCULK_SENSOR.default_state.id,
+                BlockFlags::empty(),
+            );
+            world.game_event(
+                event,
+                Vector3::new(0.5, 64.0, 1.5),
+                vibration::GameEventContext::of(Some(source), None),
+            );
+            for _ in 0..10 {
+                world.level_time.lock().unwrap().world_age += 1;
+                sensor_be.tick(&world);
+                shrieker_be.tick(&world);
+            }
+            let sh_props =
+                SculkShriekerLikeProperties::from_state_id(world.get_block_state(&shrieker_pos).id);
+            assert!(
+                sh_props.shrieking,
+                "shrieker should be shrieking on warning {expected_warning}"
+            );
+            assert_eq!(
+                *shrieker_be.warning_level.lock().unwrap(),
+                expected_warning,
+                "warning level mismatch on warning {expected_warning}"
+            );
+
+            SculkShriekerBlock.on_scheduled_tick(OnScheduledTickArgs {
+                world: &world,
+                block: &Block::SCULK_SHRIEKER,
+                position: &shrieker_pos,
+            });
+            for _ in 0..205 {
+                player.warden_spawn_tracker.lock().unwrap().tick();
+            }
+
+            let warden_count = world
+                .entities
+                .load()
+                .iter()
+                .filter(|e| e.get_entity().entity_type == &EntityType::WARDEN)
+                .count();
+            if expected_warning < 4 {
+                assert_eq!(warden_count, 0, "warden must not spawn before 4th warning");
+            } else {
+                assert_eq!(warden_count, 1, "warden must spawn on 4th warning");
+            }
+        }
+
+        // 3. Verify the spawned Warden listens to vibrations and increases anger toward the player
+        let warden_entity = world
+            .entities
+            .load()
+            .iter()
+            .find(|e| e.get_entity().entity_type == &EntityType::WARDEN)
+            .cloned()
+            .expect("spawned warden");
+        let warden = warden_entity
+            .cast_any()
+            .downcast_ref::<WardenEntity>()
+            .expect("downcast WardenEntity");
+        warden
+            .get_entity()
+            .set_pose(pumpkin_data::entity::EntityPose::Standing);
+        warden.vibration_cooldown.store(0, Ordering::Relaxed);
+        world.game_event(
+            GameEvent::Step,
+            player.living_entity.entity.pos.load(),
+            vibration::GameEventContext::of(Some(player.clone() as Arc<dyn EntityBase>), None),
+        );
+        for _ in 0..10 {
+            world.level_time.lock().unwrap().world_age += 1;
+            if let Some(user) = warden_entity.as_vibration_user() {
+                vibration::tick(user, &world);
+            }
+        }
+        let anger = warden
+            .anger
+            .lock()
+            .unwrap()
+            .active_anger(Some(player.living_entity.entity.entity_uuid));
+        assert!(
+            anger >= 35,
+            "warden should gain anger toward the player after receiving their vibration, got {anger}"
+        );
+
+        // 4. Verify Allay hears NoteBlockPlay and dances to JukeboxPlay
+        let allay = AllayEntity::new(Entity::new(
+            world.clone(),
+            Vector3::new(-2.5, 64.0, 0.5),
+            &EntityType::ALLAY,
+        ));
+        world.spawn_entity(allay.clone() as Arc<dyn EntityBase>);
+
+        let note_pos = BlockPos::new(-3, 64, 0);
+        world.game_event(
+            GameEvent::NoteBlockPlay,
+            note_pos.to_centered_f64(),
+            vibration::GameEventContext::of(None, None),
+        );
+        for _ in 0..10 {
+            world.level_time.lock().unwrap().world_age += 1;
+            if let Some(user) = (allay.clone() as Arc<dyn EntityBase>).as_vibration_user() {
+                vibration::tick(user, &world);
+            }
+        }
+        assert_eq!(
+            allay
+                .liked_noteblock_pos
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|(_, pos)| *pos),
+            Some(note_pos),
+            "allay should remember liked note block position after hearing NoteBlockPlay"
+        );
+
+        let jukebox_pos = BlockPos::new(-2, 64, 1);
+        world.set_block_state(
+            &jukebox_pos,
+            Block::JUKEBOX.default_state.id,
+            BlockFlags::empty(),
+        );
+        world.game_event(
+            GameEvent::JukeboxPlay,
+            jukebox_pos.to_centered_f64(),
+            vibration::GameEventContext::of(None, None),
+        );
+        assert!(allay.is_dancing(), "allay should dance on JukeboxPlay");
+        world.game_event(
+            GameEvent::JukeboxStopPlay,
+            jukebox_pos.to_centered_f64(),
+            vibration::GameEventContext::of(None, None),
+        );
+        assert!(
+            !allay.is_dancing(),
+            "allay should stop dancing on JukeboxStopPlay"
+        );
     }
 }

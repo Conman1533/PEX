@@ -11,8 +11,11 @@ use pumpkin_data::game_event::GameEvent;
 use pumpkin_data::particle::Particle;
 use pumpkin_data::tag::{self, Tag, Taggable};
 use pumpkin_data::{Block, BlockDirection, BlockStateId};
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+use uuid::Uuid;
 
 use crate::entity::EntityBase;
 use crate::world::World;
@@ -146,7 +149,121 @@ pub struct VibrationInfo {
     pub event: GameEvent,
     pub distance: f32,
     pub pos: Vector3<f64>,
+    pub uuid: Option<Uuid>,
+    pub projectile_owner: Option<Uuid>,
     pub source: Option<Arc<dyn EntityBase>>,
+}
+
+impl VibrationInfo {
+    #[must_use]
+    pub fn from_context(
+        world: &World,
+        event: GameEvent,
+        distance: f32,
+        pos: Vector3<f64>,
+        context: &GameEventContext,
+    ) -> Self {
+        let uuid = context.source.as_ref().map(|e| e.get_entity().entity_uuid);
+        let projectile_owner = context
+            .source
+            .as_ref()
+            .and_then(|e| e.get_owner_id())
+            .and_then(|id| {
+                world
+                    .get_player_by_id(id)
+                    .map(|p| p.get_entity().entity_uuid)
+                    .or_else(|| {
+                        world
+                            .get_entity_by_id(id)
+                            .map(|e| e.get_entity().entity_uuid)
+                    })
+            });
+        Self {
+            event,
+            distance,
+            pos,
+            uuid,
+            projectile_owner,
+            source: context.source.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn resolve_entity(&self, world: &World) -> Option<Arc<dyn EntityBase>> {
+        self.source.clone().or_else(|| {
+            self.uuid.and_then(|uuid| {
+                world
+                    .get_player_by_uuid(uuid)
+                    .map(|p| p as Arc<dyn EntityBase>)
+                    .or_else(|| world.get_entity_by_uuid(uuid))
+            })
+        })
+    }
+
+    #[must_use]
+    pub fn resolve_projectile_owner(&self, world: &World) -> Option<Arc<dyn EntityBase>> {
+        self.resolve_entity(world)
+            .and_then(|entity| entity.get_owner_id())
+            .and_then(|id| {
+                world
+                    .get_player_by_id(id)
+                    .map(|p| p as Arc<dyn EntityBase>)
+                    .or_else(|| world.get_entity_by_id(id))
+            })
+            .or_else(|| {
+                self.projectile_owner.and_then(|uuid| {
+                    world
+                        .get_player_by_uuid(uuid)
+                        .map(|p| p as Arc<dyn EntityBase>)
+                        .or_else(|| world.get_entity_by_uuid(uuid))
+                })
+            })
+    }
+
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        nbt.put_string("game_event", format!("minecraft:{}", self.event.name()));
+        nbt.put_float("distance", self.distance);
+        nbt.put(
+            "pos",
+            NbtTag::List(vec![
+                self.pos.x.into(),
+                self.pos.y.into(),
+                self.pos.z.into(),
+            ]),
+        );
+        if let Some(uuid) = self.uuid {
+            nbt.put_uuid("source", uuid);
+        }
+        if let Some(projectile_owner) = self.projectile_owner {
+            nbt.put_uuid("projectile_owner", projectile_owner);
+        }
+        nbt
+    }
+
+    #[must_use]
+    pub fn from_nbt(nbt: &NbtCompound) -> Option<Self> {
+        let event = GameEvent::from_name(nbt.get_string("game_event")?)?;
+        let distance = nbt.get_float("distance")?.max(0.0);
+        let pos_list = nbt.get_list("pos")?;
+        if pos_list.len() < 3 {
+            return None;
+        }
+        let pos = Vector3::new(
+            pos_list[0].extract_double()?,
+            pos_list[1].extract_double()?,
+            pos_list[2].extract_double()?,
+        );
+        Some(Self {
+            event,
+            distance,
+            pos,
+            uuid: nbt.get_uuid("source"),
+            projectile_owner: nbt.get_uuid("projectile_owner"),
+            source: None,
+        })
+    }
 }
 
 /// `VibrationSelector`: of the vibrations offered in one tick, keeps the closest, and on a tie the
@@ -187,6 +304,28 @@ impl VibrationSelector {
     fn start_over(&mut self) {
         self.candidate = None;
     }
+
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        if let Some((ref info, tick)) = self.candidate {
+            nbt.put_compound("event", info.to_nbt());
+            nbt.put_long("tick", tick);
+        } else {
+            nbt.put_long("tick", -1);
+        }
+        nbt
+    }
+
+    #[must_use]
+    pub fn from_nbt(nbt: &NbtCompound) -> Option<Self> {
+        let tick = nbt.get_long("tick")?;
+        let candidate = nbt
+            .get_compound("event")
+            .and_then(VibrationInfo::from_nbt)
+            .map(|info| (info, tick));
+        Some(Self { candidate })
+    }
 }
 
 /// `VibrationSystem.Data`.
@@ -195,14 +334,70 @@ pub struct VibrationData {
     pub current: Option<VibrationInfo>,
     pub selector: VibrationSelector,
     pub travel_time_in_ticks: i32,
+    pub reload_vibration_particle: bool,
+}
+
+impl VibrationData {
+    pub const NBT_TAG_KEY: &'static str = "listener";
+
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            current: None,
+            selector: VibrationSelector::new(),
+            travel_time_in_ticks: 0,
+            reload_vibration_particle: false,
+        }
+    }
+
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        if let Some(ref current) = self.current {
+            nbt.put_compound("event", current.to_nbt());
+        }
+        nbt.put_compound("selector", self.selector.to_nbt());
+        nbt.put_int("event_delay", self.travel_time_in_ticks.max(0));
+        nbt
+    }
+
+    #[must_use]
+    pub fn from_nbt(nbt: &NbtCompound) -> Self {
+        let current = nbt.get_compound("event").and_then(VibrationInfo::from_nbt);
+        let selector = nbt
+            .get_compound("selector")
+            .and_then(VibrationSelector::from_nbt)
+            .unwrap_or_default();
+        let travel_time_in_ticks = nbt.get_int("event_delay").unwrap_or(0).max(0);
+        Self {
+            current,
+            selector,
+            travel_time_in_ticks,
+            reload_vibration_particle: true,
+        }
+    }
+
+    pub fn write_nbt(&self, nbt: &mut NbtCompound) {
+        nbt.put_compound(Self::NBT_TAG_KEY, self.to_nbt());
+    }
+
+    #[must_use]
+    pub fn read_nbt(nbt: &NbtCompound) -> Self {
+        nbt.get_compound(Self::NBT_TAG_KEY)
+            .map_or_else(Self::default, Self::from_nbt)
+    }
 }
 
 /// `VibrationSystem.User`, implemented by each listener.
 pub trait VibrationUser: Send + Sync {
     fn vibration_data(&self) -> &Mutex<VibrationData>;
     fn listener_radius(&self) -> i32;
-    /// Where the listener is: the block centre for block listeners.
+    /// Where the listener is: the block centre for block listeners, or eye/body pos for entities.
     fn listener_pos(&self) -> Vector3<f64>;
+    /// `(entity_id, y_offset)` when the listener uses `EntityPositionSource`, or `None` for blocks.
+    fn listener_entity(&self) -> Option<(i32, f32)> {
+        None
+    }
     fn can_receive_vibration(
         &self,
         world: &World,
@@ -216,6 +411,7 @@ pub trait VibrationUser: Send + Sync {
         origin: &BlockPos,
         event: GameEvent,
         source: Option<&Arc<dyn EntityBase>>,
+        projectile_owner: Option<&Arc<dyn EntityBase>>,
         distance: f32,
     );
     fn listenable_events(&self) -> &'static Tag {
@@ -247,6 +443,9 @@ pub trait VibrationUser: Send + Sync {
             {
                 return false;
             }
+            if source.dampens_vibrations() {
+                return false;
+            }
         }
         context.affected_state.is_none_or(|state| {
             !Block::from_state_id(state).has_tag(&tag::Block::MINECRAFT_DAMPENS_VIBRATIONS)
@@ -274,12 +473,7 @@ pub fn handle_game_event(
     }
     let distance = source_pos.sub(&destination).length() as f32;
     lock(user.vibration_data()).selector.add_candidate(
-        VibrationInfo {
-            event,
-            distance,
-            pos: source_pos,
-            source: context.source.clone(),
-        },
+        VibrationInfo::from_context(world, event, distance, source_pos, context),
         world.get_world_age(),
     );
     true
@@ -296,12 +490,7 @@ pub fn force_schedule_vibration(
 ) {
     let distance = origin.sub(&user.listener_pos()).length() as f32;
     lock(user.vibration_data()).selector.add_candidate(
-        VibrationInfo {
-            event,
-            distance,
-            pos: origin,
-            source: context.source.clone(),
-        },
+        VibrationInfo::from_context(world, event, distance, origin, context),
         world.get_world_age(),
     );
 }
@@ -314,19 +503,30 @@ pub fn tick(user: &dyn VibrationUser, world: &Arc<World>) {
             && let Some(vibration) = data.selector.chosen_candidate(world.get_world_age())
         {
             data.travel_time_in_ticks = user.travel_time_in_ticks(vibration.distance);
-            send_vibration_particle(
-                world,
-                vibration.pos,
-                user.listener_pos(),
-                data.travel_time_in_ticks,
-            );
+            send_vibration_particle(world, vibration.pos, user, data.travel_time_in_ticks);
             data.current = Some(vibration);
             data.selector.start_over();
         }
         let Some(current) = data.current.clone() else {
             return;
         };
-        data.travel_time_in_ticks -= 1;
+        if data.reload_vibration_particle {
+            let initial_travel_time = user.travel_time_in_ticks(current.distance);
+            let destination = user.listener_pos();
+            let alpha = if initial_travel_time > 0 {
+                1.0 - f64::from(data.travel_time_in_ticks) / f64::from(initial_travel_time)
+            } else {
+                0.0
+            };
+            let pos = Vector3::new(
+                current.pos.x + alpha * (destination.x - current.pos.x),
+                current.pos.y + alpha * (destination.y - current.pos.y),
+                current.pos.z + alpha * (destination.z - current.pos.z),
+            );
+            send_vibration_particle(world, pos, user, data.travel_time_in_ticks);
+            data.reload_vibration_particle = false;
+        }
+        data.travel_time_in_ticks = (data.travel_time_in_ticks - 1).max(0);
         if data.travel_time_in_ticks > 0 {
             return;
         }
@@ -340,12 +540,15 @@ pub fn tick(user: &dyn VibrationUser, world: &Arc<World>) {
         return;
     }
     let distance = (origin.squared_distance(&destination) as f32).sqrt();
+    let source = arrived.resolve_entity(world);
+    let projectile_owner = arrived.resolve_projectile_owner(world);
     lock(user.vibration_data()).current = None;
     user.on_receive_vibration(
         world,
         &origin,
         arrived.event,
-        arrived.source.as_ref(),
+        source.as_ref(),
+        projectile_owner.as_ref(),
         distance,
     );
 }
@@ -370,19 +573,31 @@ fn adjacent_chunks_loaded(world: &World, pos: &BlockPos) -> bool {
     })
 }
 
-/// The `minecraft:vibration` particle: a block position source and the arrival time.
+/// The `minecraft:vibration` particle: encodes `PositionSource` (0 = block, 1 = entity) + arrival ticks.
 fn send_vibration_particle(
     world: &World,
     origin: Vector3<f64>,
-    destination: Vector3<f64>,
+    user: &dyn VibrationUser,
     ticks: i32,
 ) {
     let mut data = Vec::with_capacity(16);
-    // PositionSourceType: 0 = block
-    if VarInt(0).encode(&mut data).is_err() {
-        return;
+    if let Some((entity_id, y_offset)) = user.listener_entity() {
+        // PositionSourceType: 1 = entity
+        if VarInt(1).encode(&mut data).is_err() || VarInt(entity_id).encode(&mut data).is_err() {
+            return;
+        }
+        data.extend_from_slice(&y_offset.to_be_bytes());
+    } else {
+        // PositionSourceType: 0 = block
+        if VarInt(0).encode(&mut data).is_err() {
+            return;
+        }
+        data.extend_from_slice(
+            &BlockPos::floored_v(user.listener_pos())
+                .as_long()
+                .to_be_bytes(),
+        );
     }
-    data.extend_from_slice(&BlockPos::floored_v(destination).as_long().to_be_bytes());
     if VarInt(ticks).encode(&mut data).is_err() {
         return;
     }
@@ -537,6 +752,8 @@ mod tests {
             event,
             distance,
             pos: Vector3::new(0.0, 0.0, 0.0),
+            uuid: None,
+            projectile_owner: None,
             source: None,
         };
         let mut selector = VibrationSelector::default();
@@ -563,5 +780,55 @@ mod tests {
             },
         );
         assert_eq!(seen, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn vibration_data_nbt_round_trips_current_and_selector() {
+        let source_uuid = Uuid::from_u128(0x1111_2222_3333_4444_5555_6666_7777_8888);
+        let owner_uuid = Uuid::from_u128(0x9999_aaaa_bbbb_cccc_dddd_eeee_ffff_0000);
+        let mut selector = VibrationSelector::new();
+        selector.add_candidate(
+            VibrationInfo {
+                event: GameEvent::ProjectileLand,
+                distance: 4.5,
+                pos: Vector3::new(1.25, 64.0, -3.5),
+                uuid: Some(source_uuid),
+                projectile_owner: Some(owner_uuid),
+                source: None,
+            },
+            42,
+        );
+        let data = VibrationData {
+            current: Some(VibrationInfo {
+                event: GameEvent::Step,
+                distance: 3.0,
+                pos: Vector3::new(10.5, 70.0, 20.5),
+                uuid: Some(owner_uuid),
+                projectile_owner: None,
+                source: None,
+            }),
+            selector,
+            travel_time_in_ticks: 3,
+            reload_vibration_particle: false,
+        };
+        let mut root = NbtCompound::new();
+        data.write_nbt(&mut root);
+
+        let restored = VibrationData::read_nbt(&root);
+        assert!(restored.reload_vibration_particle);
+        assert_eq!(restored.travel_time_in_ticks, 3);
+        let current = restored.current.unwrap();
+        assert_eq!(current.event, GameEvent::Step);
+        assert_eq!(current.distance, 3.0);
+        assert_eq!(current.pos, Vector3::new(10.5, 70.0, 20.5));
+        assert_eq!(current.uuid, Some(owner_uuid));
+        assert_eq!(current.projectile_owner, None);
+
+        let chosen = restored.selector.chosen_candidate(43).unwrap();
+        assert_eq!(chosen.event, GameEvent::ProjectileLand);
+        assert_eq!(chosen.distance, 4.5);
+        assert_eq!(chosen.pos, Vector3::new(1.25, 64.0, -3.5));
+        assert_eq!(chosen.uuid, Some(source_uuid));
+        assert_eq!(chosen.projectile_owner, Some(owner_uuid));
     }
 }

@@ -75,18 +75,28 @@ impl BlockEntity for JukeboxBlockEntity {
         }
     }
 
-    fn tick(&self, _world: &Arc<World>) {
+    fn tick(&self, world: &Arc<World>) {
         // Increment ticks if we're playing
         let song_length = self.song_length_ticks.load(Ordering::Relaxed);
         if song_length > 0 {
             let ticks = self
                 .ticks_since_song_started
                 .fetch_add(1, Ordering::Relaxed);
+            if ticks.is_multiple_of(20) {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::JukeboxPlay,
+                    self.position.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::default(),
+                );
+            }
             // Check if song has finished
             if ticks >= song_length {
                 self.stop_playing();
-                // TODO: Update block state to has_record = false? Or just stop redstone?
-                // In vanilla, the disc stays but music stops and redstone turns off
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::JukeboxStopPlay,
+                    self.position.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::default(),
+                );
             }
         }
     }

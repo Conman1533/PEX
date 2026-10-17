@@ -6216,15 +6216,20 @@ impl World {
                     .get(block_pos)
                     .cloned()
             })
-            .flatten()?;
-        if let Some(custom_data) = nbt
-            .get_compound("PumpkinCustomData")
-            .or_else(|| nbt.get_compound("BukkitValues"))
-        {
-            self.custom_block_entity_data
-                .insert(*block_pos, custom_data.clone());
-        }
-        let entity = block_entity_from_nbt(&nbt)?;
+            .flatten();
+        let entity = if let Some(nbt) = nbt {
+            if let Some(custom_data) = nbt
+                .get_compound("PumpkinCustomData")
+                .or_else(|| nbt.get_compound("BukkitValues"))
+            {
+                self.custom_block_entity_data
+                    .insert(*block_pos, custom_data.clone());
+            }
+            block_entity_from_nbt(&nbt)?
+        } else {
+            let state = self.get_block_state(block_pos);
+            crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
+        };
         self.block_entities
             .entry(chunk_pos)
             .or_default()
@@ -6903,7 +6908,10 @@ impl World {
 
     /// `ServerLevel.gameEvent`: tells plugins, then offers the event to every vibration listener
     /// in range (`GameEventDispatcher.post`).
-    #[expect(clippy::needless_pass_by_value, reason = "callers build the context inline")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "callers build the context inline"
+    )]
     pub fn game_event(
         &self,
         event: pumpkin_data::game_event::GameEvent,
@@ -6931,6 +6939,34 @@ impl World {
             let radius = user.listener_radius();
             if listener.squared_distance(&center) <= radius * radius {
                 vibration::handle_game_event(user, self, event, context, position);
+            }
+        }
+        for entity in self.entities.load().iter() {
+            if !entity.get_entity().is_alive() {
+                continue;
+            }
+            if let Some(user) = entity.as_vibration_user() {
+                let listener = BlockPos::floored_v(user.listener_pos());
+                let radius = user.listener_radius();
+                if listener.squared_distance(&center) <= radius * radius {
+                    vibration::handle_game_event(user, self, event, context, position);
+                }
+            }
+            if matches!(
+                event,
+                pumpkin_data::game_event::GameEvent::JukeboxPlay
+                    | pumpkin_data::game_event::GameEvent::JukeboxStopPlay
+            ) && let Some(allay) = entity
+                .cast_any()
+                .downcast_ref::<crate::entity::passive::allay::AllayEntity>()
+            {
+                let listener = BlockPos::floored_v(allay.get_entity().get_eye_pos());
+                if listener.squared_distance(&center) <= radius * radius {
+                    allay.set_jukebox_playing(
+                        center,
+                        event == pumpkin_data::game_event::GameEvent::JukeboxPlay,
+                    );
+                }
             }
         }
     }
@@ -7455,6 +7491,36 @@ fn merge_entity_records(data: &mut Vec<NbtCompound>, live: bool, fresh: Vec<NbtC
 }
 
 /// A bare world with no loaded chunks, enough for entity queries.
+#[cfg(test)]
+pub(crate) fn test_player(world: &Arc<World>, pos: Vector3<f64>) -> Arc<Player> {
+    let profile = crate::net::GameProfile {
+        id: Uuid::new_v4(),
+        name: "TestPlayer".to_string(),
+        properties: ArcSwap::from_pointee(Vec::new()),
+        profile_actions: None,
+    };
+    let client = Arc::new(crate::net::ClientPlatform::Java(
+        crate::net::java::JavaClient::new_for_test(profile.clone()),
+    ));
+    let player = Arc::new(Player::new(
+        client,
+        profile,
+        crate::net::PlayerConfig::default(),
+        world,
+        pumpkin_util::GameMode::Survival,
+    ));
+    player.living_entity.entity.set_pos(pos);
+    world
+        .entity_sections
+        .add(&(player.clone() as Arc<dyn EntityBase>));
+    world.players.rcu(|players| {
+        let mut next = (**players).clone();
+        next.push(player.clone());
+        next
+    });
+    player
+}
+
 #[cfg(test)]
 pub(crate) fn test_world() -> Arc<World> {
     let path = tempfile::tempdir().expect("temp dir").keep();

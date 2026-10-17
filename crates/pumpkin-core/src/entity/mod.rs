@@ -191,6 +191,15 @@ pub trait EntityBase: Send + Sync + std::any::Any {
         None
     }
 
+    /// Vanilla `Entity.dampensVibrations`.
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        None
+    }
+
     fn get_eye_pos(&self) -> Vector3<f64> {
         self.get_entity().get_eye_pos()
     }
@@ -1693,7 +1702,14 @@ impl Entity {
             }
 
             if !self.touching_water.load(Ordering::SeqCst) {
-
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Splash,
+                    self.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        None,
+                    ),
+                );
                 // TODO: Spawn splash particles
             }
         }
@@ -1910,6 +1926,7 @@ impl Entity {
             self.velocity.store(Vector3::default());
         }
 
+        let was_on_ground = self.on_ground.load(Ordering::SeqCst);
         let final_move = self.adjust_movement_for_collisions(motion, caller);
 
         self.move_pos(final_move);
@@ -1918,9 +1935,22 @@ impl Entity {
 
         self.velocity.store(final_move * velocity_multiplier);
 
+        let on_ground = self.on_ground.load(Ordering::SeqCst);
         if let Some(living) = caller.get_living_entity() {
-            let on_ground = self.on_ground.load(Ordering::SeqCst);
             living.fall(caller, final_move.y, on_ground);
+        } else if !was_on_ground && on_ground && motion.y < 0.0 {
+            let world = self.world.load_full();
+            let landed_on = self
+                .get_supporting_block_pos()
+                .unwrap_or_else(|| self.block_pos.load().down());
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::HitGround,
+                self.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, caller),
+                    Some(world.get_block_state_id(&landed_on)),
+                ),
+            );
         }
 
         if motion.y != final_move.y {
@@ -2415,11 +2445,34 @@ impl Entity {
         };
         let move_dist = self.move_dist.load() + moved;
         self.move_dist.store(move_dist);
-        if move_dist <= self.next_step.load() || state.is_air() {
+        if move_dist <= self.next_step.load() {
             return;
         }
         let on_ground = self.on_ground.load(Ordering::Relaxed);
         let source = crate::world::vibration::entity_handle(&world, caller);
+        if state.is_air() {
+            if !on_ground
+                && matches!(
+                    self.entity_type.id,
+                    id if id == EntityType::ALLAY.id
+                        || id == EntityType::BEE.id
+                        || id == EntityType::BAT.id
+                        || id == EntityType::PARROT.id
+                        || id == EntityType::CHICKEN.id
+                        || id == EntityType::PHANTOM.id
+                        || id == EntityType::VEX.id
+                        || id == EntityType::ENDER_DRAGON.id
+                )
+            {
+                self.next_step.store(move_dist.floor() + 1.0);
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Flap,
+                    self.pos.load(),
+                    crate::world::vibration::GameEventContext::of(source, None),
+                );
+            }
+            return;
+        }
         if (on_ground || climbing || (self.is_sneaking() && movement.y == 0.0))
             && !self.is_swimming()
         {

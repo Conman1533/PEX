@@ -93,7 +93,14 @@ impl ItemBehaviour for FishingRodItem {
             world.spawn_entity(bobber_arc);
 
             // Vanilla `ItemStack.causeUseVibration(player, ITEM_INTERACT_START)`.
-            world.emit_game_event(GameEvent::ItemInteractStart.name(), player.position());
+            world.game_event(
+                GameEvent::ItemInteractStart,
+                player.position(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, player),
+                    None,
+                ),
+            );
         } else {
             // Reel in
             if let Some(bobber_base) = world.get_entity_by_id(bobber_id) {
@@ -117,7 +124,14 @@ impl ItemBehaviour for FishingRodItem {
             );
 
             // Vanilla `ItemStack.causeUseVibration(player, ITEM_INTERACT_FINISH)`.
-            world.emit_game_event(GameEvent::ItemInteractFinish.name(), player.position());
+            world.game_event(
+                GameEvent::ItemInteractFinish,
+                player.position(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, player),
+                    None,
+                ),
+            );
         }
     }
 
