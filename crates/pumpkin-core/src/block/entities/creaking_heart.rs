@@ -273,6 +273,10 @@ impl CreakingHeartBlockEntity {
         self.creaking_uuid.load() == Some(creaking_uuid)
     }
 
+    pub fn get_creaking_uuid(&self) -> Option<Uuid> {
+        self.creaking_uuid.load()
+    }
+
     pub fn set_creaking_uuid(&self, uuid: Option<Uuid>) {
         self.creaking_uuid.store(uuid);
     }
