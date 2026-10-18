@@ -26,7 +26,13 @@ members = [
     "crates/pumpkin-world",
     "tools/pumpkin-codegen",
     "tools/pumpkin-fuzzer",
+    "native-plugins/common",
+    "native-plugins/template",
+    "native-plugins/worldpumpkin",
+    "native-plugins/pexguard",
+    "native-plugins/pexprotect",
 ]
+exclude = ["native-plugins/tools/testbot"]
 
 # [workspace.lints.rust]
 # missing_docs = "warn"

@@ -1,0 +1,23 @@
+[package]
+name = "pexguard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0"
+description = "Region protection for PEX: build, interact, PvP, explosions, fire, entry and more."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pex-common = { path = "../common" }
+pumpkin = { path = "../../crates/pumpkin-core", package = "pumpkin-core" }
+pumpkin-data.workspace = true
+pumpkin-util.workspace = true
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

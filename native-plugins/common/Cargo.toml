@@ -1,0 +1,21 @@
+[package]
+name = "pex-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0"
+description = "Shared helpers for PEX native plugins."
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+pumpkin = { path = "../../crates/pumpkin-core", package = "pumpkin-core" }
+pumpkin-util.workspace = true
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
