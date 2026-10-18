@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::entity::mob::zombie::ZombieEntityBase;
 use crate::entity::{
     Entity,
+    ai::goal::swim::SwimGoal,
     mob::{Mob, MobEntity},
 };
 use pumpkin_nbt::compound::NbtCompound;
@@ -14,6 +15,7 @@ pub struct DrownedEntity {
 impl DrownedEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
         let entity = ZombieEntityBase::new(entity);
+        Self::remove_float_goal(&entity);
         let zombie = Self { entity };
         let mob_arc = Arc::new(zombie);
         // Fix duplicated since already in ZombieEntity::new()
@@ -37,8 +39,20 @@ impl DrownedEntity {
     #[must_use]
     pub fn with_can_break_doors(entity: Entity, can_break_doors: bool) -> Arc<Self> {
         let entity = ZombieEntityBase::with_can_break_doors(entity, can_break_doors);
+        Self::remove_float_goal(&entity);
         let zombie = Self { entity };
         Arc::new(zombie)
+    }
+
+    /// Vanilla `Drowned.addBehaviourGoals` has no `FloatGoal`: drowned sink and walk the bottom
+    /// instead of bobbing at the surface like the shared zombie goals make them.
+    fn remove_float_goal(entity: &ZombieEntityBase) {
+        entity
+            .mob_entity
+            .goals_selector
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove_goals::<SwimGoal>();
     }
 }
 
