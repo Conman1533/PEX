@@ -104,6 +104,14 @@ impl ItemBehaviour for ShearsItem {
             let world = player.world();
             let pos = sheep.mob_entity.living_entity.entity.pos.load();
             world.play_sound(Sound::EntitySheepShear, SoundCategory::Players, &pos);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::Shear,
+                pos,
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, player),
+                    None,
+                ),
+            );
 
             let wool_count = (rand::random::<u8>() % 3 + 1) as u8;
             let wool_item = get_wool_item_for_color(sheep.get_color());
@@ -200,6 +208,14 @@ fn handle_beehive(
         SoundCategory::Blocks,
         &location.to_f64(),
     );
+    world.game_event(
+        pumpkin_data::game_event::GameEvent::Shear,
+        location.to_centered_f64(),
+        crate::world::vibration::GameEventContext::of(
+            crate::world::vibration::entity_handle(&world, player),
+            None,
+        ),
+    );
 
     let drop_pos = location.to_centered_f64();
     for item in drops {
@@ -222,6 +238,14 @@ fn handle_pumpkin(player: &Player, location: &BlockPos, block: &Block) -> bool {
             Sound::BlockPumpkinCarve,
             SoundCategory::Blocks,
             &location.to_f64(),
+        );
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::Shear,
+            location.to_centered_f64(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, player),
+                None,
+            ),
         );
 
         let drop_pos = location.to_centered_f64();

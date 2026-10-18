@@ -139,7 +139,9 @@ impl TridentEntity {
         }
 
         // Skip owner for initial frames (5 ticks)
-        if Some(other_ent.entity_id) == self.owner_id && self_ent.age.load(Ordering::Relaxed) < 5 {
+        if Some(other_ent.entity_id) == self.owner_id
+            && self_ent.tick_count.load(Ordering::Relaxed) < 5
+        {
             return true;
         }
 
@@ -161,9 +163,23 @@ impl EntityBase for TridentEntity {
         self.owner_id
     }
 
+    #[allow(clippy::too_many_lines)]
     fn tick(&self, caller: &dyn EntityBase, _server: &Server) {
         let entity = self.get_entity();
         let world = entity.world.load();
+
+        if entity.age.fetch_add(1, Ordering::Relaxed) == 0 {
+            let owner = self.owner_id.and_then(|id| {
+                world
+                    .get_entity_by_id(id)
+                    .or_else(|| world.get_player_by_id(id).map(|p| p as Arc<dyn EntityBase>))
+            });
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileShoot,
+                entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(owner, None),
+            );
+        }
 
         // Handle shake time
         let shake = self.shake_time.load(Ordering::Relaxed);
@@ -320,6 +336,14 @@ impl EntityBase for TridentEntity {
                         .block_registry
                         .on_projectile_hit(block, &world, self, &pos, state, &hit_pos, &server);
                 }
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::ProjectileLand,
+                    pos.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, self),
+                        Some(state.id),
+                    ),
+                );
 
                 // Stop the trident
                 entity.velocity.store(Vector3::new(0.0, 0.0, 0.0));
@@ -342,6 +366,14 @@ impl EntityBase for TridentEntity {
                 hit_pos,
                 ..
             } => {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::ProjectileLand,
+                    hit_pos,
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, self),
+                        None,
+                    ),
+                );
                 let mut damage = Self::BASE_DAMAGE;
 
                 // Apply Impaling enchantment extra damage

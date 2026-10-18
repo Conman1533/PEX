@@ -84,6 +84,41 @@ pub struct ChunkData {
     pub custom_data: std::sync::Mutex<NbtCompound>,
 }
 
+impl ChunkData {
+    /// Positions of every block whose state has a block entity type. Sections whose palette has
+    /// no such state are skipped.
+    #[must_use]
+    pub fn block_entity_block_positions(&self) -> Vec<BlockPos> {
+        let has_block_entity = |id: BlockStateId| id.to_state().block_entity_type != u16::MAX;
+        let sections = self
+            .section
+            .block_sections
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut positions = Vec::new();
+        for (index, section) in sections.iter().enumerate() {
+            if !section.palette_contains(has_block_entity) {
+                continue;
+            }
+            let base_y = self.section.min_y + index as i32 * 16;
+            for y in 0..16 {
+                for z in 0..16 {
+                    for x in 0..16 {
+                        if has_block_entity(section.get(x, y, z)) {
+                            positions.push(BlockPos::new(
+                                (self.x << 4) + x as i32,
+                                base_y + y as i32,
+                                (self.z << 4) + z as i32,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        positions
+    }
+}
+
 pub struct ChunkEntityData {
     /// Chunk X
     pub x: i32,

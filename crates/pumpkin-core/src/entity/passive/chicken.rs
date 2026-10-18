@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering, Ordering::Relaxed},
@@ -8,6 +10,7 @@ use pumpkin_data::chicken_variant::ChickenVariant;
 use pumpkin_data::game_event::GameEvent;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::{entity::EntityType, item::Item};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -26,15 +29,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[
-    &Item::WHEAT_SEEDS,
-    &Item::MELON_SEEDS,
-    &Item::PUMPKIN_SEEDS,
-    &Item::BEETROOT_SEEDS,
-    &Item::TORCHFLOWER_SEEDS,
-    &Item::PITCHER_POD,
-];
 
 /// Represents a Chicken, a passive mob that lays eggs and is immune to fall damage.
 ///
@@ -77,9 +71,16 @@ impl ChickenEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.4));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.0, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.0,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_CHICKEN_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
                 6,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -136,15 +137,39 @@ impl AgeableMob for ChickenEntity {
 
 impl Animal for ChickenEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        use pumpkin_data::tag::Taggable;
-        item_stack
-            .item
-            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_CHICKEN_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_CHICKEN_FOOD)
+    }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::CHICKEN, world);
+        if let Some(child) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            child.set_variant(
+                ChickenVariant::from_id(parent.variant.load(Ordering::Relaxed)).unwrap_or_default(),
+            );
+        }
+        Some(baby)
     }
 }
 
 impl Mob for ChickenEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant =
+            ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+                .unwrap_or_default();
+        Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -269,13 +294,6 @@ impl Mob for ChickenEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        let sound_variant =
-            ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-                .unwrap_or_default();
-        self.animal_interact(
-            player,
-            item_stack,
-            sound_variant.ambient_sound(self.is_baby()),
-        )
+        self.animal_interact(player, item_stack)
     }
 }

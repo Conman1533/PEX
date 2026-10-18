@@ -86,6 +86,18 @@ impl FireworkRocketEntity {
             EntityStatus::FireworksExplode,
             Some(ActorEventID::FireworksExplode),
         );
+        let owner = self.entity.owner_id.and_then(|id| {
+            world.get_entity_by_id(id).or_else(|| {
+                world
+                    .get_player_by_id(id)
+                    .map(|p| p as std::sync::Arc<dyn EntityBase>)
+            })
+        });
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::Explode,
+            entity.pos.load(),
+            crate::world::vibration::GameEventContext::of(owner, None),
+        );
 
         entity.remove();
     }

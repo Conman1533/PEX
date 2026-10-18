@@ -440,8 +440,6 @@ pub struct PathNavigation {
     pub required_path_length: f32,
     pub ticks_on_current_node: u32,
     pub last_node_index: usize,
-    pub total_ticks: u32,
-    pub path_start_pos: Option<Vector3<f64>>,
     pub path_type_overrides: FxHashMap<PathType, f32>,
     pub mob_width: f32,
     pub mob_height: f32,
@@ -488,8 +486,6 @@ impl PathNavigation {
             required_path_length: 16.0,
             ticks_on_current_node: 0,
             last_node_index: 0,
-            total_ticks: 0,
-            path_start_pos: None,
             path_type_overrides: FxHashMap::default(),
             mob_width: 0.6,
             mob_height: 1.95,
@@ -528,14 +524,11 @@ impl PathNavigation {
         self.current_goal = None;
         self.path = None;
         self.ticks_on_current_node = 0;
-        self.total_ticks = 0;
-        self.path_start_pos = None;
     }
 
     pub fn finish_navigation(&mut self, entity: &LivingEntity) {
         self.stop();
         entity.movement_input.store(Vector3::new(0.0, 0.0, 0.0));
-        entity.jumping.store(false, Ordering::Relaxed);
     }
 
     pub fn set_pathfinding_malus(&mut self, path_type: PathType, malus: f32) {
@@ -661,6 +654,11 @@ impl PathNavigation {
                 .get_neighbors(&current, &mut self.neighbors_buf);
 
             for mut neighbor in self.neighbors_buf.drain(..) {
+                // Vanilla marks popped nodes as closed, and `isNeighborValid` never offers them
+                // again. Nodes here are copies, so check the closed set instead.
+                if closed_set.contains_key(&neighbor.pos.0) {
+                    continue;
+                }
                 let step_cost = current.distance(&neighbor);
                 neighbor.walked_dist = current.walked_dist + step_cost;
                 let tentative_g = current.g + step_cost + neighbor.cost_malus;
@@ -1008,7 +1006,6 @@ impl PathNavigation {
             return;
         }
 
-        self.total_ticks += 1;
         if self.repath_cooldown > 0 {
             self.repath_cooldown -= 1;
         }
@@ -1027,7 +1024,6 @@ impl PathNavigation {
             self.path = self.compute_path(entity, dest_v, self.reach_range);
             self.ticks_on_current_node = 0;
             self.last_node_index = 0;
-            self.path_start_pos = Some(entity.entity.pos.load());
             self.repath_cooldown = 15;
             self.time_last_recompute = world_age;
         }
@@ -1063,21 +1059,6 @@ impl PathNavigation {
             if self.ticks_on_current_node > 100 {
                 self.finish_navigation(entity);
                 return;
-            }
-
-            if self.total_ticks.is_multiple_of(100) {
-                if let Some(start_pos) = self.path_start_pos {
-                    let current_pos = entity.entity.pos.load();
-                    let dx = current_pos.x - start_pos.x;
-                    let dy = current_pos.y - start_pos.y;
-                    let dz = current_pos.z - start_pos.z;
-                    let dist_sq = dx * dx + dy * dy + dz * dz;
-                    if dist_sq < 4.0 {
-                        self.finish_navigation(entity);
-                        return;
-                    }
-                }
-                self.path_start_pos = Some(entity.entity.pos.load());
             }
 
             let on_ground = entity.entity.on_ground.load(Ordering::Relaxed);
@@ -1150,8 +1131,6 @@ impl PathNavigation {
                     && horizontal_dist_sq < jump_distance * jump_distance
                 {
                     entity.jumping.store(true, Ordering::SeqCst);
-                } else {
-                    entity.jumping.store(false, Ordering::SeqCst);
                 }
             } else {
                 self.finish_navigation(entity);
@@ -1490,7 +1469,6 @@ impl PathNavigationTrait for FlyingPathNavigation {
                 self.inner.path = self.inner.compute_path(entity, goal.destination, 1);
                 self.inner.ticks_on_current_node = 0;
                 self.inner.last_node_index = 0;
-                self.inner.path_start_pos = Some(entity.entity.pos.load());
                 self.inner.repath_cooldown = 15;
                 self.inner.time_last_recompute = world_age;
             }
@@ -1791,7 +1769,6 @@ impl PathNavigationTrait for WaterBoundPathNavigation {
                 self.inner.path = self.inner.compute_path(entity, goal.destination, 1);
                 self.inner.ticks_on_current_node = 0;
                 self.inner.last_node_index = 0;
-                self.inner.path_start_pos = Some(entity.entity.pos.load());
                 self.inner.repath_cooldown = 15;
                 self.inner.time_last_recompute = world_age;
             }
@@ -2119,8 +2096,6 @@ impl PathNavigationTrait for WallClimberNavigation {
                 entity.movement_input.store(Vector3::new(0.0, 0.0, speed));
                 if dy > 0.0 {
                     entity.jumping.store(true, Ordering::SeqCst);
-                } else {
-                    entity.jumping.store(false, Ordering::SeqCst);
                 }
             }
         }
@@ -2323,7 +2298,6 @@ impl PathNavigationTrait for AmphibiousPathNavigation {
                     self.inner.path = self.inner.compute_path(entity, goal.destination, 1);
                     self.inner.ticks_on_current_node = 0;
                     self.inner.last_node_index = 0;
-                    self.inner.path_start_pos = Some(entity.entity.pos.load());
                     self.inner.repath_cooldown = 15;
                     self.inner.time_last_recompute = world_age;
                 }

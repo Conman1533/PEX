@@ -219,7 +219,18 @@ impl LivingEntity {
         entity_type.death_sound.unwrap_or(Sound::EntityGenericDeath)
     }
 
-    fn get_pitch(&self) -> f32 {
+    /// Vanilla `LivingEntity.makeSound`: plays `sound` with this entity's voice pitch.
+    pub fn make_sound(&self, sound: Sound) {
+        self.entity.world.load().play_sound_fine(
+            sound,
+            SoundCategory::Neutral,
+            &self.entity.pos.load(),
+            1.0,
+            self.get_pitch(),
+        );
+    }
+
+    pub(crate) fn get_pitch(&self) -> f32 {
         let is_baby = self
             .get_mob()
             .and_then(|x| x.as_ageable())
@@ -628,6 +639,10 @@ impl LivingEntity {
     /// Sends the Hand animation to all others, used when Eating for example
     pub fn set_active_hand(&self, hand: Hand, stack: ItemStack, duration: i32) {
         self.item_use_time.store(duration, Ordering::Relaxed);
+        let cause_use_vibration = stack.item.id != Item::GOAT_HORN.id
+            && stack
+                .get_data_component::<pumpkin_data::data_component_impl::KineticWeaponImpl>()
+                .is_none();
         *self
             .item_in_use
             .lock()
@@ -642,6 +657,17 @@ impl LivingEntity {
             .clear();
         self.set_living_flag(Self::USING_ITEM_FLAG, true);
         self.set_living_flag(Self::OFF_HAND_ACTIVE_FLAG, hand == Hand::Left);
+        if cause_use_vibration {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ItemInteractStart,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, &self.entity),
+                    None,
+                ),
+            );
+        }
     }
 
     fn set_living_flag(&self, flag: u8, value: bool) {
@@ -685,10 +711,11 @@ impl LivingEntity {
     }
 
     pub fn clear_active_hand(&self) {
-        *self
+        let prev_item = self
             .item_in_use
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         *self
             .active_hand
             .lock()
@@ -700,6 +727,22 @@ impl LivingEntity {
         self.item_use_time.store(0, Ordering::Relaxed);
 
         self.set_living_flag(Self::USING_ITEM_FLAG, false);
+        if let Some(stack) = prev_item
+            && stack.item.id != Item::GOAT_HORN.id
+            && stack
+                .get_data_component::<pumpkin_data::data_component_impl::KineticWeaponImpl>()
+                .is_none()
+        {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ItemInteractFinish,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, &self.entity),
+                    None,
+                ),
+            );
+        }
     }
 
     pub fn was_recently_stabbed(&self, target_id: i32, now: i32, allowed_ticks: i32) -> bool {
@@ -1552,6 +1595,7 @@ impl LivingEntity {
         let movement_input = self.movement_input.load();
 
         let falling = self.entity.velocity.load().y <= 0.0;
+        let old_y = self.entity.pos.load().y;
         let gravity = self.get_effective_gravity(caller);
         let effective_speed = self.get_attribute_value(&Attributes::MOVEMENT_SPEED);
 
@@ -1619,17 +1663,17 @@ impl LivingEntity {
             self.entity.velocity.store(velo);
         }
 
-        let mut velo = self.entity.velocity.load();
+        self.jump_out_of_fluid(old_y);
+    }
 
+    /// Vanilla `LivingEntity.jumpOutOfFluid`: hop onto a ledge when there is room above it.
+    fn jump_out_of_fluid(&self, old_y: f64) {
+        let mut velo = self.entity.velocity.load();
+        let rise = velo.y + 0.6 - self.entity.pos.load().y + old_y;
         if self.entity.horizontal_collision.load(SeqCst)
-            && !self
-                .entity
-                .world
-                .load()
-                .check_fluid_collision(self.entity.bounding_box.load().shift(velo))
+            && self.entity.is_free(Vector3::new(velo.x, rise, velo.z))
         {
             velo.y = 0.3;
-
             self.entity.velocity.store(velo);
         }
     }
@@ -1645,7 +1689,12 @@ impl LivingEntity {
     }
 
     pub(crate) fn make_move(&self, caller: &dyn EntityBase) {
+        let before = self.entity.pos.load();
         self.entity.move_entity(caller, self.entity.velocity.load());
+        if caller.get_player().is_none() {
+            self.entity
+                .emit_movement_events(caller, self.entity.pos.load().sub(&before));
+        }
 
         self.check_climbing();
     }
@@ -1804,6 +1853,20 @@ impl LivingEntity {
             let fall_distance = self.fall_distance.swap(0.0);
             if fall_distance > 0.0 {
                 self.on_changed_block(caller, self.entity.block_pos.load());
+                // Entity.checkFallDamage
+                let world = self.entity.world.load_full();
+                let landed_on = self
+                    .entity
+                    .get_supporting_block_pos()
+                    .unwrap_or_else(|| self.entity.block_pos.load().down());
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::HitGround,
+                    self.entity.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        Some(world.get_block_state_id(&landed_on)),
+                    ),
+                );
             }
             // Vanilla calls `Block.fallOn` even for entities that take no fall damage (creative
             // players, fall-immune mobs), so blocks like farmland still react; the damage itself is
@@ -1964,7 +2027,7 @@ impl LivingEntity {
         cause: Option<&dyn EntityBase>,
     ) {
         let world = self.entity.world.load();
-        let Some(dyn_self) = world.get_entity_by_id(self.entity.entity_id) else {
+        let Some(dyn_self) = crate::world::vibration::entity_handle(&world, &self.entity) else {
             return;
         };
         if self
@@ -1974,6 +2037,11 @@ impl LivingEntity {
         {
             self.movement_input.store(Vector3::default());
             self.jumping.store(false, Relaxed);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::EntityDie,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(Some(dyn_self.clone()), None),
+            );
 
             let kill_credit = self.get_kill_credit();
             let killer = cause.or(source).or(kill_credit.as_deref());
@@ -2045,6 +2113,12 @@ impl LivingEntity {
                         .get_living_entity()
                         .map(|living| living.held_item(direct))
                 }),
+                // Babies keep a negative age, including the zombie and piglin flag babies.
+                is_baby: Some(self.entity.age.load(std::sync::atomic::Ordering::Relaxed) < 0),
+                vehicle_entity: self
+                    .entity
+                    .get_vehicle()
+                    .map(|vehicle| vehicle.get_entity().entity_type),
                 ..Default::default()
             };
 
@@ -2281,7 +2355,7 @@ impl LivingEntity {
             let Ok(mut effects) = self.active_effects.try_lock() else {
                 return;
             };
-            let entity_age = self.entity.age.load(Relaxed);
+            let tick_count = self.entity.tick_count.load(Relaxed);
             for effect in effects.values_mut() {
                 if effect.duration == 0 {
                     effects_to_remove.push(effect.effect_type);
@@ -2289,7 +2363,7 @@ impl LivingEntity {
                 }
 
                 let tick_duration = if effect.duration == -1 {
-                    entity_age
+                    tick_count
                 } else {
                     effect.duration
                 };
@@ -3163,7 +3237,11 @@ impl LivingEntity {
                 self.get_pitch(),
             );
 
-            if let Some(source) = source {
+            if let Some(source) = source
+                && !caller
+                    .get_mob()
+                    .is_some_and(crate::entity::mob::Mob::movement_frozen)
+            {
                 let source_pos = source.get_entity().pos.load();
                 let target_pos = self.entity.pos.load();
                 let dx = source_pos.x - target_pos.x;
@@ -3209,7 +3287,7 @@ impl LivingEntity {
                 self.last_attacker_id
                     .store(attacker.get_entity().entity_id, Relaxed);
                 self.last_attacked_time
-                    .store(self.entity.age.load(Relaxed), Relaxed);
+                    .store(self.entity.tick_count.load(Relaxed), Relaxed);
             }
         }
 
@@ -3242,7 +3320,7 @@ impl LivingEntity {
                 let attacker_id = attacker.get_entity().entity_id;
                 self.last_attacker_id.store(attacker_id, Relaxed);
                 self.last_attacked_time
-                    .store(self.entity.age.load(Relaxed), Relaxed);
+                    .store(self.entity.tick_count.load(Relaxed), Relaxed);
 
                 let current_tick = world.level_info.load().day_time;
                 if attacker.get_player().is_some() {
@@ -3277,6 +3355,15 @@ impl LivingEntity {
                 );
             }
         }
+
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::EntityDamage,
+            self.entity.pos.load(),
+            crate::world::vibration::GameEventContext::of(
+                crate::world::vibration::entity_handle(&world, caller),
+                None,
+            ),
+        );
 
         if new_health <= 0.0 {
             let mut death_event =
@@ -3433,7 +3520,7 @@ impl EntityBase for LivingEntity {
             // Vanilla `Item.finishUsingItem` only consumes an item that has the `consumable`
             // component. Anything else, like a bundle or a goat horn, just stops being used.
             if let Some(item) = item_in_use.as_ref()
-                && item.get_data_component::<ConsumableImpl>().is_some()
+                && let Some(consumable) = item.get_data_component::<ConsumableImpl>()
             {
                 // Consume item
                 let mut is_potion = false;
@@ -3549,8 +3636,36 @@ impl EntityBase for LivingEntity {
                     }
                 }
 
+                let world = self.entity.world.load();
+                let consume_event = if consumable.animation
+                    == pumpkin_data::data_component_impl::ConsumeAnimation::Drink
+                {
+                    pumpkin_data::game_event::GameEvent::Drink
+                } else {
+                    pumpkin_data::game_event::GameEvent::Eat
+                };
+                world.game_event(
+                    consume_event,
+                    self.entity.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        None,
+                    ),
+                );
                 self.clear_active_hand();
             }
+        }
+
+        if self.entity.is_fall_flying() && self.entity.age.load(Relaxed) % 10 == 0 {
+            let world = self.entity.world.load();
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ElytraGlide,
+                self.entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, caller),
+                    None,
+                ),
+            );
         }
 
         if self.hurt_cooldown.load(Relaxed) > 0 {

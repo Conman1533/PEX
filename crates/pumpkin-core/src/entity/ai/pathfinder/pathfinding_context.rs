@@ -209,8 +209,9 @@ impl PathfindingContext {
         pos: Vector3<i32>,
         fallback: PathType,
     ) -> PathType {
-        for dy in -1..=1i32 {
-            for dx in -1..=1i32 {
+        // Vanilla `WalkNodeEvaluator.checkNeighbourBlocks` order: the first match wins.
+        for dx in -1..=1i32 {
+            for dy in -1..=1i32 {
                 for dz in -1..=1i32 {
                     if dx == 0 && dz == 0 {
                         continue;

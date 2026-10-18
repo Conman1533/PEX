@@ -266,6 +266,15 @@ impl JavaClient {
             .place_block(player, block, server, use_item_on, location, face)
         {
             Ok(Some((final_block_pos, new_state))) => {
+                // BlockItem.place
+                player.world().game_event(
+                    pumpkin_data::game_event::GameEvent::BlockPlace,
+                    final_block_pos.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::of(
+                        Some(player.clone()),
+                        Some(new_state),
+                    ),
+                );
                 player.try_send_client_packet(&CBlockUpdate::new(
                     final_block_pos,
                     VarInt(i32::from(new_state.as_u16())),

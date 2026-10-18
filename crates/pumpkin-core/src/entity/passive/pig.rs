@@ -1,3 +1,6 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
+use rand::RngExt;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -7,6 +10,7 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::pig_sound_variant::PigSoundVariant;
 use pumpkin_data::pig_variant::PigVariant;
 use pumpkin_data::sound::Sound;
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::{entity::EntityType, item::Item};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -26,13 +30,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const PIG_FOOD: &[&Item] = &[
-    &Item::CARROT,
-    &Item::POTATO,
-    &Item::BEETROOT,
-    &Item::CARROT_ON_A_STICK,
-];
 
 /// Represents a Pig, a common passive mob that provides porkchops.
 ///
@@ -75,15 +72,30 @@ impl PigEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.25));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.2, PIG_FOOD, false)));
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                6,
+                4,
+                Box::new(TemptGoal::new(
+                    1.2,
+                    |_, stack| stack.get_item() == &Item::CARROT_ON_A_STICK,
+                    false,
+                )),
+            );
+            goal_selector.add_goal(
+                4,
+                Box::new(TemptGoal::new(
+                    1.2,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_PIG_FOOD),
+                    false,
+                )),
+            );
+            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.1)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(1.0)));
+            goal_selector.add_goal(
+                7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
         };
 
         mob_arc
@@ -133,15 +145,46 @@ impl AgeableMob for PigEntity {
 
 impl Animal for PigEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        use pumpkin_data::tag::Taggable;
-        item_stack
-            .item
-            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_PIG_FOOD)
-            || PIG_FOOD.iter().any(|i| i.id == item_stack.item.id)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_PIG_FOOD)
+    }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::PIG, world);
+        if let Some(child) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            child.set_variant(
+                PigVariant::from_id(parent.variant.load(Ordering::Relaxed)).unwrap_or_default(),
+            );
+        }
+        Some(baby)
+    }
+
+    fn play_eating_sound(&self) {
+        let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        self.mob_entity
+            .living_entity
+            .make_sound(sound_variant.eat_sound(self.is_baby()));
     }
 }
 
 impl Mob for PigEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -259,13 +302,7 @@ impl Mob for PigEntity {
                 return true;
             }
         }
-        let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-            .unwrap_or_default();
-        self.animal_interact(
-            player,
-            item_stack,
-            sound_variant.ambient_sound(self.is_baby()),
-        )
+        self.animal_interact(player, item_stack)
     }
 }
 

@@ -1,3 +1,6 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
+use rand::RngExt;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
@@ -28,8 +31,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::WHEAT];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
@@ -104,9 +105,16 @@ impl MooshroomEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_COW_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
                 6,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -141,11 +149,50 @@ impl AgeableMob for MooshroomEntity {
 impl Animal for MooshroomEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_COW_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::MOOSHROOM, world);
+        if let Some(child) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(mate) = partner.cast_any().downcast_ref::<Self>()
+        {
+            child.set_variant(self.get_offspring_variant(mate));
+        }
+        Some(baby)
+    }
+}
+
+impl MooshroomEntity {
+    /// Vanilla `MushroomCow.getOffspringVariant`: rarely mutates when both parents match.
+    fn get_offspring_variant(&self, mate: &Self) -> MooshroomVariant {
+        let variant = self.get_variant();
+        let mate_variant = mate.get_variant();
+        let mut rng = self.get_random();
+        if variant == mate_variant && rng.random_range(0..1024) == 0 {
+            if variant == MooshroomVariant::Brown {
+                MooshroomVariant::Red
+            } else {
+                MooshroomVariant::Brown
+            }
+        } else if rng.random::<bool>() {
+            variant
+        } else {
+            mate_variant
+        }
     }
 }
 
 impl Mob for MooshroomEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(
+            pumpkin_data::cow_sound_variant::CowSoundVariant::Classic.ambient_sound(self.is_baby()),
+        )
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -166,10 +213,6 @@ impl Mob for MooshroomEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -271,6 +314,6 @@ impl Mob for MooshroomEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityCowAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::{EntityStatus, EntityType};
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
@@ -13,24 +12,24 @@ use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
+    ageable::{AgeableData, AgeableMob},
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, breed::BreedGoal,
-        escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        tempt::TemptGoal, wander_around::WanderAroundGoal,
+        leap_at_target::LeapAtTargetGoal, look_at_entity::LookAtEntityGoal,
+        ocelot_attack::OcelotAttackGoal, swim::SwimGoal, tempt::TemptGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
-    passive::animal::Animal,
+    passive::{animal::Animal, turtle::baby_on_land_selector},
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::COD, &Item::SALMON];
 
 /// Represents an Ocelot, a shy passive mob found in jungles.
 ///
 /// Wiki: <https://minecraft.wiki/w/Ocelot>
 pub struct OcelotEntity {
     pub mob_entity: MobEntity,
+    pub ageable_data: AgeableData,
     pub is_trusting: AtomicBool,
 }
 
@@ -39,6 +38,7 @@ impl OcelotEntity {
         let mob_entity = MobEntity::new(entity);
         let ocelot = Self {
             mob_entity,
+            ageable_data: AgeableData::default(),
             is_trusting: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(ocelot);
@@ -56,28 +56,45 @@ impl OcelotEntity {
 
             // Goal 1: FloatGoal (SwimGoal)
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
-            // Goal 1: PanicGoal (EscapeDangerGoal)
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
             // Goal 3: OcelotTemptGoal
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(0.6, TEMPT_ITEMS, true)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    0.6,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD),
+                    true,
+                )),
+            );
             // Goal 4: OcelotAvoidEntityGoal (when not trusting)
             goal_selector.add_goal(
                 4,
-                Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 0.8, 1.33)),
+                Box::new(
+                    AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 0.8, 1.33).gated_by(|mob| {
+                        mob.cast_any()
+                            .downcast_ref::<Self>()
+                            .is_some_and(|ocelot| !ocelot.is_trusting())
+                    }),
+                ),
             );
+            // Goal 7: LeapAtTargetGoal
+            goal_selector.add_goal(7, Box::new(LeapAtTargetGoal::new(0.3)));
+            // Goal 8: OcelotAttackGoal
+            goal_selector.add_goal(8, Box::new(OcelotAttackGoal::new()));
             // Goal 9: BreedGoal
             goal_selector.add_goal(9, BreedGoal::new(0.8));
-            // Goal 9: FollowParentGoal
-            goal_selector.add_goal(9, Box::new(FollowParentGoal::new(0.8)));
             // Goal 10: WaterAvoidingRandomStrollGoal (WanderAroundGoal)
-            goal_selector.add_goal(10, Box::new(WanderAroundGoal::new(0.8)));
+            goal_selector.add_goal(
+                10,
+                Box::new(WanderAroundGoal::water_avoiding_with_probability(
+                    0.8,
+                    1.000_000_1e-5,
+                )),
+            );
             // Goal 11: LookAtPlayerGoal
             goal_selector.add_goal(
                 11,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 10.0),
             );
-            // Goal 11: RandomLookAroundGoal
-            goal_selector.add_goal(11, Box::new(RandomLookAroundGoal::default()));
         };
 
         {
@@ -94,7 +111,14 @@ impl OcelotEntity {
             );
             target_selector.add_goal(
                 1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::TURTLE, false),
+                Box::new(ActiveTargetGoal::new(
+                    &mob_arc.mob_entity,
+                    &EntityType::TURTLE,
+                    10,
+                    false,
+                    false,
+                    Some(baby_on_land_selector),
+                )),
             );
         };
 
@@ -114,14 +138,32 @@ impl OcelotEntity {
 
 impl Animal for OcelotEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        let item = item_stack.get_item();
-        item.has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD)
-            || item == &Item::COD
-            || item == &Item::SALMON
+        item_stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD)
+    }
+}
+
+impl AgeableMob for OcelotEntity {
+    fn get_ageable_data(&self) -> &AgeableData {
+        &self.ageable_data
     }
 }
 
 impl Mob for OcelotEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityOcelotAmbient)
+    }
+
+    /// Vanilla `Ocelot.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        900
+    }
+
+    fn as_ageable(&self) -> Option<&dyn AgeableMob> {
+        Some(self)
+    }
+
     /// Vanilla `Ocelot.removeWhenFarAway`, without the 2400 tick minimum age Pumpkin does not track.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         !self.is_trusting.load(std::sync::atomic::Ordering::Relaxed)
@@ -187,10 +229,6 @@ impl Mob for OcelotEntity {
             return true;
         }
 
-        self.animal_interact(
-            player,
-            item_stack,
-            pumpkin_data::sound::Sound::EntityOcelotAmbient,
-        )
+        self.animal_interact(player, item_stack)
     }
 }

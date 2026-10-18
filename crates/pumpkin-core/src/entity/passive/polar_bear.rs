@@ -5,7 +5,7 @@ use std::sync::{
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
+use pumpkin_data::tag;
 use pumpkin_nbt::compound::NbtCompound;
 
 use crate::entity::{
@@ -66,7 +66,16 @@ impl PolarBearEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, Box::new(MeleeAttackGoal::new(1.25, true)));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
+            goal_selector.add_goal(
+                1,
+                EscapeDangerGoal::new(2.0).with_panic_causes(|mob| {
+                    if is_baby(mob) {
+                        &tag::DamageType::MINECRAFT_PANIC_CAUSES
+                    } else {
+                        &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES
+                    }
+                }),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
@@ -137,6 +146,14 @@ impl NeutralMob for PolarBearEntity {
 }
 
 impl Mob for PolarBearEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityPolarBearAmbientBaby
+        } else {
+            pumpkin_data::sound::Sound::EntityPolarBearAmbient
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -161,10 +178,6 @@ impl Mob for PolarBearEntity {
         &self.mob_entity
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -178,6 +191,6 @@ impl Mob for PolarBearEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityPolarBearAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

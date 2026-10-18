@@ -22,8 +22,6 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::WARPED_FUNGUS, &Item::WARPED_FUNGUS_ON_A_STICK];
-
 pub struct StriderEntity {
     pub mob_entity: MobEntity,
     pub ageable_data: AgeableData,
@@ -55,17 +53,33 @@ impl StriderEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
+            // Not in vanilla, which floats striders on lava in `Strider.floatStrider` instead.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.65));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.4, TEMPT_ITEMS, false)));
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                3,
+                Box::new(TemptGoal::new(
+                    1.4,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_STRIDER_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
+            goal_selector.add_goal(7, Box::new(WanderAroundGoal::with_interval(1.0, 60)));
+            goal_selector.add_goal(
+                8,
+                LookAtEntityGoal::with_default(mob_weak.clone(), &EntityType::PLAYER, 8.0),
+            );
+            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(
+                9,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::STRIDER, 8.0),
+            );
         };
 
         mob_arc
@@ -100,6 +114,11 @@ impl Animal for StriderEntity {
 }
 
 impl Mob for StriderEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla also keeps quiet while tempted, which the goal does not expose here.
+        (!self.is_panicking()).then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -142,10 +161,6 @@ impl Mob for StriderEntity {
         self.saddled.store(saddled, Ordering::Relaxed);
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -182,7 +197,7 @@ impl Mob for StriderEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityStriderAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
 

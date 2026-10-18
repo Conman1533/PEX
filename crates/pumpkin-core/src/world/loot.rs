@@ -31,6 +31,19 @@ pub struct LootContextParameters {
     /// Computed from `Entity.fire_ticks > 0`.
     pub is_on_fire: Option<bool>,
     pub direct_attacker_weapon: Option<ItemStack>,
+    /// Whether the killed entity was a baby (vanilla `EntityFlagsPredicate.isBaby`).
+    pub is_baby: Option<bool>,
+    /// What the killed entity was riding at death time.
+    pub vehicle_entity: Option<&'static EntityType>,
+}
+
+fn vehicle_is(params: &LootContextParameters, entity_type: &str) -> bool {
+    let entity_type = entity_type
+        .strip_prefix("minecraft:")
+        .unwrap_or(entity_type);
+    params
+        .vehicle_entity
+        .is_some_and(|vehicle| vehicle.resource_name == entity_type)
 }
 
 fn direct_attacker_weapon_has_enchantment(params: &LootContextParameters, tag: &str) -> bool {
@@ -122,6 +135,8 @@ fn check_dynamic_condition(
         DynamicLootCondition::DirectAttackerWeaponEnchantment(tag) => {
             direct_attacker_weapon_has_enchantment(params, tag)
         }
+        DynamicLootCondition::EntityIsBaby(baby) => params.is_baby == Some(*baby),
+        DynamicLootCondition::EntityVehicle(entity_type) => vehicle_is(params, entity_type),
         DynamicLootCondition::WeatherCheck {
             raining,
             thundering,
@@ -190,6 +205,8 @@ fn check_condition(
         LootCondition::DirectAttackerWeaponEnchantment(tag) => {
             direct_attacker_weapon_has_enchantment(params, tag)
         }
+        LootCondition::EntityIsBaby(baby) => params.is_baby == Some(baby),
+        LootCondition::EntityVehicle(entity_type) => vehicle_is(params, entity_type),
     }
 }
 
@@ -657,5 +674,36 @@ fn shuffle_and_split_items(
     for i in (1..n).rev() {
         let j = rng.next_bounded_i32((i + 1) as i32) as usize;
         result.swap(i, j);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn zombie_drops(is_baby: bool, vehicle: Option<&'static EntityType>) -> bool {
+        let table =
+            pumpkin_data::loot_table::get_loot_table("entities/zombie").expect("zombie loot");
+        let params = LootContextParameters {
+            killed_by_player: Some(true),
+            this_entity: Some(&EntityType::ZOMBIE),
+            is_baby: Some(is_baby),
+            vehicle_entity: vehicle,
+            ..Default::default()
+        };
+        (0..200).any(|seed| {
+            generate_loot_with_context(table, seed, &params)
+                .iter()
+                .any(|stack| stack.item.id == Item::MUSIC_DISC_LAVA_CHICKEN.id)
+        })
+    }
+
+    #[test]
+    fn lava_chicken_disc_needs_a_baby_zombie_riding_a_chicken() {
+        assert!(!zombie_drops(false, None));
+        assert!(!zombie_drops(true, None));
+        assert!(!zombie_drops(false, Some(&EntityType::CHICKEN)));
+        assert!(!zombie_drops(true, Some(&EntityType::ZOMBIE_HORSE)));
+        assert!(zombie_drops(true, Some(&EntityType::CHICKEN)));
     }
 }

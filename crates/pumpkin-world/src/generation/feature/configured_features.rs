@@ -19,7 +19,6 @@ use super::features::{
         coral_tree::CoralTreeFeature,
     },
     delta_feature::DeltaFeatureFeature,
-    desert_well::DesertWellFeature,
     disk::DiskFeature,
     drip_stone::{
         cluster::DripstoneClusterFeature, large::LargeDripstoneFeature,
@@ -61,11 +60,13 @@ use super::features::{
     sculk_patch::SculkPatchFeature,
     sea_pickle::SeaPickleFeature,
     seagrass::SeagrassFeature,
+    sequence::SequenceFeature,
     simple_block::SimpleBlockFeature,
     simple_random_selector::SimpleRandomFeature,
     single_block_pillar::SingleBlockPillarFeature,
     spring_feature::SpringFeatureFeature,
     stepped_column_cluster::SteppedColumnClusterFeature,
+    template::TemplateFeature,
     tree::TreeFeature,
     twisting_vines::TwistingVinesFeature,
     underwater_magma::UnderwaterMagmaFeature,
@@ -110,7 +111,6 @@ pub enum ConfiguredFeature {
     ChorusPlant(ChorusPlantFeature),
     ReplaceSingleBlock(ReplaceSingleBlockFeature),
     VoidStartPlatform(VoidStartPlatformFeature),
-    DesertWell(DesertWellFeature),
     Fossil(FossilFeature),
     HugeRedMushroom(HugeRedMushroomFeature),
     HugeBrownMushroom(HugeBrownMushroomFeature),
@@ -165,10 +165,12 @@ pub enum ConfiguredFeature {
     PointedDripstone(SmallDripstoneFeature),
     SculkPatch(SculkPatchFeature),
     Overlay(OverlayFeature),
+    Sequence(SequenceFeature),
     ProjectedRandomPatchySquare(ProjectedRandomPatchySquareFeature),
     RandomNeighborSpread(RandomNeighborSpreadFeature),
     SingleBlockPillar(SingleBlockPillarFeature),
     SteppedColumnCluster(SteppedColumnClusterFeature),
+    Template(TemplateFeature),
 }
 
 // Yes this may look ugly and you wonder why this is hard coded, but it makes sense to hardcode since we have to add logic for these in code
@@ -277,9 +279,6 @@ impl ConfiguredFeature {
                 random,
                 pos,
             ),
-            Self::DesertWell(_feature) => {
-                DesertWellFeature::generate(chunk, min_y, height, feature_name, random, pos)
-            }
             Self::Fossil(feature) => feature.generate(chunk, min_y, height, random, pos),
             Self::Bamboo(feature) => feature.generate(
                 chunk,
@@ -506,6 +505,15 @@ impl ConfiguredFeature {
                 random,
                 pos,
             ),
+            Self::Sequence(feature) => feature.generate(
+                chunk,
+                block_registry,
+                min_y,
+                height,
+                feature_name,
+                random,
+                pos,
+            ),
             Self::ProjectedRandomPatchySquare(feature) => feature.generate(
                 chunk,
                 block_registry,
@@ -536,6 +544,7 @@ impl ConfiguredFeature {
             Self::SteppedColumnCluster(feature) => {
                 feature.generate(chunk, block_registry, random, pos)
             }
+            Self::Template(feature) => feature.generate(chunk, random, pos),
             Self::NoOp => false,
         }
     }

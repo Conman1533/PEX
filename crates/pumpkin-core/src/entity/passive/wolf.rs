@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::{create_offspring, get_mixed_color};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicU8, Ordering},
@@ -21,10 +23,11 @@ use crate::entity::{
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, beg::BegGoal,
         breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_owner::FollowOwnerGoal,
-        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
+        leap_at_target::LeapAtTargetGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal,
         owner_hurt_by_target::OwnerHurtByTargetGoal, owner_hurt_target::OwnerHurtTargetGoal,
-        revenge::RevengeGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        revenge::RevengeGoal, sit_when_ordered_to::SitWhenOrderedToGoal, swim::SwimGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{
         Mob, MobEntity,
@@ -32,7 +35,8 @@ use crate::entity::{
     },
     passive::{
         animal::Animal,
-        tamable::{TamableAnimal, TamableData},
+        tamable::{TamableAnimal, TamableData, is_untamed},
+        turtle::baby_on_land_selector,
     },
     player::Player,
 };
@@ -76,21 +80,29 @@ impl WolfEntity {
             // 1: SwimGoal (FloatGoal)
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
             // 1: EscapeDangerGoal (TamableAnimalPanicGoal)
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
+            goal_selector.add_goal(
+                1,
+                EscapeDangerGoal::new(1.5)
+                    .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES)
+                    .teleporting_to_owner(),
+            );
+            // 2: SitWhenOrderedToGoal
+            goal_selector.add_goal(2, Box::new(SitWhenOrderedToGoal::new()));
             // 3: Avoid Llama
             goal_selector.add_goal(
                 3,
                 Box::new(AvoidEntityGoal::new(&EntityType::LLAMA, 24.0, 1.5, 1.5)),
             );
+            // 4: LeapAtTargetGoal
+            goal_selector.add_goal(4, Box::new(LeapAtTargetGoal::new(0.4)));
             // 5: MeleeAttackGoal
             goal_selector.add_goal(5, Box::new(MeleeAttackGoal::new(1.0, true)));
             // 6: FollowOwnerGoal
             goal_selector.add_goal(6, FollowOwnerGoal::new(1.0, 10.0, 2.0));
             // 7: BreedGoal
             goal_selector.add_goal(7, BreedGoal::new(1.0));
-            // 8: FollowParentGoal & WanderAroundGoal
-            goal_selector.add_goal(8, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(1.0)));
+            // 8: WanderAroundGoal
+            goal_selector.add_goal(8, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             // 9: BegGoal
             goal_selector.add_goal(9, BegGoal::new(8.0));
             // 10: LookAtPlayer & RandomLookAround
@@ -120,15 +132,31 @@ impl WolfEntity {
             // 5: NonTameRandomTarget (Sheep, Rabbit, Fox)
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::SHEEP, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::SHEEP, false)
+                    .gated_by(is_untamed),
             );
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::RABBIT, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::RABBIT, false)
+                    .gated_by(is_untamed),
             );
             target_selector.add_goal(
                 5,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::FOX, false),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::FOX, false)
+                    .gated_by(is_untamed),
+            );
+            // 6: NonTameRandomTarget (baby Turtle on land)
+            target_selector.add_goal(
+                6,
+                Box::new(ActiveTargetGoal::new(
+                    &mob_arc.mob_entity,
+                    &EntityType::TURTLE,
+                    10,
+                    false,
+                    false,
+                    Some(baby_on_land_selector),
+                ))
+                .gated_by(is_untamed),
             );
             // 7: NearestAttackableTarget (Skeleton)
             target_selector.add_goal(
@@ -160,8 +188,53 @@ impl AgeableMob for WolfEntity {
 
 impl Animal for WolfEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        let item = item_stack.get_item();
-        item.has_tag(&tag::Item::MINECRAFT_WOLF_FOOD) || item == &Item::BONE
+        item_stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_WOLF_FOOD)
+    }
+
+    /// Vanilla `Wolf.canMate`: both tamed, the partner not sitting.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        let Some(wolf) = partner.cast_any().downcast_ref::<Self>() else {
+            return false;
+        };
+        wolf.get_entity().entity_id != self.get_entity().entity_id
+            && self.is_tame()
+            && wolf.is_tame()
+            && !wolf.is_in_sitting_pose()
+            && self.mob_entity.is_in_love()
+            && wolf.mob_entity.is_in_love()
+    }
+
+    /// Vanilla `Wolf.getBreedOffspring`: a parent's variant, and a tamed parent's owner.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::WOLF, world);
+        if let Some(puppy) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let parent = if self.get_random().random::<bool>() {
+                self
+            } else {
+                partner
+            };
+            let variant_id = parent.variant.load(Ordering::Relaxed);
+            if let Some(variant) = WolfVariant::all().iter().find(|v| v.id() == variant_id) {
+                puppy.set_variant(*variant);
+            }
+            if self.is_tame() {
+                puppy.set_owner(self.get_owner());
+                TamableAnimal::set_tame(puppy, true);
+                puppy.set_collar_color(get_mixed_color(
+                    self.get_collar_color(),
+                    partner.get_collar_color(),
+                ));
+            }
+        }
+        Some(baby)
     }
 }
 
@@ -178,6 +251,23 @@ impl NeutralMob for WolfEntity {
 }
 
 impl Mob for WolfEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let sound_variant = WolfSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+            .unwrap_or_default();
+        let is_baby = self.is_baby();
+        Some(if self.is_angry() {
+            sound_variant.growl_sound(is_baby)
+        } else if self.get_random().random_range(0..3) == 0 {
+            if self.is_tame() && self.mob_entity.living_entity.health.load() < 20.0 {
+                sound_variant.whine_sound(is_baby)
+            } else {
+                sound_variant.pant_sound(is_baby)
+            }
+        } else {
+            sound_variant.ambient_sound(is_baby)
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -328,17 +418,12 @@ impl Mob for WolfEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         let item = item_stack.get_item();
-        let sound_variant = WolfSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
-            .unwrap_or_default();
-        let ambient = sound_variant.ambient_sound(self.is_baby());
         if self.is_tame() {
             if self.is_food(item_stack)
                 && self.mob_entity.living_entity.health.load()
                     < self.mob_entity.living_entity.get_max_health()
             {
-                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
-                self.mob_entity.living_entity.heal(2.0);
-                self.play_eating_sound(ambient);
+                self.feed(player, item_stack, 2.0, 2.0);
                 return true;
             }
 
@@ -351,7 +436,7 @@ impl Mob for WolfEntity {
                     return true;
                 }
 
-                let parent_interaction = self.animal_interact(player, item_stack, ambient);
+                let parent_interaction = self.animal_interact(player, item_stack);
                 if !parent_interaction {
                     self.set_ordered_to_sit(!self.is_ordered_to_sit());
                     return true;
@@ -371,7 +456,7 @@ impl Mob for WolfEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, ambient)
+        self.animal_interact(player, item_stack)
     }
 }
 

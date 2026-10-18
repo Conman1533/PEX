@@ -1,4 +1,6 @@
+use pumpkin_data::particle::Particle;
 use pumpkin_data::tracked_data;
+use pumpkin_util::math::vector3::Vector3;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering::Relaxed};
 
 use crate::entity::mob::Mob;
@@ -81,21 +83,14 @@ pub trait AgeableMob: Mob {
         if forced {
             data.forced_age.fetch_add(delta, Relaxed);
             if data.forced_age_timer.load(Relaxed) == 0 {
-                data.forced_age_timer.store(40, Relaxed);
+                data.forced_age_timer
+                    .store(FORCED_AGE_PARTICLE_TICKS, Relaxed);
             }
         }
 
         if self.get_age() == 0 {
             self.set_age(data.forced_age.load(Relaxed));
         }
-    }
-
-    #[must_use]
-    fn get_speed_up_seconds_when_feeding(ticks_until_adult: i32) -> i32
-    where
-        Self: Sized,
-    {
-        (ticks_until_adult as f32 / 20.0 * 0.1) as i32
     }
 
     fn write_ageable_nbt(&self, nbt: &mut pumpkin_nbt::compound::NbtCompound) {
@@ -123,7 +118,32 @@ pub trait AgeableMob: Mob {
         true
     }
 
+    /// Vanilla `AgeableMob.aiStep`.
     fn ageable_ai_step(&self) {
+        let data = self.get_ageable_data();
+        let forced_age_timer = data.forced_age_timer.load(Relaxed);
+        if forced_age_timer > 0 {
+            if forced_age_timer % 4 == 0 {
+                let entity = self.get_entity();
+                let pos = Vector3::new(
+                    entity.get_random_x(1.0),
+                    entity.get_random_y() + 0.5,
+                    entity.get_random_z(1.0),
+                );
+                entity.world.load().spawn_particle(
+                    pos,
+                    Vector3::new(0.0, 0.0, 0.0),
+                    0.0,
+                    1,
+                    Particle::HappyVillager,
+                );
+            }
+            data.forced_age_timer.store(forced_age_timer - 1, Relaxed);
+        }
+
+        if !self.get_entity().is_alive() {
+            return;
+        }
         if self.can_age_up() {
             let age = self.get_age() + 1;
             self.set_age(age);
@@ -132,4 +152,10 @@ pub trait AgeableMob: Mob {
             self.set_age(age);
         }
     }
+}
+
+/// Vanilla `AgeableMob.getSpeedUpSecondsWhenFeeding`.
+#[must_use]
+pub fn get_speed_up_seconds_when_feeding(ticks_until_adult: i32) -> i32 {
+    (ticks_until_adult as f32 / 20.0 * 0.1) as i32
 }

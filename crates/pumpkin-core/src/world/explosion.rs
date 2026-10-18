@@ -498,6 +498,11 @@ impl Explosion {
 
     /// Returns the removed block count
     pub fn explode(&self, world: &Arc<World>) -> u32 {
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::Explode,
+            self.pos,
+            crate::world::vibration::GameEventContext::default(),
+        );
         self.damage_entities(world);
 
         match self.block_interaction {

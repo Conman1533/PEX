@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::{create_offspring, get_mixed_color};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicU8, Ordering},
@@ -23,8 +25,7 @@ use crate::entity::{
 
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::WHEAT];
+use pumpkin_data::tag::{self, Taggable};
 
 pub struct SheepEntity {
     pub mob_entity: MobEntity,
@@ -56,10 +57,17 @@ impl SheepEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.25));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.1, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.1,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_SHEEP_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
             goal_selector.add_goal(5, Box::new(EatGrassGoal::default()));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -113,15 +121,29 @@ impl AgeableMob for SheepEntity {
 
 impl Animal for SheepEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        use pumpkin_data::tag::Taggable;
-        item_stack
-            .item
-            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_SHEEP_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_SHEEP_FOOD)
+    }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::SHEEP, world);
+        if let Some(lamb) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            lamb.set_color(get_mixed_color(self.get_color(), partner.get_color()));
+        }
+        Some(baby)
     }
 }
 
 impl Mob for SheepEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntitySheepAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -189,6 +211,6 @@ impl Mob for SheepEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, Sound::EntitySheepAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

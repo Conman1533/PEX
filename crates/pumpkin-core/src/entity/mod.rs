@@ -191,6 +191,15 @@ pub trait EntityBase: Send + Sync + std::any::Any {
         None
     }
 
+    /// Vanilla `Entity.dampensVibrations`.
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        None
+    }
+
     fn get_eye_pos(&self) -> Vector3<f64> {
         self.get_entity().get_eye_pos()
     }
@@ -560,18 +569,6 @@ pub trait EntityBase: Send + Sync + std::any::Any {
 
     fn set_paddle_state(&self, _left: bool, _right: bool) {}
 
-    fn is_in_love(&self) -> bool {
-        false
-    }
-
-    fn is_breeding_ready(&self) -> bool {
-        false
-    }
-
-    fn reset_love(&self) {}
-
-    fn set_breeding_cooldown(&self, _ticks: i32) {}
-
     fn is_panicking(&self) -> bool {
         false
     }
@@ -763,6 +760,9 @@ pub struct Entity {
     pub chunk_pos: AtomicCell<Vector2<i32>>,
     /// Indicates whether the entity is sneaking
     pub sneaking: AtomicBool,
+    /// `Entity.moveDist` and `Entity.nextStep`: walked distance and when the next step falls.
+    pub move_dist: AtomicCell<f32>,
+    pub next_step: AtomicCell<f32>,
     /// Indicates whether the entity is sprinting
     pub sprinting: AtomicBool,
     /// Indicates whether the entity is swimming
@@ -832,8 +832,10 @@ pub struct Entity {
     pending_leash_ticks: AtomicI32,
     /// Cooldown before entity can mount again after dismounting
     pub riding_cooldown: AtomicI32,
-    /// The age of the entity in ticks. Negative values indicate a baby.
+    /// Vanilla `AgeableMob.age`: negative while a baby, counting back to 0 after breeding.
     pub age: AtomicI32,
+    /// Ticks since the entity was created, vanilla `Entity.tickCount`. Not saved.
+    pub tick_count: AtomicI32,
 
     pub current_biome: ArcSwap<&'static Biome>,
     pub last_biome_update_pos: AtomicCell<BlockPos>,
@@ -951,6 +953,8 @@ impl Entity {
                 get_section_cord(floor_z),
             )),
             sneaking: AtomicBool::new(false),
+            move_dist: AtomicCell::new(0.0),
+            next_step: AtomicCell::new(1.0),
             swimming: AtomicBool::new(false),
             invisible: AtomicBool::new(false),
             glowing: AtomicBool::new(false),
@@ -991,6 +995,7 @@ impl Entity {
 
             riding_cooldown: AtomicI32::new(0),
             age: AtomicI32::new(0),
+            tick_count: AtomicI32::new(0),
             current_biome: ArcSwap::new(Arc::new(current_biome)),
             last_biome_update_pos: AtomicCell::new(BlockPos::new(floor_x, floor_y, floor_z)),
             portal_cooldown: AtomicU32::new(0),
@@ -1697,7 +1702,14 @@ impl Entity {
             }
 
             if !self.touching_water.load(Ordering::SeqCst) {
-
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Splash,
+                    self.pos.load(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, caller),
+                        None,
+                    ),
+                );
                 // TODO: Spawn splash particles
             }
         }
@@ -1914,6 +1926,7 @@ impl Entity {
             self.velocity.store(Vector3::default());
         }
 
+        let was_on_ground = self.on_ground.load(Ordering::SeqCst);
         let final_move = self.adjust_movement_for_collisions(motion, caller);
 
         self.move_pos(final_move);
@@ -1922,9 +1935,22 @@ impl Entity {
 
         self.velocity.store(final_move * velocity_multiplier);
 
+        let on_ground = self.on_ground.load(Ordering::SeqCst);
         if let Some(living) = caller.get_living_entity() {
-            let on_ground = self.on_ground.load(Ordering::SeqCst);
             living.fall(caller, final_move.y, on_ground);
+        } else if !was_on_ground && on_ground && motion.y < 0.0 {
+            let world = self.world.load_full();
+            let landed_on = self
+                .get_supporting_block_pos()
+                .unwrap_or_else(|| self.block_pos.load().down());
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::HitGround,
+                self.pos.load(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, caller),
+                    Some(world.get_block_state_id(&landed_on)),
+                ),
+            );
         }
 
         if motion.y != final_move.y {
@@ -2187,6 +2213,14 @@ impl Entity {
         self.fire_ticks.store(0, Ordering::Relaxed);
     }
 
+    /// Vanilla `Entity.isFree`: whether the bounding box moved by `offset` hits no block and holds
+    /// no liquid.
+    pub fn is_free(&self, offset: Vector3<f64>) -> bool {
+        let bounding_box = self.bounding_box.load().shift(offset);
+        let world = self.world.load();
+        world.is_space_empty(bounding_box) && !world.contains_any_liquid(bounding_box)
+    }
+
     /// Maximum freeze ticks (7 seconds at 20 tps)
     pub const MAX_FROZEN_TICKS: i32 = 140;
 
@@ -2271,7 +2305,7 @@ impl Entity {
         // Vanilla parity: full-freeze damage is tick-phase based.
         if can_freeze
             && new_frozen_ticks >= Self::MAX_FROZEN_TICKS
-            && self.age.load(Ordering::Relaxed) % Self::FREEZE_DAMAGE_INTERVAL == 0
+            && self.tick_count.load(Ordering::Relaxed) % Self::FREEZE_DAMAGE_INTERVAL == 0
         {
             let world = self.world.load_full();
             if world.level_info.load().game_rules.freeze_damage
@@ -2359,6 +2393,24 @@ impl Entity {
         )
     }
 
+    /// Vanilla `Entity.getRandomX`.
+    #[must_use]
+    pub fn get_random_x(&self, scale: f64) -> f64 {
+        self.pos.load().x + f64::from(self.width()) * (2.0 * rand::random::<f64>() - 1.0) * scale
+    }
+
+    /// Vanilla `Entity.getRandomY`.
+    #[must_use]
+    pub fn get_random_y(&self) -> f64 {
+        self.pos.load().y + f64::from(self.height()) * rand::random::<f64>()
+    }
+
+    /// Vanilla `Entity.getRandomZ`.
+    #[must_use]
+    pub fn get_random_z(&self, scale: f64) -> f64 {
+        self.pos.load().z + f64::from(self.width()) * (2.0 * rand::random::<f64>() - 1.0) * scale
+    }
+
     pub fn width(&self) -> f32 {
         self.entity_dimension.load().width
     }
@@ -2372,6 +2424,74 @@ impl Entity {
         self.sneaking.store(sneaking, Relaxed);
         self.set_flag(Flag::Sneaking, sneaking);
     }
+    /// The game event half of vanilla `Entity.applyMovementEmissionAndPlaySound`: every step's
+    /// worth of walking (horizontal distance x 0.6, or total distance while climbing) emits a
+    /// `step` vibration with the block walked on, or `swim` in water.
+    pub fn emit_movement_events(&self, caller: &dyn EntityBase, movement: Vector3<f64>) {
+        if self.vehicle.lock().is_ok_and(|vehicle| vehicle.is_some()) {
+            return;
+        }
+        let world = self.world.load_full();
+        let supporting = self
+            .get_supporting_block_pos()
+            .unwrap_or_else(|| self.block_pos.load().down());
+        let (block, state) = world.get_block_and_state(&supporting);
+        let climbing = block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CLIMBABLE)
+            || block.id == pumpkin_data::BlockId::POWDER_SNOW;
+        let moved = if climbing {
+            movement.length() as f32 * 0.6
+        } else {
+            movement.x.hypot(movement.z) as f32 * 0.6
+        };
+        let move_dist = self.move_dist.load() + moved;
+        self.move_dist.store(move_dist);
+        if move_dist <= self.next_step.load() {
+            return;
+        }
+        let on_ground = self.on_ground.load(Ordering::Relaxed);
+        let source = crate::world::vibration::entity_handle(&world, caller);
+        if state.is_air() {
+            if !on_ground
+                && matches!(
+                    self.entity_type.id,
+                    id if id == EntityType::ALLAY.id
+                        || id == EntityType::BEE.id
+                        || id == EntityType::BAT.id
+                        || id == EntityType::PARROT.id
+                        || id == EntityType::CHICKEN.id
+                        || id == EntityType::PHANTOM.id
+                        || id == EntityType::VEX.id
+                        || id == EntityType::ENDER_DRAGON.id
+                )
+            {
+                self.next_step.store(move_dist.floor() + 1.0);
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Flap,
+                    self.pos.load(),
+                    crate::world::vibration::GameEventContext::of(source, None),
+                );
+            }
+            return;
+        }
+        if (on_ground || climbing || (self.is_sneaking() && movement.y == 0.0))
+            && !self.is_swimming()
+        {
+            self.next_step.store(move_dist.floor() + 1.0);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::Step,
+                self.pos.load(),
+                crate::world::vibration::GameEventContext::of(source, Some(state.id)),
+            );
+        } else if self.touching_water.load(Ordering::SeqCst) {
+            self.next_step.store(move_dist.floor() + 1.0);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::Swim,
+                self.pos.load(),
+                crate::world::vibration::GameEventContext::of(source, None),
+            );
+        }
+    }
+
     pub fn is_sneaking(&self) -> bool {
         self.sneaking.load(Ordering::Relaxed)
     }

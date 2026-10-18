@@ -6,7 +6,6 @@ use std::sync::{
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -14,16 +13,21 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal,
-        try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        breed::BreedGoal, escape_danger::EscapeDangerGoal, look_at_entity::LookAtEntityGoal,
+        swim::SwimGoal, tempt::TemptGoal, try_find_water::TryFindWaterGoal,
+        wander_around::WanderAroundGoal,
     },
+    living::LivingEntity,
     mob::{Mob, MobEntity},
     passive::animal::Animal,
     player::Player,
 };
+use crate::world::World;
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::SEAGRASS];
+/// Vanilla `Turtle.BABY_ON_LAND_SELECTOR`: baby turtles out of the water are prey.
+pub fn baby_on_land_selector(target: &LivingEntity, _world: &World) -> bool {
+    target.entity.age.load(Ordering::Relaxed) < 0 && !target.is_in_water()
+}
 
 pub struct TurtleEntity {
     pub mob_entity: MobEntity,
@@ -56,15 +60,21 @@ impl TurtleEntity {
 
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(3, BreedGoal::new(1.0));
-            goal_selector.add_goal(4, Box::new(TemptGoal::new(1.1, TEMPT_ITEMS, false)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(0, EscapeDangerGoal::new(1.2).seeking_water(7));
+            goal_selector.add_goal(1, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                2,
+                Box::new(TemptGoal::new(
+                    1.1,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_TURTLE_FOOD),
+                    false,
+                )),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(
+                8,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
+            );
+            goal_selector.add_goal(9, Box::new(WanderAroundGoal::with_interval(1.0, 100)));
         };
 
         mob_arc
@@ -107,6 +117,17 @@ impl Animal for TurtleEntity {
 }
 
 impl Mob for TurtleEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        let entity = self.get_entity();
+        (!entity.is_in_water() && entity.on_ground.load(Ordering::Relaxed) && !self.is_baby())
+            .then_some(pumpkin_data::sound::Sound::EntityTurtleAmbientLand)
+    }
+
+    /// Vanilla `Turtle.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        200
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -131,10 +152,6 @@ impl Mob for TurtleEntity {
         &self.mob_entity
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -149,6 +166,6 @@ impl Mob for TurtleEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityTurtleAmbientLand)
+        self.animal_interact(player, item_stack)
     }
 }

@@ -1,19 +1,18 @@
 use std::sync::Arc;
 
-use uuid::Uuid;
-
-use pumpkin_data::entity::EntityStatus;
-use rand::RngExt;
-
-use crate::entity::experience_orb::ExperienceOrbEntity;
-use crate::entity::{EntityBase, ai::pathfinder::NavigatorGoal, mob::Mob, r#type::from_type};
+use crate::entity::{EntityBase, ai::pathfinder::NavigatorGoal, mob::Mob};
 
 use super::{Controls, Goal};
 
+/// Vanilla `BreedGoal.PARTNER_TARGETING` range.
+const PARTNER_RANGE: f64 = 8.0;
+const BREED_DISTANCE_SQ: f64 = 9.0;
+const LOVE_TIME: i32 = 60;
+
 pub struct BreedGoal {
     speed: f64,
-    mate: Option<Arc<dyn EntityBase>>,
-    timer: i32,
+    partner: Option<Arc<dyn EntityBase>>,
+    love_time: i32,
 }
 
 impl BreedGoal {
@@ -21,165 +20,99 @@ impl BreedGoal {
     pub fn new(speed: f64) -> Box<Self> {
         Box::new(Self {
             speed,
-            mate: None,
-            timer: 0,
+            partner: None,
+            love_time: 0,
         })
     }
 
-    fn find_mate(mob: &dyn Mob) -> Option<Arc<dyn EntityBase>> {
-        let mob_entity = mob.get_mob_entity();
-        if !mob_entity.is_in_love() {
-            return None;
-        }
-
+    /// Vanilla `BreedGoal.getFreePartner`: the closest animal this one can mate with that is not
+    /// panicking.
+    fn get_free_partner(mob: &dyn Mob) -> Option<Arc<dyn EntityBase>> {
+        let animal = mob.as_animal()?;
         let entity = mob.get_entity();
         let pos = entity.pos.load();
-        let world = entity.world.load();
-        let my_type = entity.entity_type;
-        let my_uuid = entity.entity_uuid;
+        let search_box =
+            entity
+                .bounding_box
+                .load()
+                .expand(PARTNER_RANGE, PARTNER_RANGE, PARTNER_RANGE);
 
-        let nearby = world.get_nearby_entities(pos, 8.0);
         let mut closest: Option<(f64, Arc<dyn EntityBase>)> = None;
-
-        for candidate in nearby.values() {
-            let c_entity = candidate.get_entity();
-            if c_entity.entity_uuid == my_uuid {
+        for candidate in entity.world.load().get_entities_at_box(&search_box) {
+            let Some(candidate_mob) = candidate.get_mob() else {
                 continue;
-            }
-            if c_entity.entity_type != my_type {
-                continue;
-            }
-            if !candidate.is_in_love() || !candidate.is_breeding_ready() || candidate.is_panicking()
+            };
+            let dist_sq = pos.squared_distance_to_vec(&candidate.get_entity().pos.load());
+            if dist_sq > PARTNER_RANGE * PARTNER_RANGE
+                || !animal.can_mate(candidate_mob)
+                || candidate.is_panicking()
             {
                 continue;
             }
-
-            let dist = pos.squared_distance_to_vec(&c_entity.pos.load());
-            match &closest {
-                Some((best_dist, _)) if dist >= *best_dist => {}
-                _ => closest = Some((dist, candidate.clone())),
+            if closest
+                .as_ref()
+                .is_none_or(|(best_dist_sq, _)| dist_sq < *best_dist_sq)
+            {
+                closest = Some((dist_sq, candidate.clone()));
             }
         }
 
-        closest.map(|(_, e)| e)
-    }
-
-    fn breed(mob: &dyn Mob, mate: &dyn EntityBase) {
-        let mob_entity = mob.get_mob_entity();
-        let entity = mob.get_entity();
-        let world = entity.world.load();
-
-        let player_opt = mob_entity
-            .breeder
-            .load()
-            .and_then(|uuid| world.get_player_by_uuid(uuid));
-        if let Some(player) = player_opt {
-            let entity_type_name = entity.entity_type.resource_name;
-            player.increment_stat(
-                pumpkin_data::statistic::StatisticCategory::Custom,
-                pumpkin_data::statistic::CustomStatistic::AnimalsBred as i32,
-                1,
-            );
-
-            player.trigger_advancement_criterion(
-                pumpkin_data::advancement::Advancement::HUSBANDRY_BREED_AN_ANIMAL,
-                "bred",
-            );
-            player.trigger_advancement_criterion(
-                pumpkin_data::advancement::Advancement::HUSBANDRY_BRED_ALL_ANIMALS,
-                &format!("minecraft:{entity_type_name}"),
-            );
-        }
-
-        mob_entity.reset_love_ticks();
-        mob_entity
-            .breeding_cooldown
-            .store(6000, std::sync::atomic::Ordering::Relaxed);
-
-        mate.reset_love();
-        mate.set_breeding_cooldown(6000);
-
-        let parent_pos = entity.pos.load();
-        let baby = from_type(entity.entity_type, parent_pos, &world, Uuid::new_v4());
-        baby.get_entity().set_age(-24000);
-        let world_full = entity.world.load_full();
-        world_full.spawn_entity(baby);
-
-        world_full.send_entity_status(entity, EntityStatus::InLoveHearts, None);
-        // TODO: gate on the `animalBreedingDropsXp` game rule once it exists.
-        ExperienceOrbEntity::spawn(&world_full, parent_pos, mob.get_random().random_range(1..8));
+        closest.map(|(_, partner)| partner)
     }
 }
 
 impl Goal for BreedGoal {
     fn can_start(&mut self, mob: &dyn Mob) -> bool {
-        let mob_entity = mob.get_mob_entity();
-        if !mob_entity.is_breeding_ready() || !mob_entity.is_in_love() {
+        if !mob.get_mob_entity().is_in_love() {
             return false;
         }
-
-        self.mate = Self::find_mate(mob);
-        self.mate.is_some()
+        self.partner = Self::get_free_partner(mob);
+        self.partner.is_some()
     }
 
     fn should_continue(&mut self, _mob: &dyn Mob) -> bool {
-        let Some(mate) = &self.mate else {
+        let Some(partner) = &self.partner else {
             return false;
         };
-
-        if !mate.get_entity().is_alive() || mate.is_panicking() {
-            return false;
-        }
-
-        mate.is_in_love() && self.timer < 60
+        partner.get_entity().is_alive()
+            && partner
+                .get_mob()
+                .is_some_and(|partner| partner.get_mob_entity().is_in_love())
+            && self.love_time < LOVE_TIME
+            && !partner.is_panicking()
     }
 
-    fn start(&mut self, _mob: &dyn Mob) {
-        self.timer = 0;
-    }
-
-    fn stop(&mut self, mob: &dyn Mob) {
-        self.mate = None;
-        self.timer = 0;
-        let mut navigator = mob
-            .get_mob_entity()
-            .navigator
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        navigator.stop();
+    fn stop(&mut self, _mob: &dyn Mob) {
+        self.partner = None;
+        self.love_time = 0;
     }
 
     fn tick(&mut self, mob: &dyn Mob) {
-        let Some(mate) = &self.mate else {
+        let Some(partner) = self.partner.clone() else {
             return;
         };
-
         let mob_entity = mob.get_mob_entity();
-        let mate_pos = mate.get_entity().pos.load();
+        mob_entity
+            .look_control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .look_at_entity_with_range(&partner, 10.0, mob.get_max_look_pitch_change());
 
+        let pos = mob.get_entity().pos.load();
+        let partner_pos = partner.get_entity().pos.load();
+        mob_entity
+            .navigator
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .set_progress(NavigatorGoal::new(pos, partner_pos, self.speed));
+
+        self.love_time += 1;
+        if self.love_time >= self.get_tick_count(LOVE_TIME)
+            && pos.squared_distance_to_vec(&partner_pos) < BREED_DISTANCE_SQ
+            && let Some(animal) = mob.as_animal()
+            && let Some(partner) = partner.get_mob()
         {
-            let mut look_control = mob_entity
-                .look_control
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            look_control.look_at_entity(mob, mate);
-        };
-
-        let my_pos = mob.get_entity().pos.load();
-        let dist_sq = my_pos.squared_distance_to_vec(&mate_pos);
-
-        {
-            let mut navigator = mob_entity
-                .navigator
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            navigator.set_progress(NavigatorGoal::new(my_pos, mate_pos, self.speed));
-        };
-
-        self.timer += 1;
-
-        if self.timer >= self.get_tick_count(60) && dist_sq < 9.0 {
-            Self::breed(mob, mate.as_ref());
+            animal.spawn_child_from_breeding(&mob.get_entity().world.load_full(), partner);
         }
     }
 

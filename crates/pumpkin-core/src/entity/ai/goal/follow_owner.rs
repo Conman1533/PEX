@@ -32,7 +32,7 @@ impl FollowOwnerGoal {
         })
     }
 
-    fn unable_to_move_to_owner(mob: &dyn Mob, owner: Option<&Player>) -> bool {
+    pub(crate) fn unable_to_move_to_owner(mob: &dyn Mob, owner: Option<&Player>) -> bool {
         if mob.is_sitting() {
             return true;
         }
@@ -49,7 +49,7 @@ impl FollowOwnerGoal {
         false
     }
 
-    fn find_owner(mob: &dyn Mob) -> Option<Arc<Player>> {
+    pub(crate) fn find_owner(mob: &dyn Mob) -> Option<Arc<Player>> {
         let owner_uuid = mob.get_owner_uuid()?;
         let world = mob.get_mob_entity().living_entity.entity.world.load_full();
         let player = world.get_player_by_uuid(owner_uuid)?;
@@ -65,12 +65,12 @@ impl FollowOwnerGoal {
         mob_pos.squared_distance_to_vec(&owner_pos)
     }
 
-    fn should_try_teleport_to_owner(mob: &dyn Mob, owner: &Player) -> bool {
+    pub(crate) fn should_try_teleport_to_owner(mob: &dyn Mob, owner: &Player) -> bool {
         let dist_sq = Self::distance_to_owner_sq(mob, owner);
         dist_sq >= TELEPORT_DISTANCE_SQ
     }
 
-    fn try_teleport_to_owner(mob: &dyn Mob, owner: &Player) {
+    pub(crate) fn try_teleport_to_owner(mob: &dyn Mob, owner: &Player) {
         let owner_pos = owner.living_entity.entity.pos.load();
         let mob_entity = &mob.get_mob_entity().living_entity.entity;
         let world = mob_entity.world.load_full();

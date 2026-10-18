@@ -122,7 +122,11 @@ impl CreakingEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.0, true)));
+            // Vanilla `MeleeAttack.create(Creaking::canMove, 40)`.
+            goal_selector.add_goal(
+                4,
+                Box::new(MeleeAttackGoal::new(1.0, true).gated_by(|mob| !mob.movement_frozen())),
+            );
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
                 6,
@@ -210,12 +214,16 @@ impl CreakingEntity {
             .set_synced_data(pumpkin_data::tracked_data::creaking::HOME_POS, pos);
     }
 
+    /// Vanilla `Mob.stopInPlace`.
     pub fn stop_in_place(&self) {
-        let entity = &self.mob_entity.living_entity.entity;
-        entity.velocity.store(Vector3::default());
+        let living = &self.mob_entity.living_entity;
         if let Ok(mut navigator) = self.mob_entity.navigator.lock() {
             navigator.stop();
         }
+        // setXxa, setYya and setSpeed: travel would otherwise keep walking on the last input.
+        living.movement_input.store(Vector3::default());
+        living.jumping.store(false, Ordering::Relaxed);
+        living.entity.velocity.store(Vector3::default());
     }
 
     pub fn activate(&self, player: &Arc<Player>) {
@@ -431,6 +439,10 @@ impl Mob for CreakingEntity {
 
     fn is_allowed_in_peaceful(&self) -> bool {
         false
+    }
+
+    fn movement_frozen(&self) -> bool {
+        !self.can_move()
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {

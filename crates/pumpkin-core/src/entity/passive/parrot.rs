@@ -9,8 +9,8 @@ use pumpkin_data::tag::{self, Taggable};
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        wander_around::WanderAroundGoal,
+        escape_danger::EscapeDangerGoal, follow_mob::FollowMobGoal,
+        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     player::Player,
@@ -44,13 +44,14 @@ impl ParrotEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
+            goal_selector.add_goal(0, EscapeDangerGoal::new(1.25).teleporting_to_owner());
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                2,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                1,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(3, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(3, Box::new(FollowMobGoal::new(1.0, 3.0, 7.0)));
         };
 
         mob_arc
@@ -88,6 +89,16 @@ impl ParrotEntity {
 }
 
 impl Mob for ParrotEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Parrot.getAmbient` also imitates a nearby monster one time in a thousand.
+        Some(pumpkin_data::sound::Sound::EntityParrotAmbient)
+    }
+
+    /// Vanilla `Animal.getAmbientSoundInterval`; parrots are animals there.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     /// Vanilla `Animal.removeWhenFarAway`: parrots are animals there, unlike in Pumpkin.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

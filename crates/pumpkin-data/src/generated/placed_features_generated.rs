@@ -8,7 +8,7 @@ fn build_placed_features()
         HeightRangeBlockPredicate, InsideWorldBoundsBlockPredicate, MatchingBlockTagPredicate,
         MatchingBlocksBlockPredicate, MatchingBlocksWrapper, MatchingFluidsBlockPredicate,
         NotBlockPredicate, OffsetBlocksBlockPredicate, ReplaceableBlockPredicate,
-        SolidBlockPredicate, WouldSurviveBlockPredicate,
+        SolidBlockPredicate, VolumeMatchBlockPredicate, WouldSurviveBlockPredicate,
     };
     use crate::generation::height_provider::{
         HeightProvider, TrapezoidHeightProvider, UniformHeightProvider,
@@ -928,7 +928,18 @@ fn build_placed_features()
                                 offset: OffsetBlocksBlockPredicate { offset: None },
                                 blocks: MatchingBlocksWrapper::Single("minecraft:sand".to_string()),
                             }),
-                            BlockPredicate::AlwaysTrue,
+                            BlockPredicate::VolumeMatch(VolumeMatchBlockPredicate {
+                                min: pumpkin_util::math::vector3::Vector3::new(-2i32, -2i32, -2i32),
+                                max: pumpkin_util::math::vector3::Vector3::new(2i32, -1i32, 2i32),
+                                predicate: Box::new(BlockPredicate::Not(NotBlockPredicate {
+                                    predicate: Box::new(BlockPredicate::MatchingBlockTag(
+                                        MatchingBlockTagPredicate {
+                                            offset: OffsetBlocksBlockPredicate { offset: None },
+                                            tag: pumpkin_data::tag::Block::MINECRAFT_AIR,
+                                        },
+                                    )),
+                                })),
+                            }),
                         ],
                     }),
                 }),

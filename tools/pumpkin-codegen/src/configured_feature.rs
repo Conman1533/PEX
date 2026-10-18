@@ -112,7 +112,7 @@ pub fn build() -> TokenStream {
                 AllOfBlockPredicate, AnyOfBlockPredicate, BlockPredicate,
                 HasSturdyFacePredicate, InsideWorldBoundsBlockPredicate,
                 MatchingBlockTagPredicate, MatchingBlocksBlockPredicate, MatchingBlocksWrapper,
-                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate,
+                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate, VolumeMatchBlockPredicate,
                 ReplaceableBlockPredicate, SolidBlockPredicate, WouldSurviveBlockPredicate,
                 HeightRangeBlockPredicate,
             };
@@ -151,7 +151,8 @@ pub fn build() -> TokenStream {
                 EnvironmentScanPlacementModifier, HeightRangePlacementModifier,
                 HeightmapPlacementModifier, NoiseBasedCountPlacementModifier,
                 NoiseThresholdCountPlacementModifier, OffsetPlacementModifier,
-                RandomOffsetPlacementModifier,
+                RandomOffsetPlacementModifier, RandomChancePlacementModifier,
+                CuboidPlacementModifier, RandomlySelectedPlacementModifier,
                 RarityFilterPlacementModifier, SquarePlacementModifier,
                 SurfaceThresholdFilterPlacementModifier, SurfaceWaterDepthFilterPlacementModifier,
                 PlacedFeatureWrapper,
@@ -173,10 +174,12 @@ pub fn build() -> TokenStream {
                 weighted_random_selector::{WeightedRandomFeature, WeightedRandomFeatureEntry},
                 sea_pickle::SeaPickleFeature,
                 seagrass::SeagrassFeature,
+                sequence::SequenceFeature,
                 simple_block::SimpleBlockFeature,
                 simple_random_selector::SimpleRandomFeature,
                 single_block_pillar::SingleBlockPillarFeature,
                 spring_feature::{BlockWrapper, SpringFeatureFeature},
+                template::{TemplateEntry, TemplateFeature},
                 geode::GeodeFeature,
                 tree::TreeFeature,
                 vegetation_patch::VegetationPatchFeature,
@@ -585,9 +588,22 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
             let placements_require_layer0_alternate = config["placements_require_layer0_alternate"]
                 .as_bool()
                 .unwrap_or(true);
-            let outer_wall_distance = value_to_int_provider(&config["outer_wall_distance"]);
-            let distribution_points = value_to_int_provider(&config["distribution_points"]);
-            let point_offset = value_to_int_provider(&config["point_offset"]);
+            // The datapack omits fields at their GeodeFeature.CODEC default, which are uniform ranges.
+            let uniform_or_default = |key: &str, min: i32, max: i32| {
+                let value = &config[key];
+                if value.is_null() {
+                    value_to_int_provider(&serde_json::json!({
+                        "type": "minecraft:uniform",
+                        "min_inclusive": min,
+                        "max_inclusive": max,
+                    }))
+                } else {
+                    value_to_int_provider(value)
+                }
+            };
+            let outer_wall_distance = uniform_or_default("outer_wall_distance", 4, 5);
+            let distribution_points = uniform_or_default("distribution_points", 3, 4);
+            let point_offset = uniform_or_default("point_offset", 1, 2);
             let min_gen_offset = config["min_gen_offset"].as_i64().unwrap_or(-16) as i32;
             let max_gen_offset = config["max_gen_offset"].as_i64().unwrap_or(16) as i32;
             let noise_multiplier = config["noise_multiplier"].as_f64().unwrap_or(0.05);
@@ -1004,7 +1020,18 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
             quote! { ConfiguredFeature::DripstoneCluster(crate::generation::feature::features::drip_stone::cluster::DripstoneClusterFeature {}) }
         }
         "minecraft:sequence" => {
-            quote! { ConfiguredFeature::NoOp }
+            let features: Vec<TokenStream> = config["features"]
+                .as_array()
+                .map(|a| a.as_slice())
+                .unwrap_or(&[])
+                .iter()
+                .map(value_to_placed_feature_wrapper)
+                .collect();
+            quote! {
+                ConfiguredFeature::Sequence(SequenceFeature {
+                    features: vec![#(#features),*],
+                })
+            }
         }
         "minecraft:stepped_column_cluster" => {
             let block = value_to_block_state_provider(&config["block"]);
@@ -1046,8 +1073,6 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
             let spread_attempts = config["spread_attempts"].as_u64().unwrap() as i32;
             let growth_rounds = config["growth_rounds"].as_u64().unwrap() as i32;
             let spread_rounds = config["spread_rounds"].as_u64().unwrap() as i32;
-            let extra_rare_growths = value_to_int_provider(&config["extra_rare_growths"]);
-            let catalyst_chance = config["catalyst_chance"].as_f64().unwrap() as f32;
             quote! {
                 ConfiguredFeature::SculkPatch(crate::generation::feature::features::sculk_patch::SculkPatchFeature {
                     charge_count: #charge_count,
@@ -1055,8 +1080,6 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
                     spread_attempts: #spread_attempts,
                     growth_rounds: #growth_rounds,
                     spread_rounds: #spread_rounds,
-                    extra_rare_growths: #extra_rare_growths,
-                    catalyst_chance: #catalyst_chance,
                 })
             }
         }
@@ -1089,9 +1112,6 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
         }
         "minecraft:void_start_platform" => {
             quote! { ConfiguredFeature::VoidStartPlatform(crate::generation::feature::features::void_start_platform::VoidStartPlatformFeature {}) }
-        }
-        "minecraft:desert_well" => {
-            quote! { ConfiguredFeature::DesertWell(crate::generation::feature::features::desert_well::DesertWellFeature) }
         }
         "minecraft:overlay" => {
             let features_arr = config["features"]
@@ -1169,10 +1189,71 @@ pub fn value_to_configured_feature(v: &Value) -> TokenStream {
             }
         }
         "minecraft:template" => {
-            quote! { ConfiguredFeature::NoOp }
+            let templates: Vec<TokenStream> = config["templates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| {
+                    let data = &entry["data"];
+                    let id = data["id"].as_str().unwrap();
+                    let rotations: Vec<TokenStream> = match data.get("rotations") {
+                        // Rotation.values()
+                        None => ["none", "clockwise_90", "180", "counterclockwise_90"]
+                            .into_iter()
+                            .map(value_to_rotation)
+                            .collect(),
+                        Some(rotations) => rotations
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|r| value_to_rotation(r.as_str().unwrap()))
+                            .collect(),
+                    };
+                    let weight = entry["weight"].as_i64().unwrap() as i32;
+                    quote! {
+                        Weighted {
+                            data: TemplateEntry { template: #id, rotations: vec![#(#rotations),*] },
+                            weight: #weight,
+                        }
+                    }
+                })
+                .collect();
+            let processors = match config.get("processors") {
+                None => quote! { std::sync::Arc::from([]) },
+                Some(Value::String(name)) => {
+                    quote! { crate::generation::structure::template::load_processor_list(#name) }
+                }
+                Some(inline) => {
+                    // A multi-line raw string keeps the line short enough for rustfmt.
+                    let json: TokenStream =
+                        format!("r#\"{}\"#", serde_json::to_string_pretty(inline).unwrap())
+                            .parse()
+                            .unwrap();
+                    quote! { TemplateFeature::inline_processors(#json) }
+                }
+            };
+            quote! {
+                ConfiguredFeature::Template(TemplateFeature {
+                    templates: vec![#(#templates),*],
+                    processors: #processors,
+                })
+            }
         }
         other => {
             let msg = format!("unknown configured feature type: {other}");
+            quote! { compile_error!(#msg) }
+        }
+    }
+}
+
+fn value_to_rotation(s: &str) -> TokenStream {
+    match s {
+        "none" => quote! { pumpkin_data::Rotation::None },
+        "clockwise_90" => quote! { pumpkin_data::Rotation::Clockwise90 },
+        "180" => quote! { pumpkin_data::Rotation::Rotate180 },
+        "counterclockwise_90" => quote! { pumpkin_data::Rotation::CounterClockwise90 },
+        other => {
+            let msg = format!("unknown rotation: {other}");
             quote! { compile_error!(#msg) }
         }
     }
@@ -2013,7 +2094,7 @@ fn value_to_feature_ref(v: &Value) -> TokenStream {
 /// – `v` – a JSON object for one modifier entry, expected to contain a `"type"` field.
 ///
 /// # Returns
-/// A `TokenStream` for the appropriate `PlacementModifier` variant; defaults to `PlacementModifier::Biome` for unrecognised types.
+/// A `PlacementModifier` variant token stream, or `compile_error!` for unknown types.
 fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
     let type_str = v["type"].as_str().unwrap_or("");
     match type_str {
@@ -2054,9 +2135,36 @@ fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
             let c = value_to_int_provider(&v["count"]);
             quote! { PlacementModifier::CountOnEveryLayer(CountOnEveryLayerPlacementModifier { count: #c }) }
         }
+        "minecraft:random_chance" => {
+            let chance = v["chance"].as_f64().unwrap_or(1.0) as f32;
+            quote! {
+                PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                    chance: #chance,
+                })
+            }
+        }
         "minecraft:rarity_filter" => {
             let ch = v["chance"].as_u64().unwrap_or(1) as u32;
             quote! { PlacementModifier::RarityFilter(RarityFilterPlacementModifier { chance: #ch }) }
+        }
+        "minecraft:cuboid" => {
+            let xz = value_to_int_provider(&v["xz_size"]);
+            let y = value_to_int_provider(&v["y_size"]);
+            let edges = v["include_edges"].as_bool().unwrap_or(true);
+            let interior = v["include_interior"].as_bool().unwrap_or(true);
+            quote! { PlacementModifier::Cuboid(CuboidPlacementModifier { xz_size: #xz, y_size: #y, include_edges: #edges, include_interior: #interior }) }
+        }
+        "minecraft:randomly_selected" => {
+            let placements: Vec<TokenStream> = v["placements"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(value_to_placement_modifier_cf)
+                .collect();
+            if placements.is_empty() {
+                return quote! { compile_error!("randomly_selected needs at least one placement") };
+            }
+            quote! { PlacementModifier::RandomlySelected(RandomlySelectedPlacementModifier { placements: vec![#(#placements),*] }) }
         }
         "minecraft:block_predicate_filter" => {
             let pred = value_to_block_predicate(&v["predicate"]);
@@ -2119,6 +2227,9 @@ fn value_to_placement_modifier_cf(v: &Value) -> TokenStream {
             let steps = v["max_steps"].as_i64().unwrap_or(1) as i32;
             quote! { PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier { direction_of_search: #dir, target_condition: #tc, allowed_search_condition: #asc, max_steps: #steps }) }
         }
-        _ => quote! { PlacementModifier::Biome(BiomePlacementModifier) },
+        other => {
+            let msg = format!("unknown placement modifier: {other}");
+            quote! { compile_error!(#msg) }
+        }
     }
 }

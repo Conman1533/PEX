@@ -1,3 +1,7 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
+use crate::entity::passive::horse::{HorseEntity, can_parent, horse_or_donkey_tamed};
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -24,12 +28,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[
-    &Item::GOLDEN_APPLE,
-    &Item::ENCHANTED_GOLDEN_APPLE,
-    &Item::GOLDEN_CARROT,
-];
 
 pub const FLAG_TAME: u8 = 2;
 pub const FLAG_SADDLE: u8 = 4;
@@ -74,9 +72,20 @@ impl DonkeyEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_HORSE_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -142,17 +151,40 @@ impl AgeableMob for DonkeyEntity {
 impl Animal for DonkeyEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::SUGAR
-            || item_stack.item == &Item::HAY_BLOCK
-            || item_stack.item == &Item::APPLE
-            || item_stack.item == &Item::GOLDEN_CARROT
-            || item_stack.item == &Item::GOLDEN_APPLE
-            || item_stack.item == &Item::ENCHANTED_GOLDEN_APPLE
+    }
+
+    /// Vanilla `Donkey.canMate`: with a horse or a donkey.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && horse_or_donkey_tamed(partner)
+                .is_some_and(|tamed| can_parent(self, self.is_tame()) && can_parent(partner, tamed))
+    }
+
+    /// Vanilla `Donkey.getBreedOffspring`: a mule with a horse.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby_type = if partner.cast_any().is::<HorseEntity>() {
+            &EntityType::MULE
+        } else {
+            &EntityType::DONKEY
+        };
+        Some(create_offspring(&self.mob_entity, baby_type, world))
     }
 }
 
 impl Mob for DonkeyEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityDonkeyAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -189,10 +221,6 @@ impl Mob for DonkeyEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -251,6 +279,6 @@ impl Mob for DonkeyEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityDonkeyAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

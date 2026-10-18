@@ -116,6 +116,8 @@ impl BlockBehaviour for NetherPortalBlock {
             mob.get_entity()
                 .portal_cooldown
                 .store(300, Ordering::Relaxed);
+            // Gives the zombified piglin its golden weapon, like `World::spawn_entity`.
+            mob.init_data_tracker();
             args.world.spawn_entity_non_save(mob);
         }
     }

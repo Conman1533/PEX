@@ -66,6 +66,18 @@ fn toggle_door(player: &Player, world: &Arc<World>, block_pos: &BlockPos) {
         other_door_props.to_state_id(other_block),
         BlockFlags::NOTIFY_LISTENERS,
     );
+    world.game_event(
+        if door_props.open {
+            pumpkin_data::game_event::GameEvent::BlockOpen
+        } else {
+            pumpkin_data::game_event::GameEvent::BlockClose
+        },
+        block_pos.to_centered_f64(),
+        crate::world::vibration::GameEventContext::of(
+            crate::world::vibration::entity_handle(world, player),
+            None,
+        ),
+    );
 }
 
 fn can_open_door(block: &Block) -> bool {
@@ -206,6 +218,15 @@ impl DoorBlock {
                 BlockFlags::NOTIFY_LISTENERS,
             );
         }
+        world.game_event(
+            if open {
+                pumpkin_data::game_event::GameEvent::BlockOpen
+            } else {
+                pumpkin_data::game_event::GameEvent::BlockClose
+            },
+            block_pos.to_centered_f64(),
+            crate::world::vibration::GameEventContext::default(),
+        );
     }
 }
 
@@ -322,6 +343,15 @@ impl BlockBehaviour for DoorBlock {
                     get_sound(args.block, powered),
                     SoundCategory::Blocks,
                     *args.position,
+                );
+                args.world.game_event(
+                    if powered {
+                        pumpkin_data::game_event::GameEvent::BlockOpen
+                    } else {
+                        pumpkin_data::game_event::GameEvent::BlockClose
+                    },
+                    args.position.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::default(),
                 );
             }
 

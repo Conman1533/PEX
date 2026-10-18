@@ -4,27 +4,25 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        tempt::TemptGoal, wander_around::WanderAroundGoal,
+        avoid_entity::AvoidEntityGoal, breed::BreedGoal, escape_danger::EscapeDangerGoal,
+        follow_parent::FollowParentGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     passive::animal::Animal,
     player::Player,
 };
-
-pub const FOX_FOOD: &[&Item] = &[&Item::SWEET_BERRIES, &Item::GLOW_BERRIES];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
@@ -98,16 +96,22 @@ impl FoxEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.2, FOX_FOOD, false)));
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(2, EscapeDangerGoal::new(2.2));
+            goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
-                7,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
+                4,
+                Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 16.0, 1.6, 1.4)),
             );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(
+                4,
+                Box::new(AvoidEntityGoal::new(&EntityType::POLAR_BEAR, 8.0, 1.6, 1.4)),
+            );
+            goal_selector.add_goal(8, Box::new(FollowParentGoal::new(1.25)));
+            goal_selector.add_goal(11, Box::new(WanderAroundGoal::water_avoiding(1.0)));
+            goal_selector.add_goal(
+                12,
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 24.0),
+            );
         };
 
         mob_arc
@@ -225,11 +229,38 @@ impl AgeableMob for FoxEntity {
 impl Animal for FoxEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FOX_FOOD)
-            || FOX_FOOD.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    fn play_eating_sound(&self) {
+        let entity = self.get_entity();
+        entity.world.load().play_sound(
+            Sound::EntityFoxEat,
+            pumpkin_data::sound::SoundCategory::Neutral,
+            &entity.pos.load(),
+        );
     }
 }
 
 impl Mob for FoxEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        if self.is_sleeping() {
+            return Some(pumpkin_data::sound::Sound::EntityFoxSleep);
+        }
+        let entity = self.get_entity();
+        let world = entity.world.load();
+        if !world.is_bright_outside() && self.get_random().random::<f32>() < 0.1 {
+            let search_box = entity.bounding_box.load().expand(16.0, 16.0, 16.0);
+            if world
+                .get_players_at_box(&search_box)
+                .iter()
+                .all(|player| player.is_spectator())
+            {
+                return Some(pumpkin_data::sound::Sound::EntityFoxScreech);
+            }
+        }
+        Some(pumpkin_data::sound::Sound::EntityFoxAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -268,10 +299,6 @@ impl Mob for FoxEntity {
         self.set_variant(FoxVariant::from_name(name));
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -289,6 +316,6 @@ impl Mob for FoxEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityFoxAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

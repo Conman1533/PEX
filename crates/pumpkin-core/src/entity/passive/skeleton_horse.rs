@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering},
@@ -15,8 +16,8 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     passive::animal::Animal,
@@ -60,9 +61,9 @@ impl SkeletonHorseEntity {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            // Vanilla `SkeletonHorse.addBehaviourGoals` is empty: no float, panic or tempt.
+            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -118,9 +119,27 @@ impl Animal for SkeletonHorseEntity {
     fn is_food(&self, _item_stack: &ItemStack) -> bool {
         false
     }
+
+    /// Vanilla `AbstractHorse.canMate`: only horses, donkeys, llamas and camels override it.
+    fn can_mate(&self, _partner: &dyn Mob) -> bool {
+        false
+    }
 }
 
 impl Mob for SkeletonHorseEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_submerged_in_water() {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseAmbientWater
+        } else {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseAmbient
+        })
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -153,10 +172,6 @@ impl Mob for SkeletonHorseEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -201,6 +216,6 @@ impl Mob for SkeletonHorseEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntitySkeletonHorseAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

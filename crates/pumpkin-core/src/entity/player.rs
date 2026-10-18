@@ -658,10 +658,7 @@ impl Player {
             }
         }
 
-        let server = world.server.upgrade().unwrap_or_else(|| {
-            tracing::error!("server inactive");
-            std::process::exit(1);
-        });
+        let server = world.server.upgrade();
 
         let player_uuid = gameprofile.id;
 
@@ -697,7 +694,7 @@ impl Player {
             &inventory,
             None,
             0,
-            Some(server.recipe_manager.clone()),
+            server.as_ref().map(|s| s.recipe_manager.clone() as _),
         )));
 
         // Initialize abilities based on gamemode (like vanilla's GameMode.setAbilities())
@@ -727,8 +724,16 @@ impl Player {
             config: ArcSwap::new(Arc::new(config)),
             advancements: Arc::new(Mutex::new(
                 server
-                    .advancement_manager
-                    .clone()
+                    .as_ref()
+                    .map_or_else(
+                        || {
+                            Arc::new(crate::data::advancement_data::AdvancementManager::new(
+                                std::env::temp_dir(),
+                                false,
+                            ))
+                        },
+                        |s| s.advancement_manager.clone(),
+                    )
                     .new_player_advancement(gameprofile.id),
             )),
             gameprofile,
@@ -783,16 +788,21 @@ impl Player {
             using_hand: AtomicCell::new(None),
             // Minecraft has no way to change the default permission level of new players.
             // Minecraft's default permission level is 0.
-            permission_lvl: server
-                .data
-                .operator_config
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get_entry(&player_uuid)
-                .map_or(
-                    AtomicCell::new(server.advanced_config.commands.default_op_level),
-                    |op| AtomicCell::new(op.level),
-                ),
+            permission_lvl: server.as_ref().map_or_else(
+                || AtomicCell::new(pumpkin_util::permission::PermissionLvl::Zero),
+                |server| {
+                    server
+                        .data
+                        .operator_config
+                        .read()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get_entry(&player_uuid)
+                        .map_or(
+                            AtomicCell::new(server.advanced_config.commands.default_op_level),
+                            |op| AtomicCell::new(op.level),
+                        )
+                },
+            ),
             inventory,
             ender_chest_inventory,
             experience_level: AtomicI32::new(0),
@@ -1517,7 +1527,7 @@ impl Player {
         self.living_entity.last_attack_time.store(
             self.living_entity
                 .entity
-                .age
+                .tick_count
                 .load(std::sync::atomic::Ordering::Relaxed),
             std::sync::atomic::Ordering::Relaxed,
         );
@@ -2863,7 +2873,7 @@ impl Player {
         self.tick_counter.fetch_add(1, Ordering::Relaxed);
         self.living_entity
             .entity
-            .age
+            .tick_count
             .fetch_add(1, Ordering::Relaxed);
         if let Some(sleeping_since) = self.sleeping_since.load()
             && sleeping_since < 101
@@ -5088,6 +5098,7 @@ impl Player {
         let item_entity = Arc::new(ItemEntity::new_with_velocity(
             entity, item_stack, velocity, 40,
         ));
+        item_entity.set_thrower(self.gameprofile.id);
         self.world().spawn_entity(item_entity);
     }
 
@@ -7930,11 +7941,28 @@ impl InventoryPlayer for Player {
         self.living_entity
             .send_equipment_changes(&[(slot.clone(), stack.clone())]);
 
-        if let Some(equippable) = stack.get_data_component::<EquippableImpl>() {
+        let equippable = stack.get_data_component::<EquippableImpl>();
+        if let Some(equippable) = equippable {
             self.world().play_sound_event(
                 &equippable.equip_sound,
                 SoundCategory::Players,
                 &self.position(),
+            );
+        }
+        if slot.is_armor_slot() {
+            let world = self.world();
+            let event = if equippable.is_some() {
+                pumpkin_data::game_event::GameEvent::Equip
+            } else {
+                pumpkin_data::game_event::GameEvent::Unequip
+            };
+            world.game_event(
+                event,
+                self.position(),
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, self),
+                    None,
+                ),
             );
         }
     }

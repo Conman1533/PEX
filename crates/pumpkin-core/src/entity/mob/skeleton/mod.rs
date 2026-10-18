@@ -16,8 +16,8 @@ use crate::entity::{
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal,
         restrict_sun::RestrictSunGoal, revenge::RevengeGoal, wander_around::WanderAroundGoal,
     },
-    living::LivingEntity,
     mob::{Mob, MobEntity, equipment::RegionalDifficulty},
+    passive::turtle::baby_on_land_selector,
 };
 use crate::world::World;
 
@@ -130,10 +130,7 @@ impl SkeletonEntityBase {
                     10,
                     true,
                     false,
-                    // `Turtle.BABY_ON_LAND_SELECTOR`
-                    Some(|target: &LivingEntity, _world: &World| {
-                        target.entity.age.load(Ordering::Relaxed) < 0 && !target.is_in_water()
-                    }),
+                    Some(baby_on_land_selector),
                 )),
             );
         };

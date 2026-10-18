@@ -34,6 +34,7 @@ pub mod raid;
 pub mod random_sequences;
 pub mod stopwatches;
 pub mod time;
+pub mod vibration;
 pub mod villager_poi;
 
 use crate::block::RandomTickArgs;
@@ -491,7 +492,8 @@ impl World {
         for id in removed_players {
             tracker.remove_player(id, &mut active_chunks);
         }
-        tracker.sync_forced_chunks(&forced_chunks, &mut active_chunks, &mut newly_active);
+        let (unforced, newly_forced) =
+            tracker.sync_forced_chunks(&forced_chunks, &mut active_chunks, &mut newly_active);
 
         for pos in newly_active {
             if self.level.is_chunk_loaded(&pos) && tracker.loaded_active_chunks.insert(pos) {
@@ -538,11 +540,32 @@ impl World {
         drop(active_chunks);
         drop(tracker);
 
+        self.update_chunk_forced(&unforced, &newly_forced);
+
         self.spawn_state.store(Arc::new(SpawnState::new(
             spawnable_chunks,
             &self.entities,
             self,
         )));
+    }
+
+    /// Vanilla `ServerChunkCache.updateChunkForced`: a forced chunk holds a ticket, so it loads
+    /// and stays loaded without a player nearby.
+    fn update_chunk_forced(&self, unforced: &[Vector2<i32>], newly_forced: &[Vector2<i32>]) {
+        if unforced.is_empty() && newly_forced.is_empty() {
+            return;
+        }
+        let mut chunk_loading = self
+            .level
+            .chunk_loading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for &pos in unforced {
+            chunk_loading.remove_force_ticket(pos);
+        }
+        for &pos in newly_forced {
+            chunk_loading.add_force_ticket(pos);
+        }
     }
 
     pub fn get_lighting_config(&self) -> LightingEngineConfig {
@@ -1646,7 +1669,7 @@ impl World {
                 let _guard = entity_handle.enter();
 
                 for (entity, entity_chunk) in batch {
-                    entity.get_entity().age.fetch_add(1, Relaxed);
+                    entity.get_entity().tick_count.fetch_add(1, Relaxed);
                     entity.tick(entity.as_ref(), server_ref);
                     touch_players(entity, *entity_chunk, &player_touches);
                 }
@@ -2141,32 +2164,6 @@ impl World {
             });
     }
 
-    pub fn check_fluid_collision(&self, bounding_box: BoundingBox) -> bool {
-        let min = bounding_box.min_block_pos();
-
-        let max = bounding_box.max_block_pos();
-
-        for x in min.0.x..=max.0.x {
-            for y in min.0.y..=max.0.y {
-                for z in min.0.z..=max.0.z {
-                    let pos = BlockPos::new(x, y, z);
-
-                    let (fluid, state) = self.get_fluid_and_fluid_state(&pos);
-
-                    if fluid.id != Fluid::EMPTY.id {
-                        let height = f64::from(state.height);
-
-                        if height >= bounding_box.min.y {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        false
-    }
-
     pub fn contains_any_liquid(&self, bounding_box: BoundingBox) -> bool {
         let min_x = bounding_box.min.x.floor() as i32;
         let max_x = bounding_box.max.x.ceil() as i32;
@@ -2519,6 +2516,8 @@ impl World {
             is_thundering,
         );
         for entity in entities {
+            // Equipment and synced defaults, like `spawn_entity`.
+            entity.init_data_tracker();
             self.spawn_entity_non_save(entity);
         }
     }
@@ -5248,6 +5247,7 @@ impl World {
         replaced_block_state_id
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn break_block(
         self: &Arc<Self>,
         position: &BlockPos,
@@ -5322,6 +5322,17 @@ impl World {
         };
 
         let broken_state_id = self.set_block_state(position, new_state_id, flags);
+        // Level.destroyBlock
+        if broken_state_id != new_state_id {
+            self.game_event(
+                pumpkin_data::game_event::GameEvent::BlockDestroy,
+                position.to_centered_f64(),
+                vibration::GameEventContext::of(
+                    cause.map(|player| player.clone() as Arc<dyn EntityBase>),
+                    Some(broken_state_id),
+                ),
+            );
+        }
         let broken_block = Block::from_state_id(broken_state_id);
         if !broken_block.is_air()
             && broken_state_id != new_state_id
@@ -6207,15 +6218,20 @@ impl World {
                     .get(block_pos)
                     .cloned()
             })
-            .flatten()?;
-        if let Some(custom_data) = nbt
-            .get_compound("PumpkinCustomData")
-            .or_else(|| nbt.get_compound("BukkitValues"))
-        {
-            self.custom_block_entity_data
-                .insert(*block_pos, custom_data.clone());
-        }
-        let entity = block_entity_from_nbt(&nbt)?;
+            .flatten();
+        let entity = if let Some(nbt) = nbt {
+            if let Some(custom_data) = nbt
+                .get_compound("PumpkinCustomData")
+                .or_else(|| nbt.get_compound("BukkitValues"))
+            {
+                self.custom_block_entity_data
+                    .insert(*block_pos, custom_data.clone());
+            }
+            block_entity_from_nbt(&nbt)?
+        } else {
+            let state = self.get_block_state(block_pos);
+            crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
+        };
         self.block_entities
             .entry(chunk_pos)
             .or_default()
@@ -6384,7 +6400,14 @@ impl World {
                     .collect()
             })
             .unwrap_or_default();
-        for pos in positions {
+        // Chunks generated before worldgen registered block entities hold sculk sensors,
+        // shriekers and the like with no block entity data at all, so they never tick or listen.
+        // Vanilla generation always leaves a `DUMMY` entry for them; create the missing ones.
+        let block_entity_blocks = self
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| chunk.block_entity_block_positions())
+            .unwrap_or_default();
+        for pos in positions.into_iter().chain(block_entity_blocks) {
             let already_loaded = self
                 .block_entities
                 .get(&chunk_pos)
@@ -6885,9 +6908,81 @@ impl World {
     }
 
     pub fn emit_game_event(&self, event_key: impl Into<String>, position: Vector3<f64>) {
+        let event_key = event_key.into();
+        match pumpkin_data::game_event::GameEvent::from_name(&event_key) {
+            Some(event) => self.game_event(event, position, vibration::GameEventContext::default()),
+            None => self.fire_game_event_plugins(event_key, position),
+        }
+    }
+
+    /// `ServerLevel.gameEvent`: tells plugins, then offers the event to every vibration listener
+    /// in range (`GameEventDispatcher.post`).
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "callers build the context inline"
+    )]
+    pub fn game_event(
+        &self,
+        event: pumpkin_data::game_event::GameEvent,
+        position: Vector3<f64>,
+        context: vibration::GameEventContext,
+    ) {
+        let context = &context;
+        self.fire_game_event_plugins(event.name().to_string(), position);
+        let radius = vibration::notification_radius(event);
+        let center = BlockPos::floored_v(position);
+        let mut listeners = Vec::new();
+        for chunk_x in (center.0.x - radius) >> 4..=(center.0.x + radius) >> 4 {
+            for chunk_z in (center.0.z - radius) >> 4..=(center.0.z + radius) >> 4 {
+                if let Some(entities) = self.block_entities.get(&Vector2::new(chunk_x, chunk_z)) {
+                    listeners.extend(entities.values().cloned());
+                }
+            }
+        }
+        for block_entity in listeners {
+            let Some(user) = block_entity.as_vibration_user() else {
+                continue;
+            };
+            // EuclideanGameEventListenerRegistry.getPostableListenerPosition
+            let listener = BlockPos::floored_v(user.listener_pos());
+            let radius = user.listener_radius();
+            if listener.squared_distance(&center) <= radius * radius {
+                vibration::handle_game_event(user, self, event, context, position);
+            }
+        }
+        for entity in self.entities.load().iter() {
+            if !entity.get_entity().is_alive() {
+                continue;
+            }
+            if let Some(user) = entity.as_vibration_user() {
+                let listener = BlockPos::floored_v(user.listener_pos());
+                let radius = user.listener_radius();
+                if listener.squared_distance(&center) <= radius * radius {
+                    vibration::handle_game_event(user, self, event, context, position);
+                }
+            }
+            if matches!(
+                event,
+                pumpkin_data::game_event::GameEvent::JukeboxPlay
+                    | pumpkin_data::game_event::GameEvent::JukeboxStopPlay
+            ) && let Some(allay) = entity
+                .cast_any()
+                .downcast_ref::<crate::entity::passive::allay::AllayEntity>()
+            {
+                let listener = BlockPos::floored_v(allay.get_entity().get_eye_pos());
+                if listener.squared_distance(&center) <= radius * radius {
+                    allay.set_jukebox_playing(
+                        center,
+                        event == pumpkin_data::game_event::GameEvent::JukeboxPlay,
+                    );
+                }
+            }
+        }
+    }
+
+    fn fire_game_event_plugins(&self, event_key: String, position: Vector3<f64>) {
         let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
-            event_key.into(),
-            position,
+            event_key, position,
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
@@ -7406,6 +7501,36 @@ fn merge_entity_records(data: &mut Vec<NbtCompound>, live: bool, fresh: Vec<NbtC
 
 /// A bare world with no loaded chunks, enough for entity queries.
 #[cfg(test)]
+pub(crate) fn test_player(world: &Arc<World>, pos: Vector3<f64>) -> Arc<Player> {
+    let profile = crate::net::GameProfile {
+        id: Uuid::new_v4(),
+        name: "TestPlayer".to_string(),
+        properties: ArcSwap::from_pointee(Vec::new()),
+        profile_actions: None,
+    };
+    let client = Arc::new(crate::net::ClientPlatform::Java(
+        crate::net::java::JavaClient::new_for_test(profile.clone()),
+    ));
+    let player = Arc::new(Player::new(
+        client,
+        profile,
+        crate::net::PlayerConfig::default(),
+        world,
+        pumpkin_util::GameMode::Survival,
+    ));
+    player.living_entity.entity.set_pos(pos);
+    world
+        .entity_sections
+        .add(&(player.clone() as Arc<dyn EntityBase>));
+    world.players.rcu(|players| {
+        let mut next = (**players).clone();
+        next.push(player.clone());
+        next
+    });
+    player
+}
+
+#[cfg(test)]
 pub(crate) fn test_world() -> Arc<World> {
     let path = tempfile::tempdir().expect("temp dir").keep();
     let level = pumpkin_world::dimension::into_level(
@@ -7453,6 +7578,32 @@ mod tests {
         data.iter()
             .filter_map(|record| record.get_string("id"))
             .collect()
+    }
+
+    #[tokio::test]
+    async fn activating_a_chunk_creates_block_entities_its_blocks_lack() {
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::chunk::ChunkData;
+
+        let world = super::test_world();
+        let chunk_pos = Vector2::new(0, 0);
+        let chunk = ChunkData::empty_sync(0, 0);
+        // A shrieker saved without block entity data, as worldgen used to leave it.
+        let pos = BlockPos::new(3, 70, 5);
+        chunk
+            .section
+            .set_block_absolute_y(3, 70, 5, Block::SCULK_SHRIEKER.default_state.id);
+        world.level.loaded_chunks.insert(chunk_pos, chunk);
+        assert!(world.block_entities.get(&chunk_pos).is_none());
+
+        world.migrate_pending_block_entities(chunk_pos);
+
+        let entity = world
+            .block_entities
+            .get(&chunk_pos)
+            .and_then(|entities| entities.get(&pos).cloned())
+            .expect("shrieker block entity");
+        assert!(entity.as_vibration_user().is_some());
     }
 
     #[test]

@@ -1,3 +1,6 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
+use crate::entity::passive::horse::can_parent;
+use crate::entity::passive::trader_llama::TraderLlamaEntity;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -28,8 +31,6 @@ use crate::entity::{
     player::Player,
     projectile::llama_spit::LlamaSpitEntity,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::HAY_BLOCK];
 
 pub const FLAG_TAME: u8 = 2;
 pub const FLAG_BRED: u8 = 8;
@@ -128,15 +129,26 @@ impl LlamaEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
             goal_selector.add_goal(
                 3,
                 Box::new(RangedAttackGoal::new(ranged_weak, 1.25, 40, 20.0)),
             );
-            goal_selector.add_goal(4, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
-            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(7, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(3, EscapeDangerGoal::new(1.2));
+            goal_selector.add_goal(4, BreedGoal::new(1.0));
+            goal_selector.add_goal(
+                5,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_LLAMA_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
+            );
+            goal_selector.add_goal(6, Box::new(FollowParentGoal::new(1.0)));
+            goal_selector.add_goal(7, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 8,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -252,18 +264,42 @@ impl AgeableMob for LlamaEntity {
     }
 }
 
+/// Whether `mob` is a tamed llama or trader llama, `None` when it is neither.
+#[must_use]
+pub fn llama_tamed(mob: &dyn Mob) -> Option<bool> {
+    mob.cast_any()
+        .downcast_ref::<LlamaEntity>()
+        .map(LlamaEntity::is_tame)
+        .or_else(|| {
+            mob.cast_any()
+                .downcast_ref::<TraderLlamaEntity>()
+                .map(TraderLlamaEntity::is_tame)
+        })
+}
+
 impl Animal for LlamaEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_LLAMA_FOOD)
-            || item_stack
-                .item
-                .has_tag(&tag::Item::MINECRAFT_LLAMA_TEMPT_ITEMS)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::HAY_BLOCK
+    }
+
+    /// Vanilla `Llama.canMate`: with any llama, trader llamas included.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && llama_tamed(partner)
+                .is_some_and(|tamed| can_parent(self, self.is_tame()) && can_parent(partner, tamed))
     }
 }
 
 impl Mob for LlamaEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityLlamaAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -308,10 +344,6 @@ impl Mob for LlamaEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -381,7 +413,7 @@ impl Mob for LlamaEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityLlamaAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
 

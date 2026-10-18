@@ -4,26 +4,23 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::particle::Particle;
 use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::vector3::Vector3;
 
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        escape_danger::EscapeDangerGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
-        swim::SwimGoal, tempt::TemptGoal, try_find_water::TryFindWaterGoal,
-        wander_around::WanderAroundGoal,
+        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
+        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal,
+        try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::COD, &Item::SALMON, &Item::TROPICAL_FISH];
 
 pub struct DolphinEntity {
     pub mob_entity: MobEntity,
@@ -53,16 +50,15 @@ impl DolphinEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
+            // Not in vanilla: it stands in for `BreathAirGoal`, which is not ported yet.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(1.6));
-            goal_selector.add_goal(2, Box::new(MeleeAttackGoal::new(1.2, true)));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.2, TEMPT_ITEMS, false)));
             goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
             goal_selector.add_goal(
                 5,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(6, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(6, Box::new(MeleeAttackGoal::new(1.2, true)));
         };
 
         {
@@ -89,6 +85,19 @@ impl DolphinEntity {
 }
 
 impl Mob for DolphinEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_in_water() {
+            pumpkin_data::sound::Sound::EntityDolphinAmbientWater
+        } else {
+            pumpkin_data::sound::Sound::EntityDolphinAmbient
+        })
+    }
+
+    /// Vanilla `WaterAnimal.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_bool("GotFish", self.got_fish());
         nbt.put_int("Moistness", self.moistness_level.load(Ordering::Relaxed));
@@ -109,7 +118,7 @@ impl Mob for DolphinEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         let item = item_stack.get_item();
-        if TEMPT_ITEMS.iter().any(|i| i.id == item.id) {
+        if item.has_tag(&tag::Item::MINECRAFT_FISHES) {
             item_stack.decrement_unless_creative(player.gamemode.load(), 1);
             self.set_got_fish(true);
             self.mob_entity.living_entity.heal(2.0);

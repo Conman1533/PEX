@@ -545,6 +545,19 @@ impl EntityBase for ArrowEntity {
         let entity = self.get_entity();
         let world = entity.world.load();
 
+        if entity.age.fetch_add(1, Ordering::Relaxed) == 0 {
+            let owner = self.owner_id.and_then(|id| {
+                world
+                    .get_entity_by_id(id)
+                    .or_else(|| world.get_player_by_id(id).map(|p| p as Arc<dyn EntityBase>))
+            });
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileShoot,
+                entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(owner, None),
+            );
+        }
+
         // Fire & Extinguish logic
         let mut fire_ticks = entity.fire_ticks.load(Ordering::Relaxed);
         let touching_water = entity.touching_water.load(Ordering::Relaxed);
@@ -839,6 +852,14 @@ impl EntityBase for ArrowEntity {
                         .block_registry
                         .on_projectile_hit(block, &world, self, &pos, state, &hit_pos, &server);
                 }
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::ProjectileLand,
+                    pos.to_centered_f64(),
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, self),
+                        Some(state.id),
+                    ),
+                );
 
                 if block == &pumpkin_data::Block::TARGET
                     && let Some(player) = self.owner_id.and_then(|id| world.get_player_by_id(id))
@@ -888,6 +909,14 @@ impl EntityBase for ArrowEntity {
                 hit_pos,
                 ..
             } => {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::ProjectileLand,
+                    hit_pos,
+                    crate::world::vibration::GameEventContext::of(
+                        crate::world::vibration::entity_handle(&world, self),
+                        None,
+                    ),
+                );
                 let target_entity_id = target.get_entity().entity_id;
                 self.pierced_entities
                     .write()
@@ -1061,7 +1090,9 @@ impl ArrowEntity {
         }
 
         // Skip owner for initial frames (5 ticks)
-        if Some(other_ent.entity_id) == self.owner_id && self_ent.age.load(Ordering::Relaxed) < 5 {
+        if Some(other_ent.entity_id) == self.owner_id
+            && self_ent.tick_count.load(Ordering::Relaxed) < 5
+        {
             return true;
         }
 

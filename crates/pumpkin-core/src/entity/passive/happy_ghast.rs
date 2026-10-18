@@ -4,9 +4,7 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -21,8 +19,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-pub const HAPPY_GHAST_FOOD: &[&Item] = &[&Item::SNOWBALL];
 
 /// Represents a Happy Ghast, a passive flying mob.
 ///
@@ -65,7 +61,16 @@ impl HappyGhastEntity {
                 1,
                 Box::new(TemptGoal::with_stop_distance(
                     1.0,
-                    HAPPY_GHAST_FOOD,
+                    |mob, stack| {
+                        let tag = if !mob.get_mob_entity().is_wearing_body_armor()
+                            && !mob.as_ageable().is_some_and(AgeableMob::is_baby)
+                        {
+                            &tag::Item::MINECRAFT_HAPPY_GHAST_TEMPT_ITEMS
+                        } else {
+                            &tag::Item::MINECRAFT_HAPPY_GHAST_FOOD
+                        };
+                        stack.get_item().has_tag(tag)
+                    },
                     false,
                     7.0,
                 )),
@@ -124,11 +129,28 @@ impl Animal for HappyGhastEntity {
         item_stack
             .item
             .has_tag(&tag::Item::MINECRAFT_HAPPY_GHAST_FOOD)
-            || HAPPY_GHAST_FOOD.iter().any(|i| i.id == item_stack.item.id)
     }
 }
 
 impl Mob for HappyGhastEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityGhastlingAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityHappyGhastAmbient
+        })
+    }
+
+    /// Vanilla `HappyGhast.getAmbientSoundInterval`: six times longer while ridden.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        let interval = crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL;
+        if self.get_entity().has_passengers() {
+            interval * 6
+        } else {
+            interval
+        }
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -155,8 +177,6 @@ impl Mob for HappyGhastEntity {
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-
         let leash_time = self.leash_holder_time.load(Ordering::Relaxed);
         if leash_time > 0 {
             self.leash_holder_time.fetch_sub(1, Ordering::Relaxed);
@@ -166,7 +186,7 @@ impl Mob for HappyGhastEntity {
         let still_timeout = self.server_still_timeout.load(Ordering::Relaxed);
         if still_timeout > 0 {
             let entity = self.get_entity();
-            if entity.age.load(Ordering::Relaxed) > 60 {
+            if entity.tick_count.load(Ordering::Relaxed) > 60 {
                 self.server_still_timeout.fetch_sub(1, Ordering::Relaxed);
             }
             self.sync_stay_still_flag();
@@ -207,9 +227,9 @@ impl Mob for HappyGhastEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         if self.is_baby() {
-            return self.animal_interact(player, item_stack, Sound::EntityGhastlingAmbient);
+            return self.animal_interact(player, item_stack);
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityHappyGhastAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

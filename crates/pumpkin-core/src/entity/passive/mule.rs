@@ -1,3 +1,4 @@
+use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -24,12 +25,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[
-    &Item::GOLDEN_APPLE,
-    &Item::ENCHANTED_GOLDEN_APPLE,
-    &Item::GOLDEN_CARROT,
-];
 
 pub const FLAG_TAME: u8 = 2;
 pub const FLAG_SADDLE: u8 = 4;
@@ -73,9 +68,20 @@ impl MuleEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_HORSE_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -141,17 +147,23 @@ impl AgeableMob for MuleEntity {
 impl Animal for MuleEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::SUGAR
-            || item_stack.item == &Item::HAY_BLOCK
-            || item_stack.item == &Item::APPLE
-            || item_stack.item == &Item::GOLDEN_CARROT
-            || item_stack.item == &Item::GOLDEN_APPLE
-            || item_stack.item == &Item::ENCHANTED_GOLDEN_APPLE
+    }
+    /// Vanilla `AbstractHorse.canMate`: only horses, donkeys, llamas and camels override it.
+    fn can_mate(&self, _partner: &dyn Mob) -> bool {
+        false
     }
 }
 
 impl Mob for MuleEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityMuleAmbient)
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -188,10 +200,6 @@ impl Mob for MuleEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -250,6 +258,6 @@ impl Mob for MuleEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityMuleAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

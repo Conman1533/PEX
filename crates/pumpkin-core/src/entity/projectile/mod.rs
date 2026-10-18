@@ -135,9 +135,23 @@ impl ThrownItemEntity {
 
 impl ThrownItemEntity {
     /// Process a tick for projectile movement and collisions
+    #[allow(clippy::too_many_lines)]
     pub fn process_tick(&self, caller: &dyn EntityBase) {
         let entity = self.get_entity();
         let world = entity.world.load();
+
+        if entity.age.fetch_add(1, Ordering::Relaxed) == 0 {
+            let owner = caller.get_owner_id().and_then(|id| {
+                world
+                    .get_entity_by_id(id)
+                    .or_else(|| world.get_player_by_id(id).map(|p| p as Arc<dyn EntityBase>))
+            });
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileShoot,
+                entity.pos.load(),
+                crate::world::vibration::GameEventContext::of(owner, None),
+            );
+        }
 
         entity.update_last_pos();
 
@@ -238,18 +252,30 @@ impl ThrownItemEntity {
                 return;
             }
 
-            if let ProjectileHit::Block { pos, hit_pos, .. } = &h {
-                let block = world.get_block(pos);
-                let state = world.get_block_state(pos);
-                if let Some(server) = world.server.upgrade() {
-                    world
-                        .block_registry
-                        .on_projectile_hit(block, &world, caller, pos, state, hit_pos, &server);
+            let land_event = match &h {
+                ProjectileHit::Block { pos, hit_pos, .. } => {
+                    let block = world.get_block(pos);
+                    let state = world.get_block_state(pos);
+                    if let Some(server) = world.server.upgrade() {
+                        world
+                            .block_registry
+                            .on_projectile_hit(block, &world, caller, pos, state, hit_pos, &server);
+                    }
+                    (pos.to_centered_f64(), Some(state.id))
                 }
-            }
+                ProjectileHit::Entity { hit_pos, .. } => (*hit_pos, None),
+            };
 
             // Just trigger hit effects and remove
             caller.on_hit(h);
+            world.game_event(
+                pumpkin_data::game_event::GameEvent::ProjectileLand,
+                land_event.0,
+                crate::world::vibration::GameEventContext::of(
+                    crate::world::vibration::entity_handle(&world, caller),
+                    land_event.1,
+                ),
+            );
             entity.remove();
         }
     }
@@ -262,7 +288,9 @@ impl ThrownItemEntity {
         }
 
         // Skip owner for initial frames
-        if Some(other_ent.entity_id) == self.owner_id && self_ent.age.load(Ordering::Relaxed) < 5 {
+        if Some(other_ent.entity_id) == self.owner_id
+            && self_ent.tick_count.load(Ordering::Relaxed) < 5
+        {
             return true;
         }
 

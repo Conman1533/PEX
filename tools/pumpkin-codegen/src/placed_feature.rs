@@ -105,7 +105,7 @@ pub fn build() -> TokenStream {
                 AllOfBlockPredicate, AnyOfBlockPredicate, BlockPredicate,
                 HasSturdyFacePredicate, InsideWorldBoundsBlockPredicate,
                 MatchingBlockTagPredicate, MatchingBlocksBlockPredicate, MatchingBlocksWrapper,
-                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate,
+                MatchingFluidsBlockPredicate, NotBlockPredicate, OffsetBlocksBlockPredicate, VolumeMatchBlockPredicate,
                 ReplaceableBlockPredicate, SolidBlockPredicate, WouldSurviveBlockPredicate,
                 HeightRangeBlockPredicate,
             };
@@ -232,6 +232,14 @@ fn value_to_placement_modifier(v: &Value) -> TokenStream {
             quote! {
                 PlacementModifier::CountOnEveryLayer(CountOnEveryLayerPlacementModifier {
                     count: #count,
+                })
+            }
+        }
+        "minecraft:random_chance" => {
+            let chance = v["chance"].as_f64().unwrap_or(1.0) as f32;
+            quote! {
+                PlacementModifier::RandomChance(RandomChancePlacementModifier {
+                    chance: #chance,
                 })
             }
         }
@@ -376,7 +384,28 @@ pub fn value_to_block_predicate(v: &Value) -> TokenStream {
 
     let type_str = v["type"].as_str().unwrap_or("");
     match type_str {
-        "minecraft:true" | "minecraft:volume_match" | "" => quote! { BlockPredicate::AlwaysTrue },
+        "minecraft:true" | "" => quote! { BlockPredicate::AlwaysTrue },
+        "minecraft:volume_match" => {
+            let corner = |key: &str| {
+                let c: Vec<i32> = v[key]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("volume_match needs a {key} offset"))
+                    .iter()
+                    .map(|n| n.as_i64().unwrap() as i32)
+                    .collect();
+                let (x, y, z) = (c[0], c[1], c[2]);
+                quote! { pumpkin_util::math::vector3::Vector3::new(#x, #y, #z) }
+            };
+            let (min, max) = (corner("min"), corner("max"));
+            let predicate = value_to_block_predicate(&v["match"]);
+            quote! {
+                BlockPredicate::VolumeMatch(VolumeMatchBlockPredicate {
+                    min: #min,
+                    max: #max,
+                    predicate: Box::new(#predicate),
+                })
+            }
+        }
         "minecraft:matching_blocks" => {
             let offset = value_to_offset_predicate(&v["offset"]);
             let blocks = value_to_matching_blocks_wrapper(&v["blocks"]);

@@ -27,8 +27,6 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[&Item::TROPICAL_FISH_BUCKET];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
 pub enum AxolotlVariant {
@@ -111,7 +109,14 @@ impl AxolotlEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.5));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_AXOLOTL_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(5, Box::new(MeleeAttackGoal::new(1.2, false)));
             goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
@@ -233,6 +238,14 @@ impl Animal for AxolotlEntity {
 }
 
 impl Mob for AxolotlEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_entity().is_in_water() {
+            pumpkin_data::sound::Sound::EntityAxolotlIdleWater
+        } else {
+            pumpkin_data::sound::Sound::EntityAxolotlIdleAir
+        })
+    }
+
     /// Vanilla `Axolotl.removeWhenFarAway`; named axolotls are already persistent.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         !self.is_from_bucket()
@@ -265,8 +278,6 @@ impl Mob for AxolotlEntity {
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-
         let play_dead_ticks = self.play_dead_ticks.load(Ordering::Relaxed);
         if play_dead_ticks > 0 {
             let remaining = play_dead_ticks - 1;
@@ -322,6 +333,6 @@ impl Mob for AxolotlEntity {
             return true;
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityAxolotlIdleAir)
+        self.animal_interact(player, item_stack)
     }
 }

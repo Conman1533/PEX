@@ -26,7 +26,6 @@ use crate::entity::{
     player::Player,
 };
 
-pub const ARMADILLO_FOOD: &[&Item] = &[&Item::SPIDER_EYE];
 pub const ARMADILLO_BABY_START_AGE: i32 = -48000;
 pub const SCARE_CHECK_INTERVAL: i32 = 80;
 pub const SCARE_DISTANCE_HORIZONTAL: f64 = 7.0;
@@ -148,7 +147,18 @@ impl ArmadilloEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, ARMADILLO_FOOD, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_ARMADILLO_FOOD)
+                    },
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
@@ -202,7 +212,7 @@ impl ArmadilloEntity {
 
     pub fn roll_up(&self) {
         if !self.is_scared() {
-            self.mob_entity.reset_love_ticks();
+            self.reset_love();
             let entity = self.get_entity();
             let world = entity.world.load();
             world.play_sound(
@@ -290,11 +300,20 @@ impl Animal for ArmadilloEntity {
         item_stack
             .item
             .has_tag(&tag::Item::MINECRAFT_ARMADILLO_FOOD)
-            || ARMADILLO_FOOD.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    fn play_eating_sound(&self) {
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityArmadilloEat);
     }
 }
 
 impl Mob for ArmadilloEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        (!self.is_scared()).then_some(pumpkin_data::sound::Sound::EntityArmadilloAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -346,8 +365,6 @@ impl Mob for ArmadilloEntity {
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-
         self.in_state_ticks.fetch_add(1, Ordering::Relaxed);
         let danger_ticks = self.danger_detected_recently_ticks.load(Ordering::Relaxed);
         if danger_ticks > 0 {
@@ -423,6 +440,6 @@ impl Mob for ArmadilloEntity {
         if self.is_scared() {
             return false;
         }
-        self.animal_interact(player, item_stack, Sound::EntityArmadilloAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

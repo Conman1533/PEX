@@ -77,6 +77,11 @@ pub mod zoglin;
 pub mod zombie;
 pub mod zombified_piglin;
 
+/// The ambient sound interval of vanilla `Mob`.
+const DEFAULT_AMBIENT_SOUND_INTERVAL: i32 = 80;
+/// The ambient sound interval of vanilla `Animal`, `AbstractGolem` and the water creatures.
+pub const ANIMAL_AMBIENT_SOUND_INTERVAL: i32 = 120;
+
 pub struct MobEntity {
     pub living_entity: LivingEntity,
     pub goals_selector: std::sync::Mutex<GoalSelector>,
@@ -89,9 +94,12 @@ pub struct MobEntity {
     pub brain: std::sync::Mutex<Brain>,
     pub position_target: AtomicCell<BlockPos>,
     pub position_target_range: AtomicI32,
+    /// Vanilla `Animal.inLove`.
     pub love_ticks: AtomicI32,
-    pub breeding_cooldown: AtomicI32,
+    /// Vanilla `Animal.loveCause`.
     pub breeder: AtomicCell<Option<Uuid>>,
+    /// Vanilla `Mob.ambientSoundTime`.
+    pub ambient_sound_time: AtomicI32,
     pub persistence_required: AtomicBool,
     /// Vanilla `LivingEntity.noActionTime`: ticks since a player was within the no-despawn
     /// distance. Random despawning only starts once it passes [`Self::RANDOM_DESPAWN_DELAY`].
@@ -182,7 +190,7 @@ impl MobEntity {
             position_target: AtomicCell::new(BlockPos::ZERO),
             position_target_range: AtomicI32::new(-1),
             love_ticks: AtomicI32::new(0),
-            breeding_cooldown: AtomicI32::new(0),
+            ambient_sound_time: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
             no_action_time: AtomicI32::new(0),
@@ -244,7 +252,10 @@ impl MobEntity {
     /// Vanilla `Mob.serverAiStep`: sensing, goals, navigation and controls.
     pub fn server_ai_step(&self, mob: &dyn Mob, caller: &dyn EntityBase) {
         self.no_action_time.fetch_add(1, Relaxed);
-        let age = self.living_entity.entity.age.load(Relaxed);
+        // Vanilla `JumpControl.tick` sets the jump flag once per AI step, so a jump only lasts
+        // for the step that asked for it.
+        self.living_entity.jumping.store(false, Relaxed);
+        let tick_count = self.living_entity.entity.tick_count.load(Relaxed);
         let entity_id = self.living_entity.entity.entity_id;
 
         self.sensing
@@ -269,7 +280,7 @@ impl MobEntity {
         };
 
         // 2. Perform AI logic
-        if (age + entity_id) % 2 != 0 && age > 1 {
+        if (tick_count + entity_id) % 2 != 0 && tick_count > 1 {
             target_selector.tick_goals(mob, false);
             goals_selector.tick_goals(mob, false);
         } else {
@@ -298,7 +309,12 @@ impl MobEntity {
             std::mem::take(&mut *guard)
         };
 
-        navigator.tick(&self.living_entity);
+        // Vanilla `Creaking`'s navigation and look, move and jump controls only tick while it can
+        // move.
+        let frozen = mob.movement_frozen();
+        if !frozen {
+            navigator.tick(&self.living_entity);
+        }
 
         {
             *self
@@ -308,6 +324,10 @@ impl MobEntity {
         };
 
         mob.custom_server_ai_step(caller);
+
+        if frozen {
+            return;
+        }
 
         // Controllers are synchronous, so we can just use normal blocks
         {
@@ -382,6 +402,23 @@ impl MobEntity {
     pub fn set_item_slot_and_drop_when_killed(&self, slot: &EquipmentSlot, stack: ItemStack) {
         self.set_item_slot(slot, stack);
         self.set_guaranteed_drop(slot);
+    }
+
+    /// Vanilla `Mob.isWearingBodyArmor`.
+    #[must_use]
+    pub fn is_wearing_body_armor(&self) -> bool {
+        let stack = self
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&EquipmentSlot::BODY);
+        !stack.is_empty()
+            && equipment::is_equippable_in_slot(
+                self.living_entity.entity.entity_type,
+                &stack,
+                &EquipmentSlot::BODY,
+            )
     }
 
     fn write_drop_chances(&self, nbt: &mut NbtCompound) {
@@ -519,20 +556,6 @@ impl MobEntity {
         self.love_ticks.load(Relaxed) > 0
     }
 
-    pub fn set_love_ticks(&self, ticks: i32, breeder: Option<Uuid>) {
-        self.love_ticks.store(ticks, Relaxed);
-        self.breeder.store(breeder);
-    }
-
-    pub fn reset_love_ticks(&self) {
-        self.love_ticks.store(0, Relaxed);
-    }
-
-    pub fn is_breeding_ready(&self) -> bool {
-        self.living_entity.entity.age.load(Relaxed) >= 0
-            && self.breeding_cooldown.load(Relaxed) <= 0
-    }
-
     pub fn is_in_attack_range(&self, target: &dyn EntityBase) -> bool {
         const DEFAULT_ATTACK_RANGE: f64 = 0.828_427_12; // sqrt(2.04) - 0.6
 
@@ -563,10 +586,11 @@ impl MobEntity {
             return false;
         }
 
+        // The first sky check reads raw sky light, but this one is darkened by the time of day.
         let current_brightness = if is_thundering {
-            (sky_light - 10).max(block_light)
+            world.get_raw_brightness(pos, 10)
         } else {
-            sky_light.max(block_light)
+            world.get_max_local_raw_brightness(pos)
         };
 
         // TODO
@@ -662,7 +686,7 @@ impl MobEntity {
                 .store(target.get_entity().entity_id, Relaxed);
             self.living_entity
                 .last_attack_time
-                .store(self.living_entity.entity.age.load(Relaxed), Relaxed);
+                .store(self.living_entity.entity.tick_count.load(Relaxed), Relaxed);
         }
 
         damaged
@@ -991,6 +1015,27 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
+    /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        None
+    }
+
+    /// Vanilla `Mob.getAmbientSoundInterval`, which `Animal` raises to 120 ticks.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        if self.as_animal().is_some() {
+            ANIMAL_AMBIENT_SOUND_INTERVAL
+        } else {
+            DEFAULT_AMBIENT_SOUND_INTERVAL
+        }
+    }
+
+    /// Vanilla `Mob.resetAmbientSoundTime`.
+    fn reset_ambient_sound_time(&self) {
+        self.get_mob_entity()
+            .ambient_sound_time
+            .store(-self.get_ambient_sound_interval(), Relaxed);
+    }
+
     fn as_ageable(&self) -> Option<&dyn crate::entity::ageable::AgeableMob> {
         None
     }
@@ -1039,6 +1084,15 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn as_crossbow_attack_mob(&self) -> Option<&dyn crossbow_attack_mob::CrossbowAttackMob> {
+        None
+    }
+
+    /// Vanilla `Entity.dampensVibrations`, overridden by `Warden`.
+    fn dampens_vibrations(&self) -> bool {
+        false
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
         None
     }
 
@@ -1152,6 +1206,12 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Runs after navigation and before the movement controls, where vanilla ticks a mob's brain.
     fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {}
 
+    /// Whether the mob is held in place: its navigation and controls don't tick and it can't be
+    /// pushed or knocked back. Vanilla `Creaking` while `canMove()` is false.
+    fn movement_frozen(&self) -> bool {
+        false
+    }
+
     /// Moves the mob for this tick in place of the usual walking and swimming
     /// physics, returning whether it did; vanilla mobs that override `travel`.
     fn custom_travel(&self, _caller: &dyn EntityBase) -> bool {
@@ -1219,7 +1279,8 @@ pub trait Mob: EntityBase + Send + Sync {
         }
     }
 
-    fn breed(&self, father_id: i32, mother_id: i32, child_id: i32) {
+    /// Fires `EntityBreedEvent`; false when a plugin cancelled it.
+    fn breed(&self, father_id: i32, mother_id: i32, child_id: i32) -> bool {
         let mob = self.get_mob_entity();
         let mut event = crate::plugin::api::events::entity::entity_breed::EntityBreedEvent::new(
             father_id, mother_id, child_id,
@@ -1227,6 +1288,7 @@ pub trait Mob: EntityBase + Send + Sync {
         if let Some(server) = mob.living_entity.entity.world.load().server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
+        !event.cancelled
     }
 
     fn dye(
@@ -1245,7 +1307,8 @@ pub trait Mob: EntityBase + Send + Sync {
         }
     }
 
-    fn enter_love_mode(&self, human_entity_id: Option<i32>, ticks_in_love: i32) {
+    /// Fires `EntityEnterLoveModeEvent`; false when a plugin cancelled it.
+    fn enter_love_mode(&self, human_entity_id: Option<i32>, ticks_in_love: i32) -> bool {
         let mob = self.get_mob_entity();
         let mut event = crate::plugin::api::events::entity::entity_enter_love_mode::EntityEnterLoveModeEvent::new(
             mob.living_entity.entity.entity_id,
@@ -1255,6 +1318,7 @@ pub trait Mob: EntityBase + Send + Sync {
         if let Some(server) = mob.living_entity.entity.world.load().server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
+        !event.cancelled
     }
 
     fn transform(&self, new_entity_id: i32, transform_reason: String) {
@@ -1369,12 +1433,20 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         Some(self)
     }
 
+    fn dampens_vibrations(&self) -> bool {
+        Mob::dampens_vibrations(self)
+    }
+
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        Mob::as_vibration_user(self)
+    }
+
     fn is_pushed_by_fluids(&self) -> bool {
         self.mob_is_pushed_by_fluids()
     }
 
     fn is_pushable(&self) -> bool {
-        self.get_mob_entity().living_entity.is_pushable()
+        self.get_mob_entity().living_entity.is_pushable() && !self.movement_frozen()
     }
 
     fn on_lightning_strike(
@@ -1424,23 +1496,13 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         entity.tick_leash(caller);
         sun_burn::tick(self);
 
-        if mob_entity.breeding_cooldown.load(Relaxed) > 0 {
-            mob_entity.breeding_cooldown.fetch_sub(1, Relaxed);
-        }
-
-        if mob_entity.love_ticks.load(Relaxed) > 0 {
-            let ticks = mob_entity.love_ticks.fetch_sub(1, Relaxed);
-            if ticks % 10 == 0 {
-                let entity = &mob_entity.living_entity.entity;
-                let pos = entity.pos.load();
-                let world = entity.world.load();
-                world.spawn_particle(
-                    pos + Vector3::new(0.0, f64::from(entity.height()) + 0.5, 0.0),
-                    Vector3::new(0.5, 0.5, 0.5),
-                    1.0,
-                    1,
-                    pumpkin_data::particle::Particle::Heart,
-                );
+        // Vanilla `Mob.baseTick`.
+        if entity.is_alive()
+            && rand::random_range(0..1000) < mob_entity.ambient_sound_time.fetch_add(1, Relaxed)
+        {
+            self.reset_ambient_sound_time();
+            if let Some(sound) = self.get_ambient_sound() {
+                mob_entity.living_entity.make_sound(sound);
             }
         }
 
@@ -1470,6 +1532,15 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         // PolarBear run it outside the AI step, so the shared call stays for them).
         if !mob_entity.is_no_ai() {
             mob_entity.server_ai_step(self, caller);
+        }
+
+        // Vanilla `AgeableMob.aiStep` ages the mob after the AI step, with or without AI, and
+        // `Animal.aiStep` then counts down the love time.
+        if let Some(ageable) = self.as_ageable() {
+            ageable.ageable_ai_step();
+        }
+        if let Some(animal) = self.as_animal() {
+            animal.animal_ai_step();
         }
 
         mob_entity.living_entity.tick(caller, server);
@@ -1508,6 +1579,12 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             cause,
         );
         if damaged {
+            // Vanilla `Animal.actuallyHurt`.
+            if let Some(animal) = self.as_animal() {
+                animal.reset_love();
+            }
+            // Vanilla `Mob.playHurtSound`.
+            self.reset_ambient_sound_time();
             self.on_damage(damage_type, source);
         }
         damaged
@@ -1535,24 +1612,6 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn cast_any(&self) -> &dyn std::any::Any {
         self
-    }
-
-    fn is_in_love(&self) -> bool {
-        self.get_mob_entity().is_in_love()
-    }
-
-    fn is_breeding_ready(&self) -> bool {
-        self.get_mob_entity().is_breeding_ready()
-    }
-
-    fn reset_love(&self) {
-        self.get_mob_entity().reset_love_ticks();
-    }
-
-    fn set_breeding_cooldown(&self, ticks: i32) {
-        self.get_mob_entity()
-            .breeding_cooldown
-            .store(ticks, Relaxed);
     }
 
     fn is_panicking(&self) -> bool {

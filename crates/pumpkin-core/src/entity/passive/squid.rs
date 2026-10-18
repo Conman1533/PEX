@@ -34,6 +34,15 @@ impl SquidEntity {
 }
 
 impl Mob for SquidEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntitySquidAmbient)
+    }
+
+    /// Vanilla `WaterAnimal.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }
@@ -152,8 +161,8 @@ impl SquidMovement {
         let entity = &living.entity;
         let attacker_id = living.last_attacker_id.load(Ordering::Relaxed);
         // Vanilla forgets an attacker a hundred ticks after the hit.
-        let since_hit =
-            entity.age.load(Ordering::Relaxed) - living.last_attacked_time.load(Ordering::Relaxed);
+        let since_hit = entity.tick_count.load(Ordering::Relaxed)
+            - living.last_attacked_time.load(Ordering::Relaxed);
         if attacker_id == 0 || since_hit > 100 {
             return false;
         }

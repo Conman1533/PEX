@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
@@ -24,8 +23,6 @@ use crate::entity::{
 };
 
 use pumpkin_data::frog_variant::FrogVariant;
-
-pub const FROG_FOOD: &[&Item] = &[&Item::SLIME_BALL];
 
 /// Represents a Frog, an amphibious mob that can eat small slimes and magma cubes.
 ///
@@ -60,7 +57,14 @@ impl FrogEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(TemptGoal::new(1.0, FROG_FOOD, false)));
+            goal_selector.add_goal(
+                1,
+                Box::new(TemptGoal::new(
+                    1.0,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_FROG_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
                 3,
@@ -96,11 +100,25 @@ impl AgeableMob for FrogEntity {
 impl Animal for FrogEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FROG_FOOD)
-            || FROG_FOOD.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    fn play_eating_sound(&self) {
+        let entity = self.get_entity();
+        entity.world.load().play_sound_fine(
+            Sound::EntityFrogEat,
+            pumpkin_data::sound::SoundCategory::Neutral,
+            &entity.pos.load(),
+            2.0,
+            1.0,
+        );
     }
 }
 
 impl Mob for FrogEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityFrogAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -127,10 +145,6 @@ impl Mob for FrogEntity {
         self.set_variant(FrogVariant::from_name(name).unwrap_or_default());
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -144,6 +158,6 @@ impl Mob for FrogEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityFrogAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

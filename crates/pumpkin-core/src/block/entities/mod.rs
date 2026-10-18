@@ -74,6 +74,11 @@ pub trait BlockEntity: Any + Send + Sync {
     where
         Self: Sized;
     fn tick(&self, _world: &Arc<World>) {}
+
+    /// The block entity's vibration listener, for sculk sensors and shriekers.
+    fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
+        None
+    }
     fn resource_location(&self) -> &'static str;
     fn get_position(&self) -> BlockPos;
 

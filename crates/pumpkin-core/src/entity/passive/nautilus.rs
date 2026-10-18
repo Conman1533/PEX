@@ -18,6 +18,7 @@ use pumpkin_util::math::vector3::Vector3;
 
 use crate::entity::{
     Entity, EntityBase,
+    ageable::{AgeableData, AgeableMob},
     custom_sound::CustomSound,
     mob::{Mob, MobEntity},
     passive::animal::Animal,
@@ -26,6 +27,7 @@ use crate::entity::{
 
 pub struct NautilusEntity {
     pub mob_entity: MobEntity,
+    pub ageable_data: AgeableData,
     pub is_tame: AtomicBool,
     pub owner: AtomicCell<Option<Uuid>>,
     pub is_dashing: AtomicBool,
@@ -39,6 +41,7 @@ impl NautilusEntity {
         let mob_entity = MobEntity::new(entity);
         let nautilus = Self {
             mob_entity,
+            ageable_data: AgeableData::default(),
             is_tame: AtomicBool::new(false),
             owner: AtomicCell::new(None),
             is_dashing: AtomicBool::new(false),
@@ -69,33 +72,6 @@ impl NautilusEntity {
     pub fn set_tame(&self, tame: bool, owner: Option<Uuid>) {
         self.is_tame.store(tame, Ordering::Relaxed);
         self.owner.store(owner);
-    }
-
-    pub fn get_ambient_sound(&self) -> Sound {
-        let is_baby = self
-            .mob_entity
-            .living_entity
-            .entity
-            .age
-            .load(Ordering::Relaxed)
-            < 0;
-        let is_water = self
-            .mob_entity
-            .living_entity
-            .entity
-            .touching_water
-            .load(Ordering::Relaxed);
-        if is_baby {
-            if is_water {
-                Sound::EntityBabyNautilusAmbient
-            } else {
-                Sound::EntityBabyNautilusAmbientLand
-            }
-        } else if is_water {
-            Sound::EntityNautilusAmbient
-        } else {
-            Sound::EntityNautilusAmbientLand
-        }
     }
 
     pub fn get_dash_sound(&self) -> Sound {
@@ -158,12 +134,23 @@ impl NautilusEntity {
 }
 
 impl Animal for NautilusEntity {
+    /// Vanilla `AbstractNautilus.isFood`: taming items while wild and grown, food otherwise.
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        item_stack.item == &pumpkin_data::item::Item::NAUTILUS_SHELL
-            || item_stack.item == &pumpkin_data::item::Item::PUFFERFISH
-            || item_stack.item == &pumpkin_data::item::Item::COD
-            || item_stack.item == &pumpkin_data::item::Item::SALMON
-            || item_stack.item == &pumpkin_data::item::Item::TROPICAL_FISH
+        use pumpkin_data::tag::{self, Taggable};
+        let tag = if !self.is_tame() && !self.is_baby() {
+            &tag::Item::MINECRAFT_NAUTILUS_TAMING_ITEMS
+        } else {
+            &tag::Item::MINECRAFT_NAUTILUS_FOOD
+        };
+        item_stack.get_item().has_tag(tag)
+    }
+
+    fn play_eating_sound(&self) {
+        self.mob_entity.living_entity.make_sound(if self.is_baby() {
+            Sound::EntityBabyNautilusEat
+        } else {
+            Sound::EntityNautilusEat
+        });
     }
 }
 
@@ -203,7 +190,27 @@ impl CustomSound for NautilusEntity {
     }
 }
 
+impl AgeableMob for NautilusEntity {
+    fn get_ageable_data(&self) -> &AgeableData {
+        &self.ageable_data
+    }
+}
+
 impl Mob for NautilusEntity {
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        let under_water = self.get_entity().is_under_water();
+        Some(match (self.is_baby(), under_water) {
+            (true, true) => Sound::EntityBabyNautilusAmbient,
+            (true, false) => Sound::EntityBabyNautilusAmbientLand,
+            (false, true) => Sound::EntityNautilusAmbient,
+            (false, false) => Sound::EntityNautilusAmbientLand,
+        })
+    }
+
+    fn as_ageable(&self) -> Option<&dyn AgeableMob> {
+        Some(self)
+    }
+
     /// Vanilla `AbstractNautilus.removeWhenFarAway`: despawns although it is an animal.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         true
@@ -362,7 +369,7 @@ impl Mob for NautilusEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, self.get_ambient_sound())
+        self.animal_interact(player, item_stack)
     }
 
     fn is_saddled(&self) -> bool {

@@ -1,12 +1,12 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, Ordering},
 };
 
 use pumpkin_data::entity::EntityType;
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -17,8 +17,7 @@ use crate::entity::{
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, breed::BreedGoal,
-        escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
+        escape_danger::EscapeDangerGoal, look_at_entity::LookAtEntityGoal,
         melee_attack::MeleeAttackGoal, swim::SwimGoal, tempt::TemptGoal,
         wander_around::WanderAroundGoal,
     },
@@ -26,8 +25,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::CARROT, &Item::GOLDEN_CARROT, &Item::DANDELION];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
@@ -108,7 +105,14 @@ impl RabbitEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.2));
             goal_selector.add_goal(2, BreedGoal::new(0.8));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.0, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.0,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_RABBIT_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(
                 4,
                 Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 8.0, 2.2, 2.2)),
@@ -121,13 +125,11 @@ impl RabbitEntity {
                 4,
                 Box::new(AvoidEntityGoal::new(&EntityType::FOX, 10.0, 2.2, 2.2)),
             );
-            goal_selector.add_goal(5, Box::new(FollowParentGoal::new(0.8)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.6)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.6)));
             goal_selector.add_goal(
                 11,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 10.0),
             );
-            goal_selector.add_goal(11, Box::new(RandomLookAroundGoal::default()));
         };
 
         mob_arc
@@ -184,11 +186,35 @@ impl AgeableMob for RabbitEntity {
 impl Animal for RabbitEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_RABBIT_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    /// Vanilla `Rabbit.getBreedOffspring`: a parent's variant, or one time in 20 the variant a
+    /// new rabbit would spawn with.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::RABBIT, world);
+        if let Some(offspring) = baby.cast_any().downcast_ref::<Self>() {
+            let mut rng = self.get_random();
+            if rng.random_range(0..20) != 0 {
+                let variant = match partner.cast_any().downcast_ref::<Self>() {
+                    Some(partner) if rng.random::<bool>() => partner.get_variant(),
+                    _ => self.get_variant(),
+                };
+                offspring.set_variant(variant);
+            }
+        }
+        Some(baby)
     }
 }
 
 impl Mob for RabbitEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityRabbitAmbient)
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -220,10 +246,6 @@ impl Mob for RabbitEntity {
         &self.mob_entity
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-    }
-
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(Ordering::Relaxed) < 0;
@@ -237,6 +259,6 @@ impl Mob for RabbitEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityRabbitAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

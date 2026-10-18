@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::{Controls, Goal};
+use crate::entity::ai::goal::revenge::MobFilter;
 use crate::entity::ai::util::default_random_pos;
 use crate::entity::predicate::EntityPredicate;
 use crate::entity::{EntityBase, ai::pathfinder::NavigatorGoal, mob::Mob};
@@ -19,6 +20,7 @@ pub struct AvoidEntityGoal {
     fast_speed: f64,
     target: Option<Arc<dyn EntityBase>>,
     flee_pos: Option<Vector3<f64>>,
+    gate: Option<MobFilter>,
 }
 
 impl AvoidEntityGoal {
@@ -37,7 +39,15 @@ impl AvoidEntityGoal {
             fast_speed,
             target: None,
             flee_pos: None,
+            gate: None,
         }
+    }
+
+    /// Extra condition for starting and for continuing, e.g. an untamed cat.
+    #[must_use]
+    pub const fn gated_by(mut self, gate: MobFilter) -> Self {
+        self.gate = Some(gate);
+        self
     }
 
     fn find_threat(&self, mob: &dyn Mob) -> Option<Arc<dyn EntityBase>> {
@@ -61,6 +71,9 @@ impl AvoidEntityGoal {
 
 impl Goal for AvoidEntityGoal {
     fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        if self.gate.is_some_and(|gate| !gate(mob)) {
+            return false;
+        }
         let Some(target) = self.find_threat(mob) else {
             return false;
         };
@@ -86,7 +99,7 @@ impl Goal for AvoidEntityGoal {
     }
 
     fn should_continue(&mut self, mob: &dyn Mob) -> bool {
-        !mob.is_navigator_idle()
+        self.gate.is_none_or(|gate| gate(mob)) && !mob.is_navigator_idle()
     }
 
     fn start(&mut self, mob: &dyn Mob) {

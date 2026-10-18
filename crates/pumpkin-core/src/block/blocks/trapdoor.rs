@@ -35,6 +35,18 @@ fn toggle_trapdoor(player: &Player, world: &Arc<World>, block_pos: &BlockPos) {
         trapdoor_props.to_state_id(block),
         BlockFlags::NOTIFY_LISTENERS,
     );
+    world.game_event(
+        if trapdoor_props.open {
+            pumpkin_data::game_event::GameEvent::BlockOpen
+        } else {
+            pumpkin_data::game_event::GameEvent::BlockClose
+        },
+        block_pos.to_centered_f64(),
+        crate::world::vibration::GameEventContext::of(
+            crate::world::vibration::entity_handle(world, player),
+            None,
+        ),
+    );
 }
 
 fn can_open_trapdoor(block: &Block) -> bool {
@@ -125,6 +137,15 @@ impl BlockBehaviour for TrapDoorBlock {
                         get_sound(args.block, powered),
                         SoundCategory::Blocks,
                         *args.position,
+                    );
+                    args.world.game_event(
+                        if powered {
+                            pumpkin_data::game_event::GameEvent::BlockOpen
+                        } else {
+                            pumpkin_data::game_event::GameEvent::BlockClose
+                        },
+                        args.position.to_centered_f64(),
+                        crate::world::vibration::GameEventContext::default(),
                     );
                 }
             }

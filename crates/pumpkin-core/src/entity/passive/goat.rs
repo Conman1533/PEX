@@ -1,3 +1,5 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, Ordering},
@@ -9,6 +11,7 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
@@ -22,8 +25,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::WHEAT];
 
 pub struct GoatEntity {
     pub mob_entity: MobEntity,
@@ -59,7 +60,14 @@ impl GoatEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_GOAT_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
@@ -124,11 +132,57 @@ impl AgeableMob for GoatEntity {
 impl Animal for GoatEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_GOAT_FOOD)
-            || TEMPT_ITEMS.iter().any(|i| i.id == item_stack.item.id)
+    }
+
+    /// Vanilla `Goat.getBreedOffspring`: screams like a random parent, or with a 2% chance.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        let baby = create_offspring(&self.mob_entity, &EntityType::GOAT, world);
+        if let Some(kid) = baby.cast_any().downcast_ref::<Self>() {
+            let mut rng = self.get_random();
+            let parent_screams = if rng.random::<bool>() {
+                self.is_screaming()
+            } else {
+                partner
+                    .cast_any()
+                    .downcast_ref::<Self>()
+                    .is_some_and(Self::is_screaming)
+            };
+            kid.set_screaming(parent_screams || rng.random::<f64>() < 0.02);
+        }
+        Some(baby)
+    }
+
+    fn play_eating_sound(&self) {
+        let sound = if self.is_screaming() {
+            Sound::EntityGoatScreamingEat
+        } else {
+            Sound::EntityGoatEat
+        };
+        let entity = self.get_entity();
+        let pitch = self.get_random().random_range(0.8..1.2);
+        entity.world.load().play_sound_fine(
+            sound,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            1.0,
+            pitch,
+        );
     }
 }
 
 impl Mob for GoatEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_screaming() {
+            pumpkin_data::sound::Sound::EntityGoatScreamingAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityGoatAmbient
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -157,10 +211,6 @@ impl Mob for GoatEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -198,11 +248,6 @@ impl Mob for GoatEntity {
             return true;
         }
 
-        let ambient_sound = if self.is_screaming() {
-            Sound::EntityGoatScreamingAmbient
-        } else {
-            Sound::EntityGoatAmbient
-        };
-        self.animal_interact(player, item_stack, ambient_sound)
+        self.animal_interact(player, item_stack)
     }
 }

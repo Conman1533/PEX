@@ -9,6 +9,7 @@ use pumpkin_util::math::vector3::Vector3;
 
 use crate::entity::{
     Entity, EntityBase,
+    ageable::{AgeableData, AgeableMob},
     ai::goal::{
         active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
@@ -23,7 +24,7 @@ pub struct HoglinEntity {
     pub immune_to_zombification: AtomicBool,
     pub time_in_overworld: AtomicI32,
     pub cannot_be_hunted: AtomicBool,
-    pub is_baby: AtomicBool,
+    pub ageable_data: AgeableData,
 }
 
 impl HoglinEntity {
@@ -66,7 +67,7 @@ impl HoglinEntity {
             immune_to_zombification: AtomicBool::new(false),
             time_in_overworld: AtomicI32::new(0),
             cannot_be_hunted: AtomicBool::new(false),
-            is_baby: AtomicBool::new(false),
+            ageable_data: AgeableData::default(),
         };
         let mob_arc = Arc::new(hoglin);
         let mob_weak: Weak<dyn Mob> = {
@@ -158,7 +159,7 @@ impl HoglinEntity {
         }
 
         // Vanilla ConversionType.SINGLE keeps the baby state.
-        if self.is_baby.load(Ordering::Relaxed)
+        if self.is_baby()
             && let Some(mob) = zoglin.get_mob()
         {
             mob.spawn_as_baby();
@@ -169,19 +170,23 @@ impl HoglinEntity {
     }
 }
 
+impl AgeableMob for HoglinEntity {
+    fn get_ageable_data(&self) -> &AgeableData {
+        &self.ageable_data
+    }
+}
+
 impl Mob for HoglinEntity {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }
 
-    fn is_allowed_in_peaceful(&self) -> bool {
-        false
+    fn as_ageable(&self) -> Option<&dyn AgeableMob> {
+        Some(self)
     }
 
-    fn spawn_as_baby(&self) -> bool {
-        self.is_baby.store(true, Ordering::Relaxed);
-        self.mob_entity.set_baby_by_age();
-        true
+    fn is_allowed_in_peaceful(&self) -> bool {
+        false
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {

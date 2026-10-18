@@ -80,6 +80,8 @@ struct PredicateStruct {
     flags: Option<serde_json::Value>,
     #[serde(rename = "minecraft:equipment", default)]
     equipment: Option<serde_json::Value>,
+    #[serde(rename = "minecraft:vehicle", default)]
+    vehicle: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -256,15 +258,36 @@ fn parse_entity_properties(cond: &ConditionStruct) -> LootCondition {
         return LootCondition::None;
     };
     match cond.entity.as_deref() {
-        Some("this")
-            if predicate
-                .flags
+        Some("this") => {
+            let flag = |name: &str| {
+                predicate
+                    .flags
+                    .as_ref()
+                    .and_then(|flags| flags.get(name))
+                    .and_then(serde_json::Value::as_bool)
+            };
+            let mut terms = Vec::new();
+            if flag("is_on_fire") == Some(true) {
+                terms.push(LootCondition::EntityOnFire);
+            }
+            if let Some(baby) = flag("is_baby") {
+                terms.push(LootCondition::EntityIsBaby(baby));
+            }
+            if let Some(vehicle) = predicate
+                .vehicle
                 .as_ref()
-                .and_then(|flags| flags.get("is_on_fire"))
-                .and_then(serde_json::Value::as_bool)
-                == Some(true) =>
-        {
-            LootCondition::EntityOnFire
+                .and_then(|vehicle| vehicle.get("minecraft:entity_type"))
+                .and_then(serde_json::Value::as_str)
+            {
+                terms.push(LootCondition::EntityVehicle(Box::leak(
+                    vehicle.strip_prefix("minecraft:").unwrap_or(vehicle).into(),
+                )));
+            }
+            match terms.len() {
+                0 => LootCondition::None,
+                1 => terms[0],
+                _ => LootCondition::AllOf(Box::leak(terms.into_boxed_slice())),
+            }
         }
         Some("direct_attacker") => predicate
             .equipment
@@ -713,6 +736,10 @@ fn condition_to_tokens(cond: LootCondition) -> TokenStream {
         LootCondition::EntityOnFire => quote! { LootCondition::EntityOnFire },
         LootCondition::DirectAttackerWeaponEnchantment(tag) => {
             quote! { LootCondition::DirectAttackerWeaponEnchantment(#tag) }
+        }
+        LootCondition::EntityIsBaby(baby) => quote! { LootCondition::EntityIsBaby(#baby) },
+        LootCondition::EntityVehicle(entity_type) => {
+            quote! { LootCondition::EntityVehicle(#entity_type) }
         }
     }
 }

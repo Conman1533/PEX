@@ -6,7 +6,6 @@ use std::sync::{
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
@@ -24,8 +23,6 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
-
-const TEMPT_ITEMS: &[&Item] = &[&Item::BAMBOO];
 
 pub const FLAG_SNEEZE: u8 = 2;
 pub const FLAG_ROLL: u8 = 4;
@@ -90,6 +87,22 @@ impl PandaGene {
         }
     }
 
+    /// Vanilla `Panda.Gene.isRecessive`.
+    #[must_use]
+    pub const fn is_recessive(self) -> bool {
+        matches!(self, Self::Brown | Self::Weak)
+    }
+
+    /// Vanilla `Panda.Gene.getVariantFromGenes`: a recessive gene only shows when both match.
+    #[must_use]
+    pub fn get_variant_from_genes(main_gene: Self, hidden_gene: Self) -> Self {
+        if !main_gene.is_recessive() || main_gene == hidden_gene {
+            main_gene
+        } else {
+            Self::Normal
+        }
+    }
+
     #[must_use]
     pub fn random_gene() -> Self {
         let mut rng = rand::rng();
@@ -143,16 +156,27 @@ impl PandaEntity {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.2, TEMPT_ITEMS, false)));
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.25)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                7,
+                2,
+                EscapeDangerGoal::new(2.0)
+                    .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES),
+            );
+            goal_selector.add_goal(2, BreedGoal::new(1.0));
+            goal_selector.add_goal(
+                4,
+                Box::new(TemptGoal::new(
+                    1.0,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_PANDA_FOOD),
+                    false,
+                )),
+            );
+            goal_selector.add_goal(
+                9,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(10, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(13, Box::new(FollowParentGoal::new(1.25)));
+            goal_selector.add_goal(14, Box::new(WanderAroundGoal::water_avoiding(1.0)));
         };
 
         mob_arc
@@ -170,6 +194,12 @@ impl PandaEntity {
             pumpkin_data::tracked_data::panda::MAIN_GENE_ID,
             gene.id() as i8,
         );
+    }
+
+    /// Vanilla `Panda.getVariant`: the gene the panda shows.
+    #[must_use]
+    pub fn get_variant(&self) -> PandaGene {
+        PandaGene::get_variant_from_genes(self.get_main_gene(), self.get_hidden_gene())
     }
 
     #[must_use]
@@ -254,6 +284,14 @@ impl Animal for PandaEntity {
 }
 
 impl Mob for PandaEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(match self.get_variant() {
+            PandaGene::Aggressive => pumpkin_data::sound::Sound::EntityPandaAggressiveAmbient,
+            PandaGene::Worried => pumpkin_data::sound::Sound::EntityPandaWorriedAmbient,
+            _ => pumpkin_data::sound::Sound::EntityPandaAmbient,
+        })
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -280,10 +318,6 @@ impl Mob for PandaEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -319,6 +353,6 @@ impl Mob for PandaEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityPandaAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

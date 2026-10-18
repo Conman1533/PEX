@@ -58,12 +58,18 @@ impl SnowGolemEntity {
                 1,
                 Box::new(RangedAttackGoal::new(ranged_weak, 1.25, 20, 10.0)),
             );
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                6,
+                2,
+                Box::new(WanderAroundGoal::water_avoiding_with_probability(
+                    1.0,
+                    1.000_000_1e-5,
+                )),
+            );
+            goal_selector.add_goal(
+                3,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(6, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
 
             target_selector.add_goal(
                 1,
@@ -119,6 +125,15 @@ impl SnowGolemEntity {
 }
 
 impl Mob for SnowGolemEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntitySnowGolemAmbient)
+    }
+
+    /// Vanilla `AbstractGolem.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

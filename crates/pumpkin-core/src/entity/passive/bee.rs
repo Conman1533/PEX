@@ -5,7 +5,6 @@ use std::sync::{
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -92,7 +91,14 @@ impl BeeEntity {
                 Box::new(MeleeAttackGoal::new(1.4, true).gated_by(can_sting)),
             );
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, &[], false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_BEE_FOOD),
+                    false,
+                )),
+            );
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(9, Box::new(SwimGoal::default()));
@@ -184,8 +190,7 @@ impl AgeableMob for BeeEntity {
 
 impl Animal for BeeEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
-        item_stack.item.has_tag(&tag::Item::MINECRAFT_FLOWERS)
-            || item_stack.item.has_tag(&tag::Item::MINECRAFT_BEE_FOOD)
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_BEE_FOOD)
     }
 }
 
@@ -257,8 +262,6 @@ impl Mob for BeeEntity {
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
-
         if self.has_stung() {
             let time = self.time_since_sting.fetch_add(1, Ordering::Relaxed) + 1;
             if time >= 1200 {
@@ -280,6 +283,6 @@ impl Mob for BeeEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityBeePollinate)
+        self.animal_interact(player, item_stack)
     }
 }

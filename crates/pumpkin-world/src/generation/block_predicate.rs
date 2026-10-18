@@ -23,6 +23,7 @@ pub enum BlockPredicate {
     AllOf(AllOfBlockPredicate),
     Not(NotBlockPredicate),
     Unobstructed(UnobstructedBlockPredicate),
+    VolumeMatch(VolumeMatchBlockPredicate),
     AlwaysTrue,
 }
 
@@ -47,6 +48,7 @@ impl BlockPredicate {
             Self::AllOf(predicate) => predicate.test(block_registry, chunk, pos),
             Self::Not(predicate) => predicate.test(block_registry, chunk, pos),
             Self::Unobstructed(predicate) => predicate.test(chunk, pos),
+            Self::VolumeMatch(predicate) => predicate.test(block_registry, chunk, pos),
             Self::AlwaysTrue => true,
         }
     }
@@ -71,6 +73,7 @@ impl BlockPredicate {
             Self::AllOf(predicate) => predicate.test_world(block_registry, world, pos),
             Self::Not(predicate) => predicate.test_world(block_registry, world, pos),
             Self::Unobstructed(predicate) => predicate.test_world(world, pos),
+            Self::VolumeMatch(predicate) => predicate.test_world(block_registry, world, pos),
             Self::AlwaysTrue => true,
         }
     }
@@ -327,6 +330,48 @@ impl NotBlockPredicate {
         pos: &BlockPos,
     ) -> bool {
         !self.predicate.test_world(world, block_registry, pos)
+    }
+}
+
+/// Vanilla `VolumeMatchPredicate`: true when `predicate` holds at every offset in the box from `min`
+/// to `max` (inclusive) around the tested position.
+pub struct VolumeMatchBlockPredicate {
+    pub min: Vector3<i32>,
+    pub max: Vector3<i32>,
+    pub predicate: Box<BlockPredicate>,
+}
+
+impl VolumeMatchBlockPredicate {
+    /// The offsets in vanilla's loop order: x, then z, then y.
+    fn offsets(&self) -> impl Iterator<Item = Vector3<i32>> + '_ {
+        (self.min.x..=self.max.x).flat_map(move |x| {
+            (self.min.z..=self.max.z)
+                .flat_map(move |z| (self.min.y..=self.max.y).map(move |y| Vector3::new(x, y, z)))
+        })
+    }
+
+    pub fn test<T: GenerationCache>(
+        &self,
+        block_registry: &dyn WorldPortalExt,
+        chunk: &T,
+        pos: &BlockPos,
+    ) -> bool {
+        self.offsets().all(|offset| {
+            self.predicate
+                .test(block_registry, chunk, &pos.offset(offset))
+        })
+    }
+
+    pub fn test_world(
+        &self,
+        block_registry: Option<&dyn WorldPortalExt>,
+        world: &dyn BlockAccessor,
+        pos: &BlockPos,
+    ) -> bool {
+        self.offsets().all(|offset| {
+            self.predicate
+                .test_world(world, block_registry, &pos.offset(offset))
+        })
     }
 }
 

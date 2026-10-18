@@ -1,3 +1,6 @@
+use crate::entity::passive::animal::create_offspring;
+use crate::entity::passive::donkey::DonkeyEntity;
+use crate::world::World;
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicI32, AtomicU8, Ordering},
@@ -27,13 +30,13 @@ use crate::entity::{
     player::Player,
 };
 
-const TEMPT_ITEMS: &[&Item] = &[
-    &Item::GOLDEN_APPLE,
-    &Item::ENCHANTED_GOLDEN_APPLE,
-    &Item::GOLDEN_CARROT,
-];
-
 pub const FLAG_TAME: u8 = 2;
+/// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+pub const HORSE_AMBIENT_SOUND_INTERVAL: i32 = 400;
+/// The number of vanilla `Variant` coat colors.
+const VARIANT_COUNT: i32 = 7;
+/// The number of vanilla `Markings`.
+const MARKINGS_COUNT: i32 = 5;
 pub const FLAG_SADDLE: u8 = 4;
 pub const FLAG_BRED: u8 = 8;
 pub const FLAG_EATING: u8 = 16;
@@ -53,8 +56,8 @@ impl HorseEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
         let mob_entity = MobEntity::new(entity);
         let mut rng = rand::rng();
-        let color = rng.random_range(0..7);
-        let style = rng.random_range(0..5);
+        let color = rng.random_range(0..VARIANT_COUNT);
+        let style = rng.random_range(0..MARKINGS_COUNT);
         let variant = color | (style << 8);
 
         let horse = Self {
@@ -81,9 +84,20 @@ impl HorseEntity {
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(3, Box::new(TemptGoal::new(1.25, TEMPT_ITEMS, false)));
+            goal_selector.add_goal(
+                3,
+                Box::new(TemptGoal::new(
+                    1.25,
+                    |_, stack| {
+                        stack
+                            .get_item()
+                            .has_tag(&tag::Item::MINECRAFT_HORSE_TEMPT_ITEMS)
+                    },
+                    false,
+                )),
+            );
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(0.7)));
+            goal_selector.add_goal(6, Box::new(WanderAroundGoal::water_avoiding(0.7)));
             goal_selector.add_goal(
                 7,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -149,20 +163,95 @@ impl AgeableMob for HorseEntity {
     }
 }
 
+/// Vanilla `AbstractHorse.canParent`.
+#[must_use]
+pub fn can_parent(mob: &dyn Mob, tamed: bool) -> bool {
+    let mob_entity = mob.get_mob_entity();
+    let living = &mob_entity.living_entity;
+    !living.entity.has_passengers()
+        && !living.entity.has_vehicle()
+        && tamed
+        && !mob.as_ageable().is_some_and(AgeableMob::is_baby)
+        && living.health.load() >= living.get_max_health()
+        && mob_entity.is_in_love()
+}
+
+/// Whether `mob` is a tamed horse or donkey, `None` when it is neither.
+#[must_use]
+pub fn horse_or_donkey_tamed(mob: &dyn Mob) -> Option<bool> {
+    mob.cast_any()
+        .downcast_ref::<HorseEntity>()
+        .map(HorseEntity::is_tame)
+        .or_else(|| {
+            mob.cast_any()
+                .downcast_ref::<DonkeyEntity>()
+                .map(DonkeyEntity::is_tame)
+        })
+}
+
 impl Animal for HorseEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
-            || item_stack.item == &Item::WHEAT
-            || item_stack.item == &Item::SUGAR
-            || item_stack.item == &Item::HAY_BLOCK
-            || item_stack.item == &Item::APPLE
-            || item_stack.item == &Item::GOLDEN_CARROT
-            || item_stack.item == &Item::GOLDEN_APPLE
-            || item_stack.item == &Item::ENCHANTED_GOLDEN_APPLE
+    }
+
+    /// Vanilla `Horse.canMate`: with a horse or a donkey.
+    fn can_mate(&self, partner: &dyn Mob) -> bool {
+        partner.get_entity().entity_id != self.get_entity().entity_id
+            && horse_or_donkey_tamed(partner)
+                .is_some_and(|tamed| can_parent(self, self.is_tame()) && can_parent(partner, tamed))
+    }
+
+    /// Vanilla `Horse.getBreedOffspring`: a mule with a donkey, else a foal mixing the parents'
+    /// coats.
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        if partner.cast_any().is::<DonkeyEntity>() {
+            return Some(create_offspring(&self.mob_entity, &EntityType::MULE, world));
+        }
+        let baby = create_offspring(&self.mob_entity, &EntityType::HORSE, world);
+        if let Some(foal) = baby.cast_any().downcast_ref::<Self>()
+            && let Some(partner) = partner.cast_any().downcast_ref::<Self>()
+        {
+            let mut rng = self.get_random();
+            let select_skin = rng.random_range(0..9);
+            let color = if select_skin < 4 {
+                self.get_variant() & 0xFF
+            } else if select_skin < 8 {
+                partner.get_variant() & 0xFF
+            } else {
+                rng.random_range(0..VARIANT_COUNT)
+            };
+            let select_marking = rng.random_range(0..5);
+            let markings = if select_marking < 2 {
+                self.get_variant() >> 8
+            } else if select_marking < 4 {
+                partner.get_variant() >> 8
+            } else {
+                rng.random_range(0..MARKINGS_COUNT)
+            };
+            foal.set_variant(color | (markings << 8));
+        }
+        Some(baby)
     }
 }
 
 impl Mob for HorseEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityBabyHorseAmbient
+        } else {
+            pumpkin_data::sound::Sound::EntityHorseAmbient
+        })
+    }
+
+    /// Vanilla `AbstractHorse.getAmbientSoundInterval`.
+    fn get_ambient_sound_interval(&self) -> i32 {
+        HORSE_AMBIENT_SOUND_INTERVAL
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }
@@ -199,10 +288,6 @@ impl Mob for HorseEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
-    }
-
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        self.ageable_ai_step();
     }
 
     fn mob_init_data_tracker(&self) {
@@ -248,6 +333,6 @@ impl Mob for HorseEntity {
             }
         }
 
-        self.animal_interact(player, item_stack, Sound::EntityHorseAmbient)
+        self.animal_interact(player, item_stack)
     }
 }

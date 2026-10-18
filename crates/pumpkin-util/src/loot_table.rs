@@ -25,6 +25,10 @@ pub enum LootCondition {
     AnyOf(&'static [Self]),
     EntityOnFire,
     DirectAttackerWeaponEnchantment(&'static str),
+    /// `entity_properties` on `this` with the `is_baby` flag.
+    EntityIsBaby(bool),
+    /// `entity_properties` on `this` with a `vehicle` entity type, by resource name.
+    EntityVehicle(&'static str),
 }
 
 /// Bonus count formulas when tools have fortune or looting enchantments.
@@ -108,6 +112,8 @@ pub enum DynamicLootCondition {
     Inverted(Box<Self>),
     EntityOnFire,
     DirectAttackerWeaponEnchantment(String),
+    EntityIsBaby(bool),
+    EntityVehicle(String),
     WeatherCheck {
         raining: Option<bool>,
         thundering: Option<bool>,
@@ -147,6 +153,10 @@ impl From<LootCondition> for DynamicLootCondition {
             LootCondition::EntityOnFire => Self::EntityOnFire,
             LootCondition::DirectAttackerWeaponEnchantment(tag) => {
                 Self::DirectAttackerWeaponEnchantment(tag.to_string())
+            }
+            LootCondition::EntityIsBaby(baby) => Self::EntityIsBaby(baby),
+            LootCondition::EntityVehicle(entity_type) => {
+                Self::EntityVehicle(entity_type.to_string())
             }
         }
     }
