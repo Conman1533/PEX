@@ -2113,6 +2113,12 @@ impl LivingEntity {
                         .get_living_entity()
                         .map(|living| living.held_item(direct))
                 }),
+                // Babies keep a negative age, including the zombie and piglin flag babies.
+                is_baby: Some(self.entity.age.load(std::sync::atomic::Ordering::Relaxed) < 0),
+                vehicle_entity: self
+                    .entity
+                    .get_vehicle()
+                    .map(|vehicle| vehicle.get_entity().entity_type),
                 ..Default::default()
             };
 

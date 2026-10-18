@@ -279,18 +279,8 @@ fn parse_condition(val: &Value) -> DynamicLootCondition {
                 DynamicLootCondition::None
             }
         }
-        "entity_properties" => {
-            let on_fire = val
-                .get("predicate")
-                .and_then(|p| p.get("flags"))
-                .and_then(|f| f.get("is_on_fire"))
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            if on_fire {
-                DynamicLootCondition::EntityOnFire
-            } else {
-                DynamicLootCondition::None
-            }
+        "entity_properties" if val.get("entity").and_then(Value::as_str) == Some("this") => {
+            parse_entity_properties(val)
         }
         "weather_check" => {
             let raining = val.get("raining").and_then(Value::as_bool);
@@ -302,6 +292,37 @@ fn parse_condition(val: &Value) -> DynamicLootCondition {
         }
         _ => DynamicLootCondition::None,
     }
+}
+
+/// `entity_properties` on `this`: the `is_on_fire` and `is_baby` flags and the vehicle type.
+fn parse_entity_properties(val: &Value) -> DynamicLootCondition {
+    let predicate = val.get("predicate");
+    let flag = |name: &str| {
+        predicate
+            .and_then(|p| p.get("minecraft:flags").or_else(|| p.get("flags")))
+            .and_then(|f| f.get(name))
+            .and_then(Value::as_bool)
+    };
+    let mut terms = Vec::new();
+    if flag("is_on_fire") == Some(true) {
+        terms.push(DynamicLootCondition::EntityOnFire);
+    }
+    if let Some(baby) = flag("is_baby") {
+        terms.push(DynamicLootCondition::EntityIsBaby(baby));
+    }
+    if let Some(vehicle) = predicate
+        .and_then(|p| p.get("minecraft:vehicle"))
+        .and_then(|v| v.get("minecraft:entity_type"))
+        .and_then(Value::as_str)
+    {
+        terms.push(DynamicLootCondition::EntityVehicle(
+            vehicle
+                .strip_prefix("minecraft:")
+                .unwrap_or(vehicle)
+                .to_string(),
+        ));
+    }
+    combine_conditions(terms)
 }
 
 fn combine_conditions(conditions: Vec<DynamicLootCondition>) -> DynamicLootCondition {

@@ -36248,7 +36248,7 @@ static ENTITIES_HUSK_POOL1_ENTRIES: &[LootEntry] = &[LootEntry {
     weight: 1i32,
     min_count: 0i32,
     max_count: 1i32,
-    condition: LootCondition::None,
+    condition: LootCondition::EntityVehicle("camel_husk"),
     bonus_formula: Some(LootBonusFormula::UniformBonusCount(1i32)),
     furnace_smelt: None,
 }];
@@ -37957,7 +37957,7 @@ static ENTITIES_ZOMBIE_POOL1_ENTRIES: &[LootEntry] = &[LootEntry {
     weight: 1i32,
     min_count: 0i32,
     max_count: 1i32,
-    condition: LootCondition::None,
+    condition: LootCondition::EntityVehicle("zombie_horse"),
     bonus_formula: Some(LootBonusFormula::UniformBonusCount(1i32)),
     furnace_smelt: None,
 }];
@@ -38036,7 +38036,13 @@ static ENTITIES_ZOMBIE_POOLS: &[LootPool] = &[
         min_rolls: 1i32,
         max_rolls: 1i32,
         empty_weight: 0i32,
-        condition: LootCondition::KilledByPlayer,
+        condition: LootCondition::AllOf(&[
+            LootCondition::KilledByPlayer,
+            LootCondition::AllOf(&[
+                LootCondition::EntityIsBaby(true),
+                LootCondition::EntityVehicle("chicken"),
+            ]),
+        ]),
     },
 ];
 pub static ENTITIES_ZOMBIE: LootTable = LootTable {
