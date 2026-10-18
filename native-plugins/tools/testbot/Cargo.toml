@@ -1,0 +1,17 @@
+[package]
+name = "pex-testbot"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Scripted Azalea bots for testing PEX plugins in-game."
+
+# Not part of the plugin workspace: Azalea needs nightly Rust and its own dependency versions.
+[workspace]
+exclude = ["azalea"]
+
+[dependencies]
+# Azalea's 26.3 branch merged with main (see README.md for how to rebuild this checkout).
+azalea = { path = "azalea/azalea" }
+eyre = "0.6.12"
+parking_lot = "0.12.5"
+tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "time", "fs"] }

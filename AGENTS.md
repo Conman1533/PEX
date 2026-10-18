@@ -22,6 +22,7 @@ Some directories have their own `AGENTS.md` with details for that area. Read it 
 - `crates/pumpkin-protocol/AGENTS.md`: adding and changing packets.
 - `crates/pumpkin-world/AGENTS.md`: chunk loading, world generation and how to check it against vanilla.
 - `tools/pumpkin-codegen/AGENTS.md`: generators, regenerating and generated-file churn.
+- `native-plugins/AGENTS.md`: the native plugins built with the server, and how to port or write one.
 
 ## Vanilla parity
 
