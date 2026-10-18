@@ -2516,6 +2516,8 @@ impl World {
             is_thundering,
         );
         for entity in entities {
+            // Equipment and synced defaults, like `spawn_entity`.
+            entity.init_data_tracker();
             self.spawn_entity_non_save(entity);
         }
     }

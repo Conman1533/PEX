@@ -634,6 +634,8 @@ pub fn spawn_mobs_for_chunk_generation(
                             .get_entity()
                             .set_rotation(rand::random::<f32>() * 360.0, 0.0);
                         group_data = finalize_spawn(&entity, world, group_data);
+                        // Equipment and synced defaults, like `World::spawn_entity`.
+                        entity.init_data_tracker();
                         world.spawn_entity_non_save(entity);
                         success = true;
                     }
