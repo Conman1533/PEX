@@ -6400,7 +6400,14 @@ impl World {
                     .collect()
             })
             .unwrap_or_default();
-        for pos in positions {
+        // Chunks generated before worldgen registered block entities hold sculk sensors,
+        // shriekers and the like with no block entity data at all, so they never tick or listen.
+        // Vanilla generation always leaves a `DUMMY` entry for them; create the missing ones.
+        let block_entity_blocks = self
+            .level
+            .read_chunk_sync(&chunk_pos, |chunk| chunk.block_entity_block_positions())
+            .unwrap_or_default();
+        for pos in positions.into_iter().chain(block_entity_blocks) {
             let already_loaded = self
                 .block_entities
                 .get(&chunk_pos)
@@ -7571,6 +7578,32 @@ mod tests {
         data.iter()
             .filter_map(|record| record.get_string("id"))
             .collect()
+    }
+
+    #[tokio::test]
+    async fn activating_a_chunk_creates_block_entities_its_blocks_lack() {
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::chunk::ChunkData;
+
+        let world = super::test_world();
+        let chunk_pos = Vector2::new(0, 0);
+        let chunk = ChunkData::empty_sync(0, 0);
+        // A shrieker saved without block entity data, as worldgen used to leave it.
+        let pos = BlockPos::new(3, 70, 5);
+        chunk
+            .section
+            .set_block_absolute_y(3, 70, 5, Block::SCULK_SHRIEKER.default_state.id);
+        world.level.loaded_chunks.insert(chunk_pos, chunk);
+        assert!(world.block_entities.get(&chunk_pos).is_none());
+
+        world.migrate_pending_block_entities(chunk_pos);
+
+        let entity = world
+            .block_entities
+            .get(&chunk_pos)
+            .and_then(|entities| entities.get(&pos).cloned())
+            .expect("shrieker block entity");
+        assert!(entity.as_vibration_user().is_some());
     }
 
     #[test]

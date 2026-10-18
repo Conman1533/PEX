@@ -644,6 +644,14 @@ impl<V: Hash + Eq + Copy + Default, const DIM: usize> PalettedContainer<V, DIM> 
             Self::Heterogeneous(_) => false,
         }
     }
+
+    /// Whether any palette entry matches, without looking at the individual values.
+    pub fn palette_contains(&self, mut predicate: impl FnMut(V) -> bool) -> bool {
+        match self {
+            Self::Homogeneous(value) => predicate(*value),
+            Self::Heterogeneous(data) => data.palette.iter().any(|value| predicate(*value)),
+        }
+    }
 }
 
 impl<'a, V: Hash + Eq + Copy + Default, const DIM: usize> IntoIterator
