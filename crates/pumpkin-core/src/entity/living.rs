@@ -3237,7 +3237,11 @@ impl LivingEntity {
                 self.get_pitch(),
             );
 
-            if let Some(source) = source {
+            if let Some(source) = source
+                && !caller
+                    .get_mob()
+                    .is_some_and(crate::entity::mob::Mob::movement_frozen)
+            {
                 let source_pos = source.get_entity().pos.load();
                 let target_pos = self.entity.pos.load();
                 let dx = source_pos.x - target_pos.x;

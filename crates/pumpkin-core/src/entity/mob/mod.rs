@@ -309,7 +309,12 @@ impl MobEntity {
             std::mem::take(&mut *guard)
         };
 
-        navigator.tick(&self.living_entity);
+        // Vanilla `Creaking`'s navigation and look, move and jump controls only tick while it can
+        // move.
+        let frozen = mob.movement_frozen();
+        if !frozen {
+            navigator.tick(&self.living_entity);
+        }
 
         {
             *self
@@ -319,6 +324,10 @@ impl MobEntity {
         };
 
         mob.custom_server_ai_step(caller);
+
+        if frozen {
+            return;
+        }
 
         // Controllers are synchronous, so we can just use normal blocks
         {
@@ -1197,6 +1206,12 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Runs after navigation and before the movement controls, where vanilla ticks a mob's brain.
     fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {}
 
+    /// Whether the mob is held in place: its navigation and controls don't tick and it can't be
+    /// pushed or knocked back. Vanilla `Creaking` while `canMove()` is false.
+    fn movement_frozen(&self) -> bool {
+        false
+    }
+
     /// Moves the mob for this tick in place of the usual walking and swimming
     /// physics, returning whether it did; vanilla mobs that override `travel`.
     fn custom_travel(&self, _caller: &dyn EntityBase) -> bool {
@@ -1431,7 +1446,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
     }
 
     fn is_pushable(&self) -> bool {
-        self.get_mob_entity().living_entity.is_pushable()
+        self.get_mob_entity().living_entity.is_pushable() && !self.movement_frozen()
     }
 
     fn on_lightning_strike(
