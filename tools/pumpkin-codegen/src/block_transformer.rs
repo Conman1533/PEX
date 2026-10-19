@@ -5,6 +5,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use serde::Deserialize;
 
+use crate::block::BlockAssets;
+
 #[derive(Deserialize, Debug)]
 struct TransformerEntryJson {
     block_state_provider: BlockStateProviderWrapperJson,
@@ -226,15 +228,10 @@ fn state_provider_to_tokens(provider: &StateProviderJson) -> TokenStream {
 }
 
 pub fn build() -> TokenStream {
-    let blocks_file: serde_json::Value =
+    let blocks_assets: BlockAssets =
         serde_json::from_str(&fs::read_to_string("../../assets/blocks.json").unwrap())
             .expect("Failed to parse blocks.json");
-    let valid_blocks: HashSet<String> = blocks_file["blocks"]
-        .as_array()
-        .expect("blocks.json has no blocks array")
-        .iter()
-        .filter_map(|block| block["name"].as_str().map(str::to_owned))
-        .collect();
+    let valid_blocks: HashSet<String> = blocks_assets.blocks.into_iter().map(|b| b.name).collect();
 
     let dir = Path::new("../../assets/datapack/data/minecraft/block_transformer");
     let mut files: Vec<(String, Vec<TransformerEntryJson>)> = Vec::new();

@@ -43,7 +43,7 @@ use pumpkin_data::data_component_impl::Operation;
 use pumpkin_data::data_component_impl::food::{ConsumableImpl, ConsumeEffect};
 use pumpkin_data::data_component_impl::{
     AttributeModifiersImpl, BlocksAttacksImpl, DeathProtectionImpl, EnchantmentsImpl,
-    EquipmentSlot, EquippableImpl, FoodImpl,
+    EquipmentSlot, EquippableImpl, FoodImpl, UseRemainderImpl,
 };
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
@@ -971,8 +971,33 @@ impl LivingEntity {
         self.entity.entity_id
     }
 
+    // canBeAffected, with the mob overrides folded in
+    fn can_be_affected(&self, effect: &Effect) -> bool {
+        let entity_type = self.entity.entity_type;
+        if (entity_type == &EntityType::WITHER_SKELETON || entity_type == &EntityType::WITHER)
+            && effect.effect_type == &StatusEffect::WITHER
+        {
+            return false;
+        }
+
+        if entity_type.has_tag(&tag::EntityType::MINECRAFT_IMMUNE_TO_INFESTED) {
+            effect.effect_type != &StatusEffect::INFESTED
+        } else if entity_type.has_tag(&tag::EntityType::MINECRAFT_IMMUNE_TO_OOZING) {
+            effect.effect_type != &StatusEffect::OOZING
+        } else if entity_type.has_tag(&tag::EntityType::MINECRAFT_IGNORES_POISON_AND_REGEN) {
+            effect.effect_type != &StatusEffect::REGENERATION
+                && effect.effect_type != &StatusEffect::POISON
+        } else {
+            true
+        }
+    }
+
     #[expect(clippy::too_many_lines)]
     pub fn add_effect(&self, effect: Effect) {
+        if !self.can_be_affected(&effect) {
+            return;
+        }
+
         let mut effect_event =
             crate::plugin::api::events::entity::entity_potion_effect::EntityPotionEffectEvent::new(
                 self.entity.entity_id,
@@ -3523,7 +3548,6 @@ impl EntityBase for LivingEntity {
                 && let Some(consumable) = item.get_data_component::<ConsumableImpl>()
             {
                 // Consume item
-                let mut is_potion = false;
                 if let Some(food) = item.get_data_component::<FoodImpl>()
                     && let Some(player) = caller.get_player()
                 {
@@ -3551,7 +3575,6 @@ impl EntityBase for LivingEntity {
                         1.0,
                         crate::item::potion::PotionApplicationSource::Normal,
                     );
-                    is_potion = true;
                 }
 
                 if let Some(player) = caller.get_player() {
@@ -3561,6 +3584,28 @@ impl EntityBase for LivingEntity {
                         },
                     );
 
+                    // Vanilla `ItemStack.finishUsingItem`: consume one, then apply `use_remainder`.
+                    let finish_using = |mut stack: ItemStack| {
+                        let stack_count_before_using = stack.item_count;
+                        let gamemode = player.gamemode.load();
+                        stack.decrement_unless_creative(gamemode, 1);
+                        match item.get_data_component::<UseRemainderImpl>() {
+                            Some(use_remainder) => use_remainder.convert_into_remainder(
+                                stack,
+                                stack_count_before_using,
+                                gamemode == GameMode::Creative,
+                                |mut extra| {
+                                    if !player.inventory.insert_stack_anywhere(&mut extra)
+                                        && !extra.is_empty()
+                                    {
+                                        player.drop_item(extra);
+                                    }
+                                },
+                            ),
+                            None => stack,
+                        }
+                    };
+
                     // Prefer modifying the exact stack that matches the consumed item:
                     // 1) selected hotbar (held_item)
                     // 2) off-hand
@@ -3568,37 +3613,19 @@ impl EntityBase for LivingEntity {
                     let mut handled = false;
 
                     // Check main hand (hotbar selected)
-                    let mut held = player.inventory.held_item();
+                    let held = player.inventory.held_item();
                     if held.are_items_and_components_equal(item) {
-                        if is_potion {
-                            if player.gamemode.load() != GameMode::Creative {
-                                held.decrement(1);
-                                if held.is_empty() {
-                                    held = ItemStack::new(1, &Item::GLASS_BOTTLE);
-                                }
-                            }
-                        } else {
-                            held.decrement_unless_creative(player.gamemode.load(), 1);
-                        }
-                        player.inventory.set_held_item(held);
+                        player.inventory.set_held_item(finish_using(held));
                         handled = true;
                     }
 
                     if !handled {
                         // Check off-hand
-                        let mut off_hand = player.inventory.off_hand_item();
+                        let off_hand = player.inventory.off_hand_item();
                         if off_hand.are_items_and_components_equal(item) {
-                            if is_potion {
-                                if player.gamemode.load() != GameMode::Creative {
-                                    off_hand.decrement(1);
-                                    if off_hand.is_empty() {
-                                        off_hand = ItemStack::new(1, &Item::GLASS_BOTTLE);
-                                    }
-                                }
-                            } else {
-                                off_hand.decrement_unless_creative(player.gamemode.load(), 1);
-                            }
-                            player.inventory.set_stack_in_hand(Hand::Left, off_hand);
+                            player
+                                .inventory
+                                .set_stack_in_hand(Hand::Left, finish_using(off_hand));
                             handled = true;
                         }
                     }
@@ -3610,21 +3637,10 @@ impl EntityBase for LivingEntity {
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner);
                         let hand_to_modify = active_hand.unwrap_or(Hand::Right);
-                        let mut item_stack = self.get_stack_in_hand(caller, hand_to_modify);
-
-                        if is_potion {
-                            if player.gamemode.load() != GameMode::Creative {
-                                item_stack.decrement(1);
-                                if item_stack.is_empty() {
-                                    item_stack = ItemStack::new(1, &Item::GLASS_BOTTLE);
-                                }
-                            }
-                        } else {
-                            item_stack.decrement_unless_creative(player.gamemode.load(), 1);
-                        }
+                        let item_stack = self.get_stack_in_hand(caller, hand_to_modify);
                         player
                             .inventory
-                            .set_stack_in_hand(hand_to_modify, item_stack);
+                            .set_stack_in_hand(hand_to_modify, finish_using(item_stack));
                     }
 
                     if let Some(cooldown) = item.get_use_cooldown() {

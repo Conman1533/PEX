@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Configuration for chunk storage format.
 ///
-/// Supports multiple chunk formats, currently `Anvil` and `Linear`.
-#[derive(Deserialize, Serialize, Clone)]
+/// Supports `Anvil` (`.mca`), `Linear` (`.linear`), and `Pump` (`.pump`).
+#[derive(Deserialize, Serialize, Clone, Default)]
 #[serde(tag = "type")]
 pub enum ChunkConfig {
     /// Standard Anvil chunk storage.
@@ -16,33 +16,16 @@ pub enum ChunkConfig {
     Linear,
     /// Pumpkin's own optimized world format.
     #[serde(rename = "pump")]
+    #[default]
     Pump,
 }
 
-impl Default for ChunkConfig {
-    fn default() -> Self {
-        Self::Anvil(AnvilChunkConfig::default())
-    }
-}
-
 /// Configuration for Anvil chunk storage.
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(default)]
 pub struct AnvilChunkConfig {
     /// Compression settings for chunk data.
     pub compression: ChunkCompression,
-    /// Whether to write changed chunks into the region file like vanilla, instead of
-    /// rewriting the whole file on every save.
-    pub write_in_place: bool,
-}
-
-impl Default for AnvilChunkConfig {
-    fn default() -> Self {
-        Self {
-            compression: ChunkCompression::default(),
-            write_in_place: true,
-        }
-    }
 }
 
 /// Compression settings for chunk data.

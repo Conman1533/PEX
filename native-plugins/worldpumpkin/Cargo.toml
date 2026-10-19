@@ -1,0 +1,25 @@
+[package]
+name = "worldpumpkin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+description = "World editing for PEX. Native port of WorldPumpkin by NicDevTV."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pex-common = { path = "../common" }
+pumpkin = { path = "../../crates/pumpkin-core", package = "pumpkin-core" }
+pumpkin-data.workspace = true
+pumpkin-util.workspace = true
+pumpkin-world.workspace = true
+pumpkin-nbt.workspace = true
+serde.workspace = true
+tracing.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

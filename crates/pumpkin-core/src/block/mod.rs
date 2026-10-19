@@ -532,12 +532,12 @@ pub fn drop_loot(
     params: &LootContextParameters,
 ) {
     let mut loot_block = block;
-    let mut loot_table = world.get_loot_table(&format!("minecraft:blocks/{}", block.name));
+    let mut loot_table = block.loot_table.and_then(|key| world.get_loot_table(key));
     if loot_table.is_none()
         && let Some(standing) = standing_variant(block)
     {
         loot_block = standing;
-        loot_table = world.get_loot_table(&format!("minecraft:blocks/{}", standing.name));
+        loot_table = standing.loot_table.and_then(|key| world.get_loot_table(key));
     }
     if let Some(loot_table) = loot_table {
         let seed: i64 = rand::random();

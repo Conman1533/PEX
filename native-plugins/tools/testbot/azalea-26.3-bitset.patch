@@ -1,0 +1,57 @@
+diff --git a/azalea-core/src/bitset.rs b/azalea-core/src/bitset.rs
+index c37d5ac..dcade49 100644
+--- a/azalea-core/src/bitset.rs
++++ b/azalea-core/src/bitset.rs
+@@ -4,7 +4,10 @@ use std::{
+     ops::Range,
+ };
+ 
+-use azalea_buf::{AzBuf, BufReadError};
++use azalea_buf::{AzBuf, AzBufVar, BufReadError};
++
++/// The 26.3 branch's name for [`BitSet`].
++pub type JavaBitSet = BitSet;
+ 
+ /// Represents Java's BitSet, a list of bits.
+ #[derive(AzBuf, Clone, Debug, Default, Eq, Hash, PartialEq)]
+@@ -232,6 +235,40 @@ impl<const N: usize> FixedBitSet<N> {
+ 
+         self.data[bit_index / 8] |= 1u8 << (bit_index % 8);
+     }
++
++    #[inline]
++    pub fn unset(&mut self, bit_index: usize) {
++        let byte = &mut self.data[bit_index / 8];
++        *byte &= !(1u8 << (bit_index % 8));
++    }
++
++    #[inline]
++    pub fn set_to(&mut self, bit_index: usize, value: bool) {
++        if value {
++            self.set(bit_index);
++        } else {
++            self.unset(bit_index);
++        }
++    }
++}
++
++// The 26.3 branch's special case: `#[var] FixedBitSet<32>` is encoded as a varint.
++impl AzBufVar for FixedBitSet<32> {
++    fn azalea_read_var(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
++        let bytes = u32::azalea_read_var(buf)?.to_be_bytes();
++        let mut set = Self::new();
++        for (slot, byte) in set.data.iter_mut().zip(bytes) {
++            *slot = byte;
++        }
++        Ok(set)
++    }
++    fn azalea_write_var(&self, buf: &mut impl Write) -> io::Result<()> {
++        let mut bytes = [0u8; 4];
++        for (slot, byte) in bytes.iter_mut().zip(self.data) {
++            *slot = byte;
++        }
++        u32::from_be_bytes(bytes).azalea_write_var(buf)
++    }
+ }
+ 
+ impl<const N: usize> AzBuf for FixedBitSet<N> {

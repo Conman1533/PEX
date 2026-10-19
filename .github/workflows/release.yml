@@ -79,6 +79,33 @@ jobs:
             cp "target/$TARGET/release/pumpkin" "dist/pumpkin-${{ runner.arch }}-${{ runner.os }}-musl"
           fi
 
+      # Native plugins only load into the server build they came from, so they're released
+      # alongside each binary. The static musl builds can't load them.
+      - name: Package native plugins
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) PREFIX=""; EXT="dll" ;;
+            macOS) PREFIX="lib"; EXT="dylib" ;;
+            *) PREFIX="lib"; EXT="so" ;;
+          esac
+          mkdir -p plugin-files plugin-dist
+          for plugin in worldpumpkin pexguard pexprotect; do
+            cp "target/release/${PREFIX}${plugin}.${EXT}" plugin-files/
+          done
+          ARCHIVE="plugin-dist/pumpkin-plugins-${{ runner.arch }}-${{ runner.os }}.zip"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            7z a "$ARCHIVE" ./plugin-files/*
+          else
+            (cd plugin-files && zip -9 "../$ARCHIVE" ./*)
+          fi
+
+      - name: Export native plugins
+        uses: actions/upload-artifact@v7
+        with:
+          name: pumpkin-plugins-${{ runner.arch }}-${{ runner.os }}
+          path: plugin-dist/pumpkin-plugins-*
+
       - name: Upload unsigned Windows executable
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
