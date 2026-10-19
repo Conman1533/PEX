@@ -361,7 +361,7 @@ fn read_root_vehicle(nbt: &NbtCompound) -> Option<Uuid> {
     ))
 }
 
-pub const DATA_VERSION: i32 = 4903; // 26.2
+pub const DATA_VERSION: i32 = 5023; // 26.3
 
 /// Food exhaustion applied for every block a player mines.
 ///
@@ -399,6 +399,9 @@ pub enum SpamType {
     Chat,
     Command,
 }
+
+/// Center chunk and levels of the view and simulation tickets a player holds.
+pub type HeldChunkTickets = (Vector2<i32>, Option<i8>, Option<i8>);
 
 pub struct Player {
     /// The underlying living entity object that represents the player.
@@ -501,7 +504,7 @@ pub struct Player {
     pub experience_pick_up_delay: Mutex<u32>,
     pub chunk_sender: Mutex<crate::net::ChunkSender>,
     pub chunk_listener: Mutex<Receiver<(Vector2<i32>, Weak<ChunkData>)>>,
-    pub held_chunk_tickets: Mutex<Option<(Option<i8>, Option<i8>)>>,
+    pub held_chunk_tickets: Mutex<Option<HeldChunkTickets>>,
     pub chunk_send_epoch: AtomicU32,
     pub has_played_before: AtomicBool,
     root_vehicle_uuid: AtomicCell<Option<Uuid>>,
@@ -1242,7 +1245,7 @@ impl Player {
         let level = &world.level;
 
         // Decrement the value of watched chunks
-        let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks).await;
+        let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks);
         // Remove chunks with no watchers from the cache
         if !chunks_to_clean.is_empty() {
             world.remove_entities_in_chunks(&chunks_to_clean).await;
@@ -1291,10 +1294,7 @@ impl Player {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        if let Some((view_level, sim_level)) = held {
-            // The chunker added these at the watched center, which can lag the entity's chunk
-            // (teleports, dimension changes); removing at chunk_pos would leak the ticket.
-            let center = self.watched_section.load().center;
+        if let Some((center, view_level, sim_level)) = held {
             if let Some(view) = view_level {
                 lock.remove_ticket(center, view);
             }
@@ -3988,7 +3988,7 @@ impl Player {
     pub async fn unload_watched_chunks(&self, world: &World) {
         let radial_chunks = self.watched_section.load().all_chunks_within();
         let level = &world.level;
-        let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks).await;
+        let chunks_to_clean = level.mark_chunks_as_not_watched(radial_chunks);
         if !chunks_to_clean.is_empty() {
             world.remove_entities_in_chunks(&chunks_to_clean).await;
             level.clean_entity_chunks(&chunks_to_clean);
@@ -4080,7 +4080,7 @@ impl Player {
                                 self.gamemode.load() as u8,
                                 self.previous_gamemode.load().unwrap_or(self.gamemode.load()) as i8,
                                 false,
-                                false,
+                                new_world.is_flat(),
                                 Some((death_dimension, death_location)),
                                 VarInt(self.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                                 new_world.sea_level.into(),

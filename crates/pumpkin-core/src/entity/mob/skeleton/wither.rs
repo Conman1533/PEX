@@ -3,9 +3,13 @@ use pumpkin_data::entity::EntityType;
 use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
 
+use pumpkin_data::effect::StatusEffect;
+use pumpkin_data::potion::Effect;
+
 use crate::entity::{
     Entity, EntityBase,
     mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
+    projectile::arrow::ArrowEntity,
 };
 
 pub struct WitherSkeletonEntity {
@@ -45,5 +49,25 @@ impl Mob for WitherSkeletonEntity {
 
     fn on_equip_item(&self, slot: &EquipmentSlot) {
         self.entity.on_equip_item(slot);
+    }
+
+    fn on_attack(&self, target: &dyn EntityBase) {
+        if let Some(living) = target.get_living_entity() {
+            living.add_effect(Effect {
+                effect_type: &StatusEffect::WITHER,
+                duration: 200,
+                amplifier: 0,
+                ambient: false,
+                show_particles: true,
+                show_icon: true,
+                blend: false,
+            });
+        }
+    }
+
+    fn get_arrow(&self, arrow: ArrowEntity) -> ArrowEntity {
+        // vanilla lights it for 100 seconds
+        arrow.set_flame(true);
+        arrow
     }
 }
