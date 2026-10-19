@@ -1143,6 +1143,17 @@ impl BlockPalette {
                     }
                     out.extend_from_slice(indices.as_flattened().as_flattened());
                 }
+                PaletteStorage::Nibbles(_) => {
+                    out.put_u8(1);
+                    out.put_u16(data.palette.len() as u16);
+                    for (&id, &count) in data.palette.iter().zip(&data.counts) {
+                        out.put_u16(id.as_u16());
+                        out.put_u16(count);
+                    }
+                    for idx in data.storage.indices().into_iter().flatten() {
+                        out.put_u8(idx as u8);
+                    }
+                }
                 PaletteStorage::Dense(cube) => {
                     out.put_u8(2);
                     for &id in cube.as_flattened().as_flattened() {
@@ -1264,6 +1275,11 @@ impl BiomePalette {
                     PaletteStorage::Indexed(indices) => {
                         for &idx in indices.as_flattened().as_flattened() {
                             out.put_u8(data.palette.get(idx as usize).copied().unwrap_or(0));
+                        }
+                    }
+                    PaletteStorage::Nibbles(_) => {
+                        for idx in data.storage.indices().into_iter().flatten() {
+                            out.put_u8(data.palette.get(idx).copied().unwrap_or(0));
                         }
                     }
                 }

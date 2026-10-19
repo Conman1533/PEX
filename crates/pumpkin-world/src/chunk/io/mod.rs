@@ -1,4 +1,13 @@
-use std::{error, fs::File, path::Path, time::Duration};
+use std::{
+    error, fmt,
+    fs::File,
+    path::Path,
+    sync::{
+        Mutex, PoisonError,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use bytes::Bytes;
 use pumpkin_util::math::vector2::Vector2;
@@ -45,6 +54,28 @@ impl<D: Send, E: error::Error> LoadedData<D, E> {
 pub trait Dirtiable {
     fn is_dirty(&self) -> bool;
     fn mark_dirty(&self, flag: bool);
+}
+
+const SAVE_FAILURE_LOG_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Logs a failed save at most once per minute, with a count of the ones in between. When the
+/// disk is full every save fails, many times a second.
+pub fn log_save_failure(message: fmt::Arguments<'_>) {
+    static LAST_LOGGED: Mutex<Option<Instant>> = Mutex::new(None);
+    static HELD_BACK: AtomicU64 = AtomicU64::new(0);
+
+    let mut last_logged = LAST_LOGGED.lock().unwrap_or_else(PoisonError::into_inner);
+    if last_logged.is_some_and(|at| at.elapsed() < SAVE_FAILURE_LOG_INTERVAL) {
+        HELD_BACK.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
+    *last_logged = Some(Instant::now());
+    drop(last_logged);
+
+    match HELD_BACK.swap(0, Ordering::Relaxed) {
+        0 => tracing::error!("{message}"),
+        held_back => tracing::error!("{message} ({held_back} more failed saves since)"),
+    }
 }
 
 /// Trait to handle the IO of chunks

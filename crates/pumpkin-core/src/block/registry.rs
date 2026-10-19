@@ -708,52 +708,13 @@ impl BlockRegistry {
 
         let clicked_block_pos = BlockPos(location.0);
         let world = entity.world.load_full();
-        let (clicked_block, clicked_block_state) = world.get_block_and_state(&clicked_block_pos);
+        let clicked_block = world.get_block(&clicked_block_pos);
 
         let Some((final_block_pos, final_face, replacing)) =
             self.placement_target(&world, player, placed_block, use_item_on, location, face)
         else {
             return Ok(None);
         };
-
-        let (final_block_pos, final_face, replacing) =
-            if let Some(replacing) = replace_clicked_block {
-                (clicked_block_pos, face.opposite(), replacing)
-            } else {
-                let block_pos = BlockPos(location.0 + face.to_offset());
-                let (previous_block, previous_block_state) = world.get_block_and_state(&block_pos);
-
-                let replace_previous_block = if previous_block == placed_block {
-                    self.can_update_at(
-                        &world,
-                        previous_block,
-                        previous_block_state.id,
-                        &block_pos,
-                        face.opposite(),
-                        use_item_on,
-                        player,
-                    )
-                    .then_some(BlockIsReplacing::Itself(previous_block_state.id))
-                } else {
-                    can_replace_with_other_block(previous_block, previous_block_state).then(|| {
-                        if previous_block == &Block::WATER {
-                            use pumpkin_data::block_properties::WaterLikeProperties;
-                            let water_props =
-                                WaterLikeProperties::from_state_id(previous_block_state.id);
-                            BlockIsReplacing::Water(water_props.level)
-                        } else {
-                            BlockIsReplacing::None
-                        }
-                    })
-                };
-
-                match replace_previous_block {
-                    Some(replacing) => (block_pos, face.opposite(), replacing),
-                    None => {
-                        return Ok(None);
-                    }
-                }
-            };
 
         let context = BlockPlaceContext {
             position: final_block_pos,

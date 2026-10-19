@@ -67,9 +67,9 @@ fn resolve_block_state(name: &str, properties: &[(String, String)]) -> Option<u1
     if properties.is_empty() {
         return Some(block.default_state.id.as_u16());
     }
-    let props: Vec<(&str, &str)> = properties
+    let props: Vec<pumpkin_data::Property> = properties
         .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .filter_map(|(key, value)| pumpkin_data::Property::from_str_pair(key, value))
         .collect();
     // `from_properties` panics on unknown property values.
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -86,7 +86,7 @@ fn block_properties(state: u16) -> Vec<(String, String)> {
             props
                 .to_props()
                 .into_iter()
-                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .map(|prop| (prop.key_str().to_string(), prop.value_str().to_string()))
                 .collect()
         })
         .unwrap_or_default()

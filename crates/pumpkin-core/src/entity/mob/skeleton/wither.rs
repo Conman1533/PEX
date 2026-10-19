@@ -49,6 +49,8 @@ impl Mob for WitherSkeletonEntity {
 
     fn on_equip_item(&self, slot: &EquipmentSlot) {
         self.entity.on_equip_item(slot);
+    }
+
     fn on_attack(&self, target: &dyn EntityBase) {
         if let Some(living) = target.get_living_entity() {
             living.add_effect(Effect {

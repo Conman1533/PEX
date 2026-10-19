@@ -34,7 +34,7 @@ use std::{
 };
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 // use tokio::runtime::Handle;
 use tokio::{
     select,
