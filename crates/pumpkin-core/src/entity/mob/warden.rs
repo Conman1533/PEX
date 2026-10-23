@@ -360,16 +360,16 @@ impl Mob for WardenEntity {
         if !entity.is_alive() {
             return;
         }
-        let age = entity.age.load(Ordering::Relaxed);
+        let tick_count = entity.tick_count.load(Ordering::Relaxed);
         let world = entity.world.load();
 
         self.tick_touch();
 
-        if (age + entity.entity_id) % DARKNESS_INTERVAL == 0 {
+        if (tick_count + entity.entity_id) % DARKNESS_INTERVAL == 0 {
             Self::apply_darkness_around(&world, entity.pos.load(), DARKNESS_RADIUS);
         }
 
-        if age % ANGERMANAGEMENT_TICK_DELAY == 0 {
+        if tick_count % ANGERMANAGEMENT_TICK_DELAY == 0 {
             self.anger()
                 .tick(&world, |suspect| self.can_target_entity(suspect));
             self.sync_client_anger_level();
