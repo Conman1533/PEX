@@ -34,7 +34,10 @@ use crate::entity::{
     player::{Player, advancement::trigger::AdvancementTrigger},
 };
 
-use crate::world::game_event::GameEventListener;
+use crate::world::{
+    game_event::GameEventListener,
+    vibration::{VibrationData, VibrationListener},
+};
 
 mod ai;
 mod chunk_loading;
@@ -53,7 +56,7 @@ pub struct AllayEntity {
     duplication_cooldown: AtomicI64,
     inventory: Mutex<ItemStack>,
     jukebox_pos: AtomicCell<Option<BlockPos>>,
-    vibration: Mutex<vibration::VibrationData>,
+    vibration: Mutex<VibrationData>,
     ambient_sound_time: AtomicI32,
     noteblock_chunk: Mutex<Option<chunk_loading::NoteBlockChunk>>,
 }
@@ -80,7 +83,7 @@ impl AllayEntity {
             duplication_cooldown: AtomicI64::new(0),
             inventory: Mutex::new(ItemStack::EMPTY.clone()),
             jukebox_pos: AtomicCell::new(None),
-            vibration: Mutex::new(vibration::VibrationData::default()),
+            vibration: Mutex::new(VibrationData::default()),
             ambient_sound_time: AtomicI32::new(0),
             noteblock_chunk: Mutex::new(None),
         })
@@ -479,7 +482,7 @@ impl Mob for AllayEntity {
     }
 
     fn for_each_game_event_listener(&self, visit: &mut dyn FnMut(&dyn GameEventListener)) {
-        visit(&vibration::VibrationListener(self));
+        visit(&VibrationListener(self));
         visit(&vibration::JukeboxListener(self));
     }
 
@@ -642,7 +645,7 @@ impl Mob for AllayEntity {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = nbt
             .get_compound("listener")
-            .map(vibration::VibrationData::read_nbt)
+            .map(VibrationData::read_nbt)
             .unwrap_or_default();
     }
 

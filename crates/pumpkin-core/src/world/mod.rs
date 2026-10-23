@@ -37,6 +37,7 @@ pub mod raid;
 pub mod random_sequences;
 pub mod stopwatches;
 pub mod time;
+pub mod vibration;
 pub mod villager_poi;
 
 use crate::block::RandomTickArgs;
