@@ -862,9 +862,6 @@ mod tests {
     /// stand in with player-type `Entity` values filed like other entities. `get_all_at_box`
     /// queries players the same way; the real list is covered by the in-game check.
     fn add_entities(world: &World, entities: Vec<Arc<dyn EntityBase>>) {
-        for entity in &entities {
-            world.entity_sections.add(entity);
-        }
         world.entities.store(Arc::new(entities));
     }
 

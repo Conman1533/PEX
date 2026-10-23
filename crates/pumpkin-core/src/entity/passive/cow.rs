@@ -58,11 +58,7 @@ impl CowEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
@@ -161,6 +157,10 @@ impl Mob for CowEntity {
         let sound_variant = CowSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
             .unwrap_or_default();
         Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
+    fn has_audited_tick(&self) -> bool {
+        true
     }
 
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {

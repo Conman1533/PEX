@@ -277,11 +277,7 @@ impl Goal for EmergeGoal {
     }
 
     fn start(&mut self, mob: &dyn Mob) {
-        mob.get_mob_entity()
-            .navigator
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .stop();
+        mob.get_mob_entity().steered().navigator().stop();
     }
 
     fn stop(&mut self, mob: &dyn Mob) {
@@ -346,9 +342,8 @@ impl Goal for InvestigateGoal {
         if let Some(target) = self.current_target {
             let pos = mob.get_entity().pos.load();
             mob.get_mob_entity()
-                .navigator
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .steered()
+                .navigator()
                 .set_progress(NavigatorGoal::new(
                     pos,
                     target.to_centered_f64(),
@@ -359,11 +354,7 @@ impl Goal for InvestigateGoal {
 
     fn stop(&mut self, mob: &dyn Mob) {
         self.current_target = None;
-        mob.get_mob_entity()
-            .navigator
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .stop();
+        mob.get_mob_entity().steered().navigator().stop();
     }
 
     fn controls(&self) -> Controls {
@@ -392,11 +383,7 @@ impl WardenEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(EmergeGoal { emerge_ticks }));
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));

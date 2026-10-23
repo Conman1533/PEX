@@ -96,11 +96,7 @@ impl RabbitEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.2));
@@ -149,18 +145,10 @@ impl RabbitEntity {
         );
 
         if variant == RabbitVariant::Evil {
-            let mut goal_selector = self
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &self.mob_entity.goals_selector;
             goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.4, true)));
 
-            let mut target_selector = self
-                .mob_entity
-                .target_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let target_selector = &self.mob_entity.target_selector;
             target_selector.add_goal(
                 1,
                 ActiveTargetGoal::with_default(&self.mob_entity, &EntityType::PLAYER, true),

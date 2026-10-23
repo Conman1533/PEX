@@ -55,11 +55,7 @@ impl SkeletonHorseEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             // Vanilla `SkeletonHorse.addBehaviourGoals` is empty: no float, panic or tempt.
             goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.0)));

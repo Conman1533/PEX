@@ -20,7 +20,7 @@ impl DrownedEntity {
         let mob_arc = Arc::new(zombie);
         // Fix duplicated since already in ZombieEntity::new()
         {
-            //let mut target_selector = mob_arc.entity.mob_entity.target_selector.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            //let target_selector = &mob_arc.entity.mob_entity.target_selector;
 
             // TODO
             // target_selector.add_goal(
@@ -50,9 +50,7 @@ impl DrownedEntity {
         entity
             .mob_entity
             .goals_selector
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove_goals::<SwimGoal>();
+            .remove_goal::<SwimGoal>(entity);
     }
 }
 

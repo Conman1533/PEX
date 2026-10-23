@@ -47,11 +47,7 @@ impl StriderEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             // Not in vanilla, which floats striders on lava in `Strider.floatStrider` instead.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));

@@ -32,10 +32,7 @@ pub fn init(mob_entity: &MobEntity) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner) = Box::new(FishMoveControl);
 
-    let mut goals = mob_entity
-        .goals_selector
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let goals = &mob_entity.goals_selector;
     goals.add_goal(0, EscapeDangerGoal::new(1.25));
     goals.add_goal(
         2,

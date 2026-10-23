@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::entity::{EntityBase, ai::pathfinder::NavigatorGoal, mob::Mob};
 
-use super::{Controls, Goal};
+use super::{Controls, Goal, GoalReach};
 
 /// Vanilla `BreedGoal.PARTNER_TARGETING` range.
 const PARTNER_RANGE: f64 = 8.0;
@@ -62,6 +62,43 @@ impl BreedGoal {
 }
 
 impl Goal for BreedGoal {
+    fn tick_reach(&self, mob: &dyn Mob, running: bool) -> Option<GoalReach> {
+        let mob_entity = mob.get_mob_entity();
+        let mut links: Vec<i32> = self
+            .partner
+            .iter()
+            .map(|partner| partner.get_entity().entity_id)
+            .collect();
+        if running {
+            // Breeding credits the love cause of either parent.
+            let world = mob.get_entity().world.load();
+            let partner_breeder = self
+                .partner
+                .as_ref()
+                .and_then(|partner| partner.get_mob())
+                .and_then(|partner| partner.get_mob_entity().breeder.load());
+            for breeder in [mob_entity.breeder.load(), partner_breeder]
+                .into_iter()
+                .flatten()
+            {
+                if let Some(player) = world.get_player_by_uuid(breeder) {
+                    links.push(player.entity_id());
+                }
+            }
+        }
+        let searching = !running && mob_entity.is_in_love();
+        Some(GoalReach {
+            entities: if searching { PARTNER_RANGE } else { 0.0 },
+            speed: if running || searching {
+                self.speed
+            } else {
+                0.0
+            },
+            links,
+            ..GoalReach::default()
+        })
+    }
+
     fn can_start(&mut self, mob: &dyn Mob) -> bool {
         if !mob.get_mob_entity().is_in_love() {
             return false;
@@ -101,9 +138,8 @@ impl Goal for BreedGoal {
         let pos = mob.get_entity().pos.load();
         let partner_pos = partner.get_entity().pos.load();
         mob_entity
-            .navigator
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .steered()
+            .navigator()
             .set_progress(NavigatorGoal::new(pos, partner_pos, self.speed));
 
         self.love_time += 1;

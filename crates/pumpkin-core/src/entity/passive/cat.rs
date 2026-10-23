@@ -8,7 +8,6 @@ use std::sync::{
 use pumpkin_data::cat_sound_variant::CatSoundVariant;
 use pumpkin_data::cat_variant::CatVariant;
 use pumpkin_data::entity::{EntityStatus, EntityType};
-use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
@@ -37,44 +36,6 @@ use crate::entity::{
     player::Player,
 };
 
-fn get_dye_color_from_item(item: &Item) -> Option<u8> {
-    let key = item.registry_key;
-    if key.contains("white") {
-        Some(0)
-    } else if key.contains("orange") {
-        Some(1)
-    } else if key.contains("magenta") {
-        Some(2)
-    } else if key.contains("light_blue") {
-        Some(3)
-    } else if key.contains("yellow") {
-        Some(4)
-    } else if key.contains("lime") {
-        Some(5)
-    } else if key.contains("pink") {
-        Some(6)
-    } else if key.contains("light_gray") {
-        Some(8)
-    } else if key.contains("gray") {
-        Some(7)
-    } else if key.contains("cyan") {
-        Some(9)
-    } else if key.contains("purple") {
-        Some(10)
-    } else if key.contains("blue") {
-        Some(11)
-    } else if key.contains("brown") {
-        Some(12)
-    } else if key.contains("green") {
-        Some(13)
-    } else if key.contains("red") {
-        Some(14)
-    } else if key.contains("black") {
-        Some(15)
-    } else {
-        None
-    }
-}
 
 pub struct CatEntity {
     pub mob_entity: MobEntity,
@@ -107,11 +68,7 @@ impl CatEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             // Goal 1: SwimGoal (FloatGoal)
             goal_selector.add_goal(1, Box::new(SwimGoal::default()));
@@ -159,11 +116,7 @@ impl CatEntity {
         };
 
         {
-            let mut target_selector = mob_arc
-                .mob_entity
-                .target_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let target_selector = &mob_arc.mob_entity.target_selector;
 
             // Target Goal 1: NonTameRandomTargetGoal for Rabbit and Turtle
             target_selector.add_goal(
@@ -491,10 +444,11 @@ impl Mob for CatEntity {
                 if item.has_tag(&tag::Item::MINECRAFT_CAT_COLLAR_DYES)
                     || item.has_tag(&tag::Item::C_DYES)
                 {
-                    if let Some(color) = get_dye_color_from_item(item)
-                        && color != self.get_collar_color()
+                    if let Some(dye) = item_stack
+                        .get_data_component::<pumpkin_data::data_component_impl::DyeImpl>()
+                        && dye.color.id() != self.get_collar_color()
                     {
-                        self.set_collar_color(color);
+                        self.set_collar_color(dye.color.id());
                         item_stack.decrement_unless_creative(player.gamemode.load(), 1);
                         return true;
                     }

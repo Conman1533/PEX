@@ -11,7 +11,7 @@ use pumpkin_util::Difficulty;
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        Goal, active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
+        active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
         bow_attack::BowAttackGoal, flee_sun::FleeSunGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal,
         restrict_sun::RestrictSunGoal, revenge::RevengeGoal, wander_around::WanderAroundGoal,
@@ -83,16 +83,8 @@ impl SkeletonEntityBase {
             Arc::downgrade(&mob_arc)
         };
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut target_selector = mob_arc
-                .mob_entity
-                .target_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
+            let target_selector = &mob_arc.mob_entity.target_selector;
 
             goal_selector.add_goal(2, Box::new(RestrictSunGoal::new()));
             goal_selector.add_goal(3, Box::new(FleeSunGoal::new(1.0)));
@@ -153,40 +145,30 @@ impl SkeletonEntityBase {
             equipment.get(&EquipmentSlot::MAIN_HAND).item.id == Item::BOW.id
                 || equipment.get(&EquipmentSlot::OFF_HAND).item.id == Item::BOW.id
         };
-        let mut stopped = {
-            let mut goal_selector = self
+        let goal_selector = &self.mob_entity.goals_selector;
+        goal_selector.remove_goal::<MeleeAttackGoal>(self);
+        goal_selector.remove_goal::<BowAttackGoal>(self);
+        if holding_bow {
+            let difficulty = self
                 .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut stopped = goal_selector.remove_goals::<MeleeAttackGoal>();
-            stopped.extend(goal_selector.remove_goals::<BowAttackGoal>());
-            if holding_bow {
-                let difficulty = self
-                    .mob_entity
-                    .living_entity
-                    .entity
-                    .world
-                    .load()
-                    .level_info
-                    .load()
-                    .difficulty;
-                let min_attack_interval = if difficulty == Difficulty::Hard {
-                    self.hard_attack_interval
-                } else {
-                    self.attack_interval
-                };
-                goal_selector.add_goal(
-                    4,
-                    Box::new(BowAttackGoal::new(1.0, min_attack_interval, 15.0)),
-                );
+                .living_entity
+                .entity
+                .world
+                .load()
+                .level_info
+                .load()
+                .difficulty;
+            let min_attack_interval = if difficulty == Difficulty::Hard {
+                self.hard_attack_interval
             } else {
-                goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.2, false)));
-            }
-            stopped
-        };
-        for goal in &mut stopped {
-            goal.stop(self);
+                self.attack_interval
+            };
+            goal_selector.add_goal(
+                4,
+                Box::new(BowAttackGoal::new(1.0, min_attack_interval, 15.0)),
+            );
+        } else {
+            goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.2, false)));
         }
     }
 }

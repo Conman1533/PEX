@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use std::sync::atomic::{
     AtomicBool, AtomicU32,
     Ordering::{self, Relaxed},
 };
+use std::sync::Arc;
 
 use bytes::BufMut;
 use crossbeam::atomic::AtomicCell;
@@ -173,6 +173,21 @@ impl TrackedEntity {
     #[must_use]
     pub fn has_bedrock_watchers(&self) -> bool {
         self.bedrock_watchers.load(Relaxed) > 0
+    }
+
+    #[must_use]
+    pub fn has_viewers(&self) -> bool {
+        !self
+            .seen_by
+            .read()
+            .is_empty()
+    }
+
+    #[must_use]
+    pub fn is_seen_by(&self, uuid: &Uuid) -> bool {
+        self.seen_by
+            .read()
+            .contains(uuid)
     }
 
     /// Vanilla `ServerEntity.sendChanges`. Non-player entities only.
@@ -471,7 +486,11 @@ impl TrackedEntity {
                 .is_chunk_ready(&entity_chunk);
 
         if is_visible {
-            if self.seen_by.insert(player.gameprofile.id) {
+            let inserted = self
+                .seen_by
+                .write()
+                .insert(player.gameprofile.id);
+            if inserted {
                 if matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     self.bedrock_watchers.fetch_add(1, Relaxed);
                 }
@@ -659,7 +678,7 @@ impl TrackedEntity {
     }
 
     pub fn broadcast_removed(&self, world: &World) {
-        if self.seen_by.is_empty() {
+        if !self.has_viewers() {
             return;
         }
         let entity_ids = [self.entity_id.into()];
@@ -669,7 +688,7 @@ impl TrackedEntity {
         let players = world.players.load();
         let recipients = players
             .iter()
-            .filter(|p| self.seen_by.contains(&p.gameprofile.id));
+            .filter(|p| self.is_seen_by(&p.gameprofile.id));
 
         let mut java_recipients = Vec::new();
         let mut bedrock_recipients = Vec::new();
@@ -684,13 +703,19 @@ impl TrackedEntity {
         World::broadcast_java_grouped(&je_packet, recipients_by_version);
         World::broadcast_bedrock_grouped(&be_packet, bedrock_recipients.into_iter());
 
-        self.seen_by.clear();
+        self.seen_by
+            .write()
+            .clear();
         self.bedrock_watchers.store(0, Relaxed);
     }
 
     /// Vanilla `TrackedEntity.removePlayer`: despawn on the client, only if it was paired.
     pub fn remove_player(&self, player: &Player) {
-        if self.seen_by.remove(&player.gameprofile.id).is_some() {
+        let removed = self
+            .seen_by
+            .write()
+            .remove(&player.gameprofile.id);
+        if removed {
             if matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
                 self.bedrock_watchers.fetch_sub(1, Relaxed);
             }
@@ -700,21 +725,23 @@ impl TrackedEntity {
 
     /// Forgets the player as a viewer without a removal packet; the client already dropped it.
     pub fn forget_player(&self, player: &Player) {
-        if self.seen_by.remove(&player.gameprofile.id).is_some()
-            && matches!(player.client.as_ref(), ClientPlatform::Bedrock(_))
-        {
+        let removed = self
+            .seen_by
+            .write()
+            .remove(&player.gameprofile.id);
+        if removed && matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
             self.bedrock_watchers.fetch_sub(1, Relaxed);
         }
     }
 
     pub fn send_to_tracking_players<P: ClientPacket + Sync>(&self, packet: &P, world: &World) {
-        if self.seen_by.is_empty() {
+        if !self.has_viewers() {
             return;
         }
         let players = world.players.load();
         let recipients = players
             .iter()
-            .filter(|p| self.seen_by.contains(&p.gameprofile.id));
+            .filter(|p| self.is_seen_by(&p.gameprofile.id));
         let recipients_by_version = World::collect_java_recipients_by_version(recipients);
         World::broadcast_java_grouped(packet, recipients_by_version);
     }
@@ -729,7 +756,7 @@ impl TrackedEntity {
         }
         let players = world.players.load();
         let recipients = players.iter().filter_map(|p| {
-            if self.seen_by.contains(&p.gameprofile.id)
+            if self.is_seen_by(&p.gameprofile.id)
                 && let ClientPlatform::Bedrock(client) = p.client.as_ref()
             {
                 return Some(client);
@@ -745,13 +772,13 @@ impl TrackedEntity {
         be_packet: &B,
         world: &World,
     ) {
-        if self.seen_by.is_empty() {
+        if !self.has_viewers() {
             return;
         }
         let players = world.players.load();
         let recipients = players
             .iter()
-            .filter(|p| self.seen_by.contains(&p.gameprofile.id));
+            .filter(|p| self.is_seen_by(&p.gameprofile.id));
 
         let mut java_recipients = Vec::new();
         let mut bedrock_recipients = Vec::new();
@@ -802,7 +829,7 @@ impl TrackedEntity {
         let players = world.players.load();
         let recipients = players
             .iter()
-            .filter(|p| self.seen_by.contains(&p.gameprofile.id) && filter(p));
+            .filter(|p| self.is_seen_by(&p.gameprofile.id) && filter(p));
         let recipients_by_version = World::collect_java_recipients_by_version(recipients);
         World::broadcast_java_grouped(packet, recipients_by_version);
     }
@@ -821,7 +848,7 @@ impl TrackedEntity {
         let players = world.players.load();
         let recipients = players
             .iter()
-            .filter(|p| self.seen_by.contains(&p.gameprofile.id) && filter(p));
+            .filter(|p| self.is_seen_by(&p.gameprofile.id) && filter(p));
 
         let mut java_recipients = Vec::new();
         let mut bedrock_recipients = Vec::new();
@@ -870,7 +897,7 @@ impl EntityTracker {
     pub fn is_tracked_by_any_player(&self, entity_id: i32) -> bool {
         self.entity_map
             .get(&entity_id)
-            .is_some_and(|t| !t.seen_by.is_empty())
+            .is_some_and(|t| t.has_viewers())
     }
 
     pub fn for_each_entity_tracked_by<F: FnMut(&Arc<dyn EntityBase>)>(
@@ -879,7 +906,7 @@ impl EntityTracker {
         mut f: F,
     ) {
         for entry in &self.entity_map {
-            if entry.value().seen_by.contains(&player.gameprofile.id) {
+            if entry.value().is_seen_by(&player.gameprofile.id) {
                 f(&entry.value().entity);
             }
         }

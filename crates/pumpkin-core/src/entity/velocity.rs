@@ -241,8 +241,8 @@ pub fn push_apart(this: &(impl EntityBase + ?Sized), other: &dyn EntityBase) {
     dx /= d;
     dz /= d;
     let d2 = (1.0 / d).min(1.0);
-    dx = dx * d2 * f64::from(0.05f32);
-    dz = dz * d2 * f64::from(0.05f32);
+    dx = dx * d2 * super::PUSH_STRENGTH;
+    dz = dz * d2 * super::PUSH_STRENGTH;
 
     if !this_entity.has_passengers() && this.is_pushable() {
         this_entity.push_velocity(-dx, -dz);

@@ -62,11 +62,7 @@ impl ChickenEntity {
         };
 
         {
-            let mut goal_selector = mob_arc
-                .mob_entity
-                .goals_selector
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.4));
@@ -168,6 +164,19 @@ impl Mob for ChickenEntity {
             ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
                 .unwrap_or_default();
         Some(sound_variant.ambient_sound(self.is_baby()))
+    }
+
+    fn has_audited_tick(&self) -> bool {
+        true
+    }
+
+    fn audited_spawn_distance(&self) -> f64 {
+        // The egg drops anywhere in its block.
+        if self.egg_lay_time.load(Ordering::Relaxed) <= 1 {
+            1.0
+        } else {
+            0.0
+        }
     }
 
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
