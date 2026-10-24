@@ -213,8 +213,27 @@ impl HeadlessBot {
     }
 
     pub async fn start_digging(&mut self, position: BlockPos, sequence: i32) -> Result<(), String> {
+        self.send_player_action(Status::StartedDigging, position, sequence)
+            .await
+    }
+
+    pub async fn finish_digging(
+        &mut self,
+        position: BlockPos,
+        sequence: i32,
+    ) -> Result<(), String> {
+        self.send_player_action(Status::FinishedDigging, position, sequence)
+            .await
+    }
+
+    async fn send_player_action(
+        &mut self,
+        status: Status,
+        position: BlockPos,
+        sequence: i32,
+    ) -> Result<(), String> {
         self.send_packet(&SPlayerAction {
-            status: VarInt(Status::StartedDigging as i32),
+            status: VarInt(status as i32),
             position,
             face: 1,
             sequence: VarInt(sequence),
