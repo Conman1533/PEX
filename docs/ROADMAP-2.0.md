@@ -75,7 +75,7 @@ These branches are pushed but not merged. A piece that touches the same area sta
   - The nautilus has no goals and no Brain; vanilla drives it with `NautilusAi`.
   - The squid folds vanilla's two goals into `mob_tick`, which is allowed if the behaviour matches but hasn't been audited.
 - Tests: 220 builtin GameTests exist (`crates/pumpkin-core/src/server/builtin_game_tests/`), but only one is about mob AI (`zombie_pathfinds_to_villager`). `tools/pumpkin-tester` has bot tests for the allay and sheep shearing. Nine mob files have unit tests.
-- There is no parity table on alpha. Mobs merged from open upstream PRs on 2026-10-23 (fox, drowned, bogged, cats and ocelots, silverfish, weak self references in goals) were matched against vanilla goal lists by those PRs.
+- There is no parity table on alpha. The upstream mob PRs merged on 2026-10-23 matched their goal lists against vanilla: fox, drowned, bogged, cats and ocelots, silverfish, weak self references in goals, Pumpkin-MC/Pumpkin#4050, #3795, #3774, #3815, #4113, #3790, #4095 and #3715, on top of the #4092 AI foundation. Not all of them against 26.3: #3984 (cats and ocelots) compared with 26.2, and #3715 says its phantom AI came from 1.21.1.
 
 Appendix A has the starting table for all 90 mobs.
 
@@ -86,6 +86,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
 | 1.1 | Parity table and mob test helpers. Create `docs/MOB-PARITY.md` from Appendix A with columns for the vanilla classes and methods compared, the commit audited, status and test name. Add the `GameTestHelper` assertions the family pieces will need (entity in box after N ticks, entity count by type, mob target, held item), only as many as the first test uses. Write that first test for the cow (tempted by wheat, panics when hit). | `test/mob-parity-table` | | Table has 90 rows; the cow test passes in `cargo run -p pumpkin-tester` and fails if `TemptGoal` is removed from the cow |
+| 1.1b | Shared mob test helpers before the families run in parallel: a survival-mode mock player (1.1's mock players are creative, so hostiles ignore them), the mob target and held item assertions, and a wider tester grid for mob tests (`TEST_GRID_SPACING` 16 is less than tempt and follow ranges), so mock-player tests can run in one batch instead of one at a time. | `test/mob-test-helpers` | 1.1 | Two existing mob tests run in the same batch without interfering; a hostile mob targets a survival mock player in a test |
 | 1.2 | Zombie family: zombie, husk, drowned, zombie_villager, zombified_piglin, giant | `fix/mobai-zombies` | 1.1 | 6 rows filled; a test per mob (zombie breaks a door on hard, husk does not burn, drowned throws a trident, zombified piglin pack anger) |
 | 1.3 | Skeleton family: skeleton, stray, bogged, parched, wither_skeleton | `fix/mobai-skeletons` | 1.1 | 5 rows; a test per mob (strafing bow attack, stray slowness arrow, wither skeleton melee with wither effect) |
 | 1.4 | Arthropods and small hostiles: spider, cave_spider, creeper, silverfish, endermite | `fix/mobai-arthropods` | 1.1 | 5 rows; tests include creeper fleeing a cat and spider climbing |
@@ -116,19 +117,20 @@ Every family piece does the same thing: audit each mob against its vanilla class
 | 1.29 | Bat and phantom | `fix/mobai-flyers` | 1.1 | 2 rows; phantom swoop and cat avoidance |
 | 1.30 | Wither | `fix/mobai-wither` | 1.1 | 1 row; skull targeting and block breaking. The dragon is 6.6. |
 
-1.2 to 1.30 can run in parallel once 1.1 is merged, three at a time in the CT. The Brain pieces (1.7, 1.8, 1.20 to 1.28) wait for Q1.1.
+1.2 to 1.30 can run in parallel once 1.1 and 1.1b are merged, three at a time in the CT. The Brain pieces (1.7, 1.8, 1.20 to 1.28) wait for Q1.1.
 
 ### Proof
 
 - `docs/MOB-PARITY.md` has all 90 rows at status `parity`, each naming the vanilla classes and methods compared and the commit audited, plus any accepted deviation.
 - Every mob has a test registered in `builtin_game_tests` (or `pumpkin-tester` where a player is needed) that passes in CI.
-- The tests that are block-based datapack tests also pass on vanilla 26.3 through `/test runall`.
+- The tests that are block-based datapack tests also pass on vanilla 26.3 through `/test runall`. Behaviour that needs a player (tempting, targeting players) can't be a block-based test, so those mobs rely on the audit and the function test.
 
 ### Decisions
 
 - **Q1.1** Do the 21 Brain mobs have to run on PEX's Brain framework, or is a goal-based port acceptable when the observable behaviour matches vanilla? Root `AGENTS.md` allows a different design with the same behaviour, but upstream Pumpkin has a planned Brain design and won't take workarounds. A full Brain port is roughly twice the work per mob.
 - **Q1.2** Should the per-mob tests stay in this repository's GameTests, or go to upstream Pumpkin as well?
 - **Q1.3** Is 1.26 to 1.28 (villagers) in scope for 2.0? It's three sessions, and villagers matter for trading but not for the dragon.
+- **Q1.4** Tests that need a player use an in-world mock player with a closed client (1.1, after vanilla's `makeMockServerPlayerInLevel`, which vanilla marks deprecated for removal). Acceptable for PEX, and for upstream if the tests go there?
 
 ## Goal 2: plugin API decision
 
@@ -489,6 +491,7 @@ Cross-goal dependencies to keep in mind:
 | Q1.1 | Must the 21 vanilla Brain mobs run on PEX's Brain framework, or are goal-based ports with matching behaviour acceptable? |
 | Q1.2 | Per-mob tests here only, or also offered upstream? |
 | Q1.3 | Are villagers (three sessions) in scope for 2.0? |
+| Q1.4 | Are mock players with a closed client acceptable in GameTests? |
 | Q2.1 | Versioned native plugin ABI, or explicitly unstable (same release only)? |
 | Q2.2 | When v0.1 goes: finish WASM v0.2, or drop WASM plugins entirely? |
 | Q2.3 | Are third-party native plugins a 2.0 goal? |
@@ -525,7 +528,7 @@ Cross-goal dependencies to keep in mind:
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
-| 1.1 | `test/mob-parity-table` | in progress in CT 117 (resumed after the move) | |
+| 1.1 | `test/mob-parity-table` | done, pushed `a37d261e9`: `docs/MOB-PARITY.md` (90 rows, all `not audited`), mock players and `assert_entity_not_present_in_box` in the GameTest helper, `pumpkin:cow_follows_wheat_and_panics_when_hit` (fails without `TemptGoal` 11 of 11 runs, without the panic goal 5 of 5). Local CI green except the known scaffolding GameTest (`/srv/pex/ci/test-mob-parity-table/20261024-221123/`). Needs merge. | `pr-drafts/test-mob-parity-table.md` |
 | 5.1 | `test/redstone-dual-run` | in progress in CT 117 (resumed after the move) | |
 | 6.1 | `test/survival-harness` | in progress in CT 117 (resumed after the move) | |
 | 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
@@ -536,6 +539,10 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (1.1) The repository copied into the CT had a repo-local git identity (endercreepern64) that overrode Neon Swan; removed on 2026-10-24, and the affected commits were re-authored.
+- (1.1) `tools/pumpkin-tester/src/bot_tests/commands_and_gamemode.rs` is flaky on a busy host ("Bot `/setblock` did not place emerald_block"): 3 of 27 runs on 1.1's branch and 1 of 7 runs of alpha's binary. When it fails, the tester stops before any GameTest runs.
+- (1.1) Any player in the world makes non-persistent mobs more than 128 blocks away despawn (`crates/pumpkin-core/src/entity/mob/mod.rs:935`), which breaks command-summoned datapack tests such as `creeper_should_run_from_cat` while a player is present. 1.1 runs mock-player tests in their own batch for that reason.
+- (1.1) Vanilla `LivingEntity.knockback` throws a hit mob about two blocks, so "moved away after a hit" doesn't prove panic in a test.
 - (baseline) `crates/pumpkin-core/src/block/entities/creaking_heart.rs:655`: the creaking heart end-to-end test is flaky (failed 2 of 3 runs in the CT, passed on pve).
 - (baseline) `pumpkin-world` `nether_biome_hashes_match_vanilla` failed once under load with no panic message and passed alone.
 - (baseline) Running `pumpkin-tester` from the repository root leaves an untracked `metrics/` directory (`slow-ticks.log`, `summary.csv`); it isn't in `.gitignore`. Run it from a scratch directory with `--manifest-path`.
