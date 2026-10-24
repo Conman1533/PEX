@@ -1,0 +1,14 @@
+# From pumpkin:comparator_subtract_clamps_to_zero.
+# A subtract mode comparator reads 15 from START at the back and 15 from a redstone
+# block at the side, so its output must stay 0 and FAIL in front of it stays off.
+# ACCEPT is three delay 4 repeaters (24 game ticks) away from START.
+# size: 6 2 3
+fill ~ ~ ~ ~5 ~ ~2 stone
+setblock ~1 ~1 ~ test_block[mode=start]{mode:"start",message:""}
+setblock ~ ~1 ~1 redstone_block
+setblock ~1 ~1 ~1 comparator[facing=north,mode=subtract]
+setblock ~1 ~1 ~2 test_block[mode=fail]{mode:"fail",message:"subtract comparator with side >= back is powered"}
+setblock ~2 ~1 ~ repeater[facing=west,delay=4]
+setblock ~3 ~1 ~ repeater[facing=west,delay=4]
+setblock ~4 ~1 ~ repeater[facing=west,delay=4]
+setblock ~5 ~1 ~ test_block[mode=accept]{mode:"accept",message:""}

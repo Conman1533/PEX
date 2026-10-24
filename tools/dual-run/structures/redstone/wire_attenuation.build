@@ -1,0 +1,15 @@
+# From pumpkin:redstone_wire_attenuation_13_to_15.
+# START feeds a U-shaped run of 16 wires. Wire 15 must still carry power 1: it feeds
+# a repeater into ACCEPT. Wire 16 ends the run and points into FAIL, so it must be at
+# 0. The repeater delays ACCEPT by 2 game ticks, so a run that carries power too far
+# fails before ACCEPT fires.
+# size: 9 2 6
+fill ~ ~ ~ ~8 ~ ~5 stone
+setblock ~ ~1 ~1 test_block[mode=start]{mode:"start",message:""}
+# Wires 1 to 8 run east, wire 9 turns south, wires 10 to 16 run back west.
+fill ~1 ~1 ~1 ~8 ~1 ~1 redstone_wire
+setblock ~8 ~1 ~2 redstone_wire
+fill ~2 ~1 ~3 ~8 ~1 ~3 redstone_wire
+setblock ~3 ~1 ~4 repeater[facing=north,delay=1]
+setblock ~3 ~1 ~5 test_block[mode=accept]{mode:"accept",message:""}
+setblock ~1 ~1 ~3 test_block[mode=fail]{mode:"fail",message:"wire 16 is powered, power must drop by 1 per wire"}
