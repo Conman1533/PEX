@@ -1,1 +1,2575 @@
-{"entries": {}}
+{
+ "entries": {
+  "entities:fox": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared Fox.registerGoals, the variant-dependent target goals, trust handling and NBT with vanilla Fox. Goal bodies in goals.rs were read but not compared line by line. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#4093 (open upstream) ports the fox with every vanilla goal at its vanilla priority. Breeding does not make the baby trust the players who bred it, and two goals use generic versions without the fox-specific guards.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "sha256": "17e145411bd5c7ea0d473151206216f15ed54d186db6eb40aaedea04a1656449"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/fox/goals.rs",
+     "sha256": "8ea438c58af1f811d760c343c56695e6116315091de2e680770586feb5d1e6e9"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/ai/goal/breed.rs",
+     "sha256": "84bec6ee6421a6357b909e8c433a665b9d9e7a8135464423a4a458920eb83133"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal list mirroring Fox.registerGoals",
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "line": 231
+    },
+    {
+     "label": "Red and snow foxes swap land and fish target priorities",
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "line": 270
+    },
+    {
+     "label": "Trusted players",
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "line": 430
+    },
+    {
+     "label": "Trusted saved to NBT",
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "line": 879
+    },
+    {
+     "label": "Spawn egg makes the baby trust the player",
+     "source": "crates/pumpkin-core/src/entity/passive/fox/mod.rs",
+     "line": 945
+    },
+    {
+     "label": "Generic BreedGoal: no FoxBreedGoal trust step",
+     "source": "crates/pumpkin-core/src/entity/ai/goal/breed.rs",
+     "line": 151
+    }
+   ],
+   "items": [
+    {
+     "text": "Every Fox.registerGoals goal at its vanilla priority",
+     "done": true
+    },
+    {
+     "text": "Chicken, rabbit, baby turtle and fish targets with variant-dependent priority",
+     "done": true
+    },
+    {
+     "text": "Sleeping, sitting, crouching, pouncing and faceplanting states",
+     "done": true
+    },
+    {
+     "text": "Eating and spitting held items, berry eating",
+     "done": true
+    },
+    {
+     "text": "Trusted players saved and loaded",
+     "done": true
+    },
+    {
+     "text": "Baby from a spawn egg trusts the player",
+     "done": true
+    },
+    {
+     "text": "Bred baby trusts the breeding players (FoxBreedGoal)",
+     "done": false
+    },
+    {
+     "text": "FoxLookAtPlayerGoal skips faceplanted or interested foxes",
+     "done": false
+    },
+    {
+     "text": "FoxFollowParentGoal stops while defending",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.animal.fox.Fox",
+    "methods": [
+     "registerGoals",
+     "setTargetGoals",
+     "FoxBreedGoal.breed",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:bogged": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared Bogged (arrows, attack intervals, shearing, NBT) and the dispenser shearing path with vanilla. The inherited AbstractSkeleton goals were not re-compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3988 (open upstream). Players can shear bogged; dispensers with shears only shear sheep.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs",
+     "sha256": "63ae9d1964c54c92de46f99fb08b2a2deb269f00b5668baedc32d473393eef5d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/mod.rs",
+     "sha256": "ae2664960c31204a7d3704d674ef412ac1c1fa0b04cea72e643947e938a0d1ef"
+    },
+    {
+     "source": "crates/pumpkin-core/src/block/blocks/redstone/dispenser.rs",
+     "sha256": "29a34382077bf0bfabf82ddcbc58d048aeac6ce6d3e264b2c063621e62e5bc95"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Bogged.getArrow: 100 ticks of poison",
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs",
+     "line": 117
+    },
+    {
+     "label": "Bogged attack intervals 50 and 70",
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/mod.rs",
+     "line": 44
+    },
+    {
+     "label": "Bogged.mobInteract shearing with event and game event",
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs",
+     "line": 137
+    },
+    {
+     "label": "sheared NBT",
+     "source": "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs",
+     "line": 94
+    },
+    {
+     "label": "Dispenser shearing only handles sheep",
+     "source": "crates/pumpkin-core/src/block/blocks/redstone/dispenser.rs",
+     "line": 967
+    }
+   ],
+   "items": [
+    {
+     "text": "Poison arrows (100 ticks)",
+     "done": true
+    },
+    {
+     "text": "Hard and normal attack intervals 50 and 70",
+     "done": true
+    },
+    {
+     "text": "Shearing by players drops shearing/bogged loot",
+     "done": true
+    },
+    {
+     "text": "sheared saved and synced",
+     "done": true
+    },
+    {
+     "text": "Dispensers shear bogged",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.monster.skeleton.Bogged",
+    "methods": [
+     "getArrow",
+     "getHardAttackInterval",
+     "getAttackInterval",
+     "mobInteract",
+     "shear"
+    ]
+   }
+  },
+  "entities:goat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared PEX's goat with vanilla Goat and GoatAi (brain activities). Source review only; not tested in game.",
+   "note": "PEX 603540f96 brought spawning, milking, sounds and pathing in line with vanilla, but the goat runs a goal list instead of GoatAi's brain and has no ramming or long jumps.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/goat.rs",
+     "sha256": "4d94976a88f58af6c7998afdabe6c6500966f240c8528dddc436136543b3f4a5"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal list standing in for GoatAi",
+     "source": "crates/pumpkin-core/src/entity/passive/goat.rs",
+     "line": 76
+    },
+    {
+     "label": "Screaming goat chance",
+     "source": "crates/pumpkin-core/src/entity/passive/goat.rs",
+     "line": 36
+    },
+    {
+     "label": "Horn state",
+     "source": "crates/pumpkin-core/src/entity/passive/goat.rs",
+     "line": 43
+    }
+   ],
+   "items": [
+    {
+     "text": "Screaming variant, horns and sounds",
+     "done": true
+    },
+    {
+     "text": "Milking",
+     "done": true
+    },
+    {
+     "text": "Breeding, tempting with goat food, following parents",
+     "done": true
+    },
+    {
+     "text": "Ramming entities and dropping horns (RamTarget, PrepareRamNearestTarget)",
+     "done": false
+    },
+    {
+     "text": "Long jumps (LongJumpToRandomPos)",
+     "done": false
+    },
+    {
+     "text": "Brain-based AI as in GoatAi",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.animal.goat.GoatAi",
+    "methods": [
+     "initCoreActivity",
+     "initIdleActivity",
+     "initLongJumpActivity",
+     "initRamActivity"
+    ]
+   }
+  },
+  "entities:warden": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Checked which Warden and WardenAi behaviours exist in the PEX code (presence, not line-by-line parity) and ran the ancient city unit test (sculk_shrieker::tests::ancient_city_sensor_and_shrieker_four_warnings_summon_warden_and_entities_listen, passed). Not tested in game.",
+   "note": "PEX 1.1: listens to vibrations, builds and saves anger, investigates, emerges and applies darkness. No sonic boom, sniffing or digging back down, so it only fights in melee.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/warden.rs",
+     "sha256": "59a35dd35ec2c516e24a720a0bb292b4191168b1b9a6ea7475a22615dba99fb1"
+    },
+    {
+     "source": "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
+     "sha256": "dd353fae79385674f1f3d9d5348911171a3973cdaafd78abad64865eaf186c80"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "AngerManagement port",
+     "source": "crates/pumpkin-core/src/entity/mob/warden.rs",
+     "line": 138
+    },
+    {
+     "label": "Emerging",
+     "source": "crates/pumpkin-core/src/entity/mob/warden.rs",
+     "line": 39
+    },
+    {
+     "label": "Darkness aura",
+     "source": "crates/pumpkin-core/src/entity/mob/warden.rs",
+     "line": 561
+    },
+    {
+     "label": "Shrieker summons the warden",
+     "source": "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
+     "line": 94
+    }
+   ],
+   "items": [
+    {
+     "text": "Vibration listening (#warden_can_listen, radius 16)",
+     "done": true
+    },
+    {
+     "text": "Anger +35 per disturbance, +10 for repeated projectiles, saved to NBT",
+     "done": true
+    },
+    {
+     "text": "Emerging and darkness aura",
+     "done": true
+    },
+    {
+     "text": "Summoned after the fourth shrieker warning",
+     "done": true
+    },
+    {
+     "text": "Sonic boom ranged attack",
+     "done": false
+    },
+    {
+     "text": "Sniffing for targets",
+     "done": false
+    },
+    {
+     "text": "Digging down when calm",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.monster.warden.Warden",
+    "methods": [
+     "tick",
+     "increaseAngerAt",
+     "applyDarknessAround"
+    ]
+   },
+   "tests": [
+    "block::blocks::sculk::sculk_shrieker::tests::ancient_city_sensor_and_shrieker_four_warnings_summon_warden_and_entities_listen"
+   ]
+  },
+  "entities:allay": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Checked which Allay and AllayAi behaviours exist in the PEX code (presence, not line-by-line parity) and ran the allay vibration unit tests (3 passed). Not tested in game.",
+   "note": "PEX 1.1 added vibration listening, note block binding and dancing on top of the item-collecting allay.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/allay.rs",
+     "sha256": "367ba9e2b0dafd8015237f94e6534d27621c23117338ca98ac30dec3f1d45e41"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/allay/vibration.rs",
+     "sha256": "05d5233242ee5688dcb6fd552ae27d94232f8dc48a51d564c3d489bb7b200a31"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Duplication with amethyst while dancing",
+     "source": "crates/pumpkin-core/src/entity/passive/allay.rs",
+     "line": 104
+    },
+    {
+     "label": "Dancing near a playing jukebox",
+     "source": "crates/pumpkin-core/src/entity/passive/allay.rs",
+     "line": 318
+    },
+    {
+     "label": "Note block vibration listener",
+     "source": "crates/pumpkin-core/src/entity/passive/allay/vibration.rs",
+     "line": 254
+    }
+   ],
+   "items": [
+    {
+     "text": "Picks up items matching its held item",
+     "done": true
+    },
+    {
+     "text": "Binds to a note block it hears for 30 seconds",
+     "done": true
+    },
+    {
+     "text": "Dances near a playing jukebox",
+     "done": true
+    },
+    {
+     "text": "Duplicates with an amethyst shard while dancing",
+     "done": true
+    },
+    {
+     "text": "Brain-based movement as in AllayAi (goes to liked player and note block)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.animal.allay.Allay",
+    "methods": [
+     "wantsToPickUp",
+     "setJukeboxPlaying",
+     "duplicateAllay"
+    ]
+   },
+   "tests": [
+    "entity::passive::allay::vibration::tests::note_delivery_waits_for_travel_and_survives_reload",
+    "entity::passive::allay::vibration::tests::wool_occludes_notes_but_a_solid_stone_block_does_not"
+   ]
+  },
+  "entities:drowned": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#4039 (open upstream) plus PEX sinking fixes. Goal list matches vanilla; trident throwing and swimming navigation were not compared.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/zombie/drowned.rs",
+     "sha256": "ba2671351382c86a0090a76ae872711e02515db6565fba3fd8ae5ac80ea8ad60"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/mob/zombie/drowned.rs",
+     "line": 80
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    },
+    {
+     "text": "Trident attack goal",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Drowned",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:phantom": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3715 (open upstream). Circle, swoop, attack-strategy and player target goals match vanilla's at the same priorities under different names. Size-scaled damage, sun burning and insomnia spawning were not compared.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/phantom.rs",
+     "sha256": "ab6fa1225f456d1eb52bb7a9d597c71b0e451d2670a85d0897206e5e34754e7e"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/mob/phantom.rs",
+     "line": 61
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Phantom",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:cat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3984 (open upstream) plus PEX tamable fixes. Cats have no bed or chest behaviour.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/cat.rs",
+     "sha256": "573cdc79699153cc5dea71e66570b314bc67904295b367df5cec7116dab0622f"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/cat.rs",
+     "line": 73
+    }
+   ],
+   "items": [
+    {
+     "text": "Float, panic, sit, follow owner, leap, ocelot attack, breed, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "CatRelaxOnOwnerGoal (sleeping on the owner's bed and morning gifts)",
+     "done": false
+    },
+    {
+     "text": "CatLieOnBlockGoal",
+     "done": false
+    },
+    {
+     "text": "CatSitOnBlockGoal (chests, furnaces, beds)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Cat",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:ocelot": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3984. Goal list matches vanilla, including the tempt and avoid goals vanilla adds in reassessTrustingGoals. Trust and its NBT were not compared.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/ocelot.rs",
+     "sha256": "493fbfd0a6380e33e2e3b12a2edfd1c38a0425ffa0a65912d989fd89e9cd01a3"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/ocelot.rs",
+     "line": 55
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Ocelot",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:pufferfish": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#4050 (open upstream). PufferfishPuffGoal present; puff state timing and sting effects were not compared.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/pufferfish.rs",
+     "sha256": "8adffe2df22fc229ff865046d045b16e9c6c3f28fa279b4aa3a118f388719519"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/pufferfish.rs",
+     "line": 80
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Pufferfish",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:silverfish": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3886 (open upstream). Goal list matches vanilla including wake-up-friends and merge-with-stone. PEX registers the float goal on the target selector instead of the goal selector.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/silverfish.rs",
+     "sha256": "6c785320975e923fa9c0e21cc53b37279ce4120a1a923d0353dd63df3a3bdbb6"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/mob/silverfish.rs",
+     "line": 48
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    },
+    {
+     "text": "FloatGoal registered on the goal selector",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Silverfish",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:blaze": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3790 and #4113 (open upstream). Attack, stroll and look goals present; the restriction and revenge goals are not.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/mob/blaze.rs",
+     "sha256": "96f2ca76db39df0ab34f605d3e1424e29252f0d7a74dd270368e5325b8be575c"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/mob/blaze.rs",
+     "line": 49
+    }
+   ],
+   "items": [
+    {
+     "text": "Attack, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "MoveTowardsRestrictionGoal",
+     "done": false
+    },
+    {
+     "text": "HurtByTargetGoal (revenge)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Blaze",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:chicken": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Goal list matches vanilla. PEX lays eggs at the chicken's position (9526e7d60) with vanilla pitch (eb1b1ac9a); chicken jockeys were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/chicken.rs",
+     "sha256": "3d394302c0dc61cf619eec8bef303ce27d1fd9e1ac2dcfeb834c139ea6e55c6b"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/chicken.rs",
+     "line": 77
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Chicken",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:wolf": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "PEX tamable fixes (5c091a713). Most goals match; the anger target and reset goals differ.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/wolf.rs",
+     "sha256": "4a60d12c6667aa4082ccad4f4c6e2d013a0d8521f2a8ebeb51e0ea275bf7ab2f"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/wolf.rs",
+     "line": 77
+    }
+   ],
+   "items": [
+    {
+     "text": "Movement, sit, leap, melee, follow owner, breed, beg and owner-defence goals",
+     "done": true
+    },
+    {
+     "text": "NearestAttackableTargetGoal for players it is angry at (vanilla priority 4)",
+     "done": false
+    },
+    {
+     "text": "ResetUniversalAngerTargetGoal (priority 8)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Wolf",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:llama": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "PEX 6e720ff0d gave llamas vanilla goal priorities, but two llama goals are missing.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/llama.rs",
+     "sha256": "456fb597b87d11f145c2d8a8e4bb8c8f2b4b958f0858efe0e03b002d5943a5fa"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/llama.rs",
+     "line": 123
+    }
+   ],
+   "items": [
+    {
+     "text": "Ranged spit, panic, breed, tempt, follow parent, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "RunAroundLikeCrazyGoal (taming)",
+     "done": false
+    },
+    {
+     "text": "LlamaFollowCaravanGoal",
+     "done": false
+    },
+    {
+     "text": "LlamaAttackWolfGoal",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Llama",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:parrot": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Generic goals only; a tamed parrot does none of its owner behaviour.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/parrot.rs",
+     "sha256": "4a958aea231ee089046ae042b343e609618e2d9e757e0295b9e5f3a326043ce8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/parrot.rs",
+     "line": 43
+    }
+   ],
+   "items": [
+    {
+     "text": "Panic, float, look, wander and follow-mob goals",
+     "done": true
+    },
+    {
+     "text": "SitWhenOrderedToGoal",
+     "done": false
+    },
+    {
+     "text": "FollowOwnerGoal",
+     "done": false
+    },
+    {
+     "text": "LandOnOwnersShoulderGoal",
+     "done": false
+    },
+    {
+     "text": "ParrotWanderGoal (flying)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Parrot",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:turtle": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Turtles use generic goals; nothing brings them home to lay eggs.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/turtle.rs",
+     "sha256": "c553c79551c8e53a911f258d126be8d6b7451821ab1162ddf0bd1a31214d6f82"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/turtle.rs",
+     "line": 57
+    }
+   ],
+   "items": [
+    {
+     "text": "Panic, breed, tempt, look and stroll goals",
+     "done": true
+    },
+    {
+     "text": "TurtleLayEggGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleGoHomeGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleTravelGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleGoToWaterGoal",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Turtle",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:panda": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Pandas use generic goals; none of the panda personality goals exist.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/panda.rs",
+     "sha256": "75e06cf78d57f268ba3ba0685bfd86c287b198235d401160acca23da8d8f4ba1"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/panda.rs",
+     "line": 154
+    }
+   ],
+   "items": [
+    {
+     "text": "Float, panic, breed, tempt, look, follow parent and stroll goals",
+     "done": true
+    },
+    {
+     "text": "PandaAttackGoal",
+     "done": false
+    },
+    {
+     "text": "PandaAvoidGoal",
+     "done": false
+    },
+    {
+     "text": "PandaSitGoal",
+     "done": false
+    },
+    {
+     "text": "PandaLieOnBackGoal",
+     "done": false
+    },
+    {
+     "text": "PandaSneezeGoal",
+     "done": false
+    },
+    {
+     "text": "PandaRollGoal",
+     "done": false
+    },
+    {
+     "text": "PandaHurtByTargetGoal",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Panda",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:bee": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Bees attack and breed but never use hives or flowers.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/bee.rs",
+     "sha256": "01522e07f626427ee8fb6ce5994b36ed3800b5de4ba346e84070faa73c21485e"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/bee.rs",
+     "line": 108
+    }
+   ],
+   "items": [
+    {
+     "text": "Attack, breed, tempt, follow parent, wander and float goals",
+     "done": true
+    },
+    {
+     "text": "BeeEnterHiveGoal and BeeLocateHiveGoal",
+     "done": false
+    },
+    {
+     "text": "ValidateHiveGoal and ValidateFlowerGoal",
+     "done": false
+    },
+    {
+     "text": "BeeGrowCropGoal (pollination)",
+     "done": false
+    },
+    {
+     "text": "BeeWanderGoal (flying)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Bee",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:dolphin": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Dolphins swim and fight back but have none of their player interactions.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/dolphin.rs",
+     "sha256": "a7d1dd8e9903ae51c9e2b263f4101cc99e452eaccabf0a4fcd7c10e40feda741"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/dolphin.rs",
+     "line": 67
+    }
+   ],
+   "items": [
+    {
+     "text": "Find water, swim, look and melee goals",
+     "done": true
+    },
+    {
+     "text": "BreathAirGoal",
+     "done": false
+    },
+    {
+     "text": "DolphinSwimToTreasureGoal",
+     "done": false
+    },
+    {
+     "text": "DolphinSwimWithPlayerGoal (Dolphin's Grace)",
+     "done": false
+    },
+    {
+     "text": "DolphinJumpGoal",
+     "done": false
+    },
+    {
+     "text": "PlayWithItemsGoal and MoveToItemGoal",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Dolphin",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:polar_bear": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Polar bears fight back but don't defend their cubs from players.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/polar_bear.rs",
+     "sha256": "013d5344aac9847244c78ab57381b7f29d933191baf8b402ded3cf8789391b28"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/polar_bear.rs",
+     "line": 63
+    }
+   ],
+   "items": [
+    {
+     "text": "Melee, panic, follow parent, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "PolarBearAttackPlayersGoal (defending cubs)",
+     "done": false
+    },
+    {
+     "text": "ResetUniversalAngerTargetGoal",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "PolarBear",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:rabbit": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Rabbit goals match vanilla except crop raiding.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/rabbit.rs",
+     "sha256": "77f627ee06f1a3cc16782888d0d745708f6a87637aa3fb37e864bb8cb7c99de5"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/rabbit.rs",
+     "line": 101
+    }
+   ],
+   "items": [
+    {
+     "text": "Panic, breed, tempt, avoid, killer bunny melee and target goals",
+     "done": true
+    },
+    {
+     "text": "RaidGardenGoal (eating carrots)",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Rabbit",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:pig": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Goal list matches vanilla, including both tempt goals (food and carrot on a stick). Saddle steering and boosting were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/pig.rs",
+     "sha256": "b63ebcb8ca3f998f3a77cdefc7175132b8b4b154803feaafe1671f830f5ed5bb"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/pig.rs",
+     "line": 69
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Pig",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:sheep": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared the goal and target selector registrations (goal classes and priorities) with vanilla registerGoals. Goal internals, movement and attributes were not compared. Source review only; not tested in game.",
+   "note": "Goal list matches vanilla including grass eating. Shearing, dyeing and colour inheritance were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/passive/sheep.rs",
+     "sha256": "abd4d4180dc8caae9ddd7888f011e2673296769a3ae8f2b9374a415d8046ae0d"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Goal registration",
+     "source": "crates/pumpkin-core/src/entity/passive/sheep.rs",
+     "line": 126
+    }
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "Sheep",
+    "methods": [
+     "registerGoals"
+    ]
+   }
+  },
+  "entities:acacia_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:birch_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:cherry_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:dark_oak_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:jungle_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:mangrove_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:oak_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:pale_oak_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:poplar_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:spruce_chest_boat": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:bamboo_chest_raft": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the chest boat interaction, drops and ContainerEntity NBT code. Source review only; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "sha256": "d6c5a1719eb3fb0c854500177f8eedbbfe58e603f0d3df0b5ca4d389674e8e6d"
+    },
+    {
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "sha256": "de72b4cf198cc98fe247966e15857fa2dc8ca851e0ace30f618b98844254cfb8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Loot table and items saved like ContainerEntity",
+     "source": "crates/pumpkin-core/src/entity/vehicle/container.rs",
+     "line": 65
+    },
+    {
+     "label": "Sneak-interact opens the inventory",
+     "source": "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+     "line": 212
+    }
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.vehicle.boat.AbstractChestBoat",
+    "methods": [
+     "interact",
+     "destroy",
+     "addAdditionalSaveData"
+    ]
+   }
+  },
+  "entities:fishing_bobber": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Read the bobber code and its commit history and ran its 7 unit tests (passed). Not compared line by line with FishingHook; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3821 (open upstream) plus PEX hook and gravity fixes (11fc1c0ae). Open-water treasure rules and lure/luck were not compared.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/entity/projectile/fishing_bobber.rs",
+     "sha256": "1a3e8a6a7e7457b2750dcb69374f7e5dfe28204038f0ac983974279c524785f7"
+    },
+    {
+     "source": "crates/pumpkin-core/src/item/items/fishing_rod.rs",
+     "sha256": "2bea6ede365b034bde6c70166e867bf44322e2c0c4dc6f23a81437e44a8d222a"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Throw test",
+     "source": "crates/pumpkin-core/src/entity/projectile/fishing_bobber.rs",
+     "line": 920
+    },
+    {
+     "label": "Hooking players test",
+     "source": "crates/pumpkin-core/src/entity/projectile/fishing_bobber.rs",
+     "line": 1002
+    }
+   ],
+   "items": [
+    {
+     "text": "Throw, flight, bobbing and settling at the surface",
+     "done": true
+    },
+    {
+     "text": "Hooking mobs and players, pulling on reel",
+     "done": true
+    },
+    {
+     "text": "Bites, catches and fishing loot",
+     "done": true
+    },
+    {
+     "text": "Fishing events fired and cancellable",
+     "done": true
+    },
+    {
+     "text": "Open-water treasure check and Luck of the Sea/Lure compared",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.entity.projectile.FishingHook",
+    "methods": [
+     "tick",
+     "catchingFish",
+     "retrieve"
+    ]
+   },
+   "tests": [
+    "entity::projectile::fishing_bobber::tests (7 tests)"
+   ]
+  },
+  "blocks:sculk_shrieker": {
+   "status": "done",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Checked the shrieker's behaviours against vanilla SculkShriekerBlockEntity (presence, not line-by-line parity) and ran the ancient city unit test (passed). Not tested in game.",
+   "note": "PEX 1.1: shrieks on sensor activation, warns the responsible player (direct, passenger, projectile owner or thrower), summons a warden on the fourth warning when can_summon is set.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
+     "sha256": "dd353fae79385674f1f3d9d5348911171a3973cdaafd78abad64865eaf186c80"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "SculkShriekerBlockEntity.tryGetPlayer",
+     "source": "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
+     "line": 46
+    },
+    {
+     "label": "tryShriek and warning levels",
+     "source": "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
+     "line": 94
+    }
+   ],
+   "items": [
+    {
+     "text": "Shriek on vibration and sensor activation",
+     "done": true
+    },
+    {
+     "text": "Warning levels and cooldowns per player",
+     "done": true
+    },
+    {
+     "text": "Warden summon on the fourth warning",
+     "done": true
+    },
+    {
+     "text": "listener NBT",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.level.block.entity.SculkShriekerBlockEntity",
+    "methods": [
+     "tryShriek",
+     "tryGetPlayer",
+     "tryRespond"
+    ]
+   },
+   "tests": [
+    "block::blocks::sculk::sculk_shrieker::tests::ancient_city_sensor_and_shrieker_four_warnings_summon_warden_and_entities_listen"
+   ]
+  },
+  "blocks:creaking_heart": {
+   "status": "done",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Checked the heart's behaviours against vanilla CreakingHeartBlockEntity.serverTick (presence, not line-by-line parity) and ran the creaking heart unit test (passed). Not tested in game.",
+   "note": "PEX 1.1 port of the creaking heart: protector spawning at night, resin spreading, dormant/awake/uprooted states, comparator output and XP drop.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/block/entities/creaking_heart.rs",
+     "sha256": "2141b5919545629f2d0059ee37bd79e99b2c6448b8da6fea3f265402c26d0ff5"
+    },
+    {
+     "source": "crates/pumpkin-core/src/block/blocks/creaking_heart.rs",
+     "sha256": "a0feac0cb1452ee3e98ebdfbc96e698c330fe0706a8492129f4f7b8f6e3e10a6"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "End-to-end unit test",
+     "source": "crates/pumpkin-core/src/block/entities/creaking_heart.rs",
+     "line": 588
+    },
+    {
+     "label": "Comparator output",
+     "source": "crates/pumpkin-core/src/block/blocks/creaking_heart.rs",
+     "line": 154
+    }
+   ],
+   "items": [
+    {
+     "text": "Protector spawns at night near survival players",
+     "done": true
+    },
+    {
+     "text": "Despawns at dawn or when too far",
+     "done": true
+    },
+    {
+     "text": "Resin spreads when the creaking is hurt",
+     "done": true
+    },
+    {
+     "text": "Dormant, awake and uprooted states",
+     "done": true
+    },
+    {
+     "text": "Comparator signal",
+     "done": true
+    },
+    {
+     "text": "20 to 24 XP from a natural heart",
+     "done": true
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.level.block.entity.CreakingHeartBlockEntity",
+    "methods": [
+     "serverTick",
+     "creakingHurt"
+    ]
+   },
+   "tests": [
+    "block::entities::creaking_heart::tests::creaking_heart_spawns_protector_at_night_spreads_resin_on_hurt_and_despawns_at_dawn"
+   ]
+  },
+  "blocks:wall_banner": {
+   "status": "done",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the 6 banner unit tests (passed). Not compared with vanilla beyond what the tests assert; not tested in game.",
+   "note": "Pumpkin-MC/Pumpkin#3951 (open upstream): banners placed on walls, wall drops use the standing banner loot table.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/block/blocks/banners.rs",
+     "sha256": "5b716c3c9ec17d1eac2fb7ecc8496184d31bc3745921d127b8c2b7eca7262e40"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Wall facing test",
+     "source": "crates/pumpkin-core/src/block/blocks/banners.rs",
+     "line": 264
+    },
+    {
+     "label": "Wall banner loot test",
+     "source": "crates/pumpkin-core/src/block/blocks/banners.rs",
+     "line": 151
+    }
+   ],
+   "items": [
+    {
+     "text": "Wall placement facing away from support",
+     "done": true
+    },
+    {
+     "text": "Removed when support is lost",
+     "done": true
+    },
+    {
+     "text": "Wall banners drop their standing banner",
+     "done": true
+    }
+   ],
+   "reference": "banners::tests"
+  },
+  "redstone:redstone-tick-system": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Compared the scheduled tick skip for inactive chunks with vanilla LevelTicks.tickCheck and ran the level.rs scheduled tick tests (passed). Tick ordering within a tick was not compared. Not tested in game.",
+   "note": "PEX: scheduled ticks in chunks that are not ticking wait, and run once the chunk ticks again instead of being lost (#3553 plus PEX 4a55ea0aa).",
+   "files": [
+    {
+     "source": "crates/pumpkin-world/src/level.rs",
+     "sha256": "a7609bb6b427311bd55cd5c7f35d273ea72f4a1360936933eb0618a3d8762499"
+    },
+    {
+     "source": "crates/pumpkin-world/src/tick/scheduler.rs",
+     "sha256": "ca109b84636c2e2607990fefb6076b5b29c9fa9e941966f53874e30ce2742426"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Skip ticks outside active chunks without losing them",
+     "source": "crates/pumpkin-world/src/level.rs",
+     "line": 610
+    },
+    {
+     "label": "Unit test",
+     "source": "crates/pumpkin-world/src/level.rs",
+     "line": 1117
+    }
+   ],
+   "items": [
+    {
+     "text": "Ticks wait in inactive chunks",
+     "done": true
+    },
+    {
+     "text": "Overdue ticks run when the chunk becomes active",
+     "done": true
+    },
+    {
+     "text": "Priority and sub-tick order compared with vanilla",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.ticks.LevelTicks",
+    "methods": [
+     "tick",
+     "collectTicks"
+    ]
+   },
+   "tests": [
+    "level::tests::scheduled_ticks_wait_for_inactive_chunks",
+    "level::tests::scheduled_ticks_wait_for_active_chunk"
+   ]
+  },
+  "world:game-events-and-vibrations": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "source-review",
+    "unit-test"
+   ],
+   "scope": "Read world/vibration.rs against vanilla VibrationSystem and VibrationSelector and ran its 5 unit tests plus the ancient city test (passed). Which game events every action emits was checked against the 1.1 list, not against every vanilla call site. Not tested in game.",
+   "note": "PEX 1.1 port of the vibration system. Game events are emitted for the common actions; some vanilla emitters are still missing (for example item_interact_start/finish outside the fishing rod).",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/world/vibration.rs",
+     "sha256": "f9026ed28dfe559d1fa4ecfa98f2ad8dac792e79211dde246f42f90ab0084c45"
+    },
+    {
+     "source": "crates/pumpkin-core/src/world/game_event.rs",
+     "sha256": "a76f693f0b0d52a884deae663cb2ddec5256599297054e5d3aea4c5932aaec59"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "VibrationSelector ordering test",
+     "source": "crates/pumpkin-core/src/world/vibration.rs",
+     "line": 750
+    },
+    {
+     "label": "Signal strength test",
+     "source": "crates/pumpkin-core/src/world/vibration.rs",
+     "line": 719
+    }
+   ],
+   "items": [
+    {
+     "text": "Vibration travel time, selection and occlusion by #dampens_vibrations",
+     "done": true
+    },
+    {
+     "text": "listener NBT round trip",
+     "done": true
+    },
+    {
+     "text": "Game events for steps, blocks, eating, projectiles, containers, doors, damage, explosions, fluids",
+     "done": true
+    },
+    {
+     "text": "Every vanilla gameEvent call site emits",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.world.level.gameevent.vibrations.VibrationSystem",
+    "methods": [
+     "Ticker.tick",
+     "Listener.handleGameEvent"
+    ]
+   },
+   "tests": [
+    "world::vibration::tests (5 tests)"
+   ]
+  },
+  "world:features-and-placement": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": [
+    "unit-test"
+   ],
+   "scope": "Ran the template feature unit tests (sulfur spring, desert well). The feature and placement code was not compared against vanilla for this audit.",
+   "note": "PEX 1.1 placement and feature additions. Templates place only their first palette, and post-placement shape updates only cover blocks the current templates use.",
+   "files": [
+    {
+     "source": "crates/pumpkin-world/src/generation/feature/features/template.rs",
+     "sha256": "e6d63362bb780419b3f09850fd8bf0bd51677cc416a4e77dc7d8d22ab88527a0"
+    },
+    {
+     "source": "crates/pumpkin-world/src/generation/feature/placed_features.rs",
+     "sha256": "59df9bb9e5de0b0ceb0d6dadc591f51d4a57f76c766b12d50284077df9493658"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Sulfur spring test",
+     "source": "crates/pumpkin-world/src/generation/feature/features/template.rs",
+     "line": 436
+    },
+    {
+     "label": "Desert well test",
+     "source": "crates/pumpkin-world/src/generation/feature/features/template.rs",
+     "line": 503
+    }
+   ],
+   "items": [
+    {
+     "text": "template, sequence, cuboid, random_chance, randomly_selected, volume_match",
+     "done": true
+    },
+    {
+     "text": "Data-driven desert well",
+     "done": true
+    },
+    {
+     "text": "Templates with more than one palette",
+     "done": false
+    },
+    {
+     "text": "Shape updates for every block after template placement",
+     "done": false
+    }
+   ],
+   "reference": "docs/ALPHA-TODO.md and template::tests",
+   "tests": [
+    "generation::feature::features::template::tests (2 tests)"
+   ]
+  },
+  "performance:palette-memory": {
+   "status": "done",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the palette.rs unit tests (passed), which cover the 4-bit layout and shrinking. Memory savings were measured for 1.0 only.",
+   "note": "PEX packs small palettes 4 bits per block and keeps uniform light sections without arrays.",
+   "files": [
+    {
+     "source": "crates/pumpkin-world/src/chunk/palette.rs",
+     "sha256": "665a7a9d6e42ce231b59d376aac83f4091904f6652ef426d34a9a2830a8411d0"
+    },
+    {
+     "source": "crates/pumpkin-world/src/chunk/format/mod.rs",
+     "sha256": "d9dd78fdff246a44e6f4059fd6ac58334f637f16bbbc697f5d3a55c410652f8c"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Palette tests",
+     "source": "crates/pumpkin-world/src/chunk/palette.rs",
+     "line": 1415
+    },
+    {
+     "label": "Uniform light sections stored as a level",
+     "source": "crates/pumpkin-world/src/chunk/format/mod.rs",
+     "line": 1372
+    }
+   ],
+   "items": [
+    {
+     "text": "4-bit packing for palettes up to 16 entries",
+     "done": true
+    },
+    {
+     "text": "Indexed storage kept until the palette shrinks to 8",
+     "done": true
+    },
+    {
+     "text": "Uniform light sections without arrays",
+     "done": true
+    }
+   ],
+   "reference": "Vanilla PalettedContainer bit sizes (4 bits minimum for blocks)",
+   "tests": [
+    "chunk::palette::tests"
+   ]
+  },
+  "storage:vanilla-26-3-load": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the world_info and chunk format unit tests (passed). No vanilla-written world was loaded for this audit and no round trip was done.",
+   "note": "Loading 26.3 data is covered by unit tests; the 2.0 round-trip goal is not met yet.",
+   "files": [
+    {
+     "source": "crates/pumpkin-world/src/world_info/anvil.rs",
+     "sha256": "0242bff2d83ba1ddf5f31e7c8a1d8db7de3b8bdd638549c3b37686ab82bf286c"
+    },
+    {
+     "source": "crates/pumpkin-world/src/chunk/format/mod.rs",
+     "sha256": "d9dd78fdff246a44e6f4059fd6ac58334f637f16bbbc697f5d3a55c410652f8c"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Bare-string palette entries",
+     "source": "crates/pumpkin-world/src/chunk/format/mod.rs",
+     "line": 136
+    },
+    {
+     "label": "level.dat tests",
+     "source": "crates/pumpkin-world/src/world_info/anvil.rs",
+     "line": 617
+    }
+   ],
+   "items": [
+    {
+     "text": "Bare-string palette entries",
+     "done": true
+    },
+    {
+     "text": "26.3 level.dat",
+     "done": true
+    },
+    {
+     "text": "Saves use the 26.3 data version",
+     "done": true
+    },
+    {
+     "text": "Round trip vanilla to PEX to vanilla verified",
+     "done": false
+    },
+    {
+     "text": "Entity and player data round trip",
+     "done": false
+    }
+   ],
+   "reference": "Vanilla 26.3 chunk and level.dat format",
+   "tests": [
+    "world_info::anvil::tests",
+    "chunk::format::tests"
+   ]
+  },
+  "pex-plugins:native-abi": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read the native plugin loader and pex_common::export_plugin. Not tested with a mismatched build for this audit.",
+   "note": "The loader checks only PLUGIN_API_VERSION, so a plugin from another build is accepted.",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/plugin/loader/native.rs",
+     "sha256": "e3ddfe6f3d0b9300ca9dea5a112694f52c3464d58bafd6d01850fe3bed60cb65"
+    },
+    {
+     "source": "native-plugins/common/src/lib.rs",
+     "sha256": "a19ea74d901b8eda445f02f80e336f6174745148a3e5207dabb8de3eb9efbe31"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Only the API version is compared",
+     "source": "crates/pumpkin-core/src/plugin/loader/native.rs",
+     "line": 35
+    }
+   ],
+   "items": [
+    {
+     "text": "PLUGIN_API_VERSION checked at load",
+     "done": true
+    },
+    {
+     "text": "Build identity (compiler, lockfile, commit) checked at load",
+     "done": false
+    },
+    {
+     "text": "Stable C ABI or versioned interface",
+     "done": false
+    },
+    {
+     "text": "musl build can load native plugins",
+     "done": false
+    }
+   ],
+   "reference": "Rust has no stable ABI: types shared across a cdylib boundary must come from the identical build"
+  },
+  "ops:offline-uuid": {
+   "status": "missing",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Compared offline_uuid with vanilla UUIDUtil.createOfflinePlayerUUID.",
+   "note": "PEX derives offline UUIDs from SHA-256; vanilla uses a name-based v3 UUID of \"OfflinePlayer:<name>\".",
+   "files": [
+    {
+     "source": "crates/pumpkin-core/src/net/mod.rs",
+     "sha256": "decf23938a836faf183aa51dfdfa75c10f2011c2ad802a2490f5e246c544a527"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "SHA-256 based offline UUID",
+     "source": "crates/pumpkin-core/src/net/mod.rs",
+     "line": 74
+    }
+   ],
+   "items": [
+    {
+     "text": "UUID v3 from \"OfflinePlayer:<name>\"",
+     "done": false
+    },
+    {
+     "text": "Migration of existing playerdata, ops, whitelist and bans",
+     "done": false
+    }
+   ],
+   "vanilla": {
+    "version": "26.3 (server jar decompiled with Vineflower)",
+    "class": "net.minecraft.core.UUIDUtil",
+    "methods": [
+     "createOfflinePlayerUUID"
+    ]
+   }
+  },
+  "ops:config-merge": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "source-review",
+   "scope": "Read LoadConfiguration::load and merge_with_default_toml.",
+   "note": "A value that fails to deserialize resets the whole file to defaults instead of reporting the bad key.",
+   "files": [
+    {
+     "source": "crates/pumpkin-config/src/lib.rs",
+     "sha256": "23a8b639699d8d804da2c23c97f104cabbfcba7bf5cb01239d36055a915a8205"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Merge with defaults",
+     "source": "crates/pumpkin-config/src/lib.rs",
+     "line": 385
+    },
+    {
+     "label": "Fallback to defaults on any error",
+     "source": "crates/pumpkin-config/src/lib.rs",
+     "line": 397
+    }
+   ],
+   "items": [
+    {
+     "text": "Missing keys filled and written back",
+     "done": true
+    },
+    {
+     "text": "Invalid value reported instead of resetting everything",
+     "done": false
+    }
+   ],
+   "reference": "Paper and vanilla server.properties keep valid keys and report invalid ones"
+  },
+  "pex-plugins:worldpumpkin": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the plugin's unit tests (cargo test -p <plugin>, passed). Commands were not exercised on a running server for this audit.",
+   "note": "Native port of NicDevTV's WorldPumpkin (MIT): selections, //set, //replace, //walls, //move, undo and redo. No copy, paste, schematics or brushes.",
+   "files": [
+    {
+     "source": "native-plugins/worldpumpkin/src/engine.rs",
+     "sha256": "4c002ffdd600320d84c3d8b279b605fc130dd1f4ac53db401d2ed205748d2920"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Unit tests",
+     "source": "native-plugins/worldpumpkin/src/engine.rs",
+     "line": 672
+    }
+   ],
+   "items": [
+    {
+     "text": "Selections (pos1/pos2/hpos/chunk/expand)",
+     "done": true
+    },
+    {
+     "text": "//set, //replace, //walls with block patterns",
+     "done": true
+    },
+    {
+     "text": "//move",
+     "done": true
+    },
+    {
+     "text": "Undo and redo",
+     "done": true
+    },
+    {
+     "text": "Copy, paste and rotate",
+     "done": false
+    },
+    {
+     "text": "Schematic load and save",
+     "done": false
+    },
+    {
+     "text": "Brushes",
+     "done": false
+    }
+   ],
+   "reference": "Plugin unit tests",
+   "tests": [
+    "worldpumpkin unit tests"
+   ]
+  },
+  "pex-plugins:pexguard": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the plugin's unit tests (cargo test -p <plugin>, passed). Commands were not exercised on a running server for this audit.",
+   "note": "WorldGuard-style regions with flags; listeners depend on which server events are actually fired (PORTING_GUIDE Appendix A).",
+   "files": [
+    {
+     "source": "native-plugins/pexguard/src/region.rs",
+     "sha256": "b88902d5ebf8252e1379d5c6ce4189b55f5ee768e724fac26c6669735713649c"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Unit tests",
+     "source": "native-plugins/pexguard/src/region.rs",
+     "line": 285
+    }
+   ],
+   "items": [
+    {
+     "text": "Cuboid regions, priorities, owners and members",
+     "done": true
+    },
+    {
+     "text": "Build, interact, chest, PvP, mob damage and spawning, explosion, fire, liquid, piston, entry and greeting flags",
+     "done": true
+    },
+    {
+     "text": "Polygon regions",
+     "done": false
+    },
+    {
+     "text": "Region inheritance",
+     "done": false
+    }
+   ],
+   "reference": "Plugin unit tests",
+   "tests": [
+    "pexguard unit tests"
+   ]
+  },
+  "pex-plugins:pexprotect": {
+   "status": "partial",
+   "commit": "2ce43ef3df1382bff4dcae4f3643bcdf9c48d272",
+   "date": "2026-10-24",
+   "check": "unit-test",
+   "scope": "Ran the plugin's unit tests (cargo test -p <plugin>, passed). Commands were not exercised on a running server for this audit.",
+   "note": "CoreProtect-style logging to SQLite with inspect, lookup, rollback and restore.",
+   "files": [
+    {
+     "source": "native-plugins/pexprotect/src/params.rs",
+     "sha256": "1b4ccd08544d3ec10579885e546d28fbec4c00f5d87a3d34bbeb9934b47a5cd8"
+    }
+   ],
+   "evidence": [
+    {
+     "label": "Unit tests",
+     "source": "native-plugins/pexprotect/src/params.rs",
+     "line": 158
+    }
+   ],
+   "items": [
+    {
+     "text": "Block break and place logging",
+     "done": true
+    },
+    {
+     "text": "Inspect, lookup, rollback, restore",
+     "done": true
+    },
+    {
+     "text": "Container transaction logging",
+     "done": false
+    },
+    {
+     "text": "Entity kill logging",
+     "done": false
+    }
+   ],
+   "reference": "Plugin unit tests",
+   "tests": [
+    "pexprotect unit tests"
+   ]
+  }
+ }
+}

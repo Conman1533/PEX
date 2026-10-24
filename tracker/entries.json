@@ -80,15 +80,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:acacia_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:allay": {
@@ -96,11 +111,34 @@
    "group": "Passive",
    "vanilla_id": "minecraft:allay",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has not changed this code.",
+   "note": "PEX 1.1 added vibration listening, note block binding and dancing on top of the item-collecting allay.",
    "files": [
-    "crates/pumpkin-core/src/entity/passive/allay.rs"
+    "crates/pumpkin-core/src/entity/passive/allay.rs",
+    "crates/pumpkin-core/src/entity/passive/allay/vibration.rs"
+   ],
+   "items": [
+    {
+     "text": "Picks up items matching its held item",
+     "done": true
+    },
+    {
+     "text": "Binds to a note block it hears for 30 seconds",
+     "done": true
+    },
+    {
+     "text": "Dances near a playing jukebox",
+     "done": true
+    },
+    {
+     "text": "Duplicates with an amethyst shard while dancing",
+     "done": true
+    },
+    {
+     "text": "Brain-based movement as in AllayAi (goes to liked player and note block)",
+     "done": false
+    }
    ]
   },
   "entities:area_effect_cloud": {
@@ -189,15 +227,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:bamboo_chest_raft",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:bamboo_raft": {
@@ -233,9 +286,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:bee",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (3 commits); not re-reviewed.",
+   "note": "Bees attack and breed but never use hives or flowers.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/bee.rs"
    ],
@@ -243,6 +296,28 @@
     "0a072e906 pex",
     "800b194c8 pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Attack, breed, tempt, follow parent, wander and float goals",
+     "done": true
+    },
+    {
+     "text": "BeeEnterHiveGoal and BeeLocateHiveGoal",
+     "done": false
+    },
+    {
+     "text": "ValidateHiveGoal and ValidateFlowerGoal",
+     "done": false
+    },
+    {
+     "text": "BeeGrowCropGoal (pollination)",
+     "done": false
+    },
+    {
+     "text": "BeeWanderGoal (flying)",
+     "done": false
+    }
    ]
   },
   "entities:birch_boat": {
@@ -266,15 +341,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:birch_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:blaze": {
@@ -282,15 +372,29 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:blaze",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3790 and #4113 (open upstream). Attack, stroll and look goals present; the restriction and revenge goals are not.",
    "files": [
     "crates/pumpkin-core/src/entity/mob/blaze.rs"
    ],
    "commits": [
     "be6104cd2 pex",
     "feabcf3fc pex"
+   ],
+   "items": [
+    {
+     "text": "Attack, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "MoveTowardsRestrictionGoal",
+     "done": false
+    },
+    {
+     "text": "HurtByTargetGoal (revenge)",
+     "done": false
+    }
    ]
   },
   "entities:block_display": {
@@ -310,11 +414,13 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:bogged",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3988",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (9 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3988 (open upstream). Players can shear bogged; dispensers with shears only shear sheep.",
    "files": [
-    "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs"
+    "crates/pumpkin-core/src/block/blocks/redstone/dispenser.rs",
+    "crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs",
+    "crates/pumpkin-core/src/entity/mob/skeleton/mod.rs"
    ],
    "commits": [
     "1b574ee51 pex",
@@ -326,6 +432,28 @@
     "be6104cd2 pex",
     "cd6e1f4bb upstream-pr#3988",
     "f64385861 upstream-pr#3988"
+   ],
+   "items": [
+    {
+     "text": "Poison arrows (100 ticks)",
+     "done": true
+    },
+    {
+     "text": "Hard and normal attack intervals 50 and 70",
+     "done": true
+    },
+    {
+     "text": "Shearing by players drops shearing/bogged loot",
+     "done": true
+    },
+    {
+     "text": "sheared saved and synced",
+     "done": true
+    },
+    {
+     "text": "Dispensers shear bogged",
+     "done": false
+    }
    ]
   },
   "entities:breeze": {
@@ -388,9 +516,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:cat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3984",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (11 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3984 (open upstream) plus PEX tamable fixes. Cats have no bed or chest behaviour.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/cat.rs"
    ],
@@ -406,6 +534,24 @@
     "a4f36a07e pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Float, panic, sit, follow owner, leap, ocelot attack, breed, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "CatRelaxOnOwnerGoal (sleeping on the owner's bed and morning gifts)",
+     "done": false
+    },
+    {
+     "text": "CatLieOnBlockGoal",
+     "done": false
+    },
+    {
+     "text": "CatSitOnBlockGoal (chests, furnaces, beds)",
+     "done": false
+    }
    ]
   },
   "entities:cave_spider": {
@@ -444,15 +590,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:cherry_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:chest_minecart": {
@@ -479,10 +640,10 @@
    "name": "Chicken",
    "group": "Passive",
    "vanilla_id": "minecraft:chicken",
-   "status": "done",
-   "assessment": "upstream",
+   "status": "partial",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is Pumpkin's tracker baseline claim (file presence and TODO heuristics, not a review); PEX has changed this code since (6 commits); not re-reviewed.",
+   "note": "Goal list matches vanilla. PEX lays eggs at the chicken's position (9526e7d60) with vanilla pitch (eb1b1ac9a); chicken jockeys were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/chicken.rs"
    ],
@@ -493,6 +654,13 @@
     "db196ca2b pex",
     "eb1b1ac9a pex",
     "ed1961c67 pex"
+   ],
+   "upstream_status": "done",
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:cod": {
@@ -629,15 +797,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:dark_oak_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:dolphin": {
@@ -645,9 +828,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:dolphin",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (3 commits); not re-reviewed.",
+   "note": "Dolphins swim and fight back but have none of their player interactions.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/dolphin.rs"
    ],
@@ -655,6 +838,32 @@
     "0a072e906 pex",
     "72b752919 pex",
     "b79673626 pex"
+   ],
+   "items": [
+    {
+     "text": "Find water, swim, look and melee goals",
+     "done": true
+    },
+    {
+     "text": "BreathAirGoal",
+     "done": false
+    },
+    {
+     "text": "DolphinSwimToTreasureGoal",
+     "done": false
+    },
+    {
+     "text": "DolphinSwimWithPlayerGoal (Dolphin's Grace)",
+     "done": false
+    },
+    {
+     "text": "DolphinJumpGoal",
+     "done": false
+    },
+    {
+     "text": "PlayWithItemsGoal and MoveToItemGoal",
+     "done": false
+    }
    ]
   },
   "entities:donkey": {
@@ -691,9 +900,9 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:drowned",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#4039",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (4 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#4039 (open upstream) plus PEX sinking fixes. Goal list matches vanilla; trident throwing and swimming navigation were not compared.",
    "files": [
     "crates/pumpkin-core/src/entity/mob/zombie/drowned.rs"
    ],
@@ -702,6 +911,16 @@
     "805e460a7 upstream-pr#4039",
     "be6104cd2 pex",
     "df53165fd pex"
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    },
+    {
+     "text": "Trident attack goal",
+     "done": true
+    }
    ]
   },
   "entities:egg": {
@@ -920,11 +1139,12 @@
    "group": "Projectile",
    "vanilla_id": "minecraft:fishing_bobber",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3821",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (18 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3821 (open upstream) plus PEX hook and gravity fixes (11fc1c0ae). Open-water treasure rules and lure/luck were not compared.",
    "files": [
-    "crates/pumpkin-core/src/entity/projectile/fishing_bobber.rs"
+    "crates/pumpkin-core/src/entity/projectile/fishing_bobber.rs",
+    "crates/pumpkin-core/src/item/items/fishing_rod.rs"
    ],
    "commits": [
     "0208a9490 upstream-pr#3821",
@@ -945,6 +1165,28 @@
     "c3a6aaa3a upstream-pr#3821",
     "d99988c57 upstream-pr#3821",
     "ffae9d60c upstream-pr#3821"
+   ],
+   "items": [
+    {
+     "text": "Throw, flight, bobbing and settling at the surface",
+     "done": true
+    },
+    {
+     "text": "Hooking mobs and players, pulling on reel",
+     "done": true
+    },
+    {
+     "text": "Bites, catches and fishing loot",
+     "done": true
+    },
+    {
+     "text": "Fishing events fired and cancellable",
+     "done": true
+    },
+    {
+     "text": "Open-water treasure check and Luck of the Sea/Lure compared",
+     "done": false
+    }
    ]
   },
   "entities:fox": {
@@ -952,10 +1194,12 @@
    "group": "Passive",
    "vanilla_id": "minecraft:fox",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#4093",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (4 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#4093 (open upstream) ports the fox with every vanilla goal at its vanilla priority. Breeding does not make the baby trust the players who bred it, and two goals use generic versions without the fox-specific guards.",
    "files": [
+    "crates/pumpkin-core/src/entity/ai/goal/breed.rs",
+    "crates/pumpkin-core/src/entity/passive/fox/goals.rs",
     "crates/pumpkin-core/src/entity/passive/fox/mod.rs"
    ],
    "commits": [
@@ -963,6 +1207,44 @@
     "7fb652ead upstream-pr#4093",
     "b55e421eb upstream-pr#4093",
     "cce18ffe3 upstream-pr#4093"
+   ],
+   "items": [
+    {
+     "text": "Every Fox.registerGoals goal at its vanilla priority",
+     "done": true
+    },
+    {
+     "text": "Chicken, rabbit, baby turtle and fish targets with variant-dependent priority",
+     "done": true
+    },
+    {
+     "text": "Sleeping, sitting, crouching, pouncing and faceplanting states",
+     "done": true
+    },
+    {
+     "text": "Eating and spitting held items, berry eating",
+     "done": true
+    },
+    {
+     "text": "Trusted players saved and loaded",
+     "done": true
+    },
+    {
+     "text": "Baby from a spawn egg trusts the player",
+     "done": true
+    },
+    {
+     "text": "Bred baby trusts the breeding players (FoxBreedGoal)",
+     "done": false
+    },
+    {
+     "text": "FoxLookAtPlayerGoal skips faceplanted or interested foxes",
+     "done": false
+    },
+    {
+     "text": "FoxFollowParentGoal stops while defending",
+     "done": false
+    }
    ]
   },
   "entities:frog": {
@@ -1066,9 +1348,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:goat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "pex",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (5 commits); not re-reviewed.",
+   "note": "PEX 603540f96 brought spawning, milking, sounds and pathing in line with vanilla, but the goat runs a goal list instead of GoatAi's brain and has no ramming or long jumps.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/goat.rs"
    ],
@@ -1078,6 +1360,32 @@
     "72b752919 pex",
     "800b194c8 pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Screaming variant, horns and sounds",
+     "done": true
+    },
+    {
+     "text": "Milking",
+     "done": true
+    },
+    {
+     "text": "Breeding, tempting with goat food, following parents",
+     "done": true
+    },
+    {
+     "text": "Ramming entities and dropping horns (RamTarget, PrepareRamNearestTarget)",
+     "done": false
+    },
+    {
+     "text": "Long jumps (LongJumpToRandomPos)",
+     "done": false
+    },
+    {
+     "text": "Brain-based AI as in GoatAi",
+     "done": false
+    }
    ]
   },
   "entities:guardian": {
@@ -1289,15 +1597,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:jungle_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:leash_knot": {
@@ -1344,9 +1667,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:llama",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (6 commits); not re-reviewed.",
+   "note": "PEX 6e720ff0d gave llamas vanilla goal priorities, but two llama goals are missing.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/llama.rs"
    ],
@@ -1357,6 +1680,24 @@
     "800b194c8 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Ranged spit, panic, breed, tempt, follow parent, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "RunAroundLikeCrazyGoal (taming)",
+     "done": false
+    },
+    {
+     "text": "LlamaFollowCaravanGoal",
+     "done": false
+    },
+    {
+     "text": "LlamaAttackWolfGoal",
+     "done": false
+    }
    ]
   },
   "entities:llama_spit": {
@@ -1414,15 +1755,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:mangrove_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:mannequin": {
@@ -1545,15 +1901,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:oak_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:ocelot": {
@@ -1561,9 +1932,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:ocelot",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3984",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (8 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3984. Goal list matches vanilla, including the tempt and avoid goals vanilla adds in reassessTrustingGoals. Trust and its NBT were not compared.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/ocelot.rs"
    ],
@@ -1576,6 +1947,12 @@
     "a34bd5590 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:ominous_item_spawner": {
@@ -1621,15 +1998,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:pale_oak_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:panda": {
@@ -1637,9 +2029,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:panda",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (7 commits); not re-reviewed.",
+   "note": "Pandas use generic goals; none of the panda personality goals exist.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/panda.rs"
    ],
@@ -1651,6 +2043,40 @@
     "b79673626 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Float, panic, breed, tempt, look, follow parent and stroll goals",
+     "done": true
+    },
+    {
+     "text": "PandaAttackGoal",
+     "done": false
+    },
+    {
+     "text": "PandaAvoidGoal",
+     "done": false
+    },
+    {
+     "text": "PandaSitGoal",
+     "done": false
+    },
+    {
+     "text": "PandaLieOnBackGoal",
+     "done": false
+    },
+    {
+     "text": "PandaSneezeGoal",
+     "done": false
+    },
+    {
+     "text": "PandaRollGoal",
+     "done": false
+    },
+    {
+     "text": "PandaHurtByTargetGoal",
+     "done": false
+    }
    ]
   },
   "entities:parched": {
@@ -1676,9 +2102,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:parrot",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (4 commits); not re-reviewed.",
+   "note": "Generic goals only; a tamed parrot does none of its owner behaviour.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/parrot.rs"
    ],
@@ -1687,6 +2113,28 @@
     "a34bd5590 pex",
     "a4f36a07e pex",
     "b79673626 pex"
+   ],
+   "items": [
+    {
+     "text": "Panic, float, look, wander and follow-mob goals",
+     "done": true
+    },
+    {
+     "text": "SitWhenOrderedToGoal",
+     "done": false
+    },
+    {
+     "text": "FollowOwnerGoal",
+     "done": false
+    },
+    {
+     "text": "LandOnOwnersShoulderGoal",
+     "done": false
+    },
+    {
+     "text": "ParrotWanderGoal (flying)",
+     "done": false
+    }
    ]
   },
   "entities:phantom": {
@@ -1694,9 +2142,9 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:phantom",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3715",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (8 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3715 (open upstream). Circle, swoop, attack-strategy and player target goals match vanilla's at the same priorities under different names. Size-scaled damage, sun burning and insomnia spawning were not compared.",
    "files": [
     "crates/pumpkin-core/src/entity/mob/phantom.rs"
    ],
@@ -1709,16 +2157,22 @@
     "cf37d07b7 upstream-pr#3715",
     "e7c6f39c8 upstream-pr#3715",
     "feabcf3fc pex"
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:pig": {
    "name": "Pig",
    "group": "Passive",
    "vanilla_id": "minecraft:pig",
-   "status": "done",
-   "assessment": "upstream",
+   "status": "partial",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is Pumpkin's tracker baseline claim (file presence and TODO heuristics, not a review); PEX has changed this code since (5 commits); not re-reviewed.",
+   "note": "Goal list matches vanilla, including both tempt goals (food and carrot on a stick). Saddle steering and boosting were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/pig.rs"
    ],
@@ -1728,6 +2182,13 @@
     "b79673626 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "upstream_status": "done",
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:piglin": {
@@ -1781,9 +2242,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:polar_bear",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (4 commits); not re-reviewed.",
+   "note": "Polar bears fight back but don't defend their cubs from players.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/polar_bear.rs"
    ],
@@ -1792,6 +2253,20 @@
     "800b194c8 pex",
     "a4f36a07e pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Melee, panic, follow parent, stroll and look goals",
+     "done": true
+    },
+    {
+     "text": "PolarBearAttackPlayersGoal (defending cubs)",
+     "done": false
+    },
+    {
+     "text": "ResetUniversalAngerTargetGoal",
+     "done": false
+    }
    ]
   },
   "entities:poplar_boat": {
@@ -1815,15 +2290,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:poplar_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:pufferfish": {
@@ -1831,9 +2321,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:pufferfish",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#4050",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (3 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#4050 (open upstream). PufferfishPuffGoal present; puff state timing and sting effects were not compared.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/pufferfish.rs"
    ],
@@ -1841,6 +2331,12 @@
     "1703bc4f5 upstream-pr#4050",
     "eeb19eaa0 upstream-pr#4050",
     "f99d88b10 upstream-pr#4050"
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:rabbit": {
@@ -1848,9 +2344,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:rabbit",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (7 commits); not re-reviewed.",
+   "note": "Rabbit goals match vanilla except crop raiding.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/rabbit.rs"
    ],
@@ -1862,6 +2358,16 @@
     "b79673626 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Panic, breed, tempt, avoid, killer bunny melee and target goals",
+     "done": true
+    },
+    {
+     "text": "RaidGardenGoal (eating carrots)",
+     "done": false
+    }
    ]
   },
   "entities:ravager": {
@@ -1898,10 +2404,10 @@
    "name": "Sheep",
    "group": "Passive",
    "vanilla_id": "minecraft:sheep",
-   "status": "done",
-   "assessment": "upstream",
+   "status": "partial",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is Pumpkin's tracker baseline claim (file presence and TODO heuristics, not a review); PEX has changed this code since (4 commits); not re-reviewed.",
+   "note": "Goal list matches vanilla including grass eating. Shearing, dyeing and colour inheritance were not compared. Pumpkin's tracker marks it done from its baseline heuristic, not from a review.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/sheep.rs"
    ],
@@ -1910,6 +2416,13 @@
     "72b752919 pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "upstream_status": "done",
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    }
    ]
   },
   "entities:shulker": {
@@ -1950,9 +2463,9 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:silverfish",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3886",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (3 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3886 (open upstream). Goal list matches vanilla including wake-up-friends and merge-with-stone. PEX registers the float goal on the target selector instead of the goal selector.",
    "files": [
     "crates/pumpkin-core/src/entity/mob/silverfish.rs"
    ],
@@ -1960,6 +2473,16 @@
     "404ba247b upstream-pr#3886",
     "a6f5b9b76 upstream-pr#3886",
     "be6104cd2 pex"
+   ],
+   "items": [
+    {
+     "text": "Vanilla goal list and priorities present",
+     "done": true
+    },
+    {
+     "text": "FloatGoal registered on the goal selector",
+     "done": false
+    }
    ]
   },
   "entities:skeleton": {
@@ -2170,15 +2693,30 @@
    "group": "Vehicle",
    "vanilla_id": "minecraft:spruce_chest_boat",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream-pr#3961",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3961 (open upstream) adds the 27-slot inventory; PEX d10671199 saves its contents and loot table like the chest minecart.",
    "files": [
-    "crates/pumpkin-core/src/entity/vehicle/boat.rs"
+    "crates/pumpkin-core/src/entity/vehicle/boat.rs",
+    "crates/pumpkin-core/src/entity/vehicle/container.rs"
    ],
    "commits": [
     "224415e5c upstream-pr#3961",
     "d10671199 pex"
+   ],
+   "items": [
+    {
+     "text": "27-slot inventory opened by sneak-interacting",
+     "done": true
+    },
+    {
+     "text": "Items and LootTable saved",
+     "done": true
+    },
+    {
+     "text": "Contents dropped when destroyed (entityDrops)",
+     "done": true
+    }
    ]
   },
   "entities:squid": {
@@ -2375,9 +2913,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:turtle",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (7 commits); not re-reviewed.",
+   "note": "Turtles use generic goals; nothing brings them home to lay eggs.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/turtle.rs"
    ],
@@ -2389,6 +2927,28 @@
     "a4f36a07e pex",
     "b79673626 pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Panic, breed, tempt, look and stroll goals",
+     "done": true
+    },
+    {
+     "text": "TurtleLayEggGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleGoHomeGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleTravelGoal",
+     "done": false
+    },
+    {
+     "text": "TurtleGoToWaterGoal",
+     "done": false
+    }
    ]
   },
   "entities:vex": {
@@ -2457,16 +3017,47 @@
    "group": "Hostile",
    "vanilla_id": "minecraft:warden",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "pex",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (3 commits); not re-reviewed.",
+   "note": "PEX 1.1: listens to vibrations, builds and saves anger, investigates, emerges and applies darkness. No sonic boom, sniffing or digging back down, so it only fights in melee.",
    "files": [
+    "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs",
     "crates/pumpkin-core/src/entity/mob/warden.rs"
    ],
    "commits": [
     "a34bd5590 pex",
     "abda5c20c pex",
     "be6104cd2 pex"
+   ],
+   "items": [
+    {
+     "text": "Vibration listening (#warden_can_listen, radius 16)",
+     "done": true
+    },
+    {
+     "text": "Anger +35 per disturbance, +10 for repeated projectiles, saved to NBT",
+     "done": true
+    },
+    {
+     "text": "Emerging and darkness aura",
+     "done": true
+    },
+    {
+     "text": "Summoned after the fourth shrieker warning",
+     "done": true
+    },
+    {
+     "text": "Sonic boom ranged attack",
+     "done": false
+    },
+    {
+     "text": "Sniffing for targets",
+     "done": false
+    },
+    {
+     "text": "Digging down when calm",
+     "done": false
+    }
    ]
   },
   "entities:wind_charge": {
@@ -2549,9 +3140,9 @@
    "group": "Passive",
    "vanilla_id": "minecraft:wolf",
    "status": "partial",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is from Pumpkin's tracker audit (source review at e0cb7c01f, reviewed files changed since); PEX has changed this code since (6 commits); not re-reviewed.",
+   "note": "PEX tamable fixes (5c091a713). Most goals match; the anger target and reset goals differ.",
    "files": [
     "crates/pumpkin-core/src/entity/passive/wolf.rs"
    ],
@@ -2562,6 +3153,20 @@
     "a4f36a07e pex",
     "db196ca2b pex",
     "ed1961c67 pex"
+   ],
+   "items": [
+    {
+     "text": "Movement, sit, leap, melee, follow owner, breed, beg and owner-defence goals",
+     "done": true
+    },
+    {
+     "text": "NearestAttackableTargetGoal for players it is angry at (vanilla priority 4)",
+     "done": false
+    },
+    {
+     "text": "ResetUniversalAngerTargetGoal (priority 8)",
+     "done": false
+    }
    ]
   },
   "entities:zoglin": {
@@ -3809,14 +4414,41 @@
     "creaking_heart"
    ],
    "status": "done",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "pex",
-   "note": "Status is Pumpkin's tracker baseline claim entry blocks:creaking_heart (file presence and TODO heuristics, not a review); PEX has changed this code since (1 commit); not re-reviewed.",
+   "note": "PEX 1.1 port of the creaking heart: protector spawning at night, resin spreading, dormant/awake/uprooted states, comparator output and XP drop.",
    "files": [
-    "crates/pumpkin-core/src/block/blocks/creaking_heart.rs"
+    "crates/pumpkin-core/src/block/blocks/creaking_heart.rs",
+    "crates/pumpkin-core/src/block/entities/creaking_heart.rs"
    ],
    "commits": [
     "abda5c20c pex"
+   ],
+   "items": [
+    {
+     "text": "Protector spawns at night near survival players",
+     "done": true
+    },
+    {
+     "text": "Despawns at dawn or when too far",
+     "done": true
+    },
+    {
+     "text": "Resin spreads when the creaking is hurt",
+     "done": true
+    },
+    {
+     "text": "Dormant, awake and uprooted states",
+     "done": true
+    },
+    {
+     "text": "Comparator signal",
+     "done": true
+    },
+    {
+     "text": "20 to 24 XP from a natural heart",
+     "done": true
+    }
    ]
   },
   "blocks:crop": {
@@ -5826,15 +6458,33 @@
     "sculk_shrieker"
    ],
    "status": "done",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "pex",
-   "note": "Status is Pumpkin's tracker baseline claim entry blocks:sculk-sculk_shrieker (file presence and TODO heuristics, not a review); PEX has changed this code since (2 commits); not re-reviewed.",
+   "note": "PEX 1.1: shrieks on sensor activation, warns the responsible player (direct, passenger, projectile owner or thrower), summons a warden on the fourth warning when can_summon is set.",
    "files": [
     "crates/pumpkin-core/src/block/blocks/sculk/sculk_shrieker.rs"
    ],
    "commits": [
     "2238d6780 pex",
     "abda5c20c pex"
+   ],
+   "items": [
+    {
+     "text": "Shriek on vibration and sensor activation",
+     "done": true
+    },
+    {
+     "text": "Warning levels and cooldowns per player",
+     "done": true
+    },
+    {
+     "text": "Warden summon on the fourth warning",
+     "done": true
+    },
+    {
+     "text": "listener NBT",
+     "done": true
+    }
    ]
   },
   "blocks:sculk_vein": {
@@ -7077,14 +7727,28 @@
     "yellow_wall_banner"
    ],
    "status": "done",
-   "assessment": "upstream",
+   "assessment": "audit",
    "origin": "upstream",
-   "note": "Status is Pumpkin's tracker baseline claim entry blocks:banners (file presence and TODO heuristics, not a review); PEX has changed this code since (1 commit); not re-reviewed.",
+   "note": "Pumpkin-MC/Pumpkin#3951 (open upstream): banners placed on walls, wall drops use the standing banner loot table.",
    "files": [
     "crates/pumpkin-core/src/block/blocks/banners.rs"
    ],
    "commits": [
     "7bfaaef09 upstream-pr#3951"
+   ],
+   "items": [
+    {
+     "text": "Wall placement facing away from support",
+     "done": true
+    },
+    {
+     "text": "Removed when support is lost",
+     "done": true
+    },
+    {
+     "text": "Wall banners drop their standing banner",
+     "done": true
+    }
    ]
   },
   "blocks:wall_hanging_sign": {
@@ -10593,12 +11257,26 @@
    "name": "Scheduled block ticks",
    "group": "Core",
    "status": "partial",
-   "assessment": "scan",
-   "note": "PEX: scheduled ticks in inactive chunks wait and run once the chunk ticks again (vanilla LevelTicks.tickCheck), from #3553 plus PEX 4a55ea0aa. Not reviewed for this tracker.",
+   "assessment": "audit",
+   "note": "PEX: scheduled ticks in chunks that are not ticking wait, and run once the chunk ticks again instead of being lost (#3553 plus PEX 4a55ea0aa).",
    "origin": "pex",
    "files": [
-    "crates/pumpkin-world/src/tick/scheduler.rs",
-    "crates/pumpkin-world/src/level.rs"
+    "crates/pumpkin-world/src/level.rs",
+    "crates/pumpkin-world/src/tick/scheduler.rs"
+   ],
+   "items": [
+    {
+     "text": "Ticks wait in inactive chunks",
+     "done": true
+    },
+    {
+     "text": "Overdue ticks run when the chunk becomes active",
+     "done": true
+    },
+    {
+     "text": "Priority and sub-tick order compared with vanilla",
+     "done": false
+    }
    ]
   },
   "redstone:redstone-torch-levers-and-buttons": {
@@ -10992,12 +11670,13 @@
    "name": "Configured and placed features",
    "group": "Generation",
    "status": "partial",
-   "assessment": "scan",
-   "note": "PEX 1.1: template, sequence, cuboid, random_chance and randomly_selected placement, volume_match, seeded geodes and end spikes, data-driven desert well, vanilla biome feature order. Template features place only their first palette and only update shapes for the blocks current templates use (docs/ALPHA-TODO.md).",
+   "assessment": "audit",
+   "note": "PEX 1.1 placement and feature additions. Templates place only their first palette, and post-placement shape updates only cover blocks the current templates use.",
    "origin": "pex",
    "files": [
-    "crates/pumpkin-world/src/generation/feature/placed_features.rs",
-    "crates/pumpkin-world/src/generation/feature/configured_features.rs"
+    "crates/pumpkin-world/src/generation/feature/configured_features.rs",
+    "crates/pumpkin-world/src/generation/feature/features/template.rs",
+    "crates/pumpkin-world/src/generation/feature/placed_features.rs"
    ],
    "commits": [
     "4bfc66aa3 pex",
@@ -11007,6 +11686,24 @@
     "5765d4b7c pex",
     "db28a9450 pex",
     "444060d55 pex"
+   ],
+   "items": [
+    {
+     "text": "template, sequence, cuboid, random_chance, randomly_selected, volume_match",
+     "done": true
+    },
+    {
+     "text": "Data-driven desert well",
+     "done": true
+    },
+    {
+     "text": "Templates with more than one palette",
+     "done": false
+    },
+    {
+     "text": "Shape updates for every block after template placement",
+     "done": false
+    }
    ]
   },
   "world:flat-world-generation": {
@@ -11024,12 +11721,30 @@
    "name": "Game events and vibrations",
    "group": "Simulation",
    "status": "partial",
-   "assessment": "scan",
-   "note": "PEX 1.1 port of VibrationSystem, VibrationSelector and game event emission (2238d6780, abda5c20c).",
+   "assessment": "audit",
+   "note": "PEX 1.1 port of the vibration system. Game events are emitted for the common actions; some vanilla emitters are still missing (for example item_interact_start/finish outside the fishing rod).",
    "origin": "pex",
    "files": [
-    "crates/pumpkin-core/src/world/vibration.rs",
-    "crates/pumpkin-core/src/world/game_event.rs"
+    "crates/pumpkin-core/src/world/game_event.rs",
+    "crates/pumpkin-core/src/world/vibration.rs"
+   ],
+   "items": [
+    {
+     "text": "Vibration travel time, selection and occlusion by #dampens_vibrations",
+     "done": true
+    },
+    {
+     "text": "listener NBT round trip",
+     "done": true
+    },
+    {
+     "text": "Game events for steps, blocks, eating, projectiles, containers, doors, damage, explosions, fluids",
+     "done": true
+    },
+    {
+     "text": "Every vanilla gameEvent call site emits",
+     "done": false
+    }
    ]
   },
   "world:lighting": {
@@ -11200,8 +11915,8 @@
    "name": "Native plugin ABI",
    "group": "ABI",
    "status": "partial",
-   "assessment": "scan",
-   "note": "Native plugins are Rust cdylibs that share the server's Rust types, so they only work with the exact build they came from. The loader only compares PLUGIN_API_VERSION (3): a plugin from another build loads without an error and then misbehaves. 2.0 goal: a stable ABI, or an explicitly unstable one that refuses mismatched builds.",
+   "assessment": "audit",
+   "note": "The loader checks only PLUGIN_API_VERSION, so a plugin from another build is accepted.",
    "origin": "upstream",
    "items": [
     {
@@ -11231,7 +11946,7 @@
    "name": "PEXGuard (regions)",
    "group": "Plugins",
    "status": "partial",
-   "assessment": "scan",
+   "assessment": "audit",
    "note": "WorldGuard-style regions with flags; listeners depend on which server events are actually fired (PORTING_GUIDE Appendix A).",
    "origin": "pex",
    "items": [
@@ -11254,8 +11969,8 @@
    ],
    "files": [
     "native-plugins/pexguard/src/lib.rs",
-    "native-plugins/pexguard/src/region.rs",
-    "native-plugins/pexguard/src/listeners.rs"
+    "native-plugins/pexguard/src/listeners.rs",
+    "native-plugins/pexguard/src/region.rs"
    ],
    "commits": [
     "b1b7a4293 pex"
@@ -11266,7 +11981,7 @@
    "name": "PEXProtect (block logging)",
    "group": "Plugins",
    "status": "partial",
-   "assessment": "scan",
+   "assessment": "audit",
    "note": "CoreProtect-style logging to SQLite with inspect, lookup, rollback and restore.",
    "origin": "pex",
    "items": [
@@ -11288,8 +12003,9 @@
     }
    ],
    "files": [
+    "native-plugins/pexprotect/src/db.rs",
     "native-plugins/pexprotect/src/lib.rs",
-    "native-plugins/pexprotect/src/db.rs"
+    "native-plugins/pexprotect/src/params.rs"
    ],
    "commits": [
     "b1b7a4293 pex"
@@ -11345,7 +12061,7 @@
    "name": "WorldPumpkin (world editing)",
    "group": "Plugins",
    "status": "partial",
-   "assessment": "scan",
+   "assessment": "audit",
    "note": "Native port of NicDevTV's WorldPumpkin (MIT): selections, //set, //replace, //walls, //move, undo and redo. No copy, paste, schematics or brushes.",
    "origin": "pex",
    "items": [
@@ -11379,9 +12095,9 @@
     }
    ],
    "files": [
-    "native-plugins/worldpumpkin/src/lib.rs",
+    "native-plugins/worldpumpkin/src/commands.rs",
     "native-plugins/worldpumpkin/src/engine.rs",
-    "native-plugins/worldpumpkin/src/commands.rs"
+    "native-plugins/worldpumpkin/src/lib.rs"
    ],
    "commits": [
     "b1b7a4293 pex"
@@ -11491,12 +12207,12 @@
    "name": "Compact block palettes and uniform light",
    "group": "Memory",
    "status": "done",
-   "assessment": "scan",
-   "note": "Small palettes packed 4 bits per block (96d0c47c8, 50f11a6e7, 41e6cbb76); uniform light sections stored without arrays (0642a081c).",
+   "assessment": "audit",
+   "note": "PEX packs small palettes 4 bits per block and keeps uniform light sections without arrays.",
    "origin": "pex",
    "files": [
-    "crates/pumpkin-world/src/chunk/palette.rs",
-    "crates/pumpkin-world/src/chunk/format/mod.rs"
+    "crates/pumpkin-world/src/chunk/format/mod.rs",
+    "crates/pumpkin-world/src/chunk/palette.rs"
    ],
    "commits": [
     "96d0c47c8 pex",
@@ -11504,7 +12220,21 @@
     "41e6cbb76 pex",
     "0642a081c pex"
    ],
-   "upstream_status": "missing"
+   "upstream_status": "missing",
+   "items": [
+    {
+     "text": "4-bit packing for palettes up to 16 entries",
+     "done": true
+    },
+    {
+     "text": "Indexed storage kept until the palette shrinks to 8",
+     "done": true
+    },
+    {
+     "text": "Uniform light sections without arrays",
+     "done": true
+    }
+   ]
   },
   "performance:pathfinding-heap": {
    "name": "Pathfinding heap allocated on demand",
@@ -11738,8 +12468,8 @@
    "name": "Load vanilla 26.3 worlds",
    "group": "Compatibility",
    "status": "partial",
-   "assessment": "scan",
-   "note": "PEX 4744882ec reads 26.3's bare-string palette entries and level.dat changes. Upstream #4094 then moved saves to the 26.3 data version. Loading is covered by unit tests; a full round trip (vanilla to PEX to vanilla with every block entity, entity and player file compared) has not been done.",
+   "assessment": "audit",
+   "note": "Loading 26.3 data is covered by unit tests; the 2.0 round-trip goal is not met yet.",
    "origin": "pex",
    "items": [
     {
@@ -11885,8 +12615,8 @@
    "name": "Config defaults merge",
    "group": "Config",
    "status": "partial",
-   "assessment": "scan",
-   "note": "Missing keys are filled with defaults and written back. A value that fails to deserialize makes the whole file fall back to defaults (merge_with_default_toml uses unwrap_or_else(Self::default)), which silently resets a server's settings.",
+   "assessment": "audit",
+   "note": "A value that fails to deserialize resets the whole file to defaults instead of reporting the bad key.",
    "origin": "upstream",
    "items": [
     {
@@ -11973,8 +12703,8 @@
    "name": "Vanilla offline-mode UUIDs",
    "group": "Compatibility",
    "status": "missing",
-   "assessment": "scan",
-   "note": "offline_uuid() is the first 16 bytes of SHA-256(name). Vanilla uses UUID v3 of MD5(\"OfflinePlayer:\" + name), so offline worlds moved between vanilla and PEX lose player data, and BungeeCord fallbacks disagree too. 2.0 goal, with a migration for existing playerdata.",
+   "assessment": "audit",
+   "note": "PEX derives offline UUIDs from SHA-256; vanilla uses a name-based v3 UUID of \"OfflinePlayer:<name>\".",
    "origin": "upstream",
    "items": [
     {
