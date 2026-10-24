@@ -29,7 +29,7 @@ use pumpkin_core::{
 };
 use pumpkin_core::{PumpkinServer, stop_server};
 
-use pumpkin_config::{LoadConfiguration, PumpkinConfig};
+use pumpkin_config::{LoadConfiguration, LoadMessage, PumpkinConfig};
 use pumpkin_core::plugin::loader::PluginLoader;
 use pumpkin_util::text::{
     TextComponent,
@@ -70,11 +70,13 @@ async fn main() {
 
     let exec_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-    let config = PumpkinConfig::load(&exec_dir);
+    let (config, config_messages) = PumpkinConfig::load(&exec_dir);
 
     let vanilla_data = VanillaData::load();
 
     pumpkin_core::init_logger(&config.advanced);
+    // The config is read before the logger exists, so its lines are logged here.
+    config_messages.iter().for_each(LoadMessage::log);
 
     if let Some(target_arg) = parse_convert_world_arg(std::env::args().skip(1)) {
         let anvil_default = match &config.advanced.world.chunk {

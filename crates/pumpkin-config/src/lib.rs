@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use std::path::PathBuf;
 use std::{fs, num::NonZero, path::Path};
-use tracing::{debug, error, warn};
+use toml_edit::DocumentMut;
+use tracing::{debug, error, info, warn};
 
 /// Fun and experimental configuration options.
 pub mod fun;
@@ -22,6 +23,8 @@ pub mod fun;
 pub mod logging;
 /// Tick metrics configuration options.
 pub mod metrics;
+/// The `config_version` key and the migrations that update older config files.
+pub mod migration;
 /// Networking and protocol configuration options.
 pub mod networking;
 /// Plugin management configuration options.
@@ -69,6 +72,7 @@ pub mod whitelist;
 pub mod world;
 
 use advancement::AdvancementConfig;
+use migration::{CONFIG_VERSION_KEY, Migration, UNVERSIONED_CONFIG_VERSION};
 use networking::NetworkingConfig;
 use player_data::PlayerDataConfig;
 use resource_pack::ResourcePackConfig;
@@ -90,6 +94,8 @@ pub struct PumpkinConfig {
 }
 
 impl LoadConfiguration for PumpkinConfig {
+    const MIGRATIONS: &'static [Migration] = &[];
+
     fn get_path() -> &'static Path {
         Path::new("pumpkin.toml")
     }
@@ -143,6 +149,11 @@ impl LoadConfiguration for PumpkinConfig {
         }
     }
 }
+
+const _: () = assert!(
+    migration::migrations_are_ordered(PumpkinConfig::MIGRATIONS),
+    "pumpkin.toml migrations must be ordered by version, starting above 1"
+);
 
 /// Advanced configuration for optional and feature-specific server settings.
 ///
@@ -273,19 +284,44 @@ impl AdvancedConfiguration {
     }
 }
 
+/// A log line from loading a config file, kept until the logger is set up.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LoadMessage {
+    /// A change made to the file.
+    Info(String),
+    /// A problem the server works around, such as a change it couldn't save.
+    Warn(String),
+    /// The file couldn't be read or parsed, so the defaults are used.
+    Error(String),
+}
+
+impl LoadMessage {
+    /// Logs the line at its level.
+    pub fn log(&self) {
+        match self {
+            Self::Info(line) => info!("{line}"),
+            Self::Warn(line) => warn!("{line}"),
+            Self::Error(line) => error!("{line}"),
+        }
+    }
+}
+
 /// Trait for loading and validating configuration from a TOML file.
 ///
-/// Provides default implementations for loading, merging with defaults,
-/// and writing missing values back to disk. Also requires validation logic.
+/// Provides default implementations for loading, migrating and filling in
+/// missing values. Also requires validation logic.
 pub trait LoadConfiguration {
+    /// The steps that bring an older version of this file up to date, ordered by version.
+    const MIGRATIONS: &'static [Migration];
+
     /// Load configuration from the given directory.
     ///
-    /// Creates the directory if it doesn't exist, reads the TOML file,
-    /// merges it with defaults, writes missing fields, and validates the result.
+    /// Creates the directory if it doesn't exist and reads the TOML file. An older file is
+    /// updated by [`Self::MIGRATIONS`], missing keys get their defaults, and a changed file is
+    /// backed up before it is rewritten. Returns the validated configuration and the lines to
+    /// log once the logger is ready.
     #[must_use]
-    // NOTE: Logger may not be ready.
-    #[expect(clippy::print_stdout)]
-    fn load(config_dir: &Path) -> Self
+    fn load(config_dir: &Path) -> (Self, Vec<LoadMessage>)
     where
         Self: Sized + Default + Serialize + DeserializeOwned,
     {
@@ -295,142 +331,48 @@ pub trait LoadConfiguration {
         }
 
         let path = config_dir.join(Self::get_path());
+        let mut messages = Vec::new();
 
         let config = if path.exists() {
             let file_content = match fs::read_to_string(&path) {
                 Ok(content) => content,
                 Err(err) => {
-                    error!(
+                    messages.push(LoadMessage::Error(format!(
                         "Couldn't read configuration file at {}: {err}",
                         path.display()
-                    );
-                    return Self::default();
+                    )));
+                    return (Self::default(), messages);
                 }
             };
-
-            let parsed_toml_value: toml::Value = match toml::from_str(&file_content) {
-                Ok(val) => val,
-                Err(err) => {
-                    error!(
-                        "Couldn't parse TOML at {}. Reason: {err}. Using default config.",
-                        path.display()
-                    );
-                    return Self::default();
-                }
-            };
-
-            let (merged_config, changed) = Self::merge_with_default_toml(parsed_toml_value);
-
-            if changed {
-                let file_name = path.file_name().map_or_else(
-                    || path.display().to_string(),
-                    |f| f.to_string_lossy().into_owned(),
-                );
-                println!(
-                    "{file_name} changed because values were missing. The missing values were filled with default values."
-                );
-                match toml::to_string(&merged_config) {
-                    Ok(toml_str) => {
-                        if let Err(err) = fs::write(&path, toml_str) {
-                            warn!(
-                                "Couldn't write merged config to {}. Reason: {}",
-                                path.display(),
-                                err
-                            );
-                        }
-                    }
-                    Err(err) => {
-                        warn!(
-                            "Couldn't serialize merged config for {}. Reason: {}",
-                            path.display(),
-                            err
-                        );
-                    }
-                }
-            }
-
-            merged_config
+            load_existing(&path, &file_content, &mut messages)
         } else {
             let content = Self::default();
-            match toml::to_string(&content) {
-                Ok(toml_str) => {
-                    if let Err(err) = fs::write(&path, toml_str) {
-                        warn!(
+            match default_document(&content) {
+                Ok(mut document) => {
+                    migration::set_config_version(
+                        &mut document,
+                        migration::latest_version(Self::MIGRATIONS),
+                    );
+                    if let Err(err) = fs::write(&path, document.to_string()) {
+                        messages.push(LoadMessage::Warn(format!(
                             "Couldn't write default config to {:?}. Reason: {}",
                             path.display(),
                             err
-                        );
+                        )));
                     }
                 }
-                Err(err) => {
-                    warn!(
-                        "Couldn't serialize default config for {:?}. Reason: {}",
-                        path.display(),
-                        err
-                    );
-                }
+                Err(err) => messages.push(LoadMessage::Warn(format!(
+                    "Couldn't serialize default config for {:?}. Reason: {}",
+                    path.display(),
+                    err
+                ))),
             }
 
             content
         };
 
         config.validate();
-        config
-    }
-
-    /// Merge a parsed TOML value with the default configuration.
-    ///
-    /// Returns the merged configuration and a flag indicating if any values were filled.
-    #[must_use]
-    fn merge_with_default_toml(parsed_toml: toml::Value) -> (Self, bool)
-    where
-        Self: Sized + Default + Serialize + DeserializeOwned,
-    {
-        let default_config = Self::default();
-
-        let Ok(default_toml_value) = toml::Value::try_from(&default_config) else {
-            return (default_config, false);
-        };
-
-        let (merged_value, changed) = Self::merge_toml_values(default_toml_value, parsed_toml);
-
-        let config = merged_value.try_into().unwrap_or_else(|_| Self::default());
-
-        (config, changed)
-    }
-
-    /// Merge two TOML values recursively.
-    ///
-    /// Base is treated as default; overlay overwrites values.
-    #[must_use]
-    fn merge_toml_values(base: toml::Value, overlay: toml::Value) -> (toml::Value, bool) {
-        match (base, overlay) {
-            (toml::Value::Table(mut base_table), toml::Value::Table(overlay_table)) => {
-                let mut changed = false;
-
-                for key in base_table.keys() {
-                    if !overlay_table.contains_key(key) {
-                        changed = true;
-                        break;
-                    }
-                }
-
-                for (key, overlay_value) in overlay_table {
-                    if let Some(base_value) = base_table.get(&key).cloned() {
-                        let (merged_value, value_changed) =
-                            Self::merge_toml_values(base_value, overlay_value);
-                        base_table.insert(key, merged_value);
-                        if value_changed {
-                            changed = true;
-                        }
-                    } else {
-                        base_table.insert(key, overlay_value);
-                    }
-                }
-                (toml::Value::Table(base_table), changed)
-            }
-            (_, overlay) => (overlay, false),
-        }
+        (config, messages)
     }
 
     /// Returns the path to the configuration file relative to the config directory.
@@ -438,6 +380,99 @@ pub trait LoadConfiguration {
 
     /// Validates the configuration after loading or merging.
     fn validate(&self);
+}
+
+/// Parses an existing config file, brings it up to date and saves it if anything changed.
+fn load_existing<C>(path: &Path, file_content: &str, messages: &mut Vec<LoadMessage>) -> C
+where
+    C: LoadConfiguration + Default + Serialize + DeserializeOwned,
+{
+    let mut document: DocumentMut = match file_content.parse() {
+        Ok(document) => document,
+        Err(err) => {
+            messages.push(LoadMessage::Error(format!(
+                "Couldn't parse TOML at {}. Reason: {err}. Using default config.",
+                path.display()
+            )));
+            return C::default();
+        }
+    };
+
+    let default_config = C::default();
+    let Ok(defaults) = default_document(&default_config) else {
+        return default_config;
+    };
+
+    let latest = migration::latest_version(C::MIGRATIONS);
+    if let Some(version) = migration::file_version(&document)
+        .filter(|version| (UNVERSIONED_CONFIG_VERSION..=latest).contains(version))
+    {
+        let changes = migration::migrate(&mut document, version, C::MIGRATIONS, &defaults);
+        if !changes.is_empty() {
+            save_migrated(path, file_content, &document, version, changes, messages);
+        }
+    } else {
+        let found = document
+            .get(CONFIG_VERSION_KEY)
+            .map(|item| item.to_string().trim().to_owned())
+            .unwrap_or_default();
+        messages.push(LoadMessage::Warn(format!(
+            "{} has {CONFIG_VERSION_KEY} {found}, which this server doesn't know (it writes {latest}). Leaving the file unchanged.",
+            file_name(path)
+        )));
+        // Same as before versions existed: read what the file has, defaults for the rest.
+        let _ = migration::add_missing_keys(&mut document, &defaults);
+    }
+
+    toml::from_str(&document.to_string()).unwrap_or_else(|_| C::default())
+}
+
+/// Backs the file up as it was, then writes the migrated document in its place.
+fn save_migrated(
+    path: &Path,
+    original: &str,
+    document: &DocumentMut,
+    version: u32,
+    changes: Vec<String>,
+    messages: &mut Vec<LoadMessage>,
+) {
+    let file_name = file_name(path);
+    match migration::write_backup(path, original, version) {
+        Ok(backup) => {
+            messages.push(LoadMessage::Info(format!(
+                "Saved a copy of {file_name} as {} before changing it",
+                backup.file_name().unwrap_or_default().to_string_lossy()
+            )));
+            if let Err(err) = fs::write(path, document.to_string()) {
+                messages.push(LoadMessage::Warn(format!(
+                    "Couldn't write the updated {file_name}: {err}. The changes below apply until the next start."
+                )));
+            }
+        }
+        Err(err) => messages.push(LoadMessage::Warn(format!(
+            "Couldn't back up {file_name}, so it was left unchanged: {err}. The changes below apply until the next start."
+        ))),
+    }
+    messages.extend(
+        changes
+            .into_iter()
+            .map(|change| LoadMessage::Info(format!("{file_name}: {change}"))),
+    );
+}
+
+/// The default config as an editable document, without a `config_version`.
+fn default_document<C: Serialize>(config: &C) -> Result<DocumentMut, String> {
+    toml::to_string(config)
+        .map_err(|err| err.to_string())?
+        .parse()
+        .map_err(|err: toml_edit::TomlError| err.to_string())
+}
+
+fn file_name(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |f| f.to_string_lossy().into_owned(),
+    )
 }
 
 #[cfg(test)]
