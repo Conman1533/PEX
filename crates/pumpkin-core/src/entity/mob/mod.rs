@@ -1155,6 +1155,12 @@ pub trait Mob: EntityBase + Send + Sync {
         true
     }
 
+    /// Vanilla `LivingEntity.calculateFallDamage` overrides: adjusts the fall damage computed
+    /// from the distance fallen.
+    fn calculate_fall_damage(&self, damage: f32) -> f32 {
+        damage
+    }
+
     fn get_max_look_yaw_change(&self) -> f32 {
         10.0
     }

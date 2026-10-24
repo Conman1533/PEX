@@ -53,8 +53,13 @@ pub trait AgeableMob: Mob {
         if (old_age < 0 && new_age >= 0) || (old_age >= 0 && new_age < 0) {
             let is_baby = new_age < 0;
             entity.set_synced_data(tracked_data::ageable_mob::DATA_BABY_ID, is_baby);
+            self.age_boundary_reached();
         }
     }
+
+    /// Vanilla `AgeableMob.ageBoundaryReached`: called when the mob turns from a baby into an
+    /// adult or back.
+    fn age_boundary_reached(&self) {}
 
     fn is_age_locked(&self) -> bool {
         self.get_ageable_data().age_locked.load(Relaxed)

@@ -152,7 +152,7 @@ fn give_filled_bucket_stack(stack: &mut ItemStack, player: &Player, mut filled: 
     }
 }
 
-fn fill_bucket_stack(stack: &mut ItemStack, player: &Player, item: &'static Item) {
+pub(crate) fn fill_bucket_stack(stack: &mut ItemStack, player: &Player, item: &'static Item) {
     give_filled_bucket_stack(stack, player, ItemStack::new(1, item));
 }
 
