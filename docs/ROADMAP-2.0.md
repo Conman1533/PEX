@@ -35,8 +35,8 @@ Run by `/root/pumpkin-fork/tools/roadmap-baseline.sh`, logs in `/Vault-Mk4/pex-w
 | :-- | :-- |
 | `cargo fmt --check` | passes |
 | `cargo test --workspace --no-fail-fast` (13 min) | one failure: `pumpkin-world` `tests/world_info_save.rs` `write_world_info_reports_final_rename_failure`. It makes a directory read-only (`0o555`) to force the final rename to fail, and root ignores that, so it fails on pve, where every session runs as root. Everything else passes (616 tests in `pumpkin-core`). |
-| `cargo run -p pumpkin-tester` | running when this was committed; see `summary.txt` |
-| `cargo clippy --workspace --all-targets --all-features` | running when this was committed; see `summary.txt` |
+| `cargo run -p pumpkin-tester` (5 min) | 200 GameTests ran; one required test fails: `pumpkin:scaffolding_distance_and_collapse` ("expected block 'air', found 'scaffolding'" at tick 0). `summon_command_regression` passes. |
+| `cargo clippy --workspace --all-targets --all-features` | fails in `pumpkin-core` with 3 errors (`entity/mob/hoglin.rs:273`, `entity/passive/goat.rs:50`, `world/mod.rs:434`) and 1 warning (`entity/passive/ocelot.rs:167`), all from the 2026-10-23 mob AI merges. Because `pumpkin-core` stops there, nothing that depends on it is linted. Fixed on `fix/clippy-alpha` (`ff3ff4f28`); with it the whole workspace passes. Merge it first, or every piece's clippy run stops at the same three errors. |
 
 A session that sees one of these fail on its branch should check this table before blaming its own change.
 
@@ -418,7 +418,9 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 
 ### Current state
 
-- **CI has not run since 2026-10-14.** The fork's Actions are enabled and all eight workflows are active, but the last run of any workflow (including the daily `Nightly Release` cron) was 2026-10-14. Pushes to `alpha` on 2026-10-23 and 24, to `master` on 2026-10-19, and the `v1.1.0` and `v1.2.0` tags produced no runs.
+- **CI has not run since 2026-10-14, because GitHub disabled Actions for the repository.** The repository setting says enabled and all eight workflows are active, but `gh workflow run` returns `HTTP 422: Actions has been disabled for this repository`. The last run finished at 19:43 UTC on 2026-10-14; the first push without a run was at 22:01 UTC. Nothing has run since: pushes to `alpha` and `master`, PRs #1 and #2, the `v1.0.0` to `v1.2.0` tags and the nightly cron (piece 10.1, `/root/pumpkin-fork/pr-drafts/ci-restore-actions.md`). Before the stop the fork had used about 2,500 job minutes in two days (1,171 Linux, 858 Windows, 470 macOS).
+- `rust.yml` has never run on `alpha`: `alpha` was added to its push branches on 2026-10-15, after the stop.
+- Several workflows would do unwanted things on the fork as soon as Actions comes back: `nightly.yml:166` publishes the nightly with `make_latest: true`, which would replace v1.2.0 as the Latest release (without plugin zips or `SHA256SUMS`); `reviewers.yml:117` comments on every PEX PR mentioning upstream Pumpkin maintainers; `docker.yml` would publish `ghcr.io/conman1533/pex` for the first time; `sync-wit.yml` has no repository guard and would try to push to `Pumpkin-MC/pumpkin-plugin-wit`; `release.yml` also runs on the hand-moved `alpha` tag and needs SignPath secrets the fork doesn't have.
 - **Releases were built by hand on pve.** `/root/pumpkin-fork/tools/build-release.sh` cross-compiles from `/Vault-Mk4/pex-wt/rel1` with fat LTO (aarch64 with `aarch64-linux-gnu-gcc`, Windows with mingw `x86_64-pc-windows-gnu`, musl with `musl-gcc`). The v1.2.0 release has X64 Linux (glibc and musl), ARM64 Linux, X64 Windows (GNU toolchain, unsigned) and plugin zips for those three glibc builds, plus `SHA256SUMS`. There is no Windows ARM64 or macOS binary.
 - `release.yml` would build on native runners for X64 and ARM64 Linux, X64 and ARM64 Windows and macOS, sign Windows with SignPath (secrets the fork probably doesn't have), and publish. It builds without `--locked` (`release.yml:55`), and `rust-toolchain.toml` says `channel = "stable"`, so two builds of the same tag a month apart use different compilers.
 - Nothing makes builds reproducible: no pinned toolchain, no `--remap-path-prefix` (panic messages embed the build path), no check that two builds match. `crates/pumpkin-core/build.rs` embeds the commit hash, which is fine because it's an input.
@@ -431,6 +433,7 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
 | 10.1 | Find out why Actions stopped after 2026-10-14 and get CI running on `alpha` again (read-only investigation first: workflow syntax at each commit, repository and account Actions settings, run history through the API). Anything that needs a settings change goes to the maintainer as a question. | `ci/restore-actions` | | The cause is identified; if it's fixable in the repo, `gh workflow run rust.yml --ref ci/restore-actions` (the workflow has `workflow_dispatch`) produces a run and its result is in the PR draft |
+| 10.7 | Fork-safe workflows: before Actions is re-enabled, guard or change the workflows listed above according to Q10.6 (nightly not marked Latest, no upstream reviewer pings, no Docker publish or WIT sync unless wanted, release not triggered by the `alpha` tag) | `ci/fork-safe-workflows` | Q10.6 | Each workflow's trigger and guard reviewed in the PR draft; `actionlint` passes |
 | 10.2 | Pin the toolchain (`rust-toolchain.toml` to an exact version), `--locked` on every build, `--remap-path-prefix` for the workspace and cargo home, and a script that builds the release binary twice in different directories and compares sha256 | `ci/reproducible-builds` | | Two builds of the same commit in different paths on pve produce identical `pumpkin` binaries for x86_64 Linux glibc |
 | 10.3 | Release workflow for PEX: tag-triggered, all targets on native runners, plugin zips for every glibc target, `SHA256SUMS`, asset names the panel plugin expects, SignPath step removed or made optional per Q10.2, build provenance attestation | `ci/pex-release` | 10.1, 10.2, 2.1 | A `workflow_dispatch` dry run (an input that skips publishing) builds every asset and uploads them as workflow artifacts; no tag or release is created |
 | 10.4 | Release smoke tests in CI: each binary boots to "Done" in a scratch directory, loads its plugin zip (glibc builds), runs a few console commands, stops cleanly; on the native ARM64 Linux and ARM64 Windows runners | `ci/release-smoke` | 10.3 | Smoke job green for all targets on the dry run |
@@ -449,11 +452,12 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 - **Q10.2** Windows signing: set up SignPath (or another certificate) for the fork, or ship unsigned Windows builds?
 - **Q10.3** Which targets must be bit-for-bit reproducible: only x86_64 Linux, or every target? Windows and macOS are much harder.
 - **Q10.4** Should releases keep the musl build that can't load plugins (see goal 2)?
-- **Q10.5** If 10.1 finds Actions blocked at the account or repository level, who fixes the setting?
+- **Q10.5** Actions is disabled by GitHub, not by a setting in the repository. The owner (Conman1533) has to look at the Actions tab and settings while logged in, check for a GitHub email from around 2026-10-14 and the billing page, and open a support ticket if needed. Nothing in the repository can fix it.
+- **Q10.6** Which workflows should run on the fork at all: nightly releases (and should they ever be Latest), the upstream reviewer bot, the Docker image, the WIT mirror?
 
 ## Order across goals
 
-Pieces with no decision attached can start now. Wave 1 (three at a time on pve):
+Pieces with no decision attached can start now. Merge `fix/clippy-alpha` before anything else. Wave 1 (three at a time on pve):
 
 1. 1.1, 2.1, 2.2, 3.1, 4.1, 5.1, 6.1, 9.2, 10.1, 10.2. 7.1 joins as soon as Q7.2 is answered.
 
@@ -507,12 +511,25 @@ Cross-goal dependencies to keep in mind:
 | Q10.2 | Sign Windows builds, or ship unsigned? |
 | Q10.3 | Which targets must be bit-for-bit reproducible? |
 | Q10.4 | Keep the musl build that can't load plugins? |
-| Q10.5 | Who fixes Actions if it's blocked at the account or repository level? |
+| Q10.5 | Actions is disabled by GitHub: will the owner check the account and contact support? |
+| Q10.6 | Which workflows should run on the fork (nightly as Latest, reviewer bot, Docker image, WIT mirror)? |
+
+## Piece status
+
+| Piece | Branch | State | PR draft |
+| :-- | :-- | :-- | :-- |
+| 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, needs merge | `pr-drafts/fix-clippy-alpha.md` |
+| 1.1 | `test/mob-parity-table` | in progress | |
+| 5.1 | `test/redstone-dual-run` | in progress | |
+| 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
 
 ## Found while working
 
 Sessions add things here that are outside their piece: bugs, missing features, wrong statements in this document. One line each, with the piece ID that found it and a file or commit reference.
 
+- (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
+- (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (baseline) `pumpkin:scaffolding_distance_and_collapse` fails in `pumpkin-tester` on alpha. Not investigated yet.
 - (baseline) `crates/pumpkin-world/tests/world_info_save.rs:42` `write_world_info_reports_final_rename_failure` fails when tests run as root, because a `0o555` directory doesn't stop root. Skip it under root or force the rename failure another way.
 
 ## Appendix A: mob parity starting table
