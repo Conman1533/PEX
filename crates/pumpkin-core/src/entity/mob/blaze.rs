@@ -13,9 +13,9 @@ use crate::entity::{
             active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
             look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
         },
-        util::RandomExt,
     },
     mob::{Mob, MobEntity},
+    util::RandomExt,
 };
 
 const INITIAL_ALLOWED_HEIGHT_OFFSET: f32 = 0.5;

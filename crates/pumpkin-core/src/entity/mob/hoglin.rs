@@ -226,7 +226,7 @@ impl Mob for HoglinEntity {
 
     fn on_attack(&self, target: &dyn EntityBase) {
         // Vanilla HoglinBase.hurtAndThrowTarget: babies don't throw.
-        if self.is_baby.load(Ordering::Relaxed) {
+        if self.is_baby() {
             return;
         }
         throw_target(&self.mob_entity.living_entity, target);
