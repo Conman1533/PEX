@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use pumpkin_data::{BlockState, BlockStateId};
 use pumpkin_gametest::{
@@ -11,6 +12,7 @@ use pumpkin_gametest::{
 };
 pub use pumpkin_gametest::{GameTestBatchReport, GameTestRetryOptions};
 use pumpkin_nbt::NbtCompound;
+use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector2::Vector2};
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::{chunk::ChunkHeightmapType, world::BlockFlags};
@@ -22,9 +24,14 @@ use crate::{
         BlockEntity, block_entity_from_nbt, test_block::TestBlockBlockEntity,
         test_instance_block::TestInstanceBlockBlockEntity,
     },
+    entity::player::Player,
+    net::{ClientPlatform, GameProfile, PlayerConfig, java::JavaClient},
     server::Server,
     world::World,
 };
+
+/// Vanilla `GameTestHelper.makeMockServerPlayerInLevel`'s profile name.
+const MOCK_PLAYER_NAME: &str = "test-mock-player";
 
 static GAME_TEST_QUEUE: LazyLock<Mutex<Vec<GameTestQueueEntry>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
@@ -219,6 +226,7 @@ pub async fn prepare_test_run_with_reporter(
     let adapter_world: Arc<dyn GameTestWorld> = Arc::new(ServerGameTestWorld {
         world: request.world,
         forced_chunks: StdMutex::new(HashSet::new()),
+        mock_players: StdMutex::new(Vec::new()),
     });
     let extra_rotation = GameTestRotation::from_steps(request.rotation_steps);
     let run = GameTestSession::new_with_extra_rotation(
@@ -245,9 +253,32 @@ struct ServerGameTestWorld {
     /// `FORCED_GAME_TEST_CHUNKS`. The same adapter is retained across copy-reset
     /// retries, so the chunks stay active for the complete retry lifecycle.
     forced_chunks: StdMutex<HashSet<(i32, i32)>>,
+    /// Players added by `spawn_mock_player` during the current attempt.
+    mock_players: StdMutex<Vec<Arc<Player>>>,
 }
 
 impl ServerGameTestWorld {
+    /// Takes the mock players out of the world's player list. They were never announced to
+    /// clients, so there is nothing to send.
+    fn discard_mock_players(&self) {
+        let mock_players = std::mem::take(
+            &mut *self
+                .mock_players
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        if mock_players.is_empty() {
+            return;
+        }
+        self.world.players.rcu(|players| {
+            players
+                .iter()
+                .filter(|player| !mock_players.iter().any(|mock| Arc::ptr_eq(mock, player)))
+                .cloned()
+                .collect::<Vec<_>>()
+        });
+    }
+
     fn test_block_entity(&self, position: &BlockPos) -> GameTestResult<Arc<TestBlockBlockEntity>> {
         let entity = self.world.get_block_entity(position).ok_or_else(|| {
             GameTestError::World(format!("Missing test block entity at {position}"))
@@ -328,6 +359,8 @@ impl ServerGameTestWorld {
 
 impl Drop for ServerGameTestWorld {
     fn drop(&mut self) {
+        // A stopped test never reaches the end of its attempt.
+        self.discard_mock_players();
         let chunks: Vec<_> = self
             .forced_chunks
             .get_mut()
@@ -672,6 +705,54 @@ impl GameTestWorld for ServerGameTestWorld {
         ));
         self.world.spawn_entity(item_entity);
         Ok(())
+    }
+
+    async fn spawn_mock_player(
+        &self,
+        held_item: &str,
+        position: pumpkin_util::math::vector3::Vector3<f64>,
+    ) -> GameTestResult<()> {
+        let normalized = held_item.strip_prefix("minecraft:").unwrap_or(held_item);
+        let item = pumpkin_data::item::Item::from_registry_key(normalized)
+            .ok_or_else(|| GameTestError::World(format!("Unknown item '{held_item}'")))?;
+        self.ensure_chunk_loaded(&BlockPos::floored_v(position))
+            .await;
+
+        let profile = GameProfile {
+            id: uuid::Uuid::new_v4(),
+            name: MOCK_PLAYER_NAME.to_string(),
+            properties: ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let client = JavaClient::new_for_test(profile.clone());
+        // Nobody reads this connection, so every packet sent to the player is dropped.
+        client.close();
+        let player = Arc::new(Player::new(
+            Arc::new(ClientPlatform::Java(client)),
+            profile,
+            PlayerConfig::default(),
+            &self.world,
+            GameMode::Creative,
+        ));
+        player.living_entity.entity.set_pos(position);
+        player
+            .inventory
+            .set_held_item(pumpkin_data::item_stack::ItemStack::new(1, item));
+
+        self.world.players.rcu(|players| {
+            let mut next = (**players).clone();
+            next.push(player.clone());
+            next
+        });
+        self.mock_players
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(player);
+        Ok(())
+    }
+
+    async fn remove_mock_players(&self) {
+        self.discard_mock_players();
     }
 
     async fn entity_count_in_box(

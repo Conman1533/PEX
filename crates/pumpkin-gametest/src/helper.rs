@@ -538,6 +538,17 @@ impl GameTestHelper {
         self.world.spawn_item(item_name, count, position).await
     }
 
+    /// Adds a creative mode player holding `held_item` at `relative` for the rest of the
+    /// attempt (vanilla `makeMockServerPlayerInLevel`). Mobs see it like any other player.
+    pub async fn spawn_mock_player_at(
+        &self,
+        held_item: &str,
+        relative: Vector3<f64>,
+    ) -> GameTestResult<()> {
+        let position = self.absolute_vec(relative);
+        self.world.spawn_mock_player(held_item, position).await
+    }
+
     pub async fn set_container_item(
         &self,
         relative: &BlockPos,
@@ -745,14 +756,14 @@ impl GameTestHelper {
         })
     }
 
-    pub async fn assert_entity_present_in_box(
+    /// The world-space box between two relative corners, whichever way the test is rotated.
+    fn absolute_box(
         &self,
-        entity_name: &str,
-        relative_min: BlockPos,
-        relative_max: BlockPos,
-    ) -> GameTestResult<()> {
-        let abs_a = self.absolute_pos(&relative_min);
-        let abs_b = self.absolute_pos(&relative_max);
+        relative_min: &BlockPos,
+        relative_max: &BlockPos,
+    ) -> (BlockPos, Vector3<f64>, Vector3<f64>) {
+        let abs_a = self.absolute_pos(relative_min);
+        let abs_b = self.absolute_pos(relative_max);
         let min = Vector3::new(
             f64::from(abs_a.0.x.min(abs_b.0.x)),
             f64::from(abs_a.0.y.min(abs_b.0.y)),
@@ -763,6 +774,16 @@ impl GameTestHelper {
             f64::from(abs_a.0.y.max(abs_b.0.y)),
             f64::from(abs_a.0.z.max(abs_b.0.z)),
         );
+        (abs_a, min, max)
+    }
+
+    pub async fn assert_entity_present_in_box(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+    ) -> GameTestResult<()> {
+        let (abs_a, min, max) = self.absolute_box(&relative_min, &relative_max);
         let count = self
             .world
             .entity_count_in_box(entity_name, min, max)
@@ -775,6 +796,30 @@ impl GameTestHelper {
             position: Some(abs_a),
             message: format!(
                 "expected entity '{entity_name}' in box {relative_min}..{relative_max}"
+            ),
+        })
+    }
+
+    /// Vanilla `assertEntityNotPresent(EntityType, AABB)`: no entity of the type touches the box.
+    pub async fn assert_entity_not_present_in_box(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+    ) -> GameTestResult<()> {
+        let (abs_a, min, max) = self.absolute_box(&relative_min, &relative_max);
+        let count = self
+            .world
+            .entity_count_in_box(entity_name, min, max)
+            .await?;
+        if count == 0 {
+            return Ok(());
+        }
+        Err(GameTestError::Assertion {
+            tick: self.tick,
+            position: Some(abs_a),
+            message: format!(
+                "unexpected entity '{entity_name}' in box {relative_min}..{relative_max} (found {count})"
             ),
         })
     }
