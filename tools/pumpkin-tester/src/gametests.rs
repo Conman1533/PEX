@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use pumpkin_core::{
     server::{
         Server,
-        builtin_game_tests::builtin_game_test_ids,
+        builtin_game_tests::{builtin_game_test_ids, mock_player_game_test_ids},
         server_test_manager::{
             GameTestBatchReport, GameTestQueueEntry, GameTestRetryOptions,
             prepare_test_run_with_reporter,
@@ -66,13 +66,6 @@ pub async fn run_gametests(
     ];
     all_tests.extend_from_slice(builtin_game_test_ids());
 
-    let reporter = Arc::new(CaptureReporter::default());
-    let report_sink: Arc<dyn GameTestReporter> = reporter.clone();
-    let report = Arc::new(GameTestBatchReport::new(
-        report_sink.clone(),
-        all_tests.len(),
-    ));
-
     // Pre-load the 4x4 chunk test arena once so all 3D-stacked tests run in memory
     let base_cx = TEST_BASE_X >> 4;
     let base_cz = TEST_BASE_Z >> 4;
@@ -92,10 +85,46 @@ pub async fn run_gametests(
         }
     }
 
+    // Every batch runs even if an earlier one fails, so one report covers every test.
+    let first_summary_line = summary_lines.len();
+    let mut failures = Vec::new();
+    if let Err(err) = run_batch(server, &world, runner, &all_tests, summary_lines).await {
+        failures.push(err);
+    }
+    // One at a time: a mob tempted or targeted by a player 16 blocks away in the next test
+    // would walk off to it.
+    for &test_id in mock_player_game_test_ids() {
+        if let Err(err) = run_batch(server, &world, runner, &[test_id], summary_lines).await {
+            failures.push(err);
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        // Only the error is printed on failure, so it carries the passing batches' results too.
+        failures.extend(summary_lines.drain(first_summary_line..));
+        Err(failures.join("\n"))
+    }
+}
+
+async fn run_batch(
+    server: &Arc<Server>,
+    world: &Arc<World>,
+    runner: &mut GameTestRunner,
+    test_ids: &[&str],
+    summary_lines: &mut Vec<String>,
+) -> Result<(), String> {
+    let reporter = Arc::new(CaptureReporter::default());
+    let report_sink: Arc<dyn GameTestReporter> = reporter.clone();
+    let report = Arc::new(GameTestBatchReport::new(
+        report_sink.clone(),
+        test_ids.len(),
+    ));
+
     let mut grid_slot = 0i32;
-    for &test_id in &all_tests {
+    for &test_id in test_ids {
         let entry = if test_id == "pumpkin:creeper_should_run_from_cat" {
-            prepare_flat_test_surroundings(&world, CREEPER_TEST_X, CREEPER_TEST_Z).await;
+            prepare_flat_test_surroundings(world, CREEPER_TEST_X, CREEPER_TEST_Z).await;
             GameTestQueueEntry::new(
                 test_id,
                 world.clone(),
@@ -146,9 +175,6 @@ pub async fn run_gametests(
     let finished = runner.is_empty();
     let passed = report.all_required_passed();
     let messages = reporter.snapshot();
-    for msg in &messages {
-        summary_lines.push(format!("  {msg}"));
-    }
 
     runner.clear();
 
@@ -166,6 +192,10 @@ pub async fn run_gametests(
         ));
     }
 
+    // A failing batch lists its results in the error instead.
+    for msg in &messages {
+        summary_lines.push(format!("  {msg}"));
+    }
     Ok(())
 }
 
