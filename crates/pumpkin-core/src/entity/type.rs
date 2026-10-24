@@ -713,3 +713,51 @@ pub fn check_spawn_rules(
 
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use pumpkin_data::entity::EntityType;
+    use pumpkin_util::math::vector3::Vector3;
+    use uuid::Uuid;
+
+    use super::from_type;
+    use crate::entity::ai::test_support::world;
+
+    /// A goal holding a strong `Arc` to its own mob is a cycle that keeps the mob alive forever.
+    #[tokio::test]
+    async fn mobs_are_freed_when_dropped() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+
+        for entity_type in [
+            &EntityType::CREEPER,
+            &EntityType::ENDERMAN,
+            &EntityType::PIGLIN,
+            &EntityType::SHULKER,
+            &EntityType::SLIME,
+            &EntityType::MAGMA_CUBE,
+            &EntityType::SULFUR_CUBE,
+            &EntityType::PHANTOM,
+            &EntityType::PUFFERFISH,
+            &EntityType::SILVERFISH,
+            &EntityType::BLAZE,
+            &EntityType::HOGLIN,
+            &EntityType::COD,
+        ] {
+            let mob = Arc::downgrade(&from_type(
+                entity_type,
+                Vector3::new(0.0, 0.0, 0.0),
+                &world,
+                Uuid::new_v4(),
+            ));
+            assert!(
+                mob.upgrade().is_none(),
+                "{} is still alive after being dropped",
+                entity_type.resource_name
+            );
+        }
+        world.level.shutdown().await;
+    }
+}
