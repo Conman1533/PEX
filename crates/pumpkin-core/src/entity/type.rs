@@ -745,6 +745,11 @@ mod tests {
             &EntityType::BLAZE,
             &EntityType::HOGLIN,
             &EntityType::COD,
+            &EntityType::DROWNED,
+            &EntityType::ZOMBIE,
+            &EntityType::BOGGED,
+            &EntityType::CAT,
+            &EntityType::OCELOT,
         ] {
             let mob = Arc::downgrade(&from_type(
                 entity_type,
