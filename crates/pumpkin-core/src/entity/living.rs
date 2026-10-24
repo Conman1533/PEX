@@ -2769,7 +2769,7 @@ impl LivingEntity {
     }
 
     pub fn is_part_of_game(&self) -> bool {
-        !self.is_spectator() && self.entity.is_alive()
+        !self.is_spectator() && self.is_alive()
     }
 
     pub fn can_attack(&self, target: &dyn EntityBase) -> bool {
