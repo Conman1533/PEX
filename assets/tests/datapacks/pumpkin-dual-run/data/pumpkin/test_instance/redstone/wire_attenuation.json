@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:block_based",
+  "environment": "minecraft:default",
+  "structure": "pumpkin:redstone/wire_attenuation",
+  "max_ticks": 40
+}

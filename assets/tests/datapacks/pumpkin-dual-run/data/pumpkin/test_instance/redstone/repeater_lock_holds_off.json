@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:block_based",
+  "environment": "minecraft:default",
+  "structure": "pumpkin:redstone/repeater_lock_holds_off",
+  "max_ticks": 60
+}

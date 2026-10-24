@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:block_based",
+  "environment": "minecraft:default",
+  "structure": "pumpkin:redstone/comparator_subtract_clamps",
+  "max_ticks": 60
+}
