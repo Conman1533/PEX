@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::revenge::MobFilter;
 use super::{Controls, Goal, GoalReach, to_goal_ticks};
 use crate::entity::EntityBase;
 use crate::entity::{ai::pathfinder::NavigatorGoal, mob::Mob, player::Player};
@@ -28,6 +29,10 @@ pub struct TemptGoal {
     watched_pitch: f32,
     cooldown: i32,
     running: bool,
+    /// Vanilla `CatTemptGoal.canUse`'s extra condition.
+    can_use: Option<MobFilter>,
+    /// Vanilla `OcelotTemptGoal.canScare`'s extra condition.
+    scare_condition: Option<MobFilter>,
 }
 
 impl TemptGoal {
@@ -55,7 +60,23 @@ impl TemptGoal {
             watched_pitch: 0.0,
             cooldown: 0,
             running: false,
+            can_use: None,
+            scare_condition: None,
         }
+    }
+
+    /// Extra condition for starting and for continuing, e.g. an untamed cat.
+    #[must_use]
+    pub const fn gated_by(mut self, can_use: MobFilter) -> Self {
+        self.can_use = Some(can_use);
+        self
+    }
+
+    /// Extra condition for being startled by the player, e.g. an ocelot that does not trust yet.
+    #[must_use]
+    pub const fn scared_only_if(mut self, condition: MobFilter) -> Self {
+        self.scare_condition = Some(condition);
+        self
     }
 
     #[must_use]
@@ -123,11 +144,11 @@ impl Goal for TemptGoal {
             return false;
         }
         self.target_player = self.find_tempting_player(mob);
-        self.target_player.is_some()
+        self.target_player.is_some() && self.can_use.is_none_or(|can_use| can_use(mob))
     }
 
     fn should_continue(&mut self, mob: &dyn Mob) -> bool {
-        if self.can_scare {
+        if self.can_scare && self.scare_condition.is_none_or(|condition| condition(mob)) {
             let Some(player) = self.target_player.clone() else {
                 return false;
             };

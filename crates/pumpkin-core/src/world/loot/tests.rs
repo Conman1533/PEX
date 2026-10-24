@@ -30,7 +30,7 @@ fn entity_predicates_do_not_match_a_missing_entity() {
 use crate::entity::{
     Entity,
     ai::test_support::world,
-    mob::magma_cube::MagmaCubeEntity,
+    mob::{cube_mob::CubeMobEntity, magma_cube::MAGMA_CUBE},
     passive::{
         chicken::ChickenEntity,
         frog::FrogEntity,
@@ -177,11 +177,10 @@ async fn component_predicates_use_the_current_entity_color() {
 async fn damage_source_predicates_use_the_attackers_components() {
     let folder = tempfile::tempdir().unwrap();
     let world = world(&folder);
-    let cube = MagmaCubeEntity::new(Entity::new(
-        world.clone(),
-        Vector3::default(),
-        &EntityType::MAGMA_CUBE,
-    ));
+    let cube = CubeMobEntity::new(
+        Entity::new(world.clone(), Vector3::default(), &EntityType::MAGMA_CUBE),
+        &MAGMA_CUBE,
+    );
     let frog = FrogEntity::new(Entity::new(
         world.clone(),
         Vector3::default(),
@@ -191,7 +190,7 @@ async fn damage_source_predicates_use_the_attackers_components() {
         "../../../../../assets/datapack/data/minecraft/loot_table/entities/magma_cube.json"
     );
     for size in [1, 2] {
-        cube.slime.set_size(size, true);
+        cube.set_size(size, true);
         for (variant, light) in [
             (FrogVariant::Temperate, &Item::OCHRE_FROGLIGHT),
             (FrogVariant::Warm, &Item::PEARLESCENT_FROGLIGHT),

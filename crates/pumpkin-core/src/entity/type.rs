@@ -29,6 +29,7 @@ use crate::entity::mob::breeze::BreezeEntity;
 use crate::entity::mob::cave_spider::CaveSpiderEntity;
 use crate::entity::mob::creaking::CreakingEntity;
 use crate::entity::mob::creeper::CreeperEntity;
+use crate::entity::mob::cube_mob::CubeMobEntity;
 use crate::entity::mob::elder_guardian::ElderGuardianEntity;
 use crate::entity::mob::enderman::EndermanEntity;
 use crate::entity::mob::endermite::EndermiteEntity;
@@ -38,7 +39,7 @@ use crate::entity::mob::giant::GiantEntity;
 use crate::entity::mob::guardian::GuardianEntity;
 use crate::entity::mob::hoglin::HoglinEntity;
 use crate::entity::mob::illusioner::IllusionerEntity;
-use crate::entity::mob::magma_cube::MagmaCubeEntity;
+use crate::entity::mob::magma_cube::MAGMA_CUBE;
 use crate::entity::mob::phantom::PhantomEntity;
 use crate::entity::mob::piglin::PiglinEntity;
 use crate::entity::mob::piglin_brute::PiglinBruteEntity;
@@ -50,8 +51,9 @@ use crate::entity::mob::skeleton::{
     bogged::BoggedSkeletonEntity, parched::ParchedSkeletonEntity, skeleton::SkeletonEntity,
     stray::StraySkeletonEntity, wither::WitherSkeletonEntity,
 };
-use crate::entity::mob::slime::SlimeEntity;
+use crate::entity::mob::slime::{SLIME, check_slime_spawn_rules};
 use crate::entity::mob::spider::SpiderEntity;
+use crate::entity::mob::sulfur_cube::SULFUR_CUBE;
 use crate::entity::mob::vex::VexEntity;
 use crate::entity::mob::vindicator::VindicatorEntity;
 use crate::entity::mob::warden::WardenEntity;
@@ -162,7 +164,8 @@ pub fn from_type(
         id if id == EntityType::SPIDER.id => SpiderEntity::new(entity),
         id if id == EntityType::CAVE_SPIDER.id => CaveSpiderEntity::new(entity),
         id if id == EntityType::GHAST.id => GhastEntity::new(entity),
-        id if id == EntityType::MAGMA_CUBE.id => MagmaCubeEntity::new(entity),
+        id if id == EntityType::MAGMA_CUBE.id => CubeMobEntity::new(entity, &MAGMA_CUBE),
+        id if id == EntityType::SULFUR_CUBE.id => CubeMobEntity::new(entity, &SULFUR_CUBE),
         id if id == EntityType::PHANTOM.id => PhantomEntity::new(entity),
         id if id == EntityType::WITCH.id => WitchEntity::new(entity),
         id if id == EntityType::PIGLIN.id => PiglinEntity::new(entity),
@@ -256,7 +259,7 @@ pub fn from_type(
             Arc::new(ExperienceBottleEntity::new(entity))
         }
         id if id == EntityType::SILVERFISH.id => SilverfishEntity::new(entity),
-        id if id == EntityType::SLIME.id => SlimeEntity::new(entity),
+        id if id == EntityType::SLIME.id => CubeMobEntity::new(entity, &SLIME),
         id if id == EntityType::SHULKER.id => ShulkerEntity::new(entity),
         id if id == EntityType::SHULKER_BULLET.id => {
             // Shulker bullets are normally spawned by ShulkerEntity directly;
@@ -454,12 +457,13 @@ pub fn check_spawn_rules(
 
     // Sulfur Cube
     if id == EntityType::SULFUR_CUBE.id {
+        // Vanilla SulfurCube.checkSulfurCubeSpawnRules always returns true.
         return true;
     }
 
     // Slime
     if id == EntityType::SLIME.id {
-        return SlimeEntity::check_slime_spawn_rules(world, pos);
+        return check_slime_spawn_rules(world, pos);
     }
 
     // Nether Mobs: Hoglin, Piglin, Zombified Piglin
@@ -708,4 +712,58 @@ pub fn check_spawn_rules(
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use pumpkin_data::entity::EntityType;
+    use pumpkin_util::math::vector3::Vector3;
+    use uuid::Uuid;
+
+    use super::from_type;
+    use crate::entity::ai::test_support::world;
+
+    /// A goal holding a strong `Arc` to its own mob is a cycle that keeps the mob alive forever.
+    #[tokio::test]
+    async fn mobs_are_freed_when_dropped() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+
+        for entity_type in [
+            &EntityType::CREEPER,
+            &EntityType::ENDERMAN,
+            &EntityType::PIGLIN,
+            &EntityType::SHULKER,
+            &EntityType::SLIME,
+            &EntityType::MAGMA_CUBE,
+            &EntityType::SULFUR_CUBE,
+            &EntityType::PHANTOM,
+            &EntityType::PUFFERFISH,
+            &EntityType::SILVERFISH,
+            &EntityType::BLAZE,
+            &EntityType::HOGLIN,
+            &EntityType::COD,
+            &EntityType::DROWNED,
+            &EntityType::ZOMBIE,
+            &EntityType::BOGGED,
+            &EntityType::CAT,
+            &EntityType::OCELOT,
+            &EntityType::FOX,
+        ] {
+            let mob = Arc::downgrade(&from_type(
+                entity_type,
+                Vector3::new(0.0, 0.0, 0.0),
+                &world,
+                Uuid::new_v4(),
+            ));
+            assert!(
+                mob.upgrade().is_none(),
+                "{} is still alive after being dropped",
+                entity_type.resource_name
+            );
+        }
+        world.level.shutdown().await;
+    }
 }

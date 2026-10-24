@@ -47,6 +47,7 @@ pub mod cave_spider;
 pub mod creaking;
 pub mod creeper;
 pub mod crossbow_attack_mob;
+pub mod cube_mob;
 pub mod elder_guardian;
 pub mod enderman;
 pub mod endermite;
@@ -74,6 +75,7 @@ pub mod skeleton;
 pub mod slime;
 pub mod spawn;
 pub mod spider;
+pub mod sulfur_cube;
 pub mod sun_burn;
 pub mod vex;
 pub mod vindicator;
@@ -1115,10 +1117,30 @@ pub trait Mob: EntityBase + Send + Sync {
         self.get_mob_entity().living_entity.can_attack(target)
     }
 
+    /// The arrow item a bow shot fires, for mobs whose `getArrow` adds effects.
+    fn get_arrow_projectile(&self) -> Option<ItemStack> {
+        None
+    }
+
     /// Takes the navigation lock, so callers must not already hold it.
     fn is_navigator_idle(&self) -> bool {
         self.get_mob_entity().steered().navigator().is_idle()
     }
+
+    /// Vanilla `getNavigation().moveTo`. Takes the navigation lock.
+    fn navigate_to(&self, from: Vector3<f64>, to: Vector3<f64>, speed: f64) {
+        self.get_mob_entity().steered().navigator().set_progress(
+            crate::entity::ai::pathfinder::NavigatorGoal::new(from, to, speed),
+        );
+    }
+
+    /// Vanilla `getNavigation().stop`. Takes the navigation lock.
+    fn stop_navigation(&self) {
+        self.get_mob_entity().steered().navigator().stop();
+    }
+
+    /// Vanilla `Mob.onOffspringSpawnedFromEgg`, called on a baby a spawn egg made from its parent.
+    fn on_offspring_spawned_from_egg(&self, _player: &Player) {}
 
     fn has_line_of_sight(&self, target: &crate::entity::Entity) -> bool {
         let mob_entity = self.get_mob_entity();
@@ -2397,7 +2419,7 @@ mod lifecycle_tests {
     use super::*;
     use crate::entity::{
         ai::{goal::Goal, test_support::world},
-        mob::slime::SlimeEntity,
+        mob::{cube_mob::CubeMobEntity, slime::SLIME},
         passive::cow::CowEntity,
     };
 
@@ -2515,11 +2537,14 @@ mod lifecycle_tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(rider.clone());
         assert_eq!(run_controlled_goals(&*cow), [false, false, false]);
-        let slime = SlimeEntity::new(Entity::new(
-            world.clone(),
-            Vector3::new(0.0, 64.0, 0.0),
-            &EntityType::SLIME,
-        ));
+        let slime = CubeMobEntity::new(
+            Entity::new(
+                world.clone(),
+                Vector3::new(0.0, 64.0, 0.0),
+                &EntityType::SLIME,
+            ),
+            &SLIME,
+        );
         {
             let mut passengers = cow
                 .get_entity()

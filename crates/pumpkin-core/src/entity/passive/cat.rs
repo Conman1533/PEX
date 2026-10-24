@@ -78,11 +78,14 @@ impl CatEntity {
             // Goal 4: CatTemptGoal
             goal_selector.add_goal(
                 4,
-                Box::new(TemptGoal::new(
-                    0.6,
-                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_CAT_FOOD),
-                    true,
-                )),
+                Box::new(
+                    TemptGoal::new(
+                        0.6,
+                        |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_CAT_FOOD),
+                        true,
+                    )
+                    .gated_by(is_untamed),
+                ),
             );
             // Goal 4: CatAvoidEntityGoal (when untamed)
             goal_selector.add_goal(
@@ -314,6 +317,10 @@ impl AgeableMob for CatEntity {
 }
 
 impl Mob for CatEntity {
+    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        super::ocelot::feline_server_ai_step(&self.mob_entity);
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         let sound_variant = CatSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
             .unwrap_or_default();
