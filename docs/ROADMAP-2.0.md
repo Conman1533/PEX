@@ -29,7 +29,7 @@ What is already in the CT for every session:
 | Benchmark world | `/srv/pex/bins/base-world-262` (older worlds and binaries: `/Vault-Mk4/pumpkin-bins` on the pve host) |
 | Earlier PR drafts (format to copy) | `/srv/pex/pr-drafts` |
 
-The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 12`, and don't use fat LTO release builds unless the piece is about release builds. A debug target dir takes 10 to 20 GB, so delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
+The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 12`, and don't use fat LTO release builds unless the piece is about release builds. A debug target dir with tests takes 20 to 28 GB, so the 100 GB disk holds three at a time; delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
 
 ### Baseline on alpha
 
@@ -41,6 +41,8 @@ Run on the pve host with rustc 1.99.0 (logs copied to `/srv/pex/roadmap-baseline
 | `cargo test --workspace --no-fail-fast` (13 min) | one failure: `pumpkin-world` `tests/world_info_save.rs` `write_world_info_reports_final_rename_failure`. It makes a directory read-only (`0o555`) to force the final rename to fail, and root ignores that, so it fails on pve, where every session runs as root. Everything else passes (616 tests in `pumpkin-core`). |
 | `cargo run -p pumpkin-tester` (5 min) | 200 GameTests ran; one required test fails: `pumpkin:scaffolding_distance_and_collapse` ("expected block 'air', found 'scaffolding'" at tick 0). `summon_command_regression` passes. |
 | `cargo clippy --workspace --all-targets --all-features` | fails in `pumpkin-core` with 3 errors (`entity/mob/hoglin.rs:273`, `entity/passive/goat.rs:50`, `world/mod.rs:434`) and 1 warning (`entity/passive/ocelot.rs:167`), all from the 2026-10-23 mob AI merges. Because `pumpkin-core` stops there, nothing that depends on it is linted. Fixed on `fix/clippy-alpha` (`ff3ff4f28`); with it the whole workspace passes. Merge it first, or every piece's clippy run stops at the same three errors. |
+
+The rerun in the CT (rustc 1.99.1, `ct-20261024`, with three other builds running) gave the same results, plus two failures that pass when rerun alone: `pumpkin-core` `creaking_heart::tests::creaking_heart_spawns_protector_at_night_spreads_resin_on_hurt_and_despawns_at_dawn` (failed once in two isolated runs too, at `creaking_heart.rs:655`, "comparator analog output should be positive while protector is nearby") and `pumpkin-world` `biome_hashes::nether_biome_hashes_match_vanilla`. Treat both as flaky until someone looks at them.
 
 A session that sees one of these fail on its branch should check this table before blaming its own change.
 
@@ -522,10 +524,10 @@ Cross-goal dependencies to keep in mind:
 
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
-| 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, needs merge | `pr-drafts/fix-clippy-alpha.md` |
-| 1.1 | `test/mob-parity-table` | stopped part-way for the move to CT 117; local WIP commit and uncommitted changes in `/srv/pex/wt/mob-parity-table`, scratch in `/srv/pex/scratch/mob-parity-table` | |
-| 5.1 | `test/redstone-dual-run` | stopped part-way for the move; uncommitted changes in `/srv/pex/wt/redstone-dual-run`, vanilla test runs in `/srv/pex/scratch/redstone-dual-run` | |
-| 6.1 | `test/survival-harness` | stopped part-way for the move (stage 1 had passed once); uncommitted changes in `/srv/pex/wt/survival-harness` | |
+| 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
+| 1.1 | `test/mob-parity-table` | in progress in CT 117 (resumed after the move) | |
+| 5.1 | `test/redstone-dual-run` | in progress in CT 117 (resumed after the move) | |
+| 6.1 | `test/survival-harness` | in progress in CT 117 (resumed after the move) | |
 | 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
 
 ## Found while working
@@ -534,6 +536,8 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (baseline) `crates/pumpkin-core/src/block/entities/creaking_heart.rs:655`: the creaking heart end-to-end test is flaky (failed 2 of 3 runs in the CT, passed on pve).
+- (baseline) `pumpkin-world` `nether_biome_hashes_match_vanilla` failed once under load with no panic message and passed alone.
 - (baseline) Running `pumpkin-tester` from the repository root leaves an untracked `metrics/` directory (`slow-ticks.log`, `summary.csv`); it isn't in `.gitignore`. Run it from a scratch directory with `--manifest-path`.
 - (baseline) `pumpkin:scaffolding_distance_and_collapse` fails in `pumpkin-tester` on alpha. Not investigated yet.
 - (baseline) `crates/pumpkin-world/tests/world_info_save.rs:42` `write_world_info_reports_final_rename_failure` fails when tests run as root, because a `0o555` directory doesn't stop root. Skip it under root or force the rename failure another way.
