@@ -299,6 +299,9 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 | 6.6 | Dragon phases, fireball and fight audit: map the phases 1:1 to vanilla's `EnderDragonPhase` ids (add `SittingScanning`, fold `FlyToPortal` into what vanilla does), sync `DATA_PHASE` and save `DragonPhase`; add the `dragon_fireball` entity (a projectile that bursts into the breath cloud); audit crystal healing, perching and the death sequence against `EnderDragon`, the phase classes and `EndDragonFight`. Could be two sessions (phases, then fireball and fight). | `fix/dragon-fight` | 1.1 | Rows for ender_dragon in `docs/MOB-PARITY.md`; the client sees the sitting animations; a dragon saved mid-fight reloads in the same phase; GameTests for crystal healing and the fireball |
 | 6.7 | Stage 6: the End. Arrive on the obsidian platform, destroy the crystals, kill the dragon with bow and melee, get the exit portal, egg and gateway, enter the exit portal, see the credits, respawn at the bed. | `test/survival-end` | 6.5, 6.6 | Stage passes: dragon dies from bot damage, `WinGame` is received, player respawns |
 | 6.8 | Audit the survival systems the stages lean on: crafting and smelting recipes, loot tables for the drops used, enchanting, anvils, brewing (fire resistance), beds and respawn anchors, hunger. Fix or file each gap. | `fix/survival-systems-audit` | 6.1 | Audit table in the PR with the vanilla class and method for each |
+| 6.10 | Block breaking: `FinishedDigging` breaks the block without checking how long the player dug (`net/java/play/player_action.rs`), so a client can break any block instantly in survival; vanilla `ServerPlayerGameMode.handleBlockBreakAction` needs the same position and `progress * (ticks + 1) >= 0.7`. Mining fatigue in `entity/player.rs:5079` still uses the old 0.0027 and 8.1E-4 factors; 26.3 `Player.getDestroySpeed` uses `0.3^(amplifier + 1)` and the `block_break_speed` attribute. | `fix/block-break-timing` | | Unit tests on the progress check and fatigue; a `pumpkin-tester` bot that sends an early finish gets the block back instead of a break |
+| 6.11 | Teleport confirmation: `net/java/play/confirm_teleport.rs:35` kicks with "Wrong teleport id" when a confirm for an older teleport arrives after a newer one; vanilla `handleAcceptTeleportPacket` ignores ids it isn't waiting for. Kicks bots and laggy players after `/tp`. | `fix/teleport-confirm-id` | | Bot test: two teleports in a row with the first confirm sent late, no kick |
+| 6.12 | Daylight detector tick panic: the block entity's tick panics (`block/entities/daylight_detector.rs:103`, `to_state_id` on air) when its block is gone; vanilla `LevelChunk.BoundTickingBlockEntity.tick` checks `isValid` first. Find what leaves the block entity behind and add the check. | `fix/daylight-detector-orphan` | | Regression test that ticks a detector block entity whose block was removed |
 | 6.9 | Full chained run: all stages back to back on one fixed seed and one world, without resetting between stages, run in the CT with the release build | `test/survival-full-run` | 6.2 to 6.7 | Log and timings of a full run in the PR; run three times without a failure |
 
 ### Proof
@@ -311,6 +314,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 - **Q6.1** What counts as proof: a bot run with staged setup commands (teleports and `/locate` allowed, items only from gameplay), a fully unassisted bot, or a human playthrough as well?
 - **Q6.2** Which known deviations are accepted (client-authoritative movement, anti-cheat differences)?
+- **Q6.4** The `pumpkin-tester` world uses a random seed. Stages that depend on terrain (6.3 onward) need a fixed one: on the shared tester server, or on a separate server per stage?
 - **Q6.3** Should `fix/flush-block-entities-before-unload` (or the design decision in `ISSUE-block-entities-lost-on-unload.md`) be settled before 6.2? Survival without reliable chests isn't survival parity.
 
 ## Goal 7: worlds round-trip with vanilla 26.3
@@ -507,6 +511,7 @@ Cross-goal dependencies to keep in mind:
 | Q6.1 | Proof of survival parity: staged bot, unassisted bot, human, or a mix? |
 | Q6.2 | Which deviations are accepted? |
 | Q6.3 | Settle block entity loss on unload before the survival stages? |
+| Q6.4 | Fixed seed for terrain-dependent survival stages: shared tester server or one server per stage? |
 | Q7.1 | Default chunk format for 2.0: Pump or Anvil? |
 | Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? |
 | Q7.3 | On conversion: keep, back up, or delete source region files? |
@@ -530,7 +535,7 @@ Cross-goal dependencies to keep in mind:
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
 | 1.1 | `test/mob-parity-table` | done, pushed `a37d261e9`: `docs/MOB-PARITY.md` (90 rows, all `not audited`), mock players and `assert_entity_not_present_in_box` in the GameTest helper, `pumpkin:cow_follows_wheat_and_panics_when_hit` (fails without `TemptGoal` 11 of 11 runs, without the panic goal 5 of 5). Local CI green except the known scaffolding GameTest (`/srv/pex/ci/test-mob-parity-table/20261024-221123/`). Needs merge. | `pr-drafts/test-mob-parity-table.md` |
 | 5.1 | `test/redstone-dual-run` | in progress in CT 117 (resumed after the move) | |
-| 6.1 | `test/survival-harness` | in progress in CT 117 (resumed after the move) | |
+| 6.1 | `test/survival-harness` | done, pushed `c3266dbda`: stage harness in `pumpkin-tester` (client-packet bot with its own inventory model, digging, pickups, menu clicks) and stage 1, wood to stone pickaxe; 10 of 10 runs pass; fails without the crafting table recipe. Local CI green apart from the known scaffolding GameTest and the doc-test job, which fails for any tester-only change (`rust.yml:184`, see below). | `pr-drafts/test-survival-harness.md` |
 | 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
 
 ## Found while working
@@ -539,6 +544,11 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (6.1) `.github/workflows/rust.yml:184` runs `cargo test --doc` on every affected package, so a change that only touches `pumpkin-tester` (no library target) fails CI with "no library targets found". `local-ci.sh` now skips packages without a library; the workflow needs the same fix (10.7).
+- (6.1) `crates/pumpkin-protocol/src/codec/lp_vector_3d.rs`: `LpVector3d::read` reads 2 bytes for a zero vector where vanilla `LpVec3` writes 1 (used by `SInteract::read` and `CSpawnEntity::read_packet_data`). `update_entity_pos.rs` and `update_entity_pos_rot.rs` readers still use the pre-26.3 layout without the var int; the writers are right. Matters for the in-repo bot, which reads with these.
+- (6.1) `crates/pumpkin-inventory/src/screen_handler.rs:998` repeats a shift-click while `are_items_and_components_equal`; vanilla `AbstractContainerMenu.doClick` uses `ItemStack.isSameItem`.
+- (6.1) `cargo run -p pumpkin-codegen` on alpha 2ce43ef3d rewrites six generated files unrelated to the input (`item.rs`, `registry.rs`, `structure_template.rs`, plugin-api `block.rs` and `item.rs`, `java-packets.wit`), so generated files on alpha are stale or the generator isn't deterministic.
+- (6.1) The bot's dig timing and position-after-teleport follow the vanilla client from memory, since client classes aren't in the server jar.
 - (1.1) The repository copied into the CT had a repo-local git identity (endercreepern64) that overrode Neon Swan; removed on 2026-10-24, and the affected commits were re-authored.
 - (1.1) `tools/pumpkin-tester/src/bot_tests/commands_and_gamemode.rs` is flaky on a busy host ("Bot `/setblock` did not place emerald_block"): 3 of 27 runs on 1.1's branch and 1 of 7 runs of alpha's binary. When it fails, the tester stops before any GameTest runs.
 - (1.1) Any player in the world makes non-persistent mobs more than 128 blocks away despawn (`crates/pumpkin-core/src/entity/mob/mod.rs:935`), which breaks command-summoned datapack tests such as `creeper_should_run_from_cat` while a player is present. 1.1 runs mock-player tests in their own batch for that reason.
