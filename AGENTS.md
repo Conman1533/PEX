@@ -153,6 +153,8 @@ Change what the task needs and nothing else. If the task is ambiguous, pick the 
 
 ## Checking your work
 
+PEX keeps a feature tracker in `tracker/`. Update the tracker entries for anything you add, fix or remove, in the same branch, and run `python3 tracker/check.py --write` (see `tracker/README.md`).
+
 CI only runs on the affected packages (`.github/scripts/ci_packages.py`). Locally, run it on the crates you touched plus the crates that depend on them. `cargo-nextest` and `cargo-machete` install with `cargo install`, and `typos` is `typos-cli` on crates.io.
 
 ```bash
