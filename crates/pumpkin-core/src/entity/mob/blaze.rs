@@ -8,11 +8,9 @@ use pumpkin_util::math::vector3::Vector3;
 
 use crate::entity::{
     Entity, EntityBase,
-    ai::{
-        goal::{
-            active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-            look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
-        },
+    ai::goal::{
+        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     util::RandomExt,

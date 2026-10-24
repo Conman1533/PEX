@@ -47,6 +47,7 @@ pub mod cave_spider;
 pub mod creaking;
 pub mod creeper;
 pub mod crossbow_attack_mob;
+pub mod cube_mob;
 pub mod elder_guardian;
 pub mod enderman;
 pub mod endermite;
@@ -74,6 +75,7 @@ pub mod skeleton;
 pub mod slime;
 pub mod spawn;
 pub mod spider;
+pub mod sulfur_cube;
 pub mod sun_burn;
 pub mod vex;
 pub mod vindicator;
@@ -2397,7 +2399,7 @@ mod lifecycle_tests {
     use super::*;
     use crate::entity::{
         ai::{goal::Goal, test_support::world},
-        mob::slime::SlimeEntity,
+        mob::{cube_mob::CubeMobEntity, slime::SLIME},
         passive::cow::CowEntity,
     };
 
@@ -2515,11 +2517,14 @@ mod lifecycle_tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(rider.clone());
         assert_eq!(run_controlled_goals(&*cow), [false, false, false]);
-        let slime = SlimeEntity::new(Entity::new(
-            world.clone(),
-            Vector3::new(0.0, 64.0, 0.0),
-            &EntityType::SLIME,
-        ));
+        let slime = CubeMobEntity::new(
+            Entity::new(
+                world.clone(),
+                Vector3::new(0.0, 64.0, 0.0),
+                &EntityType::SLIME,
+            ),
+            &SLIME,
+        );
         {
             let mut passengers = cow
                 .get_entity()
