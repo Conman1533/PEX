@@ -8,28 +8,30 @@ The unmerged branch `feat/tracker` has an earlier roadmap derived from its featu
 
 ## How to work a piece
 
-Each piece has an ID (`1.4`), a suggested branch and worktree short name, its dependencies and a "done means" line. A session works exactly one piece, using the step 2 rules (own worktree `/Vault-Mk4/pex-wt/<short-name>` on branch `<type>/<short-name>` off `alpha`, own `CARGO_TARGET_DIR=/Vault-Mk4/pex-build-target-<short-name>`, no live servers, no merges, no PRs, PR draft in `/root/pumpkin-fork/pr-drafts/<branch>.md`). Short names below are chosen not to collide with the worktrees and target dirs that already exist on pve.
+Each piece has an ID (`1.4`), a suggested branch and worktree short name, its dependencies and a "done means" line. A session works exactly one piece, using the step 2 rules (own worktree on branch `<type>/<short-name>` off `alpha`, own `CARGO_TARGET_DIR`, no live servers, no merges, no PRs, a PR draft per branch).
+
+**Where the work happens.** Since 2026-10-24 all PEX work runs in CT 117 `pex-dev` on pve (Ubuntu 26.04, 16 cores, 32 GB RAM, 100 GB disk), reachable over Tailscale as `root@100.109.157.28` (`pex-dev`). The step 2 template's pve paths map like this: worktree `/srv/pex/wt/<short-name>`, `CARGO_TARGET_DIR=/srv/pex/target/<short-name>`, PR draft `/srv/pex/pr-drafts/<branch with / replaced by ->.md`, scratch files `/srv/pex/scratch/<short-name>`. The main checkout is `/srv/pex/repo` (git identity Neon Swan, `gh` logged in as Conman1533). The old pve working area is archived at `/Vault-Mk4/pex-archive/pumpkin-fork` on the pve host, with the old worktrees still in `/Vault-Mk4/pex-wt`.
 
 "Depends on" means the other piece has been merged into `alpha` by the maintainer. Sessions don't merge and don't stack branches on each other, so each merge round unlocks the next pieces. A dependency on a `Q` means the maintainer has answered that question.
 
-What is already on pve for every session:
+What is already in the CT for every session:
 
 | What | Where |
 | :-- | :-- |
-| Decompiled vanilla 26.3 server, whole `net.minecraft` (5,027 files, Vineflower, no errors) | `/Vault-Mk4/vanilla-26.3/src` |
-| Vanilla 26.3 server jar (sha256 `a362163e...`) and the bundler | `/Vault-Mk4/vanilla-26.3/server-26.3.jar`, `bundler-26.3.jar` |
-| JDK 25 for running vanilla and Paper | `/root/pumpkin-fork/vanilla/jdk-25.0.4.1+1` |
-| Paper 26.3 jar used by the earlier benchmarks | `/root/pumpkin-fork/lr-default/paper/paper.jar` |
-| Protocol 777 Python bots (`walkbot.py`, `survbot.py`, `botfleet.py`), boot and bench scripts | `/root/pumpkin-fork/tools` |
-| Gameplay benchmark (bots, sampler, report) | `/root/pumpkin-fork/gameplay-bench` |
-| Benchmark worlds and old binaries | `/Vault-Mk4/pumpkin-bins` |
-| Earlier PR drafts (format to copy) | `/root/pumpkin-fork/pr-drafts` |
+| Decompiled vanilla 26.3 server, whole `net.minecraft` (5,027 files, Vineflower, no errors) | `/srv/pex/vanilla-26.3/src` |
+| Vanilla 26.3 server jar (sha256 `a362163e...`), the bundler and Vineflower | `/srv/pex/vanilla-26.3/server-26.3.jar`, `bundler-26.3.jar`, `vineflower.jar` |
+| JDK 25 for running vanilla and Paper | `/srv/pex/jdk-25` |
+| Paper 26.3 jar used by the earlier benchmarks | `/srv/pex/bins/paper/paper.jar` |
+| Protocol 777 Python bots (`walkbot.py`, `survbot.py`, `botfleet.py`), boot and bench scripts | `/srv/pex/tools` |
+| Gameplay benchmark (bots, sampler, report) | `/srv/pex/gameplay-bench` |
+| Benchmark world | `/srv/pex/bins/base-world-262` (older worlds and binaries: `/Vault-Mk4/pumpkin-bins` on the pve host) |
+| Earlier PR drafts (format to copy) | `/srv/pex/pr-drafts` |
 
-pve also runs production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin). It had about 38 GB available and 7 of 8 GB swap in use on 2026-10-24. Keep at most three sessions compiling at once, build with `nice -n 15` and `-j 12`, and don't use fat LTO release builds unless the piece is about release builds.
+The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 12`, and don't use fat LTO release builds unless the piece is about release builds. A debug target dir takes 10 to 20 GB, so delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
 
 ### Baseline on alpha
 
-Run by `/root/pumpkin-fork/tools/roadmap-baseline.sh`, logs in `/Vault-Mk4/pex-wt/roadmap-baseline/`, rustc 1.99.0.
+Run on the pve host with rustc 1.99.0 (logs copied to `/srv/pex/roadmap-baseline/`); rerun in the CT by `/srv/pex/tools/roadmap-baseline.sh` (logs in `/srv/pex/roadmap-baseline/ct-<date>/`).
 
 | Check | Result |
 | :-- | :-- |
@@ -110,7 +112,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 | 1.29 | Bat and phantom | `fix/mobai-flyers` | 1.1 | 2 rows; phantom swoop and cat avoidance |
 | 1.30 | Wither | `fix/mobai-wither` | 1.1 | 1 row; skull targeting and block breaking. The dragon is 6.6. |
 
-1.2 to 1.30 can run in parallel once 1.1 is merged, three at a time on pve. The Brain pieces (1.7, 1.8, 1.20 to 1.28) wait for Q1.1.
+1.2 to 1.30 can run in parallel once 1.1 is merged, three at a time in the CT. The Brain pieces (1.7, 1.8, 1.20 to 1.28) wait for Q1.1.
 
 ### Proof
 
@@ -276,8 +278,8 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 - **The dragon's phase never reaches the client or the save.** Vanilla syncs it in `DATA_PHASE` and saves it as `DragonPhase` (`EnderDragon.java:57`, `:740`). PEX has `EnderDragonPhase::network_id()` but nothing calls it, `set_phase` (`entity/boss/ender_dragon.rs:286`) sends nothing, and nothing writes the phase to NBT. The enum's numbers also differ from vanilla's (PEX `Charging = 2`, vanilla `LANDING_APPROACH` is 2), PEX has a `FlyToPortal` phase vanilla doesn't, and vanilla's `SittingScanning` has no PEX counterpart.
 - Eyes of ender: `EyeOfEnder` entity is wired (`entity/type.rs:325`).
 - Block entity loss on unload (`fix/flush-block-entities-before-unload`, unmerged) breaks any playthrough that stores items in chests away from players.
-- Bots: `tools/pumpkin-tester` runs an in-process server with Rust bots built on `pumpkin-protocol` (login, move, commands, use block, dig) and Mojang-style GameTests; CI runs it. `native-plugins/tools/testbot` is an Azalea bot (nightly Rust, protocol patches). `/root/pumpkin-fork/tools/survbot.py` has builder, miner, AFK and explorer roles. None of them crafts, fights or uses portals.
-- Earlier survival bot runs (`/root/pumpkin-fork/survtest*`) only covered building and mining.
+- Bots: `tools/pumpkin-tester` runs an in-process server with Rust bots built on `pumpkin-protocol` (login, move, commands, use block, dig) and Mojang-style GameTests; CI runs it. `native-plugins/tools/testbot` is an Azalea bot (nightly Rust, protocol patches). `/srv/pex/tools/survbot.py` has builder, miner, AFK and explorer roles. None of them crafts, fights or uses portals.
+- Earlier survival bot runs (`survtest*` in the pve archive) only covered building and mining.
 
 ### Pieces
 
@@ -291,7 +293,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 | 6.6 | Dragon phases, fireball and fight audit: map the phases 1:1 to vanilla's `EnderDragonPhase` ids (add `SittingScanning`, fold `FlyToPortal` into what vanilla does), sync `DATA_PHASE` and save `DragonPhase`; add the `dragon_fireball` entity (a projectile that bursts into the breath cloud); audit crystal healing, perching and the death sequence against `EnderDragon`, the phase classes and `EndDragonFight`. Could be two sessions (phases, then fireball and fight). | `fix/dragon-fight` | 1.1 | Rows for ender_dragon in `docs/MOB-PARITY.md`; the client sees the sitting animations; a dragon saved mid-fight reloads in the same phase; GameTests for crystal healing and the fireball |
 | 6.7 | Stage 6: the End. Arrive on the obsidian platform, destroy the crystals, kill the dragon with bow and melee, get the exit portal, egg and gateway, enter the exit portal, see the credits, respawn at the bed. | `test/survival-end` | 6.5, 6.6 | Stage passes: dragon dies from bot damage, `WinGame` is received, player respawns |
 | 6.8 | Audit the survival systems the stages lean on: crafting and smelting recipes, loot tables for the drops used, enchanting, anvils, brewing (fire resistance), beds and respawn anchors, hunger. Fix or file each gap. | `fix/survival-systems-audit` | 6.1 | Audit table in the PR with the vanilla class and method for each |
-| 6.9 | Full chained run: all stages back to back on one fixed seed and one world, without resetting between stages, run on pve with the release build | `test/survival-full-run` | 6.2 to 6.7 | Log and timings of a full run in the PR; run three times without a failure |
+| 6.9 | Full chained run: all stages back to back on one fixed seed and one world, without resetting between stages, run in the CT with the release build | `test/survival-full-run` | 6.2 to 6.7 | Log and timings of a full run in the PR; run three times without a failure |
 
 ### Proof
 
@@ -320,7 +322,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
-| 7.1 | Vanilla fixture world: build a small world with the vanilla 26.3 server (jar on pve) containing chests with enchanted and named items, signs, banners, pots, spawners, a lectern, item frames, maps, villagers with trades, tamed and leashed animals, passengers, a player with inventory and advancements, data in `data/` (scoreboard, map, raid, world border). Script the build with server commands so it can be regenerated for the next version. | `test/vanilla-fixture-world` | Q7.2 | Fixture committed (or stored where Q7.2 says) with the script that made it |
+| 7.1 | Vanilla fixture world: build a small world with the vanilla 26.3 server (jar in `/srv/pex/vanilla-26.3`) containing chests with enchanted and named items, signs, banners, pots, spawners, a lectern, item frames, maps, villagers with trades, tamed and leashed animals, passengers, a player with inventory and advancements, data in `data/` (scoreboard, map, raid, world border). Script the build with server commands so it can be regenerated for the next version. | `test/vanilla-fixture-world` | Q7.2 | Fixture committed (or stored where Q7.2 says) with the script that made it |
 | 7.2 | PEX side round trip: load the fixture, save it as Anvil, and compare every chunk, entity chunk, POI chunk, player file and saved data file tag by tag with the original, with an explicit list of fields vanilla itself rewrites. Integration test in `pumpkin-world` or `pumpkin-tester`. | `test/world-roundtrip` | 7.1 | Test passes; each ignored field has a reason in the list |
 | 7.3 | Item and block entity formats from data versions 4996 to 5016 that 7.2 shows are lost or changed | `fix/world-format-5016` | 7.2 | 7.2 passes with those fields no longer ignored |
 | 7.4 | Version constants and saved data: POI `DataVersion`, structure template version, `level.dat` fields, everything under `data/` | `fix/world-saved-data` | 7.2 | 7.2 covers `level.dat` and `data/` with no unexplained differences |
@@ -377,7 +379,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 ### Current state
 
-Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cores each, 26.3, identical worlds and bot schedules):
+Measured with the gameplay benchmark (`/srv/pex/gameplay-bench`; reports in `bench-game3` and `bench-game5` of the pve archive; 4 cores each, 26.3, identical worlds and bot schedules):
 
 | Run | PEX tick (mean) | Paper tick (mean) | PEX p95 | Paper p95 | PEX network sent | Paper network sent |
 | :-- | --: | --: | --: | --: | --: | --: |
@@ -418,13 +420,13 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 
 ### Current state
 
-- **CI has not run since 2026-10-14, because GitHub disabled Actions for the repository.** The repository setting says enabled and all eight workflows are active, but `gh workflow run` returns `HTTP 422: Actions has been disabled for this repository`. The last run finished at 19:43 UTC on 2026-10-14; the first push without a run was at 22:01 UTC. Nothing has run since: pushes to `alpha` and `master`, PRs #1 and #2, the `v1.0.0` to `v1.2.0` tags and the nightly cron (piece 10.1, `/root/pumpkin-fork/pr-drafts/ci-restore-actions.md`). Before the stop the fork had used about 2,500 job minutes in two days (1,171 Linux, 858 Windows, 470 macOS).
+- **CI has not run since 2026-10-14, because GitHub disabled Actions for the repository.** The repository setting says enabled and all eight workflows are active, but `gh workflow run` returns `HTTP 422: Actions has been disabled for this repository`. The last run finished at 19:43 UTC on 2026-10-14; the first push without a run was at 22:01 UTC. Nothing has run since: pushes to `alpha` and `master`, PRs #1 and #2, the `v1.0.0` to `v1.2.0` tags and the nightly cron (piece 10.1, `/srv/pex/pr-drafts/ci-restore-actions.md`). Before the stop the fork had used about 2,500 job minutes in two days (1,171 Linux, 858 Windows, 470 macOS).
 - `rust.yml` has never run on `alpha`: `alpha` was added to its push branches on 2026-10-15, after the stop.
 - Several workflows would do unwanted things on the fork as soon as Actions comes back: `nightly.yml:166` publishes the nightly with `make_latest: true`, which would replace v1.2.0 as the Latest release (without plugin zips or `SHA256SUMS`); `reviewers.yml:117` comments on every PEX PR mentioning upstream Pumpkin maintainers; `docker.yml` would publish `ghcr.io/conman1533/pex` for the first time; `sync-wit.yml` has no repository guard and would try to push to `Pumpkin-MC/pumpkin-plugin-wit`; `release.yml` also runs on the hand-moved `alpha` tag and needs SignPath secrets the fork doesn't have.
-- **Releases were built by hand on pve.** `/root/pumpkin-fork/tools/build-release.sh` cross-compiles from `/Vault-Mk4/pex-wt/rel1` with fat LTO (aarch64 with `aarch64-linux-gnu-gcc`, Windows with mingw `x86_64-pc-windows-gnu`, musl with `musl-gcc`). The v1.2.0 release has X64 Linux (glibc and musl), ARM64 Linux, X64 Windows (GNU toolchain, unsigned) and plugin zips for those three glibc builds, plus `SHA256SUMS`. There is no Windows ARM64 or macOS binary.
+- **Releases were built by hand on pve.** `tools/build-release.sh` (now in `/srv/pex/tools`) cross-compiled from `/Vault-Mk4/pex-wt/rel1` with fat LTO (aarch64 with `aarch64-linux-gnu-gcc`, Windows with mingw `x86_64-pc-windows-gnu`, musl with `musl-gcc`). The v1.2.0 release has X64 Linux (glibc and musl), ARM64 Linux, X64 Windows (GNU toolchain, unsigned) and plugin zips for those three glibc builds, plus `SHA256SUMS`. There is no Windows ARM64 or macOS binary.
 - `release.yml` would build on native runners for X64 and ARM64 Linux, X64 and ARM64 Windows and macOS, sign Windows with SignPath (secrets the fork probably doesn't have), and publish. It builds without `--locked` (`release.yml:55`), and `rust-toolchain.toml` says `channel = "stable"`, so two builds of the same tag a month apart use different compilers.
 - Nothing makes builds reproducible: no pinned toolchain, no `--remap-path-prefix` (panic messages embed the build path), no check that two builds match. `crates/pumpkin-core/build.rs` embeds the commit hash, which is fine because it's an input.
-- Release smoke tests: none in CI. `/root/pumpkin-fork/tools/release-smoke.sh` exists on pve.
+- Release smoke tests: none in CI. `/srv/pex/tools/release-smoke.sh` exists.
 - The Pelican "PEX Plugins" panel plugin downloads release assets by name (`pumpkin-plugins-X64-Linux.zip`), so asset names are an interface.
 - ARM64 hardware: the Orbi router PEX build is armv7, not ARM64. No ARM64 or Windows machine for PEX testing is recorded.
 
@@ -434,7 +436,7 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 | :-- | :-- | :-- | :-- | :-- |
 | 10.1 | Find out why Actions stopped after 2026-10-14 and get CI running on `alpha` again (read-only investigation first: workflow syntax at each commit, repository and account Actions settings, run history through the API). Anything that needs a settings change goes to the maintainer as a question. | `ci/restore-actions` | | The cause is identified; if it's fixable in the repo, `gh workflow run rust.yml --ref ci/restore-actions` (the workflow has `workflow_dispatch`) produces a run and its result is in the PR draft |
 | 10.7 | Fork-safe workflows: before Actions is re-enabled, guard or change the workflows listed above according to Q10.6 (nightly not marked Latest, no upstream reviewer pings, no Docker publish or WIT sync unless wanted, release not triggered by the `alpha` tag) | `ci/fork-safe-workflows` | Q10.6 | Each workflow's trigger and guard reviewed in the PR draft; `actionlint` passes |
-| 10.2 | Pin the toolchain (`rust-toolchain.toml` to an exact version), `--locked` on every build, `--remap-path-prefix` for the workspace and cargo home, and a script that builds the release binary twice in different directories and compares sha256 | `ci/reproducible-builds` | | Two builds of the same commit in different paths on pve produce identical `pumpkin` binaries for x86_64 Linux glibc |
+| 10.2 | Pin the toolchain (`rust-toolchain.toml` to an exact version), `--locked` on every build, `--remap-path-prefix` for the workspace and cargo home, and a script that builds the release binary twice in different directories and compares sha256 | `ci/reproducible-builds` | | Two builds of the same commit in different paths in the CT produce identical `pumpkin` binaries for x86_64 Linux glibc |
 | 10.3 | Release workflow for PEX: tag-triggered, all targets on native runners, plugin zips for every glibc target, `SHA256SUMS`, asset names the panel plugin expects, SignPath step removed or made optional per Q10.2, build provenance attestation | `ci/pex-release` | 10.1, 10.2, 2.1 | A `workflow_dispatch` dry run (an input that skips publishing) builds every asset and uploads them as workflow artifacts; no tag or release is created |
 | 10.4 | Release smoke tests in CI: each binary boots to "Done" in a scratch directory, loads its plugin zip (glibc builds), runs a few console commands, stops cleanly; on the native ARM64 Linux and ARM64 Windows runners | `ci/release-smoke` | 10.3 | Smoke job green for all targets on the dry run |
 | 10.5 | Reproducibility check in CI: a second job rebuilds the x86_64 Linux binary in a different path and fails if the hash differs; document how anyone can verify a release in `docs/RELEASING.md` | `ci/reproducibility-check` | 10.2, 10.3 | Job green; doc explains the check |
@@ -457,7 +459,7 @@ Measured with the gameplay benchmark (`/root/pumpkin-fork/gameplay-bench`, 4 cor
 
 ## Order across goals
 
-Pieces with no decision attached can start now. Merge `fix/clippy-alpha` before anything else. Wave 1 (three at a time on pve):
+Pieces with no decision attached can start now. Merge `fix/clippy-alpha` before anything else. Wave 1 (three at a time in the CT):
 
 1. 1.1, 2.1, 2.2, 3.1, 4.1, 5.1, 6.1, 9.2, 10.1, 10.2. 7.1 joins as soon as Q7.2 is answered.
 
@@ -519,8 +521,9 @@ Cross-goal dependencies to keep in mind:
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, needs merge | `pr-drafts/fix-clippy-alpha.md` |
-| 1.1 | `test/mob-parity-table` | in progress | |
-| 5.1 | `test/redstone-dual-run` | in progress | |
+| 1.1 | `test/mob-parity-table` | stopped part-way for the move to CT 117; local WIP commit and uncommitted changes in `/srv/pex/wt/mob-parity-table`, scratch in `/srv/pex/scratch/mob-parity-table` | |
+| 5.1 | `test/redstone-dual-run` | stopped part-way for the move; uncommitted changes in `/srv/pex/wt/redstone-dual-run`, vanilla test runs in `/srv/pex/scratch/redstone-dual-run` | |
+| 6.1 | `test/survival-harness` | stopped part-way for the move (stage 1 had passed once); uncommitted changes in `/srv/pex/wt/survival-harness` | |
 | 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
 
 ## Found while working
@@ -529,6 +532,7 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (baseline) Running `pumpkin-tester` from the repository root leaves an untracked `metrics/` directory (`slow-ticks.log`, `summary.csv`); it isn't in `.gitignore`. Run it from a scratch directory with `--manifest-path`.
 - (baseline) `pumpkin:scaffolding_distance_and_collapse` fails in `pumpkin-tester` on alpha. Not investigated yet.
 - (baseline) `crates/pumpkin-world/tests/world_info_save.rs:42` `write_world_info_reports_final_rename_failure` fails when tests run as root, because a `0o555` directory doesn't stop root. Skip it under root or force the rename failure another way.
 
