@@ -137,6 +137,15 @@ pub struct GoalSelector {
 }
 
 impl GoalSelector {
+    /// Whether a goal of type `G` is running, like vanilla's `goal.isRunning()` on a kept
+    /// reference.
+    #[must_use]
+    pub fn is_running<G: Goal + 'static>(&self) -> bool {
+        Self::snapshot(self)
+            .iter()
+            .any(|entry| entry.type_id == TypeId::of::<G>() && entry.is_running())
+    }
+
     pub fn add_goal<G: Goal + 'static>(&self, priority: u8, goal: Box<G>) {
         let goal = PrioritizedGoal::new(TypeId::of::<G>(), priority, goal);
         Arc::make_mut(&mut Self::lock(self).goals).push(Arc::new(RegisteredGoal {

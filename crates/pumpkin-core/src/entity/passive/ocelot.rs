@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use pumpkin_data::entity::EntityPose;
 use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::tag::{self, Taggable};
@@ -55,11 +56,18 @@ impl OcelotEntity {
             // Goal 3: OcelotTemptGoal
             goal_selector.add_goal(
                 3,
-                Box::new(TemptGoal::new(
-                    0.6,
-                    |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD),
-                    true,
-                )),
+                Box::new(
+                    TemptGoal::new(
+                        0.6,
+                        |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_OCELOT_FOOD),
+                        true,
+                    )
+                    .scared_only_if(|mob| {
+                        mob.cast_any()
+                            .downcast_ref::<Self>()
+                            .is_some_and(|ocelot| !ocelot.is_trusting())
+                    }),
+                ),
             );
             // Goal 4: OcelotAvoidEntityGoal (when not trusting)
             goal_selector.add_goal(
@@ -142,7 +150,37 @@ impl AgeableMob for OcelotEntity {
     }
 }
 
+/// Vanilla `Ocelot.customServerAiStep` and its copy in `Cat`: a feline creeps at the tempt
+/// speed and sprints at the flee speed. The crouch is cosmetic, so the hitbox stays put.
+pub(crate) fn feline_server_ai_step(mob_entity: &MobEntity) {
+    const CROUCH_SPEED: f64 = 0.6;
+    const SPRINT_SPEED: f64 = 1.33;
+    let (moving, speed) = {
+        let navigator = mob_entity
+            .navigator
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (!navigator.is_idle(), navigator.get_speed_modifier())
+    };
+    let living = &mob_entity.living_entity;
+    // The speeds are the goals' own constants, so exact comparison is intended.
+    #[expect(clippy::float_cmp)]
+    let (pose, sprinting) = if moving && speed == CROUCH_SPEED {
+        (EntityPose::Crouching, false)
+    } else if moving && speed == SPRINT_SPEED {
+        (EntityPose::Standing, true)
+    } else {
+        (EntityPose::Standing, false)
+    };
+    living.entity.set_pose_keep_dimensions(pose);
+    living.set_sprinting(sprinting);
+}
+
 impl Mob for OcelotEntity {
+    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        feline_server_ai_step(&self.mob_entity);
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntityOcelotAmbient)
     }
@@ -199,7 +237,9 @@ impl Mob for OcelotEntity {
             .load()
             .squared_distance_to_vec(&player.get_entity().pos.load());
 
-        if !self.is_trusting() && is_food && dist_sqr < 9.0 {
+        // Vanilla only rolls for trust while the ocelot is following the fish.
+        let tempted = self.mob_entity.goals_selector.is_running::<TemptGoal>();
+        if tempted && !self.is_trusting() && is_food && dist_sqr < 9.0 {
             item_stack.decrement_unless_creative(player.gamemode.load(), 1);
 
             let mut rng = rand::rng();
