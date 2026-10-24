@@ -2,6 +2,7 @@ mod bot;
 mod bot_tests;
 mod gametests;
 mod harness;
+mod survival;
 
 use std::{net::SocketAddr, process::ExitCode, sync::Arc, time::Instant};
 
@@ -14,6 +15,8 @@ async fn run_all_suites(server: &Arc<Server>, addr: SocketAddr) -> Result<Vec<St
     let mut summary_lines = Vec::new();
     let mut runner = GameTestRunner::new();
 
+    // Survival stages go first so they start from the freshly generated world.
+    survival::run_survival_stages(server, addr, &mut summary_lines).await?;
     bot_tests::run_bot_tests(server, addr, &mut runner, &mut summary_lines).await?;
     gametests::run_gametests(server, &mut runner, &mut summary_lines).await?;
 
