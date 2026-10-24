@@ -15,7 +15,8 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        avoid_entity::AvoidEntityGoal, breed::BreedGoal, escape_danger::EscapeDangerGoal,
+        avoid_entity::AvoidEntityGoal, breed::BreedGoal,
+        climb_on_top_of_powder_snow::ClimbOnTopOfPowderSnowGoal, escape_danger::EscapeDangerGoal,
         follow_parent::FollowParentGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
         wander_around::WanderAroundGoal,
     },
@@ -92,6 +93,7 @@ impl FoxEntity {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
+            goal_selector.add_goal(0, Box::new(ClimbOnTopOfPowderSnowGoal));
             goal_selector.add_goal(2, EscapeDangerGoal::new(2.2));
             goal_selector.add_goal(3, BreedGoal::new(1.0));
             goal_selector.add_goal(
