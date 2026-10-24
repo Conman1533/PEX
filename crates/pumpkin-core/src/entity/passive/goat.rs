@@ -47,16 +47,14 @@ pub struct GoatEntity {
 impl GoatEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
         let mut mob_entity = MobEntity::new(entity);
-        {
-            let navigator = mob_entity
-                .navigator
-                .get_mut()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            navigator.set_can_float(true);
-            navigator.set_pathfinding_malus(PathType::PowderSnow, -1.0);
-            // Vanilla's `PathType.ON_TOP_OF_POWDER_SNOW`.
-            navigator.set_pathfinding_malus(PathType::DangerPowderSnow, -1.0);
-        }
+        let navigator = mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        navigator.set_can_float(true);
+        navigator.set_pathfinding_malus(PathType::PowderSnow, -1.0);
+        // Vanilla's `PathType.ON_TOP_OF_POWDER_SNOW`.
+        navigator.set_pathfinding_malus(PathType::DangerPowderSnow, -1.0);
         let goat = Self {
             mob_entity,
             ageable_data: AgeableData::default(),

@@ -164,7 +164,6 @@ pub(crate) fn feline_server_ai_step(mob_entity: &MobEntity) {
     };
     let living = &mob_entity.living_entity;
     // The speeds are the goals' own constants, so exact comparison is intended.
-    #[expect(clippy::float_cmp)]
     let (pose, sprinting) = if moving && speed == CROUCH_SPEED {
         (EntityPose::Crouching, false)
     } else if moving && speed == SPRINT_SPEED {

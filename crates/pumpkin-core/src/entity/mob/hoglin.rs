@@ -270,7 +270,7 @@ pub fn throw_target(attacker: &LivingEntity, target: &dyn EntityBase) {
         target_living.get_attribute_value(&Attributes::KNOCKBACK_RESISTANCE),
         target_pos.x - my_pos.x,
         target_pos.z - my_pos.z,
-        f32::from(rand::random_range(-10_i8..=10)),
+        f32::from(rand::random_range(-10i8..=10)),
         rand::random::<f32>(),
         rand::random::<f32>(),
     ) else {
