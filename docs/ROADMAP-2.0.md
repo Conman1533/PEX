@@ -21,13 +21,14 @@ What is already in the CT for every session:
 | What | Where |
 | :-- | :-- |
 | Decompiled vanilla 26.3 server, whole `net.minecraft` (5,027 files, Vineflower, no errors) | `/srv/pex/vanilla-26.3/src` |
-| Vanilla 26.3 server jar (sha256 `a362163e...`), the bundler and Vineflower | `/srv/pex/vanilla-26.3/server-26.3.jar`, `bundler-26.3.jar`, `vineflower.jar` |
+| Vanilla 26.3 server jar (sha256 `a362163e...`), the bundler and Vineflower. Start vanilla with `java -jar bundler-26.3.jar`; `server-26.3.jar` alone doesn't start. Vanilla 26.3 defaults to `white-list=true`, so set it to false for bot runs. | `/srv/pex/vanilla-26.3/server-26.3.jar`, `bundler-26.3.jar`, `vineflower.jar` |
 | JDK 25 for running vanilla and Paper | `/srv/pex/jdk-25` |
 | Paper 26.3 jar used by the earlier benchmarks | `/srv/pex/bins/paper/paper.jar` |
 | Protocol 777 Python bots (`walkbot.py`, `survbot.py`, `botfleet.py`), boot and bench scripts | `/srv/pex/tools` |
 | Gameplay benchmark (bots, sampler, report) | `/srv/pex/gameplay-bench` |
 | Benchmark world | `/srv/pex/bins/base-world-262` (older worlds and binaries: `/Vault-Mk4/pumpkin-bins` on the pve host) |
 | Earlier PR drafts (format to copy) | `/srv/pex/pr-drafts` |
+| Dual-run GameTest runner and vanilla structure builder (on `test/redstone-dual-run` until merged) | `tools/dual-run/` in that branch |
 
 The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 12`, and don't use fat LTO release builds unless the piece is about release builds. A debug target dir with tests takes 20 to 28 GB, so the 100 GB disk holds three at a time; delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
 
@@ -61,6 +62,17 @@ These branches are pushed but not merged. A piece that touches the same area sta
 | `perf/memory` | 3 | Uniform light sections, packed idle proto chunks, two malloc arenas | 9 |
 | `perf/pathfinder-heap`, `perf/entity-box-query` | 1 each | Pathfinder and entity query allocations | 9 |
 | `claude/gifted-sagan-1yvyp9`, `claude/nifty-curie-occmzq`, `claude/nifty-newton-nx1dgj` | 4, 1, 1 | Worldgen feature placement fixes | 7 |
+
+## Groundwork
+
+Small fixes that every other piece trips over. They don't belong to a goal, and they should be merged first.
+
+| ID | Piece | Branch / short name | Depends on | Done means |
+| :-- | :-- | :-- | :-- | :-- |
+| 0.1 | Clear the clippy errors the 2026-10-23 mob AI merges left in `pumpkin-core` | `fix/clippy-alpha` | | done (see Piece status) |
+| 0.2 | Make `tools/pumpkin-codegen` deterministic: the `structure_template.rs` generator writes block entity NBT keys in a different order on every run (about 1,400 lines of churn), and a plain `cargo run -p pumpkin-codegen` on alpha rewrites six generated files unrelated to the input (`item.rs`, `registry.rs`, `structure_template.rs`, plugin-api `block.rs` and `item.rs`, `java-packets.wit`). Find out whether alpha's generated files are stale or the generator is nondeterministic, fix it, and regenerate once. | `fix/codegen-deterministic` | | Two codegen runs in a row produce no diff, and a run on the fixed branch changes only what its input changed |
+| 0.3 | `pumpkin-world` `write_world_info_reports_final_rename_failure` fails under root (a `0o555` directory doesn't stop root); make the failure independent of the user | `test/world-info-rename-root` | | Test passes as root and as a normal user, and still fails when the rename failure isn't reported |
+| 0.4 | The `commands_and_gamemode` bot test in `pumpkin-tester` is flaky on a busy host ("Bot `/setblock` did not place emerald_block") and stops the tester before any GameTest runs | `fix/tester-setblock-flake` | | 30 runs in a row pass on a busy CT |
 
 ## Goal 1: every 26.3 mob has its vanilla AI
 
@@ -123,7 +135,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 - `docs/MOB-PARITY.md` has all 90 rows at status `parity`, each naming the vanilla classes and methods compared and the commit audited, plus any accepted deviation.
 - Every mob has a test registered in `builtin_game_tests` (or `pumpkin-tester` where a player is needed) that passes in CI.
-- The tests that are block-based datapack tests also pass on vanilla 26.3 through `/test runall`. Behaviour that needs a player (tempting, targeting players) can't be a block-based test, so those mobs rely on the audit and the function test.
+- The tests that are block-based datapack tests also pass on vanilla 26.3 through `/test run <namespace>:<dir>/*` (26.3 has no `runall`). Behaviour that needs a player (tempting, targeting players) can't be a block-based test, so those mobs rely on the audit and the function test.
 
 ### Decisions
 
@@ -250,7 +262,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
-| 5.1 | Dual-run harness: a datapack of block-based tests (structure plus `test_instance` JSON, using test blocks) that runs on vanilla 26.3 with `/test runall` and on PEX, and a script outside the repo that runs both and compares results. Commit the datapack as test assets; keep the runner script outside the repo per `AGENTS.md`, or in `tools/` if it's worth keeping. Start with 5 existing redstone tests converted to block-based form. | `test/redstone-dual-run` | | The 5 tests pass on both servers; one deliberately broken PEX build fails exactly the affected test |
+| 5.1 | Dual-run harness: a datapack of block-based tests (structure plus `test_instance` JSON, using test blocks) that runs on vanilla 26.3 with `/test run` and on PEX, and a script outside the repo that runs both and compares results. Commit the datapack as test assets; keep the runner script outside the repo per `AGENTS.md`, or in `tools/` if it's worth keeping. Start with 5 existing redstone tests converted to block-based form. | `test/redstone-dual-run` | | The 5 tests pass on both servers; one deliberately broken PEX build fails exactly the affected test |
 | 5.2 | Wire update order: iterate the wire and its neighbours in the order Java's `HashSet<BlockPos>` would (`Vec3i.hashCode`, `HashMap` hash spreading, 16 buckets for 7 entries). | `fix/redstone-wire-order` | 5.1 | Unit test against orders recorded from vanilla for several positions; a locational contraption test that behaves differently at two positions passes on both servers |
 | 5.3 | Neighbour updater and BUD behaviour: audit against `CollectingNeighborUpdater` (chained update order, the limit, shape updates) and make the limit a config value like vanilla's | `fix/redstone-neighbor-updater` | 5.1 | Audit table in the PR; BUD switch and update-chain tests pass on both servers |
 | 5.4 | Quasi-connectivity: pistons, sticky pistons, dispensers, droppers | `fix/redstone-qc` | 5.1 | QC piston, QC dispenser and BUD-powered piston tests pass on both |
@@ -534,7 +546,7 @@ Cross-goal dependencies to keep in mind:
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
 | 1.1 | `test/mob-parity-table` | done, pushed `a37d261e9`: `docs/MOB-PARITY.md` (90 rows, all `not audited`), mock players and `assert_entity_not_present_in_box` in the GameTest helper, `pumpkin:cow_follows_wheat_and_panics_when_hit` (fails without `TemptGoal` 11 of 11 runs, without the panic goal 5 of 5). Local CI green except the known scaffolding GameTest (`/srv/pex/ci/test-mob-parity-table/20261024-221123/`). Needs merge. | `pr-drafts/test-mob-parity-table.md` |
-| 5.1 | `test/redstone-dual-run` | in progress in CT 117 (resumed after the move) | |
+| 5.1 | `test/redstone-dual-run` | done, pushed `bf917f65f`: datapack `assets/tests/datapacks/pumpkin-dual-run/` with 5 block-based redstone tests built and saved by vanilla, `tools/dual-run/` (runner and structure builder), START test blocks now stay powered like vanilla `TestBlockEntity.trigger`, and `pumpkin-tester` runs every embedded datapack test. All 5 pass on vanilla and PEX; each deliberately broken build fails only its test. Local CI green apart from the known failures (`/srv/pex/ci/test-redstone-dual-run/20261024-225651/`). | `pr-drafts/test-redstone-dual-run.md` |
 | 6.1 | `test/survival-harness` | done, pushed `c3266dbda`: stage harness in `pumpkin-tester` (client-packet bot with its own inventory model, digging, pickups, menu clicks) and stage 1, wood to stone pickaxe; 10 of 10 runs pass; fails without the crafting table recipe. Local CI green apart from the known scaffolding GameTest and the doc-test job, which fails for any tester-only change (`rust.yml:184`, see below). | `pr-drafts/test-survival-harness.md` |
 | 10.1 | none (no commits) | done: cause is outside the repository, see Q10.5 | `pr-drafts/ci-restore-actions.md` |
 
@@ -544,6 +556,11 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (5.1) `crates/pumpkin-core/src/data/datapack/mod.rs` `scan_datapacks_dir` (around line 1281) only loads world datapacks that `level.dat` lists as enabled; vanilla `MinecraftServer.configurePackRepository` (around line 1593) enables new world packs automatically.
+- (5.1) `crates/pumpkin-core/src/block/blocks/test_block.rs:76` returns `emits_redstone_power` true; vanilla `TestBlock` doesn't override `isSignalSource`, so wire connects to test blocks only in PEX.
+- (5.1) `crates/pumpkin-gametest/src/runner/mod.rs` `finish_failure` reports a failure at the tick it's detected; vanilla `GameTestInfo.fail` stores it and reports it a tick later, and the timeout text differs from vanilla's `test.error.timeout.no_result`. Pass and fail results agree.
+- (5.1) `assets/tests/datapacks/pumpkin-unit-test*/pack.mcmeta` declare pack format 107; vanilla 26.3's data format is 121.
+- (5.1) Roadmap said `/test runall`; 26.3's `TestCommand` has no `runall`. Corrected.
 - (6.1) `.github/workflows/rust.yml:184` runs `cargo test --doc` on every affected package, so a change that only touches `pumpkin-tester` (no library target) fails CI with "no library targets found". `local-ci.sh` now skips packages without a library; the workflow needs the same fix (10.7).
 - (6.1) `crates/pumpkin-protocol/src/codec/lp_vector_3d.rs`: `LpVector3d::read` reads 2 bytes for a zero vector where vanilla `LpVec3` writes 1 (used by `SInteract::read` and `CSpawnEntity::read_packet_data`). `update_entity_pos.rs` and `update_entity_pos_rot.rs` readers still use the pre-26.3 layout without the var int; the writers are right. Matters for the in-repo bot, which reads with these.
 - (6.1) `crates/pumpkin-inventory/src/screen_handler.rs:998` repeats a shift-click while `are_items_and_components_equal`; vanilla `AbstractContainerMenu.doClick` uses `ItemStack.isSameItem`.
