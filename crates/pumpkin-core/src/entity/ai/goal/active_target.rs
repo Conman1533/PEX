@@ -101,6 +101,9 @@ impl ActiveTargetGoal {
         target_predicate.base_max_distance = mob
             .living_entity
             .get_attribute_value(&Attributes::FOLLOW_RANGE);
+        if !check_visibility {
+            target_predicate = target_predicate.ignore_visibility();
+        }
 
         if let Some(predicate) = predicate {
             target_predicate.set_predicate(predicate);
@@ -142,6 +145,9 @@ impl ActiveTargetGoal {
         target_predicate.base_max_distance = mob
             .living_entity
             .get_attribute_value(&Attributes::FOLLOW_RANGE);
+        if !check_visibility {
+            target_predicate = target_predicate.ignore_visibility();
+        }
 
         Box::new(Self {
             track_target_goal,
@@ -169,6 +175,9 @@ impl ActiveTargetGoal {
         target_predicate.base_max_distance = mob
             .living_entity
             .get_attribute_value(&Attributes::FOLLOW_RANGE);
+        if !check_visibility {
+            target_predicate = target_predicate.ignore_visibility();
+        }
         target_predicate.set_predicate(predicate);
 
         Box::new(Self {

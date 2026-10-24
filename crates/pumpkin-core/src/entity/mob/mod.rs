@@ -1127,6 +1127,21 @@ pub trait Mob: EntityBase + Send + Sync {
         self.get_mob_entity().steered().navigator().is_idle()
     }
 
+    /// Vanilla `getNavigation().moveTo`. Takes the navigation lock.
+    fn navigate_to(&self, from: Vector3<f64>, to: Vector3<f64>, speed: f64) {
+        self.get_mob_entity().steered().navigator().set_progress(
+            crate::entity::ai::pathfinder::NavigatorGoal::new(from, to, speed),
+        );
+    }
+
+    /// Vanilla `getNavigation().stop`. Takes the navigation lock.
+    fn stop_navigation(&self) {
+        self.get_mob_entity().steered().navigator().stop();
+    }
+
+    /// Vanilla `Mob.onOffspringSpawnedFromEgg`, called on a baby a spawn egg made from its parent.
+    fn on_offspring_spawned_from_egg(&self, _player: &Player) {}
+
     fn has_line_of_sight(&self, target: &crate::entity::Entity) -> bool {
         let mob_entity = self.get_mob_entity();
         mob_entity

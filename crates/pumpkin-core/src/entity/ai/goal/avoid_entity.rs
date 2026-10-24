@@ -12,6 +12,9 @@ const FAST_DISTANCE_SQ: f64 = 49.0;
 const HORIZONTAL_RANGE: i32 = 16;
 const VERTICAL_RANGE: i32 = 7;
 
+/// Vanilla `avoidPredicate`: whether the mob avoids this particular entity.
+pub type AvoidFilter = fn(&dyn EntityBase, &dyn Mob) -> bool;
+
 pub struct AvoidEntityGoal {
     goal_control: Controls,
     flee_type: &'static EntityType,
@@ -21,6 +24,7 @@ pub struct AvoidEntityGoal {
     target: Option<Arc<dyn EntityBase>>,
     flee_pos: Option<Vector3<f64>>,
     gate: Option<MobFilter>,
+    avoid: Option<AvoidFilter>,
 }
 
 impl AvoidEntityGoal {
@@ -40,7 +44,15 @@ impl AvoidEntityGoal {
             target: None,
             flee_pos: None,
             gate: None,
+            avoid: None,
         }
+    }
+
+    /// Only flee from entities `avoid` accepts, e.g. a fox ignoring players it trusts.
+    #[must_use]
+    pub const fn avoiding_only(mut self, avoid: AvoidFilter) -> Self {
+        self.avoid = Some(avoid);
+        self
     }
 
     /// Extra condition for starting and for continuing, e.g. an untamed cat.
@@ -58,12 +70,14 @@ impl AvoidEntityGoal {
         if self.flee_type == &EntityType::PLAYER {
             world
                 .get_nearest_player(pos, self.flee_distance, |player| {
-                    EntityPredicate::ExceptCreativeOrSpectator.test(player.get_entity())
+                    EntityPredicate::ExceptCreativeOrSpectator.test(player.as_ref())
+                        && self.avoid.is_none_or(|avoid| avoid(player.as_ref(), mob))
                 })
                 .map(|p| p as Arc<dyn EntityBase>)
         } else {
             world.get_nearest_entity(pos, self.flee_distance, Some(&[self.flee_type]), |entity| {
-                EntityPredicate::ExceptCreativeOrSpectator.test(entity.get_entity())
+                EntityPredicate::ExceptCreativeOrSpectator.test(entity.as_ref())
+                    && self.avoid.is_none_or(|avoid| avoid(entity.as_ref(), mob))
             })
         }
     }

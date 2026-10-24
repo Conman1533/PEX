@@ -750,6 +750,7 @@ mod tests {
             &EntityType::BOGGED,
             &EntityType::CAT,
             &EntityType::OCELOT,
+            &EntityType::FOX,
         ] {
             let mob = Arc::downgrade(&from_type(
                 entity_type,
