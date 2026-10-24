@@ -1,0 +1,8844 @@
+{
+ "version": "26.3",
+ "source": "Blocks.java and Items.java from the decompiled vanilla server, joined with assets/blocks.json and assets/items.json",
+ "blocks": {
+  "acacia_button": "ButtonBlock",
+  "acacia_door": "DoorBlock",
+  "acacia_fence": "FenceBlock",
+  "acacia_fence_gate": "FenceGateBlock",
+  "acacia_hanging_sign": "CeilingHangingSignBlock",
+  "acacia_leaves": "TintedParticleLeavesBlock",
+  "acacia_log": "RotatedPillarBlock",
+  "acacia_planks": "Block",
+  "acacia_pressure_plate": "PressurePlateBlock",
+  "acacia_sapling": "SaplingBlock",
+  "acacia_shelf": "ShelfBlock",
+  "acacia_sign": "StandingSignBlock",
+  "acacia_slab": "SlabBlock",
+  "acacia_stairs": "StairBlock",
+  "acacia_trapdoor": "TrapDoorBlock",
+  "acacia_wall_hanging_sign": "WallHangingSignBlock",
+  "acacia_wall_sign": "WallSignBlock",
+  "acacia_wood": "RotatedPillarBlock",
+  "activator_rail": "PoweredRailBlock",
+  "air": "AirBlock",
+  "allium": "FlowerBlock",
+  "amethyst_block": "AmethystBlock",
+  "amethyst_cluster": "AmethystClusterBlock",
+  "ancient_debris": "Block",
+  "andesite": "Block",
+  "andesite_slab": "SlabBlock",
+  "andesite_stairs": "StairBlock",
+  "andesite_wall": "WallBlock",
+  "anvil": "AnvilBlock",
+  "attached_melon_stem": "AttachedStemBlock",
+  "attached_pumpkin_stem": "AttachedStemBlock",
+  "azalea": "AzaleaBlock",
+  "azalea_leaves": "UntintedParticleLeavesBlock",
+  "azure_bluet": "FlowerBlock",
+  "bamboo": "BambooStalkBlock",
+  "bamboo_block": "RotatedPillarBlock",
+  "bamboo_button": "ButtonBlock",
+  "bamboo_door": "DoorBlock",
+  "bamboo_fence": "FenceBlock",
+  "bamboo_fence_gate": "FenceGateBlock",
+  "bamboo_hanging_sign": "CeilingHangingSignBlock",
+  "bamboo_mosaic": "Block",
+  "bamboo_mosaic_slab": "SlabBlock",
+  "bamboo_mosaic_stairs": "StairBlock",
+  "bamboo_planks": "Block",
+  "bamboo_pressure_plate": "PressurePlateBlock",
+  "bamboo_sapling": "BambooSaplingBlock",
+  "bamboo_shelf": "ShelfBlock",
+  "bamboo_sign": "StandingSignBlock",
+  "bamboo_slab": "SlabBlock",
+  "bamboo_stairs": "StairBlock",
+  "bamboo_trapdoor": "TrapDoorBlock",
+  "bamboo_wall_hanging_sign": "WallHangingSignBlock",
+  "bamboo_wall_sign": "WallSignBlock",
+  "barrel": "BarrelBlock",
+  "barrier": "BarrierBlock",
+  "basalt": "RotatedPillarBlock",
+  "beacon": "BeaconBlock",
+  "bedrock": "Block",
+  "bee_nest": "BeehiveBlock",
+  "beehive": "BeehiveBlock",
+  "beetroots": "BeetrootBlock",
+  "bell": "BellBlock",
+  "big_dripleaf": "BigDripleafBlock",
+  "big_dripleaf_stem": "BigDripleafStemBlock",
+  "birch_button": "ButtonBlock",
+  "birch_door": "DoorBlock",
+  "birch_fence": "FenceBlock",
+  "birch_fence_gate": "FenceGateBlock",
+  "birch_hanging_sign": "CeilingHangingSignBlock",
+  "birch_leaves": "TintedParticleLeavesBlock",
+  "birch_log": "RotatedPillarBlock",
+  "birch_planks": "Block",
+  "birch_pressure_plate": "PressurePlateBlock",
+  "birch_sapling": "SaplingBlock",
+  "birch_shelf": "ShelfBlock",
+  "birch_sign": "StandingSignBlock",
+  "birch_slab": "SlabBlock",
+  "birch_stairs": "StairBlock",
+  "birch_trapdoor": "TrapDoorBlock",
+  "birch_wall_hanging_sign": "WallHangingSignBlock",
+  "birch_wall_sign": "WallSignBlock",
+  "birch_wood": "RotatedPillarBlock",
+  "black_banner": "BannerBlock",
+  "black_bed": "BedBlock",
+  "black_candle": "CandleBlock",
+  "black_candle_cake": "CandleCakeBlock",
+  "black_carpet": "WoolCarpetBlock",
+  "black_concrete": "Block",
+  "black_concrete_powder": "ConcretePowderBlock",
+  "black_concrete_slab": "SlabBlock",
+  "black_concrete_stairs": "StairBlock",
+  "black_glazed_terracotta": "GlazedTerracottaBlock",
+  "black_shulker_box": "ShulkerBoxBlock",
+  "black_stained_glass": "StainedGlassBlock",
+  "black_stained_glass_pane": "StainedGlassPaneBlock",
+  "black_terracotta": "Block",
+  "black_wall_banner": "WallBannerBlock",
+  "black_wool": "Block",
+  "black_wool_slab": "SlabBlock",
+  "black_wool_stairs": "StairBlock",
+  "blackstone": "Block",
+  "blackstone_slab": "SlabBlock",
+  "blackstone_stairs": "StairBlock",
+  "blackstone_wall": "WallBlock",
+  "blast_furnace": "BlastFurnaceBlock",
+  "blue_banner": "BannerBlock",
+  "blue_bed": "BedBlock",
+  "blue_candle": "CandleBlock",
+  "blue_candle_cake": "CandleCakeBlock",
+  "blue_carpet": "WoolCarpetBlock",
+  "blue_concrete": "Block",
+  "blue_concrete_powder": "ConcretePowderBlock",
+  "blue_concrete_slab": "SlabBlock",
+  "blue_concrete_stairs": "StairBlock",
+  "blue_glazed_terracotta": "GlazedTerracottaBlock",
+  "blue_ice": "HalfTransparentBlock",
+  "blue_orchid": "FlowerBlock",
+  "blue_shulker_box": "ShulkerBoxBlock",
+  "blue_stained_glass": "StainedGlassBlock",
+  "blue_stained_glass_pane": "StainedGlassPaneBlock",
+  "blue_terracotta": "Block",
+  "blue_wall_banner": "WallBannerBlock",
+  "blue_wool": "Block",
+  "blue_wool_slab": "SlabBlock",
+  "blue_wool_stairs": "StairBlock",
+  "bone_block": "RotatedPillarBlock",
+  "bookshelf": "Block",
+  "brain_coral": "CoralPlantBlock",
+  "brain_coral_block": "CoralBlock",
+  "brain_coral_fan": "CoralFanBlock",
+  "brain_coral_wall_fan": "CoralWallFanBlock",
+  "brewing_stand": "BrewingStandBlock",
+  "brick_slab": "SlabBlock",
+  "brick_stairs": "StairBlock",
+  "brick_wall": "WallBlock",
+  "bricks": "Block",
+  "brown_banner": "BannerBlock",
+  "brown_bed": "BedBlock",
+  "brown_candle": "CandleBlock",
+  "brown_candle_cake": "CandleCakeBlock",
+  "brown_carpet": "WoolCarpetBlock",
+  "brown_concrete": "Block",
+  "brown_concrete_powder": "ConcretePowderBlock",
+  "brown_concrete_slab": "SlabBlock",
+  "brown_concrete_stairs": "StairBlock",
+  "brown_glazed_terracotta": "GlazedTerracottaBlock",
+  "brown_mushroom": "MushroomBlock",
+  "brown_mushroom_block": "HugeMushroomBlock",
+  "brown_shulker_box": "ShulkerBoxBlock",
+  "brown_stained_glass": "StainedGlassBlock",
+  "brown_stained_glass_pane": "StainedGlassPaneBlock",
+  "brown_terracotta": "Block",
+  "brown_wall_banner": "WallBannerBlock",
+  "brown_wool": "Block",
+  "brown_wool_slab": "SlabBlock",
+  "brown_wool_stairs": "StairBlock",
+  "bubble_column": "BubbleColumnBlock",
+  "bubble_coral": "CoralPlantBlock",
+  "bubble_coral_block": "CoralBlock",
+  "bubble_coral_fan": "CoralFanBlock",
+  "bubble_coral_wall_fan": "CoralWallFanBlock",
+  "budding_amethyst": "BuddingAmethystBlock",
+  "bush": "BushBlock",
+  "cactus": "CactusBlock",
+  "cactus_flower": "CactusFlowerBlock",
+  "cake": "CakeBlock",
+  "calcite": "Block",
+  "calibrated_sculk_sensor": "CalibratedSculkSensorBlock",
+  "campfire": "CampfireBlock",
+  "candle": "CandleBlock",
+  "candle_cake": "CandleCakeBlock",
+  "carrots": "CarrotBlock",
+  "cartography_table": "CartographyTableBlock",
+  "carved_pumpkin": "CarvedPumpkinBlock",
+  "cauldron": "CauldronBlock",
+  "cave_air": "AirBlock",
+  "cave_vines": "CaveVinesBlock",
+  "cave_vines_plant": "CaveVinesPlantBlock",
+  "chain_command_block": "CommandBlock",
+  "cherry_button": "ButtonBlock",
+  "cherry_door": "DoorBlock",
+  "cherry_fence": "FenceBlock",
+  "cherry_fence_gate": "FenceGateBlock",
+  "cherry_hanging_sign": "CeilingHangingSignBlock",
+  "cherry_leaves": "UntintedParticleLeavesBlock",
+  "cherry_log": "RotatedPillarBlock",
+  "cherry_planks": "Block",
+  "cherry_pressure_plate": "PressurePlateBlock",
+  "cherry_sapling": "SaplingBlock",
+  "cherry_shelf": "ShelfBlock",
+  "cherry_sign": "StandingSignBlock",
+  "cherry_slab": "SlabBlock",
+  "cherry_stairs": "StairBlock",
+  "cherry_trapdoor": "TrapDoorBlock",
+  "cherry_wall_hanging_sign": "WallHangingSignBlock",
+  "cherry_wall_sign": "WallSignBlock",
+  "cherry_wood": "RotatedPillarBlock",
+  "chest": "ChestBlock",
+  "chipped_anvil": "AnvilBlock",
+  "chiseled_bookshelf": "ChiseledBookShelfBlock",
+  "chiseled_cinnabar": "Block",
+  "chiseled_copper": "WeatheringCopperFullBlock",
+  "chiseled_deepslate": "Block",
+  "chiseled_nether_bricks": "Block",
+  "chiseled_polished_blackstone": "Block",
+  "chiseled_quartz_block": "Block",
+  "chiseled_red_sandstone": "Block",
+  "chiseled_resin_bricks": "Block",
+  "chiseled_sandstone": "Block",
+  "chiseled_stone_bricks": "Block",
+  "chiseled_sulfur": "Block",
+  "chiseled_tuff": "Block",
+  "chiseled_tuff_bricks": "Block",
+  "chorus_flower": "ChorusFlowerBlock",
+  "chorus_plant": "ChorusPlantBlock",
+  "cinnabar": "Block",
+  "cinnabar_brick_slab": "SlabBlock",
+  "cinnabar_brick_stairs": "StairBlock",
+  "cinnabar_brick_wall": "WallBlock",
+  "cinnabar_bricks": "Block",
+  "cinnabar_slab": "SlabBlock",
+  "cinnabar_stairs": "StairBlock",
+  "cinnabar_wall": "WallBlock",
+  "clay": "Block",
+  "closed_eyeblossom": "EyeblossomBlock",
+  "coal_block": "Block",
+  "coal_ore": "DropExperienceBlock",
+  "coarse_dirt": "Block",
+  "cobbled_deepslate": "Block",
+  "cobbled_deepslate_slab": "SlabBlock",
+  "cobbled_deepslate_stairs": "StairBlock",
+  "cobbled_deepslate_wall": "WallBlock",
+  "cobblestone": "Block",
+  "cobblestone_slab": "SlabBlock",
+  "cobblestone_stairs": "StairBlock",
+  "cobblestone_wall": "WallBlock",
+  "cobweb": "WebBlock",
+  "cocoa": "CocoaBlock",
+  "command_block": "CommandBlock",
+  "comparator": "ComparatorBlock",
+  "composter": "ComposterBlock",
+  "conduit": "ConduitBlock",
+  "copper_bars": "WeatheringCopperBarsBlock",
+  "copper_block": "WeatheringCopperFullBlock",
+  "copper_bulb": "WeatheringCopperBulbBlock",
+  "copper_chain": "WeatheringCopperChainBlock",
+  "copper_chest": "WeatheringCopperChestBlock",
+  "copper_door": "WeatheringCopperDoorBlock",
+  "copper_golem_statue": "WeatheringCopperGolemStatueBlock",
+  "copper_grate": "WeatheringCopperGrateBlock",
+  "copper_lantern": "WeatheringLanternBlock",
+  "copper_ore": "DropExperienceBlock",
+  "copper_torch": "TorchBlock",
+  "copper_trapdoor": "WeatheringCopperTrapDoorBlock",
+  "copper_wall_torch": "WallTorchBlock",
+  "cornflower": "FlowerBlock",
+  "cracked_deepslate_bricks": "Block",
+  "cracked_deepslate_tiles": "Block",
+  "cracked_nether_bricks": "Block",
+  "cracked_polished_blackstone_bricks": "Block",
+  "cracked_stone_bricks": "Block",
+  "crafter": "CrafterBlock",
+  "crafting_table": "CraftingTableBlock",
+  "creaking_heart": "CreakingHeartBlock",
+  "creeper_head": "SkullBlock",
+  "creeper_wall_head": "WallSkullBlock",
+  "crimson_button": "ButtonBlock",
+  "crimson_door": "DoorBlock",
+  "crimson_fence": "FenceBlock",
+  "crimson_fence_gate": "FenceGateBlock",
+  "crimson_fungus": "NetherFungusBlock",
+  "crimson_hanging_sign": "CeilingHangingSignBlock",
+  "crimson_hyphae": "RotatedPillarBlock",
+  "crimson_nylium": "NyliumBlock",
+  "crimson_planks": "Block",
+  "crimson_pressure_plate": "PressurePlateBlock",
+  "crimson_roots": "NetherRootsBlock",
+  "crimson_shelf": "ShelfBlock",
+  "crimson_sign": "StandingSignBlock",
+  "crimson_slab": "SlabBlock",
+  "crimson_stairs": "StairBlock",
+  "crimson_stem": "RotatedPillarBlock",
+  "crimson_trapdoor": "TrapDoorBlock",
+  "crimson_wall_hanging_sign": "WallHangingSignBlock",
+  "crimson_wall_sign": "WallSignBlock",
+  "crying_obsidian": "CryingObsidianBlock",
+  "cut_copper": "WeatheringCopperFullBlock",
+  "cut_copper_slab": "WeatheringCopperSlabBlock",
+  "cut_copper_stairs": "WeatheringCopperStairBlock",
+  "cut_red_sandstone": "Block",
+  "cut_red_sandstone_slab": "SlabBlock",
+  "cut_sandstone": "Block",
+  "cut_sandstone_slab": "SlabBlock",
+  "cyan_banner": "BannerBlock",
+  "cyan_bed": "BedBlock",
+  "cyan_candle": "CandleBlock",
+  "cyan_candle_cake": "CandleCakeBlock",
+  "cyan_carpet": "WoolCarpetBlock",
+  "cyan_concrete": "Block",
+  "cyan_concrete_powder": "ConcretePowderBlock",
+  "cyan_concrete_slab": "SlabBlock",
+  "cyan_concrete_stairs": "StairBlock",
+  "cyan_glazed_terracotta": "GlazedTerracottaBlock",
+  "cyan_shulker_box": "ShulkerBoxBlock",
+  "cyan_stained_glass": "StainedGlassBlock",
+  "cyan_stained_glass_pane": "StainedGlassPaneBlock",
+  "cyan_terracotta": "Block",
+  "cyan_wall_banner": "WallBannerBlock",
+  "cyan_wool": "Block",
+  "cyan_wool_slab": "SlabBlock",
+  "cyan_wool_stairs": "StairBlock",
+  "damaged_anvil": "AnvilBlock",
+  "dandelion": "FlowerBlock",
+  "dark_oak_button": "ButtonBlock",
+  "dark_oak_door": "DoorBlock",
+  "dark_oak_fence": "FenceBlock",
+  "dark_oak_fence_gate": "FenceGateBlock",
+  "dark_oak_hanging_sign": "CeilingHangingSignBlock",
+  "dark_oak_leaves": "TintedParticleLeavesBlock",
+  "dark_oak_log": "RotatedPillarBlock",
+  "dark_oak_planks": "Block",
+  "dark_oak_pressure_plate": "PressurePlateBlock",
+  "dark_oak_sapling": "SaplingBlock",
+  "dark_oak_shelf": "ShelfBlock",
+  "dark_oak_sign": "StandingSignBlock",
+  "dark_oak_slab": "SlabBlock",
+  "dark_oak_stairs": "StairBlock",
+  "dark_oak_trapdoor": "TrapDoorBlock",
+  "dark_oak_wall_hanging_sign": "WallHangingSignBlock",
+  "dark_oak_wall_sign": "WallSignBlock",
+  "dark_oak_wood": "RotatedPillarBlock",
+  "dark_prismarine": "Block",
+  "dark_prismarine_slab": "SlabBlock",
+  "dark_prismarine_stairs": "StairBlock",
+  "daylight_detector": "DaylightDetectorBlock",
+  "dead_brain_coral": "BaseCoralPlantBlock",
+  "dead_brain_coral_block": "Block",
+  "dead_brain_coral_fan": "BaseCoralFanBlock",
+  "dead_brain_coral_wall_fan": "BaseCoralWallFanBlock",
+  "dead_bubble_coral": "BaseCoralPlantBlock",
+  "dead_bubble_coral_block": "Block",
+  "dead_bubble_coral_fan": "BaseCoralFanBlock",
+  "dead_bubble_coral_wall_fan": "BaseCoralWallFanBlock",
+  "dead_bush": "DryVegetationBlock",
+  "dead_fire_coral": "BaseCoralPlantBlock",
+  "dead_fire_coral_block": "Block",
+  "dead_fire_coral_fan": "BaseCoralFanBlock",
+  "dead_fire_coral_wall_fan": "BaseCoralWallFanBlock",
+  "dead_horn_coral": "BaseCoralPlantBlock",
+  "dead_horn_coral_block": "Block",
+  "dead_horn_coral_fan": "BaseCoralFanBlock",
+  "dead_horn_coral_wall_fan": "BaseCoralWallFanBlock",
+  "dead_tube_coral": "BaseCoralPlantBlock",
+  "dead_tube_coral_block": "Block",
+  "dead_tube_coral_fan": "BaseCoralFanBlock",
+  "dead_tube_coral_wall_fan": "BaseCoralWallFanBlock",
+  "decorated_pot": "DecoratedPotBlock",
+  "deepslate": "RotatedPillarBlock",
+  "deepslate_brick_slab": "SlabBlock",
+  "deepslate_brick_stairs": "StairBlock",
+  "deepslate_brick_wall": "WallBlock",
+  "deepslate_bricks": "Block",
+  "deepslate_coal_ore": "DropExperienceBlock",
+  "deepslate_copper_ore": "DropExperienceBlock",
+  "deepslate_diamond_ore": "DropExperienceBlock",
+  "deepslate_emerald_ore": "DropExperienceBlock",
+  "deepslate_gold_ore": "DropExperienceBlock",
+  "deepslate_iron_ore": "DropExperienceBlock",
+  "deepslate_lapis_ore": "DropExperienceBlock",
+  "deepslate_redstone_ore": "RedStoneOreBlock",
+  "deepslate_tile_slab": "SlabBlock",
+  "deepslate_tile_stairs": "StairBlock",
+  "deepslate_tile_wall": "WallBlock",
+  "deepslate_tiles": "Block",
+  "detector_rail": "DetectorRailBlock",
+  "diamond_block": "Block",
+  "diamond_ore": "DropExperienceBlock",
+  "diorite": "Block",
+  "diorite_slab": "SlabBlock",
+  "diorite_stairs": "StairBlock",
+  "diorite_wall": "WallBlock",
+  "dirt": "Block",
+  "dirt_path": "PathBlock",
+  "dispenser": "DispenserBlock",
+  "dragon_egg": "DragonEggBlock",
+  "dragon_head": "SkullBlock",
+  "dragon_wall_head": "WallSkullBlock",
+  "dried_ghast": "DriedGhastBlock",
+  "dried_kelp_block": "Block",
+  "dripstone_block": "Block",
+  "dropper": "DropperBlock",
+  "emerald_block": "Block",
+  "emerald_ore": "DropExperienceBlock",
+  "enchanting_table": "EnchantingTableBlock",
+  "end_gateway": "EndGatewayBlock",
+  "end_portal": "EndPortalBlock",
+  "end_portal_frame": "EndPortalFrameBlock",
+  "end_rod": "EndRodBlock",
+  "end_stone": "Block",
+  "end_stone_brick_slab": "SlabBlock",
+  "end_stone_brick_stairs": "StairBlock",
+  "end_stone_brick_wall": "WallBlock",
+  "end_stone_bricks": "Block",
+  "ender_chest": "EnderChestBlock",
+  "exposed_chiseled_copper": "WeatheringCopperFullBlock",
+  "exposed_copper": "WeatheringCopperFullBlock",
+  "exposed_copper_bars": "WeatheringCopperBarsBlock",
+  "exposed_copper_bulb": "WeatheringCopperBulbBlock",
+  "exposed_copper_chain": "WeatheringCopperChainBlock",
+  "exposed_copper_chest": "WeatheringCopperChestBlock",
+  "exposed_copper_door": "WeatheringCopperDoorBlock",
+  "exposed_copper_golem_statue": "WeatheringCopperGolemStatueBlock",
+  "exposed_copper_grate": "WeatheringCopperGrateBlock",
+  "exposed_copper_lantern": "WeatheringLanternBlock",
+  "exposed_copper_trapdoor": "WeatheringCopperTrapDoorBlock",
+  "exposed_cut_copper": "WeatheringCopperFullBlock",
+  "exposed_cut_copper_slab": "WeatheringCopperSlabBlock",
+  "exposed_cut_copper_stairs": "WeatheringCopperStairBlock",
+  "exposed_lightning_rod": "WeatheringLightningRodBlock",
+  "farmland": "FarmlandBlock",
+  "fern": "TallGrassBlock",
+  "fire": "FireBlock",
+  "fire_coral": "CoralPlantBlock",
+  "fire_coral_block": "CoralBlock",
+  "fire_coral_fan": "CoralFanBlock",
+  "fire_coral_wall_fan": "CoralWallFanBlock",
+  "firefly_bush": "FireflyBushBlock",
+  "fletching_table": "Block",
+  "flower_pot": "FlowerPotBlock",
+  "flowering_azalea": "AzaleaBlock",
+  "flowering_azalea_leaves": "UntintedParticleLeavesBlock",
+  "frogspawn": "FrogspawnBlock",
+  "frosted_ice": "FrostedIceBlock",
+  "furnace": "FurnaceBlock",
+  "gilded_blackstone": "Block",
+  "glass": "TransparentBlock",
+  "glass_pane": "IronBarsBlock",
+  "glow_lichen": "GlowLichenBlock",
+  "glowstone": "Block",
+  "gold_block": "Block",
+  "gold_ore": "DropExperienceBlock",
+  "golden_dandelion": "FlowerBlock",
+  "granite": "Block",
+  "granite_slab": "SlabBlock",
+  "granite_stairs": "StairBlock",
+  "granite_wall": "WallBlock",
+  "grass_block": "GrassBlock",
+  "gravel": "ColoredFallingBlock",
+  "gray_banner": "BannerBlock",
+  "gray_bed": "BedBlock",
+  "gray_candle": "CandleBlock",
+  "gray_candle_cake": "CandleCakeBlock",
+  "gray_carpet": "WoolCarpetBlock",
+  "gray_concrete": "Block",
+  "gray_concrete_powder": "ConcretePowderBlock",
+  "gray_concrete_slab": "SlabBlock",
+  "gray_concrete_stairs": "StairBlock",
+  "gray_glazed_terracotta": "GlazedTerracottaBlock",
+  "gray_shulker_box": "ShulkerBoxBlock",
+  "gray_stained_glass": "StainedGlassBlock",
+  "gray_stained_glass_pane": "StainedGlassPaneBlock",
+  "gray_terracotta": "Block",
+  "gray_wall_banner": "WallBannerBlock",
+  "gray_wool": "Block",
+  "gray_wool_slab": "SlabBlock",
+  "gray_wool_stairs": "StairBlock",
+  "green_banner": "BannerBlock",
+  "green_bed": "BedBlock",
+  "green_candle": "CandleBlock",
+  "green_candle_cake": "CandleCakeBlock",
+  "green_carpet": "WoolCarpetBlock",
+  "green_concrete": "Block",
+  "green_concrete_powder": "ConcretePowderBlock",
+  "green_concrete_slab": "SlabBlock",
+  "green_concrete_stairs": "StairBlock",
+  "green_glazed_terracotta": "GlazedTerracottaBlock",
+  "green_shulker_box": "ShulkerBoxBlock",
+  "green_stained_glass": "StainedGlassBlock",
+  "green_stained_glass_pane": "StainedGlassPaneBlock",
+  "green_terracotta": "Block",
+  "green_wall_banner": "WallBannerBlock",
+  "green_wool": "Block",
+  "green_wool_slab": "SlabBlock",
+  "green_wool_stairs": "StairBlock",
+  "grindstone": "GrindstoneBlock",
+  "hanging_roots": "HangingRootsBlock",
+  "hay_block": "HayBlock",
+  "heavy_core": "HeavyCoreBlock",
+  "heavy_weighted_pressure_plate": "WeightedPressurePlateBlock",
+  "honey_block": "HoneyBlock",
+  "honeycomb_block": "Block",
+  "hopper": "HopperBlock",
+  "horn_coral": "CoralPlantBlock",
+  "horn_coral_block": "CoralBlock",
+  "horn_coral_fan": "CoralFanBlock",
+  "horn_coral_wall_fan": "CoralWallFanBlock",
+  "ice": "IceBlock",
+  "infested_chiseled_stone_bricks": "InfestedBlock",
+  "infested_cobblestone": "InfestedBlock",
+  "infested_cracked_stone_bricks": "InfestedBlock",
+  "infested_deepslate": "InfestedRotatedPillarBlock",
+  "infested_mossy_stone_bricks": "InfestedBlock",
+  "infested_stone": "InfestedBlock",
+  "infested_stone_bricks": "InfestedBlock",
+  "iron_bars": "IronBarsBlock",
+  "iron_block": "Block",
+  "iron_chain": "ChainBlock",
+  "iron_door": "DoorBlock",
+  "iron_ore": "DropExperienceBlock",
+  "iron_trapdoor": "TrapDoorBlock",
+  "jack_o_lantern": "CarvedPumpkinBlock",
+  "jigsaw": "JigsawBlock",
+  "jukebox": "JukeboxBlock",
+  "jungle_button": "ButtonBlock",
+  "jungle_door": "DoorBlock",
+  "jungle_fence": "FenceBlock",
+  "jungle_fence_gate": "FenceGateBlock",
+  "jungle_hanging_sign": "CeilingHangingSignBlock",
+  "jungle_leaves": "TintedParticleLeavesBlock",
+  "jungle_log": "RotatedPillarBlock",
+  "jungle_planks": "Block",
+  "jungle_pressure_plate": "PressurePlateBlock",
+  "jungle_sapling": "SaplingBlock",
+  "jungle_shelf": "ShelfBlock",
+  "jungle_sign": "StandingSignBlock",
+  "jungle_slab": "SlabBlock",
+  "jungle_stairs": "StairBlock",
+  "jungle_trapdoor": "TrapDoorBlock",
+  "jungle_wall_hanging_sign": "WallHangingSignBlock",
+  "jungle_wall_sign": "WallSignBlock",
+  "jungle_wood": "RotatedPillarBlock",
+  "kelp": "KelpBlock",
+  "kelp_plant": "KelpPlantBlock",
+  "ladder": "LadderBlock",
+  "lantern": "LanternBlock",
+  "lapis_block": "Block",
+  "lapis_ore": "DropExperienceBlock",
+  "large_amethyst_bud": "AmethystClusterBlock",
+  "large_fern": "DoublePlantBlock",
+  "lava": "LiquidBlock",
+  "lava_cauldron": "LavaCauldronBlock",
+  "leaf_litter": "LeafLitterBlock",
+  "lectern": "LecternBlock",
+  "lever": "LeverBlock",
+  "light": "LightBlock",
+  "light_blue_banner": "BannerBlock",
+  "light_blue_bed": "BedBlock",
+  "light_blue_candle": "CandleBlock",
+  "light_blue_candle_cake": "CandleCakeBlock",
+  "light_blue_carpet": "WoolCarpetBlock",
+  "light_blue_concrete": "Block",
+  "light_blue_concrete_powder": "ConcretePowderBlock",
+  "light_blue_concrete_slab": "SlabBlock",
+  "light_blue_concrete_stairs": "StairBlock",
+  "light_blue_glazed_terracotta": "GlazedTerracottaBlock",
+  "light_blue_shulker_box": "ShulkerBoxBlock",
+  "light_blue_stained_glass": "StainedGlassBlock",
+  "light_blue_stained_glass_pane": "StainedGlassPaneBlock",
+  "light_blue_terracotta": "Block",
+  "light_blue_wall_banner": "WallBannerBlock",
+  "light_blue_wool": "Block",
+  "light_blue_wool_slab": "SlabBlock",
+  "light_blue_wool_stairs": "StairBlock",
+  "light_gray_banner": "BannerBlock",
+  "light_gray_bed": "BedBlock",
+  "light_gray_candle": "CandleBlock",
+  "light_gray_candle_cake": "CandleCakeBlock",
+  "light_gray_carpet": "WoolCarpetBlock",
+  "light_gray_concrete": "Block",
+  "light_gray_concrete_powder": "ConcretePowderBlock",
+  "light_gray_concrete_slab": "SlabBlock",
+  "light_gray_concrete_stairs": "StairBlock",
+  "light_gray_glazed_terracotta": "GlazedTerracottaBlock",
+  "light_gray_shulker_box": "ShulkerBoxBlock",
+  "light_gray_stained_glass": "StainedGlassBlock",
+  "light_gray_stained_glass_pane": "StainedGlassPaneBlock",
+  "light_gray_terracotta": "Block",
+  "light_gray_wall_banner": "WallBannerBlock",
+  "light_gray_wool": "Block",
+  "light_gray_wool_slab": "SlabBlock",
+  "light_gray_wool_stairs": "StairBlock",
+  "light_weighted_pressure_plate": "WeightedPressurePlateBlock",
+  "lightning_rod": "WeatheringLightningRodBlock",
+  "lilac": "TallFlowerBlock",
+  "lily_of_the_valley": "FlowerBlock",
+  "lily_pad": "LilyPadBlock",
+  "lime_banner": "BannerBlock",
+  "lime_bed": "BedBlock",
+  "lime_candle": "CandleBlock",
+  "lime_candle_cake": "CandleCakeBlock",
+  "lime_carpet": "WoolCarpetBlock",
+  "lime_concrete": "Block",
+  "lime_concrete_powder": "ConcretePowderBlock",
+  "lime_concrete_slab": "SlabBlock",
+  "lime_concrete_stairs": "StairBlock",
+  "lime_glazed_terracotta": "GlazedTerracottaBlock",
+  "lime_shulker_box": "ShulkerBoxBlock",
+  "lime_stained_glass": "StainedGlassBlock",
+  "lime_stained_glass_pane": "StainedGlassPaneBlock",
+  "lime_terracotta": "Block",
+  "lime_wall_banner": "WallBannerBlock",
+  "lime_wool": "Block",
+  "lime_wool_slab": "SlabBlock",
+  "lime_wool_stairs": "StairBlock",
+  "lodestone": "Block",
+  "loom": "LoomBlock",
+  "magenta_banner": "BannerBlock",
+  "magenta_bed": "BedBlock",
+  "magenta_candle": "CandleBlock",
+  "magenta_candle_cake": "CandleCakeBlock",
+  "magenta_carpet": "WoolCarpetBlock",
+  "magenta_concrete": "Block",
+  "magenta_concrete_powder": "ConcretePowderBlock",
+  "magenta_concrete_slab": "SlabBlock",
+  "magenta_concrete_stairs": "StairBlock",
+  "magenta_glazed_terracotta": "GlazedTerracottaBlock",
+  "magenta_shulker_box": "ShulkerBoxBlock",
+  "magenta_stained_glass": "StainedGlassBlock",
+  "magenta_stained_glass_pane": "StainedGlassPaneBlock",
+  "magenta_terracotta": "Block",
+  "magenta_wall_banner": "WallBannerBlock",
+  "magenta_wool": "Block",
+  "magenta_wool_slab": "SlabBlock",
+  "magenta_wool_stairs": "StairBlock",
+  "magma_block": "MagmaBlock",
+  "mangrove_button": "ButtonBlock",
+  "mangrove_door": "DoorBlock",
+  "mangrove_fence": "FenceBlock",
+  "mangrove_fence_gate": "FenceGateBlock",
+  "mangrove_hanging_sign": "CeilingHangingSignBlock",
+  "mangrove_leaves": "MangroveLeavesBlock",
+  "mangrove_log": "RotatedPillarBlock",
+  "mangrove_planks": "Block",
+  "mangrove_pressure_plate": "PressurePlateBlock",
+  "mangrove_propagule": "MangrovePropaguleBlock",
+  "mangrove_roots": "MangroveRootsBlock",
+  "mangrove_shelf": "ShelfBlock",
+  "mangrove_sign": "StandingSignBlock",
+  "mangrove_slab": "SlabBlock",
+  "mangrove_stairs": "StairBlock",
+  "mangrove_trapdoor": "TrapDoorBlock",
+  "mangrove_wall_hanging_sign": "WallHangingSignBlock",
+  "mangrove_wall_sign": "WallSignBlock",
+  "mangrove_wood": "RotatedPillarBlock",
+  "medium_amethyst_bud": "AmethystClusterBlock",
+  "melon": "Block",
+  "melon_stem": "StemBlock",
+  "moss_block": "BonemealableFeaturePlacerBlock",
+  "moss_carpet": "CarpetBlock",
+  "mossy_cobblestone": "Block",
+  "mossy_cobblestone_slab": "SlabBlock",
+  "mossy_cobblestone_stairs": "StairBlock",
+  "mossy_cobblestone_wall": "WallBlock",
+  "mossy_stone_brick_slab": "SlabBlock",
+  "mossy_stone_brick_stairs": "StairBlock",
+  "mossy_stone_brick_wall": "WallBlock",
+  "mossy_stone_bricks": "Block",
+  "moving_piston": "MovingPistonBlock",
+  "mud": "MudBlock",
+  "mud_brick_slab": "SlabBlock",
+  "mud_brick_stairs": "StairBlock",
+  "mud_brick_wall": "WallBlock",
+  "mud_bricks": "Block",
+  "muddy_mangrove_roots": "RotatedPillarBlock",
+  "mushroom_stem": "HugeMushroomBlock",
+  "mycelium": "MyceliumBlock",
+  "nether_brick_fence": "FenceBlock",
+  "nether_brick_slab": "SlabBlock",
+  "nether_brick_stairs": "StairBlock",
+  "nether_brick_wall": "WallBlock",
+  "nether_bricks": "Block",
+  "nether_gold_ore": "DropExperienceBlock",
+  "nether_portal": "NetherPortalBlock",
+  "nether_quartz_ore": "DropExperienceBlock",
+  "nether_sprouts": "NetherSproutsBlock",
+  "nether_wart": "NetherWartBlock",
+  "nether_wart_block": "Block",
+  "netherite_block": "Block",
+  "netherrack": "NetherrackBlock",
+  "note_block": "NoteBlock",
+  "oak_button": "ButtonBlock",
+  "oak_door": "DoorBlock",
+  "oak_fence": "FenceBlock",
+  "oak_fence_gate": "FenceGateBlock",
+  "oak_hanging_sign": "CeilingHangingSignBlock",
+  "oak_leaves": "TintedParticleLeavesBlock",
+  "oak_log": "RotatedPillarBlock",
+  "oak_planks": "Block",
+  "oak_pressure_plate": "PressurePlateBlock",
+  "oak_sapling": "SaplingBlock",
+  "oak_shelf": "ShelfBlock",
+  "oak_sign": "StandingSignBlock",
+  "oak_slab": "SlabBlock",
+  "oak_stairs": "StairBlock",
+  "oak_trapdoor": "TrapDoorBlock",
+  "oak_wall_hanging_sign": "WallHangingSignBlock",
+  "oak_wall_sign": "WallSignBlock",
+  "oak_wood": "RotatedPillarBlock",
+  "observer": "ObserverBlock",
+  "obsidian": "Block",
+  "ochre_froglight": "RotatedPillarBlock",
+  "open_eyeblossom": "EyeblossomBlock",
+  "orange_banner": "BannerBlock",
+  "orange_bed": "BedBlock",
+  "orange_candle": "CandleBlock",
+  "orange_candle_cake": "CandleCakeBlock",
+  "orange_carpet": "WoolCarpetBlock",
+  "orange_concrete": "Block",
+  "orange_concrete_powder": "ConcretePowderBlock",
+  "orange_concrete_slab": "SlabBlock",
+  "orange_concrete_stairs": "StairBlock",
+  "orange_glazed_terracotta": "GlazedTerracottaBlock",
+  "orange_poplar_leaves": "UntintedParticleLeavesBlock",
+  "orange_shulker_box": "ShulkerBoxBlock",
+  "orange_stained_glass": "StainedGlassBlock",
+  "orange_stained_glass_pane": "StainedGlassPaneBlock",
+  "orange_terracotta": "Block",
+  "orange_tulip": "FlowerBlock",
+  "orange_wall_banner": "WallBannerBlock",
+  "orange_wool": "Block",
+  "orange_wool_slab": "SlabBlock",
+  "orange_wool_stairs": "StairBlock",
+  "oxeye_daisy": "FlowerBlock",
+  "oxidized_chiseled_copper": "WeatheringCopperFullBlock",
+  "oxidized_copper": "WeatheringCopperFullBlock",
+  "oxidized_copper_bars": "WeatheringCopperBarsBlock",
+  "oxidized_copper_bulb": "WeatheringCopperBulbBlock",
+  "oxidized_copper_chain": "WeatheringCopperChainBlock",
+  "oxidized_copper_chest": "WeatheringCopperChestBlock",
+  "oxidized_copper_door": "WeatheringCopperDoorBlock",
+  "oxidized_copper_golem_statue": "WeatheringCopperGolemStatueBlock",
+  "oxidized_copper_grate": "WeatheringCopperGrateBlock",
+  "oxidized_copper_lantern": "WeatheringLanternBlock",
+  "oxidized_copper_trapdoor": "WeatheringCopperTrapDoorBlock",
+  "oxidized_cut_copper": "WeatheringCopperFullBlock",
+  "oxidized_cut_copper_slab": "WeatheringCopperSlabBlock",
+  "oxidized_cut_copper_stairs": "WeatheringCopperStairBlock",
+  "oxidized_lightning_rod": "WeatheringLightningRodBlock",
+  "packed_ice": "Block",
+  "packed_mud": "Block",
+  "pale_hanging_moss": "HangingMossBlock",
+  "pale_moss_block": "BonemealableFeaturePlacerBlock",
+  "pale_moss_carpet": "MossyCarpetBlock",
+  "pale_oak_button": "ButtonBlock",
+  "pale_oak_door": "DoorBlock",
+  "pale_oak_fence": "FenceBlock",
+  "pale_oak_fence_gate": "FenceGateBlock",
+  "pale_oak_hanging_sign": "CeilingHangingSignBlock",
+  "pale_oak_leaves": "UntintedParticleLeavesBlock",
+  "pale_oak_log": "RotatedPillarBlock",
+  "pale_oak_planks": "Block",
+  "pale_oak_pressure_plate": "PressurePlateBlock",
+  "pale_oak_sapling": "SaplingBlock",
+  "pale_oak_shelf": "ShelfBlock",
+  "pale_oak_sign": "StandingSignBlock",
+  "pale_oak_slab": "SlabBlock",
+  "pale_oak_stairs": "StairBlock",
+  "pale_oak_trapdoor": "TrapDoorBlock",
+  "pale_oak_wall_hanging_sign": "WallHangingSignBlock",
+  "pale_oak_wall_sign": "WallSignBlock",
+  "pale_oak_wood": "RotatedPillarBlock",
+  "pearlescent_froglight": "RotatedPillarBlock",
+  "peony": "TallFlowerBlock",
+  "petrified_oak_slab": "SlabBlock",
+  "piglin_head": "SkullBlock",
+  "piglin_wall_head": "PiglinWallSkullBlock",
+  "pink_banner": "BannerBlock",
+  "pink_bed": "BedBlock",
+  "pink_candle": "CandleBlock",
+  "pink_candle_cake": "CandleCakeBlock",
+  "pink_carpet": "WoolCarpetBlock",
+  "pink_concrete": "Block",
+  "pink_concrete_powder": "ConcretePowderBlock",
+  "pink_concrete_slab": "SlabBlock",
+  "pink_concrete_stairs": "StairBlock",
+  "pink_glazed_terracotta": "GlazedTerracottaBlock",
+  "pink_petals": "FlowerBedBlock",
+  "pink_shulker_box": "ShulkerBoxBlock",
+  "pink_stained_glass": "StainedGlassBlock",
+  "pink_stained_glass_pane": "StainedGlassPaneBlock",
+  "pink_terracotta": "Block",
+  "pink_tulip": "FlowerBlock",
+  "pink_wall_banner": "WallBannerBlock",
+  "pink_wool": "Block",
+  "pink_wool_slab": "SlabBlock",
+  "pink_wool_stairs": "StairBlock",
+  "piston": "PistonBaseBlock",
+  "piston_head": "PistonHeadBlock",
+  "pitcher_crop": "PitcherCropBlock",
+  "pitcher_plant": "DoublePlantBlock",
+  "player_head": "PlayerHeadBlock",
+  "player_wall_head": "PlayerWallHeadBlock",
+  "podzol": "SnowyBlock",
+  "pointed_dripstone": "PointedDripstoneBlock",
+  "polished_andesite": "Block",
+  "polished_andesite_slab": "SlabBlock",
+  "polished_andesite_stairs": "StairBlock",
+  "polished_basalt": "RotatedPillarBlock",
+  "polished_blackstone": "Block",
+  "polished_blackstone_brick_slab": "SlabBlock",
+  "polished_blackstone_brick_stairs": "StairBlock",
+  "polished_blackstone_brick_wall": "WallBlock",
+  "polished_blackstone_bricks": "Block",
+  "polished_blackstone_button": "ButtonBlock",
+  "polished_blackstone_pressure_plate": "PressurePlateBlock",
+  "polished_blackstone_slab": "SlabBlock",
+  "polished_blackstone_stairs": "StairBlock",
+  "polished_blackstone_wall": "WallBlock",
+  "polished_cinnabar": "Block",
+  "polished_cinnabar_slab": "SlabBlock",
+  "polished_cinnabar_stairs": "StairBlock",
+  "polished_cinnabar_wall": "WallBlock",
+  "polished_deepslate": "Block",
+  "polished_deepslate_slab": "SlabBlock",
+  "polished_deepslate_stairs": "StairBlock",
+  "polished_deepslate_wall": "WallBlock",
+  "polished_diorite": "Block",
+  "polished_diorite_slab": "SlabBlock",
+  "polished_diorite_stairs": "StairBlock",
+  "polished_granite": "Block",
+  "polished_granite_slab": "SlabBlock",
+  "polished_granite_stairs": "StairBlock",
+  "polished_sulfur": "Block",
+  "polished_sulfur_slab": "SlabBlock",
+  "polished_sulfur_stairs": "StairBlock",
+  "polished_sulfur_wall": "WallBlock",
+  "polished_tuff": "Block",
+  "polished_tuff_slab": "SlabBlock",
+  "polished_tuff_stairs": "StairBlock",
+  "polished_tuff_wall": "WallBlock",
+  "poplar_button": "ButtonBlock",
+  "poplar_door": "DoorBlock",
+  "poplar_fence": "FenceBlock",
+  "poplar_fence_gate": "FenceGateBlock",
+  "poplar_hanging_sign": "CeilingHangingSignBlock",
+  "poplar_log": "RotatedPillarBlock",
+  "poplar_planks": "Block",
+  "poplar_pressure_plate": "PressurePlateBlock",
+  "poplar_sapling": "SaplingBlock",
+  "poplar_shelf": "ShelfBlock",
+  "poplar_sign": "StandingSignBlock",
+  "poplar_slab": "SlabBlock",
+  "poplar_stairs": "StairBlock",
+  "poplar_trapdoor": "TrapDoorBlock",
+  "poplar_wall_hanging_sign": "WallHangingSignBlock",
+  "poplar_wall_sign": "WallSignBlock",
+  "poplar_wood": "RotatedPillarBlock",
+  "poppy": "FlowerBlock",
+  "potatoes": "PotatoBlock",
+  "potent_sulfur": "PotentSulfurBlock",
+  "potted_acacia_sapling": "FlowerPotBlock",
+  "potted_allium": "FlowerPotBlock",
+  "potted_azalea_bush": "FlowerPotBlock",
+  "potted_azure_bluet": "FlowerPotBlock",
+  "potted_bamboo": "FlowerPotBlock",
+  "potted_birch_sapling": "FlowerPotBlock",
+  "potted_blue_orchid": "FlowerPotBlock",
+  "potted_brown_mushroom": "FlowerPotBlock",
+  "potted_cactus": "FlowerPotBlock",
+  "potted_cherry_sapling": "FlowerPotBlock",
+  "potted_closed_eyeblossom": "FlowerPotBlock",
+  "potted_cornflower": "FlowerPotBlock",
+  "potted_crimson_fungus": "FlowerPotBlock",
+  "potted_crimson_roots": "FlowerPotBlock",
+  "potted_dandelion": "FlowerPotBlock",
+  "potted_dark_oak_sapling": "FlowerPotBlock",
+  "potted_dead_bush": "FlowerPotBlock",
+  "potted_fern": "FlowerPotBlock",
+  "potted_flowering_azalea_bush": "FlowerPotBlock",
+  "potted_golden_dandelion": "FlowerPotBlock",
+  "potted_jungle_sapling": "FlowerPotBlock",
+  "potted_lily_of_the_valley": "FlowerPotBlock",
+  "potted_mangrove_propagule": "FlowerPotBlock",
+  "potted_oak_sapling": "FlowerPotBlock",
+  "potted_open_eyeblossom": "FlowerPotBlock",
+  "potted_orange_tulip": "FlowerPotBlock",
+  "potted_oxeye_daisy": "FlowerPotBlock",
+  "potted_pale_oak_sapling": "FlowerPotBlock",
+  "potted_pink_tulip": "FlowerPotBlock",
+  "potted_poplar_sapling": "FlowerPotBlock",
+  "potted_poppy": "FlowerPotBlock",
+  "potted_red_mushroom": "FlowerPotBlock",
+  "potted_red_tulip": "FlowerPotBlock",
+  "potted_spruce_sapling": "FlowerPotBlock",
+  "potted_torchflower": "FlowerPotBlock",
+  "potted_warped_fungus": "FlowerPotBlock",
+  "potted_warped_roots": "FlowerPotBlock",
+  "potted_white_tulip": "FlowerPotBlock",
+  "potted_wither_rose": "FlowerPotBlock",
+  "powder_snow": "PowderSnowBlock",
+  "powder_snow_cauldron": "LayeredCauldronBlock",
+  "powered_rail": "PoweredRailBlock",
+  "prismarine": "Block",
+  "prismarine_brick_slab": "SlabBlock",
+  "prismarine_brick_stairs": "StairBlock",
+  "prismarine_bricks": "Block",
+  "prismarine_slab": "SlabBlock",
+  "prismarine_stairs": "StairBlock",
+  "prismarine_wall": "WallBlock",
+  "pumpkin": "PumpkinBlock",
+  "pumpkin_stem": "StemBlock",
+  "purple_banner": "BannerBlock",
+  "purple_bed": "BedBlock",
+  "purple_candle": "CandleBlock",
+  "purple_candle_cake": "CandleCakeBlock",
+  "purple_carpet": "WoolCarpetBlock",
+  "purple_concrete": "Block",
+  "purple_concrete_powder": "ConcretePowderBlock",
+  "purple_concrete_slab": "SlabBlock",
+  "purple_concrete_stairs": "StairBlock",
+  "purple_glazed_terracotta": "GlazedTerracottaBlock",
+  "purple_shulker_box": "ShulkerBoxBlock",
+  "purple_stained_glass": "StainedGlassBlock",
+  "purple_stained_glass_pane": "StainedGlassPaneBlock",
+  "purple_terracotta": "Block",
+  "purple_wall_banner": "WallBannerBlock",
+  "purple_wool": "Block",
+  "purple_wool_slab": "SlabBlock",
+  "purple_wool_stairs": "StairBlock",
+  "purpur_block": "Block",
+  "purpur_pillar": "RotatedPillarBlock",
+  "purpur_slab": "SlabBlock",
+  "purpur_stairs": "StairBlock",
+  "quartz_block": "Block",
+  "quartz_bricks": "Block",
+  "quartz_pillar": "RotatedPillarBlock",
+  "quartz_slab": "SlabBlock",
+  "quartz_stairs": "StairBlock",
+  "rail": "RailBlock",
+  "raw_copper_block": "Block",
+  "raw_gold_block": "Block",
+  "raw_iron_block": "Block",
+  "red_banner": "BannerBlock",
+  "red_bed": "BedBlock",
+  "red_candle": "CandleBlock",
+  "red_candle_cake": "CandleCakeBlock",
+  "red_carpet": "WoolCarpetBlock",
+  "red_concrete": "Block",
+  "red_concrete_powder": "ConcretePowderBlock",
+  "red_concrete_slab": "SlabBlock",
+  "red_concrete_stairs": "StairBlock",
+  "red_glazed_terracotta": "GlazedTerracottaBlock",
+  "red_mushroom": "MushroomBlock",
+  "red_mushroom_block": "HugeMushroomBlock",
+  "red_nether_brick_slab": "SlabBlock",
+  "red_nether_brick_stairs": "StairBlock",
+  "red_nether_brick_wall": "WallBlock",
+  "red_nether_bricks": "Block",
+  "red_poplar_leaves": "UntintedParticleLeavesBlock",
+  "red_sand": "SandBlock",
+  "red_sandstone": "Block",
+  "red_sandstone_slab": "SlabBlock",
+  "red_sandstone_stairs": "StairBlock",
+  "red_sandstone_wall": "WallBlock",
+  "red_shrub": "BushBlock",
+  "red_shulker_box": "ShulkerBoxBlock",
+  "red_stained_glass": "StainedGlassBlock",
+  "red_stained_glass_pane": "StainedGlassPaneBlock",
+  "red_terracotta": "Block",
+  "red_tulip": "FlowerBlock",
+  "red_wall_banner": "WallBannerBlock",
+  "red_wool": "Block",
+  "red_wool_slab": "SlabBlock",
+  "red_wool_stairs": "StairBlock",
+  "redstone_block": "PoweredBlock",
+  "redstone_lamp": "RedstoneLampBlock",
+  "redstone_ore": "RedStoneOreBlock",
+  "redstone_torch": "RedstoneTorchBlock",
+  "redstone_wall_torch": "RedstoneWallTorchBlock",
+  "redstone_wire": "RedstoneWireBlock",
+  "reinforced_deepslate": "Block",
+  "repeater": "RepeaterBlock",
+  "repeating_command_block": "CommandBlock",
+  "resin_block": "Block",
+  "resin_brick_slab": "SlabBlock",
+  "resin_brick_stairs": "StairBlock",
+  "resin_brick_wall": "WallBlock",
+  "resin_bricks": "Block",
+  "resin_clump": "MultifaceBlock",
+  "respawn_anchor": "RespawnAnchorBlock",
+  "rooted_dirt": "RootedDirtBlock",
+  "rose_bush": "TallFlowerBlock",
+  "sand": "SandBlock",
+  "sandstone": "Block",
+  "sandstone_slab": "SlabBlock",
+  "sandstone_stairs": "StairBlock",
+  "sandstone_wall": "WallBlock",
+  "scaffolding": "ScaffoldingBlock",
+  "sculk": "SculkBlock",
+  "sculk_catalyst": "SculkCatalystBlock",
+  "sculk_sensor": "SculkSensorBlock",
+  "sculk_shrieker": "SculkShriekerBlock",
+  "sculk_vein": "SculkVeinBlock",
+  "sea_lantern": "Block",
+  "sea_pickle": "SeaPickleBlock",
+  "seagrass": "SeagrassBlock",
+  "shelf_mushroom": "ShelfMushroomBlock",
+  "short_dry_grass": "ShortDryGrassBlock",
+  "short_grass": "TallGrassBlock",
+  "shroomlight": "Block",
+  "shulker_box": "ShulkerBoxBlock",
+  "skeleton_skull": "SkullBlock",
+  "skeleton_wall_skull": "WallSkullBlock",
+  "slime_block": "SlimeBlock",
+  "small_amethyst_bud": "AmethystClusterBlock",
+  "small_dripleaf": "SmallDripleafBlock",
+  "smithing_table": "SmithingTableBlock",
+  "smoker": "SmokerBlock",
+  "smooth_basalt": "Block",
+  "smooth_quartz": "Block",
+  "smooth_quartz_slab": "SlabBlock",
+  "smooth_quartz_stairs": "StairBlock",
+  "smooth_red_sandstone": "Block",
+  "smooth_red_sandstone_slab": "SlabBlock",
+  "smooth_red_sandstone_stairs": "StairBlock",
+  "smooth_sandstone": "Block",
+  "smooth_sandstone_slab": "SlabBlock",
+  "smooth_sandstone_stairs": "StairBlock",
+  "smooth_stone": "Block",
+  "smooth_stone_slab": "SlabBlock",
+  "sniffer_egg": "SnifferEggBlock",
+  "snow": "SnowLayerBlock",
+  "snow_block": "Block",
+  "soul_campfire": "CampfireBlock",
+  "soul_fire": "SoulFireBlock",
+  "soul_lantern": "LanternBlock",
+  "soul_sand": "SoulSandBlock",
+  "soul_soil": "Block",
+  "soul_torch": "TorchBlock",
+  "soul_wall_torch": "WallTorchBlock",
+  "spawner": "SpawnerBlock",
+  "sponge": "SpongeBlock",
+  "spore_blossom": "SporeBlossomBlock",
+  "spruce_button": "ButtonBlock",
+  "spruce_door": "DoorBlock",
+  "spruce_fence": "FenceBlock",
+  "spruce_fence_gate": "FenceGateBlock",
+  "spruce_hanging_sign": "CeilingHangingSignBlock",
+  "spruce_leaves": "LeavesBlock",
+  "spruce_log": "RotatedPillarBlock",
+  "spruce_planks": "Block",
+  "spruce_pressure_plate": "PressurePlateBlock",
+  "spruce_sapling": "SaplingBlock",
+  "spruce_shelf": "ShelfBlock",
+  "spruce_sign": "StandingSignBlock",
+  "spruce_slab": "SlabBlock",
+  "spruce_stairs": "StairBlock",
+  "spruce_trapdoor": "TrapDoorBlock",
+  "spruce_wall_hanging_sign": "WallHangingSignBlock",
+  "spruce_wall_sign": "WallSignBlock",
+  "spruce_wood": "RotatedPillarBlock",
+  "sticky_piston": "PistonBaseBlock",
+  "stone": "Block",
+  "stone_brick_slab": "SlabBlock",
+  "stone_brick_stairs": "StairBlock",
+  "stone_brick_wall": "WallBlock",
+  "stone_bricks": "Block",
+  "stone_button": "ButtonBlock",
+  "stone_pressure_plate": "PressurePlateBlock",
+  "stone_slab": "SlabBlock",
+  "stone_stairs": "StairBlock",
+  "stonecutter": "StonecutterBlock",
+  "straw_bed": "StrawBedBlock",
+  "stripped_acacia_log": "RotatedPillarBlock",
+  "stripped_acacia_wood": "RotatedPillarBlock",
+  "stripped_bamboo_block": "RotatedPillarBlock",
+  "stripped_birch_log": "RotatedPillarBlock",
+  "stripped_birch_wood": "RotatedPillarBlock",
+  "stripped_cherry_log": "RotatedPillarBlock",
+  "stripped_cherry_wood": "RotatedPillarBlock",
+  "stripped_crimson_hyphae": "RotatedPillarBlock",
+  "stripped_crimson_stem": "RotatedPillarBlock",
+  "stripped_dark_oak_log": "RotatedPillarBlock",
+  "stripped_dark_oak_wood": "RotatedPillarBlock",
+  "stripped_jungle_log": "RotatedPillarBlock",
+  "stripped_jungle_wood": "RotatedPillarBlock",
+  "stripped_mangrove_log": "RotatedPillarBlock",
+  "stripped_mangrove_wood": "RotatedPillarBlock",
+  "stripped_oak_log": "RotatedPillarBlock",
+  "stripped_oak_wood": "RotatedPillarBlock",
+  "stripped_pale_oak_log": "RotatedPillarBlock",
+  "stripped_pale_oak_wood": "RotatedPillarBlock",
+  "stripped_poplar_log": "RotatedPillarBlock",
+  "stripped_poplar_wood": "RotatedPillarBlock",
+  "stripped_spruce_log": "RotatedPillarBlock",
+  "stripped_spruce_wood": "RotatedPillarBlock",
+  "stripped_warped_hyphae": "RotatedPillarBlock",
+  "stripped_warped_stem": "RotatedPillarBlock",
+  "structure_block": "StructureBlock",
+  "structure_void": "StructureVoidBlock",
+  "sugar_cane": "SugarCaneBlock",
+  "sulfur": "Block",
+  "sulfur_brick_slab": "SlabBlock",
+  "sulfur_brick_stairs": "StairBlock",
+  "sulfur_brick_wall": "WallBlock",
+  "sulfur_bricks": "Block",
+  "sulfur_slab": "SlabBlock",
+  "sulfur_spike": "SulfurSpikeBlock",
+  "sulfur_stairs": "StairBlock",
+  "sulfur_wall": "WallBlock",
+  "sunflower": "TallFlowerBlock",
+  "suspicious_gravel": "BrushableBlock",
+  "suspicious_sand": "BrushableBlock",
+  "sweet_berry_bush": "SweetBerryBushBlock",
+  "tall_dry_grass": "TallDryGrassBlock",
+  "tall_grass": "DoublePlantBlock",
+  "tall_seagrass": "TallSeagrassBlock",
+  "target": "TargetBlock",
+  "terracotta": "Block",
+  "test_block": "TestBlock",
+  "test_instance_block": "TestInstanceBlock",
+  "tinted_glass": "TintedGlassBlock",
+  "tnt": "TntBlock",
+  "torch": "TorchBlock",
+  "torchflower": "FlowerBlock",
+  "torchflower_crop": "TorchflowerCropBlock",
+  "trapped_chest": "TrappedChestBlock",
+  "trial_spawner": "TrialSpawnerBlock",
+  "tripwire": "TripWireBlock",
+  "tripwire_hook": "TripWireHookBlock",
+  "tube_coral": "CoralPlantBlock",
+  "tube_coral_block": "CoralBlock",
+  "tube_coral_fan": "CoralFanBlock",
+  "tube_coral_wall_fan": "CoralWallFanBlock",
+  "tuff": "Block",
+  "tuff_brick_slab": "SlabBlock",
+  "tuff_brick_stairs": "StairBlock",
+  "tuff_brick_wall": "WallBlock",
+  "tuff_bricks": "Block",
+  "tuff_slab": "SlabBlock",
+  "tuff_stairs": "StairBlock",
+  "tuff_wall": "WallBlock",
+  "turtle_egg": "TurtleEggBlock",
+  "twisting_vines": "TwistingVinesBlock",
+  "twisting_vines_plant": "TwistingVinesPlantBlock",
+  "vault": "VaultBlock",
+  "verdant_froglight": "RotatedPillarBlock",
+  "vine": "VineBlock",
+  "void_air": "AirBlock",
+  "wall_torch": "WallTorchBlock",
+  "warped_button": "ButtonBlock",
+  "warped_door": "DoorBlock",
+  "warped_fence": "FenceBlock",
+  "warped_fence_gate": "FenceGateBlock",
+  "warped_fungus": "NetherFungusBlock",
+  "warped_hanging_sign": "CeilingHangingSignBlock",
+  "warped_hyphae": "RotatedPillarBlock",
+  "warped_nylium": "NyliumBlock",
+  "warped_planks": "Block",
+  "warped_pressure_plate": "PressurePlateBlock",
+  "warped_roots": "NetherRootsBlock",
+  "warped_shelf": "ShelfBlock",
+  "warped_sign": "StandingSignBlock",
+  "warped_slab": "SlabBlock",
+  "warped_stairs": "StairBlock",
+  "warped_stem": "RotatedPillarBlock",
+  "warped_trapdoor": "TrapDoorBlock",
+  "warped_wall_hanging_sign": "WallHangingSignBlock",
+  "warped_wall_sign": "WallSignBlock",
+  "warped_wart_block": "Block",
+  "water": "LiquidBlock",
+  "water_cauldron": "LayeredCauldronBlock",
+  "waxed_chiseled_copper": "Block",
+  "waxed_copper_bars": "IronBarsBlock",
+  "waxed_copper_block": "Block",
+  "waxed_copper_bulb": "CopperBulbBlock",
+  "waxed_copper_chain": "ChainBlock",
+  "waxed_copper_chest": "CopperChestBlock",
+  "waxed_copper_door": "DoorBlock",
+  "waxed_copper_golem_statue": "CopperGolemStatueBlock",
+  "waxed_copper_grate": "WaterloggedTransparentBlock",
+  "waxed_copper_lantern": "LanternBlock",
+  "waxed_copper_trapdoor": "TrapDoorBlock",
+  "waxed_cut_copper": "Block",
+  "waxed_cut_copper_slab": "SlabBlock",
+  "waxed_cut_copper_stairs": "StairBlock",
+  "waxed_exposed_chiseled_copper": "Block",
+  "waxed_exposed_copper": "Block",
+  "waxed_exposed_copper_bars": "IronBarsBlock",
+  "waxed_exposed_copper_bulb": "CopperBulbBlock",
+  "waxed_exposed_copper_chain": "ChainBlock",
+  "waxed_exposed_copper_chest": "CopperChestBlock",
+  "waxed_exposed_copper_door": "DoorBlock",
+  "waxed_exposed_copper_golem_statue": "CopperGolemStatueBlock",
+  "waxed_exposed_copper_grate": "WaterloggedTransparentBlock",
+  "waxed_exposed_copper_lantern": "LanternBlock",
+  "waxed_exposed_copper_trapdoor": "TrapDoorBlock",
+  "waxed_exposed_cut_copper": "Block",
+  "waxed_exposed_cut_copper_slab": "SlabBlock",
+  "waxed_exposed_cut_copper_stairs": "StairBlock",
+  "waxed_exposed_lightning_rod": "LightningRodBlock",
+  "waxed_lightning_rod": "LightningRodBlock",
+  "waxed_oxidized_chiseled_copper": "Block",
+  "waxed_oxidized_copper": "Block",
+  "waxed_oxidized_copper_bars": "IronBarsBlock",
+  "waxed_oxidized_copper_bulb": "CopperBulbBlock",
+  "waxed_oxidized_copper_chain": "ChainBlock",
+  "waxed_oxidized_copper_chest": "CopperChestBlock",
+  "waxed_oxidized_copper_door": "DoorBlock",
+  "waxed_oxidized_copper_golem_statue": "CopperGolemStatueBlock",
+  "waxed_oxidized_copper_grate": "WaterloggedTransparentBlock",
+  "waxed_oxidized_copper_lantern": "LanternBlock",
+  "waxed_oxidized_copper_trapdoor": "TrapDoorBlock",
+  "waxed_oxidized_cut_copper": "Block",
+  "waxed_oxidized_cut_copper_slab": "SlabBlock",
+  "waxed_oxidized_cut_copper_stairs": "StairBlock",
+  "waxed_oxidized_lightning_rod": "LightningRodBlock",
+  "waxed_weathered_chiseled_copper": "Block",
+  "waxed_weathered_copper": "Block",
+  "waxed_weathered_copper_bars": "IronBarsBlock",
+  "waxed_weathered_copper_bulb": "CopperBulbBlock",
+  "waxed_weathered_copper_chain": "ChainBlock",
+  "waxed_weathered_copper_chest": "CopperChestBlock",
+  "waxed_weathered_copper_door": "DoorBlock",
+  "waxed_weathered_copper_golem_statue": "CopperGolemStatueBlock",
+  "waxed_weathered_copper_grate": "WaterloggedTransparentBlock",
+  "waxed_weathered_copper_lantern": "LanternBlock",
+  "waxed_weathered_copper_trapdoor": "TrapDoorBlock",
+  "waxed_weathered_cut_copper": "Block",
+  "waxed_weathered_cut_copper_slab": "SlabBlock",
+  "waxed_weathered_cut_copper_stairs": "StairBlock",
+  "waxed_weathered_lightning_rod": "LightningRodBlock",
+  "weathered_chiseled_copper": "WeatheringCopperFullBlock",
+  "weathered_copper": "WeatheringCopperFullBlock",
+  "weathered_copper_bars": "WeatheringCopperBarsBlock",
+  "weathered_copper_bulb": "WeatheringCopperBulbBlock",
+  "weathered_copper_chain": "WeatheringCopperChainBlock",
+  "weathered_copper_chest": "WeatheringCopperChestBlock",
+  "weathered_copper_door": "WeatheringCopperDoorBlock",
+  "weathered_copper_golem_statue": "WeatheringCopperGolemStatueBlock",
+  "weathered_copper_grate": "WeatheringCopperGrateBlock",
+  "weathered_copper_lantern": "WeatheringLanternBlock",
+  "weathered_copper_trapdoor": "WeatheringCopperTrapDoorBlock",
+  "weathered_cut_copper": "WeatheringCopperFullBlock",
+  "weathered_cut_copper_slab": "WeatheringCopperSlabBlock",
+  "weathered_cut_copper_stairs": "WeatheringCopperStairBlock",
+  "weathered_lightning_rod": "WeatheringLightningRodBlock",
+  "weeping_vines": "WeepingVinesBlock",
+  "weeping_vines_plant": "WeepingVinesPlantBlock",
+  "wet_sponge": "WetSpongeBlock",
+  "wheat": "CropBlock",
+  "white_banner": "BannerBlock",
+  "white_bed": "BedBlock",
+  "white_candle": "CandleBlock",
+  "white_candle_cake": "CandleCakeBlock",
+  "white_carpet": "WoolCarpetBlock",
+  "white_concrete": "Block",
+  "white_concrete_powder": "ConcretePowderBlock",
+  "white_concrete_slab": "SlabBlock",
+  "white_concrete_stairs": "StairBlock",
+  "white_glazed_terracotta": "GlazedTerracottaBlock",
+  "white_shulker_box": "ShulkerBoxBlock",
+  "white_stained_glass": "StainedGlassBlock",
+  "white_stained_glass_pane": "StainedGlassPaneBlock",
+  "white_terracotta": "Block",
+  "white_tulip": "FlowerBlock",
+  "white_wall_banner": "WallBannerBlock",
+  "white_wool": "Block",
+  "white_wool_slab": "SlabBlock",
+  "white_wool_stairs": "StairBlock",
+  "wildflowers": "FlowerBedBlock",
+  "wither_rose": "WitherRoseBlock",
+  "wither_skeleton_skull": "WitherSkullBlock",
+  "wither_skeleton_wall_skull": "WitherWallSkullBlock",
+  "yellow_banner": "BannerBlock",
+  "yellow_bed": "BedBlock",
+  "yellow_candle": "CandleBlock",
+  "yellow_candle_cake": "CandleCakeBlock",
+  "yellow_carpet": "WoolCarpetBlock",
+  "yellow_concrete": "Block",
+  "yellow_concrete_powder": "ConcretePowderBlock",
+  "yellow_concrete_slab": "SlabBlock",
+  "yellow_concrete_stairs": "StairBlock",
+  "yellow_glazed_terracotta": "GlazedTerracottaBlock",
+  "yellow_poplar_leaves": "UntintedParticleLeavesBlock",
+  "yellow_shulker_box": "ShulkerBoxBlock",
+  "yellow_stained_glass": "StainedGlassBlock",
+  "yellow_stained_glass_pane": "StainedGlassPaneBlock",
+  "yellow_terracotta": "Block",
+  "yellow_wall_banner": "WallBannerBlock",
+  "yellow_wool": "Block",
+  "yellow_wool_slab": "SlabBlock",
+  "yellow_wool_stairs": "StairBlock",
+  "zombie_head": "SkullBlock",
+  "zombie_wall_head": "WallSkullBlock"
+ },
+ "items": {
+  "abandoned_camp_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "acacia_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "acacia_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "acacia_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "acacia_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "acacia_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "acacia_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "acacia_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "activator_rail": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "air": {
+   "class": "AirItem",
+   "components": []
+  },
+  "allay_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "allium": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "amethyst_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "amethyst_cluster": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "amethyst_shard": {
+   "class": "Item",
+   "components": []
+  },
+  "ancient_debris": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "andesite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "andesite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "andesite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "andesite_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "angler_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "anvil": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "apple": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "archer_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "armadillo_scute": {
+   "class": "Item",
+   "components": []
+  },
+  "armadillo_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "armor_stand": {
+   "class": "ArmorStandItem",
+   "components": []
+  },
+  "arms_up_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "arrow": {
+   "class": "ArrowItem",
+   "components": []
+  },
+  "axolotl_bucket": {
+   "class": "MobBucketItem",
+   "components": []
+  },
+  "axolotl_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "azalea": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "azalea_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "azure_bluet": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "baked_potato": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "bamboo": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_chest_raft": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "bamboo_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "bamboo_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "bamboo_mosaic": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_mosaic_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_mosaic_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_raft": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "bamboo_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "bamboo_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bamboo_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "barrel": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "barrier": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "basalt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bat_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "beacon": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bedrock": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bee_nest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bee_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "beef": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "beehive": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "beetroot": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "beetroot_seeds": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "beetroot_soup": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_remainder"
+   ]
+  },
+  "bell": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "big_dripleaf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "birch_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "birch_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "birch_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "birch_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "birch_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "birch_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "black_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "black_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "black_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "black_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "black_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "black_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "black_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blackstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blackstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blackstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blackstone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blade_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "blast_furnace": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blaze_powder": {
+   "class": "Item",
+   "components": []
+  },
+  "blaze_rod": {
+   "class": "Item",
+   "components": []
+  },
+  "blaze_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "blue_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "blue_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "blue_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "blue_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "blue_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "blue_egg": {
+   "class": "EggItem",
+   "components": []
+  },
+  "blue_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "blue_ice": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_orchid": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "blue_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bogged_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "bolt_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "bone": {
+   "class": "Item",
+   "components": []
+  },
+  "bone_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bone_meal": {
+   "class": "BoneMealItem",
+   "components": []
+  },
+  "book": {
+   "class": "Item",
+   "components": []
+  },
+  "bookshelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bordure_indented_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "bow": {
+   "class": "BowItem",
+   "components": []
+  },
+  "bowl": {
+   "class": "Item",
+   "components": []
+  },
+  "brain_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brain_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brain_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "bread": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "breeze_rod": {
+   "class": "Item",
+   "components": []
+  },
+  "breeze_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "brewer_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "brewing_stand": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brick": {
+   "class": "Item",
+   "components": []
+  },
+  "brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "brown_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "brown_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "brown_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "brown_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "brown_egg": {
+   "class": "EggItem",
+   "components": []
+  },
+  "brown_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "brown_mushroom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_mushroom_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brown_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "brush": {
+   "class": "BrushItem",
+   "components": []
+  },
+  "bubble_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bubble_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bubble_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "bucket": {
+   "class": "BucketItem",
+   "components": []
+  },
+  "budding_amethyst": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "buried_ancient_city_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "buried_mineshaft_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "buried_treasure_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "buried_trial_chambers_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "burn_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "bush": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cactus": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cactus_flower": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cake": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "calcite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "calibrated_sculk_sensor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "camel_husk_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "camel_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "campfire": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "carrot": {
+   "class": "BlockItem",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "carrot_on_a_stick": {
+   "class": "Item",
+   "components": []
+  },
+  "cartography_table": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "carved_pumpkin": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "cat_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "cauldron": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cave_spider_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "chain_command_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "chainmail_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "chainmail_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "chainmail_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "chainmail_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "charcoal": {
+   "class": "Item",
+   "components": []
+  },
+  "cherry_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "cherry_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "cherry_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "cherry_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "cherry_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "cherry_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cherry_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chest_minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "chicken": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "chicken_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "chipped_anvil": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_bookshelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_cinnabar": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_nether_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_polished_blackstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_quartz_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_red_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_resin_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_sulfur": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_tuff": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chiseled_tuff_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chorus_flower": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "chorus_fruit": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_cooldown"
+   ]
+  },
+  "chorus_plant": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cinnabar_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "clay": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "clay_ball": {
+   "class": "Item",
+   "components": []
+  },
+  "clock": {
+   "class": "Item",
+   "components": []
+  },
+  "closed_eyeblossom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "coal": {
+   "class": "Item",
+   "components": []
+  },
+  "coal_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "coal_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "coarse_dirt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "coast_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "cobbled_deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobbled_deepslate_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobbled_deepslate_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobbled_deepslate_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobblestone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobblestone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobblestone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobblestone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cobweb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cocoa_beans": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cod": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cod_bucket": {
+   "class": "MobBucketItem",
+   "components": [
+    "food"
+   ]
+  },
+  "cod_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "command_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "command_block_minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "comparator": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "compass": {
+   "class": "CompassItem",
+   "components": []
+  },
+  "composter": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "conduit": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cooked_beef": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_chicken": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_cod": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_mutton": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_porkchop": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_rabbit": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cooked_salmon": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "cookie": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "copper_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "copper_golem_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "copper_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_ingot": {
+   "class": "Item",
+   "components": []
+  },
+  "copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_nautilus_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "copper_nugget": {
+   "class": "Item",
+   "components": []
+  },
+  "copper_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "copper_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "copper_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "copper_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "copper_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "copper_torch": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cornflower": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cow_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "cracked_deepslate_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cracked_deepslate_tiles": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cracked_nether_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cracked_polished_blackstone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cracked_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crafter": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crafting_table": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "creaking_heart": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "creaking_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "creeper_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "creeper_head": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "creeper_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "crimson_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "crimson_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_fungus": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "crimson_hyphae": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_nylium": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_roots": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "crimson_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_stem": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crimson_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "crossbow": {
+   "class": "CrossbowItem",
+   "components": []
+  },
+  "crying_obsidian": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_red_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_red_sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cut_sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "cyan_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "cyan_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "cyan_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "cyan_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "cyan_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "cyan_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "cyan_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "damaged_anvil": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dandelion": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "danger_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "dark_oak_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "dark_oak_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "dark_oak_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "dark_oak_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "dark_oak_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "dark_oak_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_prismarine": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_prismarine_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dark_prismarine_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "daylight_detector": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_brain_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_brain_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_brain_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "dead_bubble_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_bubble_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_bubble_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "dead_bush": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_fire_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_fire_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_fire_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "dead_horn_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_horn_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_horn_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "dead_tube_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_tube_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dead_tube_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "debug_stick": {
+   "class": "DebugStickItem",
+   "components": []
+  },
+  "decorated_pot": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_coal_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_copper_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_diamond_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_emerald_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_gold_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_iron_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_lapis_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_redstone_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_tile_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_tile_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_tile_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "deepslate_tiles": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "desert_pyramid_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "desert_village_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "detector_rail": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diamond": {
+   "class": "Item",
+   "components": []
+  },
+  "diamond_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "diamond_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diamond_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "diamond_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_nautilus_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "diamond_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diamond_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "diamond_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "diamond_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "diamond_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "diorite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diorite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diorite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "diorite_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dirt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dirt_path": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "disc_fragment_5": {
+   "class": "DiscFragmentItem",
+   "components": []
+  },
+  "dispenser": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dolphin_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "donkey_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "dragon_breath": {
+   "class": "Item",
+   "components": []
+  },
+  "dragon_egg": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dragon_head": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "dried_ghast": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dried_kelp": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "dried_kelp_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dripstone_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "dropper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "drowned_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "dune_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "echo_shard": {
+   "class": "Item",
+   "components": []
+  },
+  "egg": {
+   "class": "EggItem",
+   "components": []
+  },
+  "elder_guardian_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "elytra": {
+   "class": "Item",
+   "components": [
+    "equippable",
+    "glider"
+   ]
+  },
+  "emerald": {
+   "class": "Item",
+   "components": []
+  },
+  "emerald_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "emerald_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "enchanted_book": {
+   "class": "Item",
+   "components": []
+  },
+  "enchanted_golden_apple": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "enchanting_table": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_crystal": {
+   "class": "EndCrystalItem",
+   "components": []
+  },
+  "end_portal_frame": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_stone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_stone_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_stone_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_stone_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "end_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "ender_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "ender_dragon_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "ender_eye": {
+   "class": "EnderEyeItem",
+   "components": []
+  },
+  "ender_pearl": {
+   "class": "EnderpearlItem",
+   "components": [
+    "use_cooldown"
+   ]
+  },
+  "enderman_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "endermite_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "evoker_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "experience_bottle": {
+   "class": "ExperienceBottleItem",
+   "components": []
+  },
+  "explorer_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "exposed_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "exposed_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "exposed_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "eye_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "farmland": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "feather": {
+   "class": "Item",
+   "components": []
+  },
+  "fermented_spider_eye": {
+   "class": "Item",
+   "components": []
+  },
+  "fern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "field_masoned_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "filled_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "fire_charge": {
+   "class": "FireChargeItem",
+   "components": []
+  },
+  "fire_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "fire_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "fire_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "firefly_bush": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "firework_rocket": {
+   "class": "FireworkRocketItem",
+   "components": []
+  },
+  "firework_star": {
+   "class": "Item",
+   "components": []
+  },
+  "fishing_rod": {
+   "class": "FishingRodItem",
+   "components": []
+  },
+  "fletching_table": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "flint": {
+   "class": "Item",
+   "components": []
+  },
+  "flint_and_steel": {
+   "class": "FlintAndSteelItem",
+   "components": []
+  },
+  "flow_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "flow_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "flow_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "flower_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "flower_pot": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "flowering_azalea": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "flowering_azalea_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "fox_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "friend_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "frog_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "frogspawn": {
+   "class": "PlaceOnWaterBlockItem",
+   "components": []
+  },
+  "furnace": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "furnace_minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "ghast_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "ghast_tear": {
+   "class": "Item",
+   "components": []
+  },
+  "gilded_blackstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "glass_bottle": {
+   "class": "BottleItem",
+   "components": []
+  },
+  "glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "glistering_melon_slice": {
+   "class": "Item",
+   "components": []
+  },
+  "globe_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "glow_berries": {
+   "class": "BlockItem",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "glow_ink_sac": {
+   "class": "GlowInkSacItem",
+   "components": []
+  },
+  "glow_item_frame": {
+   "class": "ItemFrameItem",
+   "components": []
+  },
+  "glow_lichen": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "glow_squid_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "glowstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "glowstone_dust": {
+   "class": "Item",
+   "components": []
+  },
+  "goat_horn": {
+   "class": "InstrumentItem",
+   "components": []
+  },
+  "goat_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "gold_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gold_ingot": {
+   "class": "Item",
+   "components": []
+  },
+  "gold_nugget": {
+   "class": "Item",
+   "components": []
+  },
+  "gold_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "golden_apple": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "golden_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "golden_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_carrot": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "golden_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_dandelion": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "golden_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "golden_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_nautilus_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "golden_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "golden_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "golden_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "golden_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "granite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "granite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "granite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "granite_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "grass_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gravel": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "gray_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "gray_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "gray_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "gray_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "gray_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "gray_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "gray_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "green_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "green_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "green_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "green_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "green_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "green_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "green_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "grindstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "guardian_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "gunpowder": {
+   "class": "Item",
+   "components": []
+  },
+  "guster_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "guster_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "hanging_roots": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "happy_ghast_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "hay_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "heart_of_the_sea": {
+   "class": "Item",
+   "components": []
+  },
+  "heart_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "heartbreak_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "heavy_core": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "heavy_weighted_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "hoglin_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "honey_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "honey_bottle": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_remainder"
+   ]
+  },
+  "honeycomb": {
+   "class": "HoneycombItem",
+   "components": []
+  },
+  "honeycomb_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "hopper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "hopper_minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "horn_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "horn_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "horn_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "horse_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "host_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "howl_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "husk_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "ice": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_chiseled_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_cobblestone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_cracked_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_mossy_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_stone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "infested_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "ink_sac": {
+   "class": "InkSacItem",
+   "components": []
+  },
+  "iron_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "iron_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "iron_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "iron_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "iron_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "iron_golem_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "iron_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "iron_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_ingot": {
+   "class": "Item",
+   "components": []
+  },
+  "iron_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_nautilus_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "iron_nugget": {
+   "class": "Item",
+   "components": []
+  },
+  "iron_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "iron_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "iron_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "iron_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "iron_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "iron_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "item_frame": {
+   "class": "ItemFrameItem",
+   "components": []
+  },
+  "jack_o_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jigsaw": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "jukebox": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "jungle_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "jungle_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "jungle_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "jungle_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_pyramid_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "jungle_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "jungle_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "jungle_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "kelp": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "knowledge_book": {
+   "class": "KnowledgeBookItem",
+   "components": []
+  },
+  "ladder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lapis_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lapis_lazuli": {
+   "class": "Item",
+   "components": []
+  },
+  "lapis_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "large_amethyst_bud": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "large_fern": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "lava_bucket": {
+   "class": "BucketItem",
+   "components": []
+  },
+  "lead": {
+   "class": "LeadItem",
+   "components": []
+  },
+  "leaf_litter": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "leather": {
+   "class": "Item",
+   "components": []
+  },
+  "leather_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "leather_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "leather_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "leather_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "leather_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "lectern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lever": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "light_blue_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "light_blue_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "light_blue_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "light_blue_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "light_blue_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "light_blue_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_blue_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "light_gray_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "light_gray_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "light_gray_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "light_gray_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "light_gray_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "light_gray_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_gray_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "light_weighted_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lilac": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "lily_of_the_valley": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lily_pad": {
+   "class": "PlaceOnWaterBlockItem",
+   "components": []
+  },
+  "lime_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "lime_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "lime_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "lime_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "lime_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "lime_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "lime_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lime_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "lingering_potion": {
+   "class": "LingeringPotionItem",
+   "components": []
+  },
+  "llama_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "lodestone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "loom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mace": {
+   "class": "MaceItem",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "magenta_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "magenta_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "magenta_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "magenta_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "magenta_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "magenta_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "magenta_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magenta_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magma_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "magma_cream": {
+   "class": "Item",
+   "components": []
+  },
+  "magma_cube_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "mangrove_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "mangrove_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "mangrove_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "mangrove_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "mangrove_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_propagule": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_roots": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "mangrove_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mangrove_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "map": {
+   "class": "EmptyMapItem",
+   "components": []
+  },
+  "medium_amethyst_bud": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "melon": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "melon_seeds": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "melon_slice": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "milk_bucket": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "use_remainder"
+   ]
+  },
+  "minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "miner_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "mojang_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "mooshroom_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "moss_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "moss_carpet": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_cobblestone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_cobblestone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_cobblestone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_cobblestone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_stone_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_stone_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_stone_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mossy_stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mourner_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "mud": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mud_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mud_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mud_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mud_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "muddy_mangrove_roots": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mule_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "mushroom_stem": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "mushroom_stew": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_remainder"
+   ]
+  },
+  "music_disc_11": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_13": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_5": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_blocks": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_bounce": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_cat": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_chirp": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_creator": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_creator_music_box": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_far": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_lava_chicken": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_mall": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_mellohi": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_otherside": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_pigstep": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_precipice": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_relic": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_stal": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_strad": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_tears": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_wait": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "music_disc_ward": {
+   "class": "Item",
+   "components": [
+    "jukebox_playable"
+   ]
+  },
+  "mutton": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "mycelium": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "name_tag": {
+   "class": "NameTagItem",
+   "components": []
+  },
+  "nautilus_shell": {
+   "class": "Item",
+   "components": []
+  },
+  "nautilus_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "nether_brick": {
+   "class": "Item",
+   "components": []
+  },
+  "nether_brick_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_gold_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_quartz_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_sprouts": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_star": {
+   "class": "Item",
+   "components": []
+  },
+  "nether_wart": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "nether_wart_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "netherite_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "netherite_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "netherite_boots": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_chestplate": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "netherite_horse_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_ingot": {
+   "class": "Item",
+   "components": []
+  },
+  "netherite_leggings": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_nautilus_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "netherite_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "netherite_scrap": {
+   "class": "Item",
+   "components": []
+  },
+  "netherite_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "netherite_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "netherite_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "netherite_upgrade_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "netherrack": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "note_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "oak_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "oak_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "oak_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "oak_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "oak_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "observer": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "obsidian": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "ocean_monument_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "ocelot_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "ochre_froglight": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "ominous_bottle": {
+   "class": "Item",
+   "components": [
+    "consumable"
+   ]
+  },
+  "ominous_trial_key": {
+   "class": "Item",
+   "components": []
+  },
+  "open_eyeblossom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "orange_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "orange_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "orange_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "orange_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "orange_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "orange_poplar_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_tulip": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "orange_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxeye_daisy": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "oxidized_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "oxidized_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "packed_ice": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "packed_mud": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "painting": {
+   "class": "HangingEntityItem",
+   "components": []
+  },
+  "pale_hanging_moss": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_moss_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_moss_carpet": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "pale_oak_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "pale_oak_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "pale_oak_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "pale_oak_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "pale_oak_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pale_oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "panda_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "paper": {
+   "class": "Item",
+   "components": []
+  },
+  "parched_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "parrot_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "pearlescent_froglight": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "peony": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "petrified_oak_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "phantom_membrane": {
+   "class": "Item",
+   "components": []
+  },
+  "phantom_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "pig_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "piglin_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "piglin_brute_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "piglin_head": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "piglin_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "pillager_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "pink_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "pink_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "pink_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "pink_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "pink_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "pink_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "pink_petals": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_tulip": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pink_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "piston": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pitcher_plant": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pitcher_pod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "plains_village_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "player_head": {
+   "class": "PlayerHeadItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "plenty_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "podzol": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pointed_dripstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poisonous_potato": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "polar_bear_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "polished_andesite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_andesite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_andesite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_basalt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_blackstone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_cinnabar": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_cinnabar_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_cinnabar_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_cinnabar_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_deepslate_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_deepslate_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_deepslate_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_diorite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_diorite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_diorite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_granite": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_granite_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_granite_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_sulfur": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_sulfur_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_sulfur_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_sulfur_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_tuff": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_tuff_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_tuff_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "polished_tuff_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "poplar_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "poplar_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "poplar_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "poplar_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "poplar_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "poplar_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "popped_chorus_fruit": {
+   "class": "Item",
+   "components": []
+  },
+  "poppy": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "porkchop": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "potato": {
+   "class": "BlockItem",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "potent_sulfur": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "potion": {
+   "class": "PotionItem",
+   "components": [
+    "consumable",
+    "use_remainder"
+   ]
+  },
+  "powder_snow_bucket": {
+   "class": "SolidBucketItem",
+   "components": []
+  },
+  "powered_rail": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_crystals": {
+   "class": "Item",
+   "components": []
+  },
+  "prismarine_shard": {
+   "class": "Item",
+   "components": []
+  },
+  "prismarine_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prismarine_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "prize_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "pufferfish": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "pufferfish_bucket": {
+   "class": "MobBucketItem",
+   "components": [
+    "food"
+   ]
+  },
+  "pufferfish_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "pumpkin": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "pumpkin_pie": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "pumpkin_seeds": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "purple_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "purple_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "purple_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "purple_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "purple_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "purple_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purple_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purpur_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purpur_pillar": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purpur_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "purpur_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "quartz": {
+   "class": "Item",
+   "components": []
+  },
+  "quartz_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "quartz_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "quartz_pillar": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "quartz_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "quartz_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "rabbit": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "rabbit_foot": {
+   "class": "Item",
+   "components": []
+  },
+  "rabbit_hide": {
+   "class": "Item",
+   "components": []
+  },
+  "rabbit_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "rabbit_stew": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_remainder"
+   ]
+  },
+  "rail": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "raiser_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "ravager_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "raw_copper": {
+   "class": "Item",
+   "components": []
+  },
+  "raw_copper_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "raw_gold": {
+   "class": "Item",
+   "components": []
+  },
+  "raw_gold_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "raw_iron": {
+   "class": "Item",
+   "components": []
+  },
+  "raw_iron_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "recovery_compass": {
+   "class": "Item",
+   "components": []
+  },
+  "red_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "red_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "red_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "red_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "red_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "red_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "red_mushroom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_mushroom_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_nether_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_nether_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_nether_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_nether_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_poplar_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_sand": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_sandstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_sandstone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_shrub": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_tulip": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "red_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "redstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "redstone_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "redstone_lamp": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "redstone_ore": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "redstone_torch": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "reinforced_deepslate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "repeater": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "repeating_command_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "resin_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "resin_brick": {
+   "class": "Item",
+   "components": []
+  },
+  "resin_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "resin_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "resin_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "resin_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "resin_clump": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "respawn_anchor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "rib_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "rooted_dirt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "rose_bush": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "rotten_flesh": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "saddle": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "salmon": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "salmon_bucket": {
+   "class": "MobBucketItem",
+   "components": [
+    "food"
+   ]
+  },
+  "salmon_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "sand": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sandstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sandstone_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "savanna_village_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "scaffolding": {
+   "class": "ScaffoldingBlockItem",
+   "components": []
+  },
+  "scrape_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "sculk": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sculk_catalyst": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sculk_sensor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sculk_shrieker": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sculk_vein": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sea_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sea_pickle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "seagrass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sentry_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "shaper_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "sheaf_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "shears": {
+   "class": "ShearsItem",
+   "components": [
+    "tool"
+   ]
+  },
+  "sheep_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "shelf_mushroom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "shelter_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "shield": {
+   "class": "ShieldItem",
+   "components": [
+    "blocks_attacks",
+    "equippable"
+   ]
+  },
+  "short_dry_grass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "short_grass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "shroomlight": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "shulker_shell": {
+   "class": "Item",
+   "components": []
+  },
+  "shulker_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "silence_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "silverfish_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "skeleton_horse_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "skeleton_skull": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "skeleton_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "skull_banner_pattern": {
+   "class": "Item",
+   "components": []
+  },
+  "skull_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "slime_ball": {
+   "class": "Item",
+   "components": []
+  },
+  "slime_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "slime_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "small_amethyst_bud": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "small_dripleaf": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "smithing_table": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smoker": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_basalt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_quartz": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_quartz_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_quartz_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_red_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_red_sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_red_sandstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_sandstone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_sandstone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_sandstone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_stone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "smooth_stone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sniffer_egg": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sniffer_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "snort_pottery_sherd": {
+   "class": "Item",
+   "components": []
+  },
+  "snout_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "snow": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "snow_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "snow_golem_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "snowball": {
+   "class": "SnowballItem",
+   "components": []
+  },
+  "snowy_village_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "soul_campfire": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "soul_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "soul_sand": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "soul_soil": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "soul_torch": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "spawner": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spectral_arrow": {
+   "class": "SpectralArrowItem",
+   "components": []
+  },
+  "spider_eye": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "spider_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "spire_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "splash_potion": {
+   "class": "SplashPotionItem",
+   "components": []
+  },
+  "sponge": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spore_blossom": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "spruce_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_chest_boat": {
+   "class": "BoatItem",
+   "components": []
+  },
+  "spruce_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "spruce_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "spruce_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_sapling": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "spruce_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spruce_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "spyglass": {
+   "class": "SpyglassItem",
+   "components": []
+  },
+  "squid_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "stick": {
+   "class": "Item",
+   "components": []
+  },
+  "sticky_piston": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "stone_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "stone_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "stone_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "stone_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "stone_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stone_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "stonecutter": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "straw_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stray_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "strider_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "string": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_acacia_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_acacia_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_bamboo_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_birch_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_birch_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_cherry_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_cherry_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_crimson_hyphae": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_crimson_stem": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_dark_oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_dark_oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_jungle_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_jungle_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_mangrove_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_mangrove_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_pale_oak_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_pale_oak_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_poplar_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_poplar_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_spruce_log": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_spruce_wood": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_warped_hyphae": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "stripped_warped_stem": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "structure_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "structure_void": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sugar": {
+   "class": "Item",
+   "components": []
+  },
+  "sugar_cane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_cube_bucket": {
+   "class": "MobBucketItem",
+   "components": []
+  },
+  "sulfur_cube_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "sulfur_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_spike": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sulfur_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "sunflower": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "suspicious_gravel": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "suspicious_sand": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "suspicious_stew": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food",
+    "use_remainder"
+   ]
+  },
+  "swamp_hut_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "sweet_berries": {
+   "class": "BlockItem",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "tadpole_bucket": {
+   "class": "MobBucketItem",
+   "components": []
+  },
+  "tadpole_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "taiga_village_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "tall_dry_grass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tall_grass": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "target": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "test_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "test_instance_block": {
+   "class": "GameMasterBlockItem",
+   "components": []
+  },
+  "tide_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "tinted_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tipped_arrow": {
+   "class": "TippedArrowItem",
+   "components": []
+  },
+  "tnt": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tnt_minecart": {
+   "class": "MinecartItem",
+   "components": []
+  },
+  "torch": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "torchflower": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "torchflower_seeds": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "totem_of_undying": {
+   "class": "Item",
+   "components": [
+    "death_protection"
+   ]
+  },
+  "trader_llama_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "trapped_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "trial_key": {
+   "class": "Item",
+   "components": []
+  },
+  "trial_spawner": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "trident": {
+   "class": "TridentItem",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "tripwire_hook": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tropical_fish": {
+   "class": "Item",
+   "components": [
+    "consumable",
+    "food"
+   ]
+  },
+  "tropical_fish_bucket": {
+   "class": "MobBucketItem",
+   "components": [
+    "food"
+   ]
+  },
+  "tropical_fish_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "tube_coral": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tube_coral_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tube_coral_fan": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "tuff": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_brick_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_brick_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_brick_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_bricks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "tuff_wall": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "turtle_egg": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "turtle_helmet": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "turtle_scute": {
+   "class": "Item",
+   "components": []
+  },
+  "turtle_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "twisting_vines": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "vault": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "verdant_froglight": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "vex_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "vex_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "villager_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "vindicator_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "vine": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wandering_trader_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "ward_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "warden_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "warm_ocean_ruins_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "warped_button": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "warped_fence": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_fence_gate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_fungus": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_fungus_on_a_stick": {
+   "class": "Item",
+   "components": []
+  },
+  "warped_hanging_sign": {
+   "class": "HangingSignItem",
+   "components": []
+  },
+  "warped_hyphae": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_nylium": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_planks": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_pressure_plate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_roots": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_shelf": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_sign": {
+   "class": "StandingAndWallBlockItem",
+   "components": []
+  },
+  "warped_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_stem": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "warped_wart_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "water_bucket": {
+   "class": "BucketItem",
+   "components": []
+  },
+  "waxed_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_block": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "waxed_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_exposed_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_oxidized_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "waxed_weathered_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wayfinder_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "weathered_chiseled_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_bars": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_bulb": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_chain": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_chest": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_door": {
+   "class": "DoubleHighBlockItem",
+   "components": []
+  },
+  "weathered_copper_golem_statue": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_grate": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_lantern": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_copper_trapdoor": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_cut_copper": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_cut_copper_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_cut_copper_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weathered_lightning_rod": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "weeping_vines": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wet_sponge": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wheat": {
+   "class": "Item",
+   "components": []
+  },
+  "wheat_seeds": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "white_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "white_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "white_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "white_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "white_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "white_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_tulip": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "white_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wild_armor_trim_smithing_template": {
+   "class": "Item",
+   "components": []
+  },
+  "wildflowers": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wind_charge": {
+   "class": "WindChargeItem",
+   "components": [
+    "use_cooldown"
+   ]
+  },
+  "witch_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "wither_rose": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "wither_skeleton_skull": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "wither_skeleton_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "wither_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "wolf_armor": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "wolf_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "wooden_axe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "wooden_hoe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "wooden_pickaxe": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "wooden_shovel": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "wooden_spear": {
+   "class": "Item",
+   "components": [
+    "kinetic_weapon",
+    "piercing_weapon",
+    "weapon"
+   ]
+  },
+  "wooden_sword": {
+   "class": "Item",
+   "components": [
+    "tool",
+    "weapon"
+   ]
+  },
+  "woodland_mansion_map": {
+   "class": "MapItem",
+   "components": []
+  },
+  "writable_book": {
+   "class": "WritableBookItem",
+   "components": []
+  },
+  "written_book": {
+   "class": "WrittenBookItem",
+   "components": []
+  },
+  "yellow_banner": {
+   "class": "BannerItem",
+   "components": []
+  },
+  "yellow_bed": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_bundle": {
+   "class": "BundleItem",
+   "components": []
+  },
+  "yellow_candle": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_carpet": {
+   "class": "BlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "yellow_concrete": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_concrete_powder": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_concrete_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_concrete_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_cushion": {
+   "class": "CushionItem",
+   "components": []
+  },
+  "yellow_dye": {
+   "class": "DyeItem",
+   "components": []
+  },
+  "yellow_glazed_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_harness": {
+   "class": "Item",
+   "components": [
+    "equippable"
+   ]
+  },
+  "yellow_poplar_leaves": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_shulker_box": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_stained_glass": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_stained_glass_pane": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_terracotta": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_wool": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_wool_slab": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "yellow_wool_stairs": {
+   "class": "BlockItem",
+   "components": []
+  },
+  "zoglin_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "zombie_head": {
+   "class": "StandingAndWallBlockItem",
+   "components": [
+    "equippable"
+   ]
+  },
+  "zombie_horse_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "zombie_nautilus_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "zombie_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "zombie_villager_spawn_egg": {
+   "class": "Item",
+   "components": []
+  },
+  "zombified_piglin_spawn_egg": {
+   "class": "Item",
+   "components": []
+  }
+ },
+ "commands": {
+  "advancement": {
+   "class": "AdvancementCommands",
+   "when": "always"
+  },
+  "attribute": {
+   "class": "AttributeCommand",
+   "when": "always"
+  },
+  "ban": {
+   "class": "BanPlayerCommands",
+   "when": "dedicated"
+  },
+  "ban-ip": {
+   "class": "BanIpCommands",
+   "when": "dedicated"
+  },
+  "banlist": {
+   "class": "BanListCommands",
+   "when": "dedicated"
+  },
+  "bossbar": {
+   "class": "BossBarCommands",
+   "when": "always"
+  },
+  "chase": {
+   "class": "ChaseCommand",
+   "when": "dev"
+  },
+  "clear": {
+   "class": "ClearInventoryCommands",
+   "when": "always"
+  },
+  "clone": {
+   "class": "CloneCommands",
+   "when": "always"
+  },
+  "compute": {
+   "class": "ComputeCommand",
+   "when": "always"
+  },
+  "damage": {
+   "class": "DamageCommand",
+   "when": "always"
+  },
+  "data": {
+   "class": "DataCommands",
+   "when": "always"
+  },
+  "datapack": {
+   "class": "DataPackCommand",
+   "when": "always"
+  },
+  "debug": {
+   "class": "DebugCommand",
+   "when": "always"
+  },
+  "debugconfig": {
+   "class": "DebugConfigCommand",
+   "when": "dev"
+  },
+  "debugmobspawning": {
+   "class": "DebugMobSpawningCommand",
+   "when": "dev"
+  },
+  "debugpath": {
+   "class": "DebugPathCommand",
+   "when": "dev"
+  },
+  "defaultgamemode": {
+   "class": "DefaultGameModeCommands",
+   "when": "always"
+  },
+  "deop": {
+   "class": "DeOpCommands",
+   "when": "dedicated"
+  },
+  "dialog": {
+   "class": "DialogCommand",
+   "when": "always"
+  },
+  "difficulty": {
+   "class": "DifficultyCommand",
+   "when": "always"
+  },
+  "effect": {
+   "class": "EffectCommands",
+   "when": "always"
+  },
+  "enchant": {
+   "class": "EnchantCommand",
+   "when": "always"
+  },
+  "execute": {
+   "class": "ExecuteCommand",
+   "when": "always"
+  },
+  "experience": {
+   "class": "ExperienceCommand",
+   "when": "always"
+  },
+  "fetchprofile": {
+   "class": "FetchProfileCommand",
+   "when": "always"
+  },
+  "fill": {
+   "class": "FillCommand",
+   "when": "always"
+  },
+  "fillbiome": {
+   "class": "FillBiomeCommand",
+   "when": "always"
+  },
+  "forceload": {
+   "class": "ForceLoadCommand",
+   "when": "always"
+  },
+  "function": {
+   "class": "FunctionCommand",
+   "when": "always"
+  },
+  "gamemode": {
+   "class": "GameModeCommand",
+   "when": "always"
+  },
+  "gamerule": {
+   "class": "GameRuleCommand",
+   "when": "always"
+  },
+  "give": {
+   "class": "GiveCommand",
+   "when": "always"
+  },
+  "help": {
+   "class": "HelpCommand",
+   "when": "always"
+  },
+  "item": {
+   "class": "ItemCommands",
+   "when": "always"
+  },
+  "jfr": {
+   "class": "JfrCommand",
+   "when": "jfr"
+  },
+  "kick": {
+   "class": "KickCommand",
+   "when": "always"
+  },
+  "kill": {
+   "class": "KillCommand",
+   "when": "always"
+  },
+  "list": {
+   "class": "ListPlayersCommand",
+   "when": "always"
+  },
+  "locate": {
+   "class": "LocateCommand",
+   "when": "always"
+  },
+  "loot": {
+   "class": "LootCommand",
+   "when": "always"
+  },
+  "me": {
+   "class": "EmoteCommands",
+   "when": "always"
+  },
+  "msg": {
+   "class": "MsgCommand",
+   "when": "always"
+  },
+  "op": {
+   "class": "OpCommand",
+   "when": "dedicated"
+  },
+  "pardon": {
+   "class": "PardonCommand",
+   "when": "dedicated"
+  },
+  "pardon-ip": {
+   "class": "PardonIpCommand",
+   "when": "dedicated"
+  },
+  "particle": {
+   "class": "ParticleCommand",
+   "when": "always"
+  },
+  "perf": {
+   "class": "PerfCommand",
+   "when": "dedicated"
+  },
+  "place": {
+   "class": "PlaceCommand",
+   "when": "always"
+  },
+  "playsound": {
+   "class": "PlaySoundCommand",
+   "when": "always"
+  },
+  "posteffect": {
+   "class": "PostEffectCommand",
+   "when": "always"
+  },
+  "publish": {
+   "class": "PublishCommand",
+   "when": "integrated"
+  },
+  "raid": {
+   "class": "RaidCommand",
+   "when": "dev"
+  },
+  "random": {
+   "class": "RandomCommand",
+   "when": "always"
+  },
+  "recipe": {
+   "class": "RecipeCommand",
+   "when": "always"
+  },
+  "reload": {
+   "class": "ReloadCommand",
+   "when": "always"
+  },
+  "return": {
+   "class": "ReturnCommand",
+   "when": "always"
+  },
+  "ride": {
+   "class": "RideCommand",
+   "when": "always"
+  },
+  "rotate": {
+   "class": "RotateCommand",
+   "when": "always"
+  },
+  "save-all": {
+   "class": "SaveAllCommand",
+   "when": "dedicated"
+  },
+  "save-off": {
+   "class": "SaveOffCommand",
+   "when": "dedicated"
+  },
+  "save-on": {
+   "class": "SaveOnCommand",
+   "when": "dedicated"
+  },
+  "say": {
+   "class": "SayCommand",
+   "when": "always"
+  },
+  "schedule": {
+   "class": "ScheduleCommand",
+   "when": "always"
+  },
+  "scoreboard": {
+   "class": "ScoreboardCommand",
+   "when": "always"
+  },
+  "seed": {
+   "class": "SeedCommand",
+   "when": "always"
+  },
+  "serverpack": {
+   "class": "ServerPackCommand",
+   "when": "dev"
+  },
+  "setblock": {
+   "class": "SetBlockCommand",
+   "when": "always"
+  },
+  "setidletimeout": {
+   "class": "SetPlayerIdleTimeoutCommand",
+   "when": "dedicated"
+  },
+  "setworldspawn": {
+   "class": "SetWorldSpawnCommand",
+   "when": "always"
+  },
+  "spawn_armor_trims": {
+   "class": "SpawnArmorTrimsCommand",
+   "when": "dev"
+  },
+  "spawnpoint": {
+   "class": "SetSpawnCommand",
+   "when": "always"
+  },
+  "spectate": {
+   "class": "SpectateCommand",
+   "when": "always"
+  },
+  "spreadplayers": {
+   "class": "SpreadPlayersCommand",
+   "when": "always"
+  },
+  "stop": {
+   "class": "StopCommand",
+   "when": "dedicated"
+  },
+  "stopsound": {
+   "class": "StopSoundCommand",
+   "when": "always"
+  },
+  "stopwatch": {
+   "class": "StopwatchCommand",
+   "when": "always"
+  },
+  "summon": {
+   "class": "SummonCommand",
+   "when": "always"
+  },
+  "swing": {
+   "class": "SwingCommand",
+   "when": "always"
+  },
+  "tag": {
+   "class": "TagCommand",
+   "when": "always"
+  },
+  "team": {
+   "class": "TeamCommand",
+   "when": "always"
+  },
+  "teammsg": {
+   "class": "TeamMsgCommand",
+   "when": "always"
+  },
+  "teleport": {
+   "class": "TeleportCommand",
+   "when": "always"
+  },
+  "tell": {
+   "class": "MsgCommand",
+   "when": "always",
+   "alias_of": "msg"
+  },
+  "tellraw": {
+   "class": "TellRawCommand",
+   "when": "always"
+  },
+  "test": {
+   "class": "TestCommand",
+   "when": "always"
+  },
+  "tick": {
+   "class": "TickCommand",
+   "when": "always"
+  },
+  "time": {
+   "class": "TimeCommand",
+   "when": "always"
+  },
+  "title": {
+   "class": "TitleCommand",
+   "when": "always"
+  },
+  "tm": {
+   "class": "TeamMsgCommand",
+   "when": "always",
+   "alias_of": "teammsg"
+  },
+  "tp": {
+   "class": "TeleportCommand",
+   "when": "always",
+   "alias_of": "teleport"
+  },
+  "transfer": {
+   "class": "TransferCommand",
+   "when": "dedicated"
+  },
+  "trigger": {
+   "class": "TriggerCommand",
+   "when": "always"
+  },
+  "unpublish": {
+   "class": "UnpublishCommand",
+   "when": "integrated"
+  },
+  "version": {
+   "class": "VersionCommand",
+   "when": "always"
+  },
+  "w": {
+   "class": "MsgCommand",
+   "when": "always",
+   "alias_of": "msg"
+  },
+  "warden_spawn_tracker": {
+   "class": "WardenSpawnTrackerCommand",
+   "when": "dev"
+  },
+  "waypoint": {
+   "class": "WaypointCommand",
+   "when": "always"
+  },
+  "weather": {
+   "class": "WeatherCommand",
+   "when": "always"
+  },
+  "whitelist": {
+   "class": "WhitelistCommand",
+   "when": "dedicated"
+  },
+  "worldborder": {
+   "class": "WorldBorderCommand",
+   "when": "always"
+  },
+  "xp": {
+   "class": "ExperienceCommand",
+   "when": "always",
+   "alias_of": "experience"
+  }
+ }
+}
