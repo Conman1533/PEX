@@ -51,7 +51,7 @@ impl Mob for SquidEntity {
         self.movement.tick(self);
     }
 
-    fn custom_travel(&self, caller: &dyn EntityBase) -> bool {
+    fn travel(&self, caller: &dyn EntityBase) -> bool {
         SquidMovement::travel(self, caller)
     }
 
@@ -96,7 +96,13 @@ impl SquidMovement {
 
         let fleeing = in_water && self.flee(living);
         if !fleeing {
-            if mob.get_mob_entity().no_action_time.load(Ordering::Relaxed) > 100 {
+            if mob
+                .get_mob_entity()
+                .living_entity
+                .no_action_time
+                .load(Ordering::Relaxed)
+                > 100
+            {
                 self.movement_vector.store(Vector3::default());
             } else if rng.random_range(0..50) == 0
                 || !in_water

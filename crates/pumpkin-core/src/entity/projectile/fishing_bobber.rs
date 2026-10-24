@@ -172,7 +172,8 @@ impl FishingBobberEntity {
             let params = LootContextParameters {
                 tool: Some(used_item.clone()),
                 position: Some(bobber_pos),
-                this_entity: Some(&EntityType::FISHING_BOBBER),
+                this_entity: Some(self),
+                world: Some(&world),
                 luck: total_luck,
                 ..Default::default()
             };

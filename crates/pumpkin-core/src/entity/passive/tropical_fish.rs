@@ -41,7 +41,7 @@ impl Mob for TropicalFishEntity {
         fish::flop(self, Sound::EntityTropicalFishFlop);
     }
 
-    fn custom_travel(&self, caller: &dyn EntityBase) -> bool {
+    fn travel(&self, caller: &dyn EntityBase) -> bool {
         fish::travel(self, caller)
     }
 

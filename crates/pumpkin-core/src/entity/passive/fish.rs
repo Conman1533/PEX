@@ -30,7 +30,7 @@ pub fn init(mob_entity: &MobEntity) {
     *mob_entity
         .move_control
         .lock()
-        .unwrap_or_else(PoisonError::into_inner) = Box::new(FishMoveControl);
+        .unwrap_or_else(PoisonError::into_inner) = Box::new(FishMoveControl::default());
 
     let goals = &mob_entity.goals_selector;
     goals.add_goal(0, EscapeDangerGoal::new(1.25));

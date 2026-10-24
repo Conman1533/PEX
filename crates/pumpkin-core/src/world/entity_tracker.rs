@@ -1,8 +1,8 @@
+use std::sync::Arc;
 use std::sync::atomic::{
     AtomicBool, AtomicU32,
     Ordering::{self, Relaxed},
 };
-use std::sync::Arc;
 
 use bytes::BufMut;
 use crossbeam::atomic::AtomicCell;
@@ -177,17 +177,12 @@ impl TrackedEntity {
 
     #[must_use]
     pub fn has_viewers(&self) -> bool {
-        !self
-            .seen_by
-            .read()
-            .is_empty()
+        !self.seen_by.read().is_empty()
     }
 
     #[must_use]
     pub fn is_seen_by(&self, uuid: &Uuid) -> bool {
-        self.seen_by
-            .read()
-            .contains(uuid)
+        self.seen_by.read().contains(uuid)
     }
 
     /// Vanilla `ServerEntity.sendChanges`. Non-player entities only.
@@ -486,10 +481,7 @@ impl TrackedEntity {
                 .is_chunk_ready(&entity_chunk);
 
         if is_visible {
-            let inserted = self
-                .seen_by
-                .write()
-                .insert(player.gameprofile.id);
+            let inserted = self.seen_by.write().insert(player.gameprofile.id);
             if inserted {
                 if matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     self.bedrock_watchers.fetch_add(1, Relaxed);
@@ -703,18 +695,13 @@ impl TrackedEntity {
         World::broadcast_java_grouped(&je_packet, recipients_by_version);
         World::broadcast_bedrock_grouped(&be_packet, bedrock_recipients.into_iter());
 
-        self.seen_by
-            .write()
-            .clear();
+        self.seen_by.write().clear();
         self.bedrock_watchers.store(0, Relaxed);
     }
 
     /// Vanilla `TrackedEntity.removePlayer`: despawn on the client, only if it was paired.
     pub fn remove_player(&self, player: &Player) {
-        let removed = self
-            .seen_by
-            .write()
-            .remove(&player.gameprofile.id);
+        let removed = self.seen_by.write().remove(&player.gameprofile.id);
         if removed {
             if matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
                 self.bedrock_watchers.fetch_sub(1, Relaxed);
@@ -725,10 +712,7 @@ impl TrackedEntity {
 
     /// Forgets the player as a viewer without a removal packet; the client already dropped it.
     pub fn forget_player(&self, player: &Player) {
-        let removed = self
-            .seen_by
-            .write()
-            .remove(&player.gameprofile.id);
+        let removed = self.seen_by.write().remove(&player.gameprofile.id);
         if removed && matches!(player.client.as_ref(), ClientPlatform::Bedrock(_)) {
             self.bedrock_watchers.fetch_sub(1, Relaxed);
         }

@@ -1,3 +1,4 @@
+use crate::entity::player::advancement::trigger::AdvancementTrigger;
 use crate::entity::player::statistics::StatisticCategory;
 use crate::server::Server;
 use crate::world::World;
@@ -578,6 +579,23 @@ impl ItemEntity {
 }
 
 impl EntityBase for ItemEntity {
+    fn dampens_vibrations(&self) -> bool {
+        self.item_stack
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .item
+            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_DAMPENS_VIBRATIONS)
+    }
+
+    fn get_owner_id(&self) -> Option<i32> {
+        let uuid = self.thrower.load()?;
+        self.entity
+            .world
+            .load()
+            .get_entity_by_uuid(uuid)
+            .map(|entity| entity.get_entity().entity_id)
+    }
+
     fn audited_reach(&self) -> Option<AuditedReach> {
         let entity = &self.entity;
         let world = entity.world.load();
@@ -767,6 +785,19 @@ impl EntityBase for ItemEntity {
             };
 
             if amount_picked_up > 0 {
+                if inserted
+                    && let Some(thrower) = self
+                        .thrower
+                        .load()
+                        .and_then(|uuid| self.entity.world.load().get_entity_by_uuid(uuid))
+                {
+                    player.trigger_advancement(AdvancementTrigger::ThrownItemPickedUpByPlayer {
+                        thrower_type: format!(
+                            "minecraft:{}",
+                            thrower.get_entity().entity_type.resource_name
+                        ),
+                    });
+                }
                 player.increment_stat(
                     StatisticCategory::PickedUp,
                     item_id as i32,
@@ -806,14 +837,6 @@ impl EntityBase for ItemEntity {
         Some(self)
     }
 
-    fn dampens_vibrations(&self) -> bool {
-        self.item_stack
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .item
-            .has_tag(&pumpkin_data::tag::Item::MINECRAFT_DAMPENS_VIBRATIONS)
-    }
-
     fn get_gravity(&self) -> f64 {
         0.04
     }
@@ -843,6 +866,7 @@ impl EntityBase for ItemEntity {
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
+        self.thrower.store(nbt.get_uuid("Thrower"));
         // Restore the item stack from the "Item" compound
         if let Some(item_compound) = nbt.get_compound("Item")
             && let Some(stack) = ItemStack::read_item_stack(item_compound)

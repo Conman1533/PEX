@@ -41,7 +41,7 @@ impl Mob for GlowSquidEntity {
         self.movement.tick(self);
     }
 
-    fn custom_travel(&self, caller: &dyn EntityBase) -> bool {
+    fn travel(&self, caller: &dyn EntityBase) -> bool {
         SquidMovement::travel(self, caller)
     }
 

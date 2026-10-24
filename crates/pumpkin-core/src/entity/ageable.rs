@@ -54,6 +54,9 @@ pub trait AgeableMob: Mob {
             let is_baby = new_age < 0;
             entity.set_synced_data(tracked_data::ageable_mob::DATA_BABY_ID, is_baby);
             self.age_boundary_reached();
+            if let Some(meta) = self.mob_metadata() {
+                entity.send_bedrock_actor_data(&meta.to_bedrock_actor_data());
+            }
         }
     }
 

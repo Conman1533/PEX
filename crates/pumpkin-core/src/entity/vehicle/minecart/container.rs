@@ -43,21 +43,31 @@ impl ScreenHandlerFactory for MinecartScreenFactory {
 }
 
 pub(super) fn open(
-    custom_name: Option<TextComponent>,
+    entity: &Entity,
     player: &Arc<Player>,
     inventory: &Arc<VehicleInventory>,
     title: TextComponent,
     hopper: bool,
 ) -> bool {
     if !player.is_spectator() {
-        inventory.unpack_loot();
+        let world = entity.world.load();
+        inventory.unpack_loot(&crate::world::loot::LootContextParameters {
+            world: Some(&world),
+            position: Some(entity.pos.load()),
+            this_entity: Some(player.as_ref()),
+            luck: player
+                .living_entity
+                .get_attribute_value(&pumpkin_data::attributes::Attributes::LUCK)
+                as f32,
+            ..Default::default()
+        });
     }
 
     player
         .open_handled_screen(
             &MinecartScreenFactory {
                 inventory: inventory.clone(),
-                title: custom_name.unwrap_or(title),
+                title: entity.custom_name.load().as_ref().clone().unwrap_or(title),
                 hopper,
             },
             None,

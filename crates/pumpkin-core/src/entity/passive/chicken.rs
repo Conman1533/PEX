@@ -1,8 +1,7 @@
 use crate::entity::passive::animal::create_offspring;
-use crate::world::World;
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicI32, AtomicU8, Ordering, Ordering::Relaxed},
+    atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
 };
 
 use pumpkin_data::chicken_sound_variant::ChickenSoundVariant;
@@ -16,6 +15,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
 use rand::RngExt;
 
+use crate::entity::ai::pathfinder::node::PathType;
 use crate::entity::custom_sound::CustomSound;
 use crate::entity::{
     Entity, EntityBase,
@@ -25,10 +25,15 @@ use crate::entity::{
         look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
         tempt::TemptGoal, wander_around::WanderAroundGoal,
     },
-    mob::{Mob, MobEntity},
+    mob::{Mob, MobEntity, spawn::SpawnGroupData},
     passive::animal::Animal,
     player::Player,
 };
+use crate::plugin::api::events::entity::entity_drop_item::EntityDropItemEvent;
+use crate::world::World;
+
+const EGG_LAY_TIME: std::ops::Range<i32> = 6000..12000;
+const CHICKEN_JOCKEY_EXPERIENCE_REWARD: u32 = 10;
 
 /// Represents a Chicken, a passive mob that lays eggs and is immune to fall damage.
 ///
@@ -38,24 +43,29 @@ pub struct ChickenEntity {
     pub variant: AtomicU8,
     pub sound_variant: AtomicU8,
     egg_lay_time: AtomicI32,
+    is_chicken_jockey: AtomicBool,
     pub ageable_data: crate::entity::ageable::AgeableData,
 }
 
 impl ChickenEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let world = entity.world.load();
-        let biome = world.get_biome(&entity.block_pos.load());
-        let variant = ChickenVariant::select_for_biome(biome.registry_id);
         let mob_entity = MobEntity::new(entity);
-        let egg_lay_time = rand::rng().random_range(6000..12000);
+        let egg_lay_time = rand::rng().random_range(EGG_LAY_TIME);
         let chicken = Self {
             mob_entity,
-            variant: AtomicU8::new(variant.id()),
+            variant: AtomicU8::new(ChickenVariant::default().id()),
             sound_variant: AtomicU8::new(ChickenSoundVariant::Classic as u8),
             egg_lay_time: AtomicI32::new(egg_lay_time),
+            is_chicken_jockey: AtomicBool::new(false),
             ageable_data: crate::entity::ageable::AgeableData::default(),
         };
         let mob_arc = Arc::new(chicken);
+        mob_arc
+            .mob_entity
+            .navigator
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .set_pathfinding_malus(PathType::Water, 0.0);
         let mob_weak: Weak<dyn Mob> = {
             let mob_arc: Arc<dyn Mob> = mob_arc.clone();
             Arc::downgrade(&mob_arc)
@@ -85,6 +95,31 @@ impl ChickenEntity {
         };
 
         mob_arc
+    }
+
+    fn lay_egg(&self) -> bool {
+        let entity = self.get_entity();
+        let mut drop_event =
+            EntityDropItemEvent::new(entity.entity_id, "minecraft:egg".to_string(), 1);
+        if let Some(server) = entity.world.load().server.upgrade() {
+            server
+                .plugin_manager
+                .fire_blocking(&server, &mut drop_event);
+        }
+        if drop_event.cancelled {
+            return false;
+        }
+        entity.spawn_at_location(ItemStack::new(1, &Item::EGG));
+        true
+    }
+
+    pub fn is_chicken_jockey(&self) -> bool {
+        self.is_chicken_jockey.load(Ordering::Relaxed)
+    }
+
+    pub fn set_chicken_jockey(&self, is_chicken_jockey: bool) {
+        self.is_chicken_jockey
+            .store(is_chicken_jockey, Ordering::Relaxed);
     }
 
     pub fn set_variant(&self, variant: ChickenVariant) {
@@ -166,6 +201,40 @@ impl Mob for ChickenEntity {
         Some(sound_variant.ambient_sound(self.is_baby()))
     }
 
+    fn mob_get_component(
+        &self,
+        component: pumpkin_data::data_component::DataComponent,
+    ) -> Option<Box<dyn pumpkin_data::data_component_impl::DataComponentImpl>> {
+        use pumpkin_data::{
+            data_component::DataComponent, data_component_impl::ChickenVariantImpl,
+        };
+        match component {
+            DataComponent::ChickenVariant => Some(Box::new(ChickenVariantImpl {
+                value: format!(
+                    "minecraft:{}",
+                    ChickenVariant::from_id(self.variant.load(Ordering::Relaxed))?.to_name()
+                )
+                .into(),
+            })),
+            _ => None,
+        }
+    }
+
+    fn finalize_spawn(
+        &self,
+        world: &Arc<World>,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
+        let biome = world.get_biome(&self.get_entity().block_pos.load());
+        self.set_variant(ChickenVariant::select_for_biome(biome.registry_id));
+        let sound_variants = ChickenSoundVariant::ALL;
+        self.set_sound_variant(
+            sound_variants[self.get_random().random_range(0..sound_variants.len())],
+        );
+        self.mob_entity.finalize_spawn_base();
+        group_data
+    }
+
     fn has_audited_tick(&self) -> bool {
         true
     }
@@ -191,7 +260,20 @@ impl Mob for ChickenEntity {
         Some(self)
     }
 
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        self.is_chicken_jockey()
+    }
+
+    fn get_base_experience_reward(&self) -> u32 {
+        if self.is_chicken_jockey() {
+            CHICKEN_JOCKEY_EXPERIENCE_REWARD
+        } else {
+            self.get_entity().entity_type.experience_reward
+        }
+    }
+
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
+        nbt.put_bool("IsChickenJockey", self.is_chicken_jockey());
         nbt.put_int("EggLayTime", self.egg_lay_time.load(Ordering::Relaxed));
         let variant =
             ChickenVariant::from_id(self.variant.load(Ordering::Relaxed)).unwrap_or_default();
@@ -206,8 +288,10 @@ impl Mob for ChickenEntity {
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
-        self.egg_lay_time
-            .store(nbt.get_int("EggLayTime").unwrap_or(6000), Ordering::Relaxed);
+        self.set_chicken_jockey(nbt.get_bool("IsChickenJockey").unwrap_or(false));
+        if let Some(egg_lay_time) = nbt.get_int("EggLayTime") {
+            self.egg_lay_time.store(egg_lay_time, Ordering::Relaxed);
+        }
         if let Some(variant_str) = nbt.get_string("variant")
             && let Some(variant) = ChickenVariant::from_name(variant_str)
         {
@@ -253,52 +337,35 @@ impl Mob for ChickenEntity {
         );
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
-        if self.mob_entity.living_entity.dead.load(Relaxed) {
-            return;
+    fn mob_ai_step(&self) {
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        let velocity = entity.velocity.load();
+        if !entity.on_ground.load(Ordering::Relaxed) && velocity.y < 0.0 {
+            entity.set_velocity(velocity.multiply(1.0, 0.6, 1.0));
         }
-        let entity = &self.mob_entity.living_entity.entity;
-        let current_velocity = entity.velocity.load();
-        let on_ground = entity.on_ground.load(Ordering::Relaxed);
-
-        // TODO: move velocity logic to physics tick when implemented
-        if (!on_ground) && current_velocity.y < 0.0 {
-            entity.set_velocity(current_velocity.multiply(1.0, 0.6, 1.0));
-        }
-        // Vanilla `Chicken.aiStep` only counts down for live, grown chickens.
-        if self.mob_entity.living_entity.is_alive()
+        if entity.is_alive()
+            && !living.is_dead_or_dying()
             && !self.is_baby()
+            && !self.is_chicken_jockey()
             && self.egg_lay_time.fetch_sub(1, Ordering::Relaxed) <= 1
         {
-            let next_time = rand::rng().random_range(6000..12000);
-            let world = entity.world.load_full();
-            let entity_id = entity.entity_id;
-            let mut drop_event =
-                crate::plugin::api::events::entity::entity_drop_item::EntityDropItemEvent::new(
-                    entity_id,
-                    "minecraft:egg".to_string(),
-                    1,
-                );
-            if let Some(server) = world.server.upgrade() {
-                server
-                    .plugin_manager
-                    .fire_blocking(&server, &mut drop_event);
-            }
-            if !drop_event.cancelled {
-                // `spawnAtLocation` drops at the chicken's own position, so an egg laid on a hopper
-                // lands inside the hopper's pickup area rather than in the block below it.
-                entity.spawn_at_location(ItemStack::new(1, &Item::EGG));
-                let mut rng = rand::rng();
-                world.play_sound_fine(
+            let mut rng = self.get_random();
+            if self.lay_egg() {
+                entity.world.load().play_sound_fine(
                     Sound::EntityChickenEgg,
                     SoundCategory::Neutral,
                     &entity.pos.load(),
                     1.0,
-                    (rng.random::<f32>() - rng.random::<f32>()) * 0.2 + 1.0,
+                    (rng.random::<f32>() - rng.random::<f32>()).mul_add(0.2, 1.0),
                 );
-                world.emit_game_event(GameEvent::EntityPlace.name(), entity.pos.load());
+                entity
+                    .world
+                    .load()
+                    .emit_game_event(GameEvent::EntityPlace.name(), entity.pos.load());
             }
-            self.egg_lay_time.store(next_time, Ordering::Relaxed);
+            self.egg_lay_time
+                .store(rng.random_range(EGG_LAY_TIME), Ordering::Relaxed);
         }
     }
 

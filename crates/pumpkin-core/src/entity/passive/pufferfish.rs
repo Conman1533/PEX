@@ -32,7 +32,7 @@ impl Mob for PufferfishEntity {
         fish::flop(self, Sound::EntityPufferFishFlop);
     }
 
-    fn custom_travel(&self, caller: &dyn EntityBase) -> bool {
+    fn travel(&self, caller: &dyn EntityBase) -> bool {
         fish::travel(self, caller)
     }
 

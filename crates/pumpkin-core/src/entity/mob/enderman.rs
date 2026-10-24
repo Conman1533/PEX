@@ -409,6 +409,11 @@ impl Mob for EndermanEntity {
         false
     }
 
+    fn mob_metadata(&self) -> Option<crate::entity::mob::MobMetadata> {
+        self.is_creepy()
+            .then(|| crate::entity::mob::MobMetadata::new().screaming(true))
+    }
+
     fn set_mob_target(&self, target: Option<Arc<dyn EntityBase>>) {
         self.set_target(self.as_valid_target(target));
     }

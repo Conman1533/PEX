@@ -58,6 +58,7 @@ pub mod guardian;
 pub mod hoglin;
 pub mod illusioner;
 pub mod magma_cube;
+pub mod metadata;
 pub mod neutral;
 pub mod patrol;
 pub mod phantom;
@@ -87,6 +88,7 @@ pub mod zombified_piglin;
 const DEFAULT_AMBIENT_SOUND_INTERVAL: i32 = 80;
 /// The ambient sound interval of vanilla `Animal`, `AbstractGolem` and the water creatures.
 pub const ANIMAL_AMBIENT_SOUND_INTERVAL: i32 = 120;
+pub use metadata::MobMetadata;
 
 /// The mob whose navigation and movement control a mob drives: its own, or the mob it steers.
 pub struct SteeredMob<'a> {
@@ -143,9 +145,6 @@ pub struct MobEntity {
     /// Vanilla `Mob.ambientSoundTime`.
     pub ambient_sound_time: AtomicI32,
     pub persistence_required: AtomicBool,
-    /// Vanilla `LivingEntity.noActionTime`: ticks since a player was within the no-despawn
-    /// distance. Random despawning only starts once it passes [`Self::RANDOM_DESPAWN_DELAY`].
-    pub no_action_time: AtomicI32,
     pending_riders: std::sync::Mutex<Vec<Arc<dyn EntityBase>>>,
     mob_flags: AtomicU8,
 }
@@ -274,7 +273,6 @@ impl MobEntity {
             ambient_sound_time: AtomicI32::new(0),
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
-            no_action_time: AtomicI32::new(0),
             pending_riders: std::sync::Mutex::new(Vec::new()),
             mob_flags: AtomicU8::new(0),
         }
@@ -373,7 +371,7 @@ impl MobEntity {
 
     /// Vanilla `Mob.serverAiStep`: sensing, goals, navigation and controls.
     pub fn server_ai_step(&self, mob: &dyn Mob, caller: &dyn EntityBase) {
-        self.no_action_time.fetch_add(1, Relaxed);
+        self.living_entity.no_action_time.fetch_add(1, Relaxed);
         let tick_count = self.living_entity.entity.tick_count.load(Relaxed);
         let entity_id = self.living_entity.entity.entity_id;
 
@@ -812,10 +810,7 @@ impl MobEntity {
             && world
                 .get_fluid(&pos.down())
                 .has_tag(&tag::Fluid::MINECRAFT_WATER)
-            && (world.get_block(&pos.up()) == &Block::WATER
-                || world
-                    .get_fluid(&pos.up())
-                    .has_tag(&tag::Fluid::MINECRAFT_WATER))
+            && world.get_block(&pos.up()) == &Block::WATER
     }
 
     pub fn check_surface_ageable_water_creature_spawn_rules(world: &World, pos: &BlockPos) -> bool {
@@ -889,7 +884,12 @@ impl MobEntity {
             >= DAYLIGHT_BRIGHTNESS
     }
 
-    pub fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
+    pub fn mob_interact(
+        &self,
+        player: &Arc<Player>,
+        item_stack: &mut ItemStack,
+        can_be_leashed: bool,
+    ) -> bool {
         let entity = &self.living_entity.entity;
 
         // If already leashed to player, right-clicking unleashes the mob
@@ -911,8 +911,9 @@ impl MobEntity {
         }
 
         // If holding a lead, leash the mob to the player
-        if item_stack.item.registry_key == "lead"
-            || item_stack.item.registry_key == "minecraft:lead"
+        if (item_stack.item.registry_key == "lead"
+            || item_stack.item.registry_key == "minecraft:lead")
+            && can_be_leashed
         {
             let diff = entity.pos.load() - player.get_entity().pos.load();
             let dist_sq = diff.length_squared();
@@ -944,6 +945,7 @@ impl MobEntity {
         // leashed mobs never despawn. A name tag sets persistence in vanilla; Pumpkin checks
         // the name directly.
         let persistent = self.persistence_required.load(Relaxed)
+            || mob.requires_custom_persistence()
             || entity.has_vehicle()
             || entity.is_leashed()
             || (**entity.custom_name.load()).is_some();
@@ -973,14 +975,14 @@ impl MobEntity {
 
         let no_despawn_distance = f64::from(pumpkin_data::entity::MobCategory::NO_DESPAWN_DISTANCE);
         if !persistent
-            && self.no_action_time.load(Relaxed) > Self::RANDOM_DESPAWN_DELAY
+            && self.living_entity.no_action_time.load(Relaxed) > Self::RANDOM_DESPAWN_DELAY
             && rand::random_range(0..Self::RANDOM_DESPAWN_CHANCE) == 0
             && dist_sq > no_despawn_distance * no_despawn_distance
             && mob.remove_when_far_away(dist_sq)
         {
             entity.remove();
         } else if dist_sq < no_despawn_distance * no_despawn_distance {
-            self.no_action_time.store(0, Relaxed);
+            self.living_entity.no_action_time.store(0, Relaxed);
         }
     }
 }
@@ -1143,6 +1145,10 @@ pub trait Mob: EntityBase + Send + Sync {
         EquipmentSlot::HEAD
     }
 
+    fn can_be_leashed(&self) -> bool {
+        true
+    }
+
     /// Vanilla `Mob.removeWhenFarAway`, which `Animal` overrides to `false`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         self.as_animal().is_none()
@@ -1201,16 +1207,35 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
+    /// Unified mob metadata abstraction. When implemented, both Java and Bedrock
+    /// spawn metadata are generated automatically.
+    fn mob_metadata(&self) -> Option<MobMetadata> {
+        let is_saddled = self.is_saddled();
+        let is_no_ai = self.get_mob_entity().is_no_ai();
+        if !is_saddled && !is_no_ai {
+            return None;
+        }
+        let mut meta = MobMetadata::new();
+        if is_saddled {
+            meta = meta.saddled(true);
+        }
+        if is_no_ai {
+            meta = meta.no_ai(true);
+        }
+        Some(meta)
+    }
+
     /// Metadata which must accompany this mob whenever it is spawned for a Java client.
-    fn mob_java_spawn_metadata(&self, _version: JavaMinecraftVersion) -> Option<Box<[u8]>> {
-        None
+    fn mob_java_spawn_metadata(&self, version: JavaMinecraftVersion) -> Option<Box<[u8]>> {
+        self.mob_metadata()
+            .and_then(|m| m.to_java_spawn_metadata(version))
     }
 
     /// Metadata which must accompany this mob whenever it is spawned for a Bedrock client.
     fn mob_bedrock_spawn_metadata(
         &self,
     ) -> Option<pumpkin_protocol::bedrock::client::set_actor_data::SyncedActorDataList> {
-        None
+        self.mob_metadata().map(|m| m.to_bedrock_actor_data())
     }
 
     fn get_job_site(&self) -> Option<BlockPos> {
@@ -1260,6 +1285,15 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Per-mob tick hook called each tick before AI runs. Override for mob-specific logic.
     fn mob_tick(&self, _caller: &dyn EntityBase) {}
 
+    /// Whether currents push this mob along. Water animals hold their ground.
+    fn mob_is_pushed_by_fluids(&self) -> bool {
+        true
+    }
+
+    fn before_mob_ai_step(&self) {}
+
+    fn mob_ai_step(&self) {}
+
     fn travel_in_water(&self, caller: &dyn EntityBase, gravity: f64, falling: bool) {
         self.get_mob_entity()
             .living_entity
@@ -1267,6 +1301,50 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn post_tick(&self) {}
+
+    fn base_tick(&self) {}
+
+    /// Moves the mob for this tick in place of the usual walking and swimming
+    /// physics, returning whether it did; vanilla mobs that override `travel`.
+    fn travel(&self, _caller: &dyn EntityBase) -> bool {
+        false
+    }
+
+    fn wants_to_pick_up(&self, _stack: &ItemStack) -> bool {
+        false
+    }
+
+    fn can_pick_up_loot(&self, _brain: Option<&crate::entity::ai::brain::BrainState>) -> bool {
+        self.get_mob_entity().can_pick_up_loot()
+    }
+
+    fn for_each_game_event_listener(
+        &self,
+        _visit: &mut dyn FnMut(&dyn crate::world::game_event::GameEventListener),
+    ) {
+    }
+
+    fn has_global_tick_reach(&self) -> bool {
+        false
+    }
+
+    fn mob_considers_entity_as_ally(
+        &self,
+        _other: &dyn EntityBase,
+        _brain: Option<&crate::entity::ai::brain::BrainState>,
+    ) -> Option<bool> {
+        None
+    }
+
+    fn drop_inventory(&self) {}
+
+    fn can_dispenser_equip_into_slot(&self, _slot: &EquipmentSlot) -> bool {
+        true
+    }
+
+    fn should_check_fall_damage(&self) -> bool {
+        true
+    }
 
     fn on_removed(&self) {}
 
@@ -1293,6 +1371,15 @@ pub trait Mob: EntityBase + Send + Sync {
     /// Used by endermen to dodge projectiles via teleportation.
     fn pre_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) -> bool {
         true
+    }
+
+    fn pre_damage_with_context(
+        &self,
+        damage_type: DamageType,
+        source: Option<&dyn EntityBase>,
+        _cause: Option<&dyn EntityBase>,
+    ) -> bool {
+        self.pre_damage(damage_type, source)
     }
 
     fn on_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) {}
@@ -1356,6 +1443,20 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn as_custom_sound(&self) -> Option<&dyn crate::entity::custom_sound::CustomSound> {
+        None
+    }
+
+    fn as_schooling_fish(
+        &self,
+    ) -> Option<&dyn crate::entity::passive::abstract_schooling_fish::AbstractSchoolingFish> {
+        None
+    }
+
+    fn as_bucketable(&self) -> Option<&dyn crate::entity::bucketable::Bucketable> {
+        None
+    }
+
+    fn as_fish(&self) -> Option<&dyn crate::entity::passive::abstract_fish::AbstractFish> {
         None
     }
 
@@ -1519,17 +1620,6 @@ pub trait Mob: EntityBase + Send + Sync {
         false
     }
 
-    /// Moves the mob for this tick in place of the usual walking and swimming
-    /// physics, returning whether it did; vanilla mobs that override `travel`.
-    fn custom_travel(&self, _caller: &dyn EntityBase) -> bool {
-        false
-    }
-
-    /// Whether currents push this mob along. Water animals hold their ground.
-    fn mob_is_pushed_by_fluids(&self) -> bool {
-        true
-    }
-
     /// Builds this mob's brain from its saved memories; goal mobs keep the brain-dead default.
     fn make_brain(&self, _packed: &PackedMemories) -> Brain {
         Brain::default()
@@ -1572,7 +1662,17 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.get_mob_entity().mob_interact(player, item_stack)
+        self.get_mob_entity()
+            .mob_interact(player, item_stack, self.can_be_leashed())
+    }
+
+    fn mob_interact_with_hand(
+        &self,
+        _player: &Arc<Player>,
+        _item_stack: &mut ItemStack,
+        _hand: pumpkin_util::Hand,
+    ) -> Option<bool> {
+        None
     }
 
     fn tame(&self, player: &Arc<Player>) {
@@ -1714,6 +1814,13 @@ pub trait Mob: EntityBase + Send + Sync {
         self.get_entity().entity_type.experience_reward
     }
 
+    fn mob_get_component(
+        &self,
+        _component: pumpkin_data::data_component::DataComponent,
+    ) -> Option<Box<dyn pumpkin_data::data_component_impl::DataComponentImpl>> {
+        None
+    }
+
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let is_baby = entity.age.load(std::sync::atomic::Ordering::Relaxed) < 0;
@@ -1736,6 +1843,10 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 }
 impl<T: Mob + Send + 'static> EntityBase for T {
+    fn is_pushed_by_fluids(&self) -> bool {
+        self.mob_is_pushed_by_fluids()
+    }
+
     fn get_mob(&self) -> Option<&dyn Mob> {
         Some(self)
     }
@@ -1746,10 +1857,6 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn as_vibration_user(&self) -> Option<&dyn crate::world::vibration::VibrationUser> {
         Mob::as_vibration_user(self)
-    }
-
-    fn is_pushed_by_fluids(&self) -> bool {
-        self.mob_is_pushed_by_fluids()
     }
 
     fn is_pushable(&self) -> bool {
@@ -1766,6 +1873,13 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn get_item_steerable(&self) -> Option<&dyn crate::entity::item_steerable::ItemSteerable> {
         Mob::get_item_steerable(self)
+    }
+
+    fn get_component(
+        &self,
+        component: pumpkin_data::data_component::DataComponent,
+    ) -> Option<Box<dyn pumpkin_data::data_component_impl::DataComponentImpl>> {
+        self.mob_get_component(component)
     }
 
     fn init_data_tracker(&self) {
@@ -1867,7 +1981,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         cause: Option<&dyn EntityBase>,
     ) -> bool {
         // pre_damage hook: allows mobs to dodge/cancel damage (e.g. enderman projectile dodge)
-        if !self.pre_damage(damage_type, source) {
+        if !self.pre_damage_with_context(damage_type, source, cause) {
             return false;
         }
         // Mob-specific damage modifier (e.g. shulker armor when closed).
@@ -1894,6 +2008,15 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         self.mob_interact(player, item_stack)
+    }
+
+    fn interact_with_hand(
+        &self,
+        player: &Arc<Player>,
+        item_stack: &mut ItemStack,
+        hand: pumpkin_util::Hand,
+    ) -> Option<bool> {
+        self.mob_interact_with_hand(player, item_stack, hand)
     }
 
     fn on_player_collision(&self, player: &Arc<Player>) {

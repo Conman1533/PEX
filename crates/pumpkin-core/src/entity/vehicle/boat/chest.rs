@@ -26,12 +26,24 @@ impl ChestBoat {
 
     pub(super) fn interact(
         &self,
+        entity: &crate::entity::Entity,
         custom_name: Option<TextComponent>,
         default_boat_name: TextComponent,
         player: &Arc<Player>,
     ) -> bool {
         if !player.is_spectator() {
-            self.inventory.unpack_loot();
+            let world = entity.world.load();
+            self.inventory
+                .unpack_loot(&crate::world::loot::LootContextParameters {
+                    world: Some(&world),
+                    position: Some(entity.pos.load()),
+                    this_entity: Some(player.as_ref()),
+                    luck: player
+                        .living_entity
+                        .get_attribute_value(&pumpkin_data::attributes::Attributes::LUCK)
+                        as f32,
+                    ..Default::default()
+                });
         }
 
         player

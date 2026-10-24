@@ -28,6 +28,7 @@ mod entity_index;
 pub(crate) use entity_index::EntityIndex;
 pub mod entity_islands;
 pub mod explosion;
+pub mod game_event;
 pub mod generation_cache;
 pub mod loot;
 pub mod map;
@@ -87,12 +88,7 @@ use pumpkin_data::{
     sound::{Sound, SoundCategory},
     world::{RAW, WorldEvent},
 };
-use pumpkin_data::{
-    BlockDirection, BlockState, HorizontalFacingExt,
-    block_properties::{ChestLikeProperties, ChestType},
-    tag::Taggable,
-    translation,
-};
+use pumpkin_data::{BlockDirection, BlockState, HorizontalFacingExt, translation};
 use pumpkin_inventory::crafting::recipe_provider::RecipeProvider;
 use pumpkin_inventory::screen_handler::InventoryPlayer;
 use pumpkin_inventory::{Clearable, Inventory};
@@ -199,38 +195,7 @@ use weather::Weather;
 const MAX_LIGHT_LEVEL: u8 = 15;
 
 fn bedrock_chest_block_actor(state_id: BlockStateId, position: BlockPos) -> Option<NbtCompound> {
-    let (block, _) = BlockState::from_id_with_block(state_id);
-    if !block.has_tag(&pumpkin_data::tag::Block::C_CHESTS_WOODEN)
-        && !block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_COPPER_CHESTS)
-    {
-        return None;
-    }
-
-    // Block actor tags describe the chest itself. Container contents are synchronized
-    // through inventory packets and must not be exposed in chunk data.
-    let mut nbt = NbtCompound::new();
-    nbt.put_string("id", "Chest".to_string());
-    nbt.put_int("x", position.0.x);
-    nbt.put_int("y", position.0.y);
-    nbt.put_int("z", position.0.z);
-    nbt.put_bool("isMovable", true);
-
-    let properties = ChestLikeProperties::from_state_id(state_id);
-    if properties.r#type != ChestType::Single {
-        let direction = if properties.r#type == ChestType::Left {
-            properties.facing.rotate_clockwise()
-        } else {
-            properties.facing.rotate_counter_clockwise()
-        };
-        let pair = position.offset(direction.to_offset());
-        nbt.put_int("pairx", pair.0.x);
-        nbt.put_int("pairz", pair.0.z);
-        if properties.r#type == ChestType::Right {
-            nbt.put_bool("pairlead", true);
-        }
-    }
-
-    Some(nbt)
+    crate::block::entities::bedrock::build_chest_actor(position, state_id, None)
 }
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -5574,6 +5539,7 @@ impl World {
                 if item.is_empty() { None } else { Some(item) }
             });
             let params = crate::world::loot::LootContextParameters {
+                world: Some(self),
                 tool,
                 block_state: Some(broken_block_state),
                 position: Some(position.to_f64()),
@@ -6143,7 +6109,7 @@ impl World {
         self.get_block_state_id_if_loaded(position).is_some()
     }
 
-    fn get_fluid_from_state_id(id: BlockStateId) -> &'static pumpkin_data::fluid::Fluid {
+    pub(crate) fn get_fluid_from_state_id(id: BlockStateId) -> &'static pumpkin_data::fluid::Fluid {
         if let Some(fluid) = Fluid::from_state_id(id) {
             return fluid.to_flowing();
         }
@@ -6583,6 +6549,13 @@ impl World {
             );
         }
 
+        let state = self.get_block_state(&block_pos);
+        if let Some(data) = bedrock_chest_block_actor(state.id, block_pos)
+            .or_else(|| block_entity.bedrock_block_actor_data(state.id))
+        {
+            self.broadcast_to_chunk_bedrock(chunk_pos, &CBlockActorData::new(block_pos, data));
+        }
+
         self.block_entities
             .entry(chunk_pos)
             .or_default()
@@ -6709,6 +6682,14 @@ impl World {
             full_nbt.put_int("z", pos.0.z);
             self.add_block_entity_nbt(block_pos, &full_nbt);
         }
+
+        let state = self.get_block_state(&block_pos);
+        if let Some(data) = bedrock_chest_block_actor(state.id, block_pos)
+            .or_else(|| block_entity.bedrock_block_actor_data(state.id))
+        {
+            self.broadcast_to_chunk_bedrock(chunk_pos, &CBlockActorData::new(block_pos, data));
+        }
+
         self.level.read_chunk_sync(&chunk_pos, |chunk| {
             chunk.mark_dirty(true);
         });
@@ -7176,15 +7157,41 @@ impl World {
     }
 
     pub fn emit_game_event(&self, event_key: impl Into<String>, position: Vector3<f64>) {
-        let event_key = event_key.into();
-        match pumpkin_data::game_event::GameEvent::from_name(&event_key) {
-            Some(event) => self.game_event(event, position, vibration::GameEventContext::default()),
-            None => self.fire_game_event_plugins(event_key, position),
-        }
+        self.emit_game_event_with_context(
+            event_key,
+            position,
+            &game_event::GameEventContext {
+                source_entity: None,
+            },
+        );
     }
 
-    /// `ServerLevel.gameEvent`: tells plugins, then offers the event to every vibration listener
-    /// in range (`GameEventDispatcher.post`).
+    pub fn emit_game_event_with_context(
+        &self,
+        event_key: impl Into<String>,
+        position: Vector3<f64>,
+        context: &game_event::GameEventContext<'_>,
+    ) {
+        let Some((event_key, position)) = self.fire_game_event_plugins(event_key.into(), position)
+        else {
+            return;
+        };
+        let Some(event) = pumpkin_data::game_event::GameEvent::from_name(&event_key) else {
+            return;
+        };
+        self.post_game_event(event, position, context);
+        let source = context
+            .source_entity
+            .and_then(|entity| self.get_entity_by_id(entity.get_entity().entity_id));
+        self.post_vibration(
+            event,
+            position,
+            &vibration::GameEventContext::of(source, None),
+        );
+    }
+
+    /// `ServerLevel.gameEvent`: tells plugins, then offers the event to the mob listeners and
+    /// to every vibration listener in range (`GameEventDispatcher.post`).
     #[expect(
         clippy::needless_pass_by_value,
         reason = "callers build the context inline"
@@ -7195,8 +7202,29 @@ impl World {
         position: Vector3<f64>,
         context: vibration::GameEventContext,
     ) {
-        let context = &context;
-        self.fire_game_event_plugins(event.name().to_string(), position);
+        let Some((event_key, position)) =
+            self.fire_game_event_plugins(event.name().to_string(), position)
+        else {
+            return;
+        };
+        let event = pumpkin_data::game_event::GameEvent::from_name(&event_key).unwrap_or(event);
+        self.post_game_event(
+            event,
+            position,
+            &game_event::GameEventContext {
+                source_entity: context.source.as_deref(),
+            },
+        );
+        self.post_vibration(event, position, &context);
+    }
+
+    /// Offers a game event to the sculk sensors, shriekers and wardens in range.
+    fn post_vibration(
+        &self,
+        event: pumpkin_data::game_event::GameEvent,
+        position: Vector3<f64>,
+        context: &vibration::GameEventContext,
+    ) {
         let radius = vibration::notification_radius(event);
         let center = BlockPos::floored_v(position);
         let mut listeners = Vec::new();
@@ -7229,32 +7257,23 @@ impl World {
                     vibration::handle_game_event(user, self, event, context, position);
                 }
             }
-            if matches!(
-                event,
-                pumpkin_data::game_event::GameEvent::JukeboxPlay
-                    | pumpkin_data::game_event::GameEvent::JukeboxStopPlay
-            ) && let Some(allay) = entity
-                .cast_any()
-                .downcast_ref::<crate::entity::passive::allay::AllayEntity>()
-            {
-                let listener = BlockPos::floored_v(allay.get_entity().get_eye_pos());
-                if listener.squared_distance(&center) <= radius * radius {
-                    allay.set_jukebox_playing(
-                        center,
-                        event == pumpkin_data::game_event::GameEvent::JukeboxPlay,
-                    );
-                }
-            }
         }
     }
 
-    fn fire_game_event_plugins(&self, event_key: String, position: Vector3<f64>) {
+    /// Fires the plugin event; `None` when a plugin cancelled it, else the possibly
+    /// rewritten event key and position.
+    fn fire_game_event_plugins(
+        &self,
+        event_key: String,
+        position: Vector3<f64>,
+    ) -> Option<(String, Vector3<f64>)> {
         let mut event = crate::plugin::api::events::world::generic_game::GenericGameEvent::new(
             event_key, position,
         );
         if let Some(server) = self.server.upgrade() {
             server.plugin_manager.fire_blocking(&server, &mut event);
         }
+        (!event.cancelled).then_some((event.event_key, event.position))
     }
 
     pub async fn unload(self: &Arc<Self>) {

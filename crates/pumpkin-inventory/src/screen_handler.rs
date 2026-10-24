@@ -1028,12 +1028,13 @@ pub trait ScreenHandler: Send + Sync {
                 if can_put
                     && can_grab
                     && crate::bundle::try_item_click_behaviour_override(
-                    player,
-                    &click_type,
-                    &slot,
-                    &slot_stack,
-                    &mut cursor_stack,
-                ) {
+                        player,
+                        &click_type,
+                        &slot,
+                        &slot_stack,
+                        &mut cursor_stack,
+                    )
+                {
                     slot.mark_dirty();
                     return;
                 }

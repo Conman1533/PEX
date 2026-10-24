@@ -92,7 +92,10 @@ impl VehicleInventory {
     }
 
     /// Vanilla `ContainerEntity.unpackChestVehicleLootTable`.
-    pub(super) fn unpack_loot(self: &Arc<Self>) {
+    pub(super) fn unpack_loot(
+        self: &Arc<Self>,
+        params: &crate::world::loot::LootContextParameters<'_>,
+    ) {
         let loot_table = self
             .loot_table
             .lock()
@@ -110,7 +113,7 @@ impl VehicleInventory {
         };
 
         let inventory: Arc<dyn Inventory> = self.clone();
-        crate::world::loot::fill_chest_inventory_handle(&inventory, &table, seed);
+        crate::world::loot::fill_chest_inventory_handle(&inventory, &table, seed, params);
     }
 }
 
@@ -202,7 +205,7 @@ mod tests {
         assert_eq!(deferred.get_long("LootTableSeed"), Some(1234));
         assert!(deferred.get_list("Items").is_none());
 
-        inventory.unpack_loot();
+        inventory.unpack_loot(&crate::world::loot::LootContextParameters::default());
         assert!(!inventory.is_empty());
 
         let mut unpacked = NbtCompound::new();

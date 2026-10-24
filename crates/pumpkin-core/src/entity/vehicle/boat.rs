@@ -39,7 +39,8 @@ enum BoatKind {
 }
 
 impl BoatEntity {
-    pub fn new(entity: Entity) -> Self {
+    pub fn new(mut entity: Entity) -> Self {
+        entity.blocks_building = true;
         let kind = match entity.entity_type.id {
             id if id == EntityType::ACACIA_CHEST_BOAT.id
                 || id == EntityType::BIRCH_CHEST_BOAT.id
@@ -194,7 +195,12 @@ impl EntityBase for BoatEntity {
             let world = self.vehicle.entity.world.load();
             if world.level_info.load().game_rules.entity_drops {
                 let position = self.vehicle.entity.block_pos.load();
-                boat.inventory().unpack_loot();
+                boat.inventory()
+                    .unpack_loot(&crate::world::loot::LootContextParameters {
+                        world: Some(&world),
+                        position: Some(self.vehicle.entity.pos.load()),
+                        ..Default::default()
+                    });
                 let inventory: Arc<dyn Inventory> = boat.inventory().clone();
                 world.scatter_inventory(&position, &inventory);
             }
@@ -206,7 +212,12 @@ impl EntityBase for BoatEntity {
         if player.get_entity().is_sneaking() {
             if let BoatKind::Chest(boat) = &self.kind {
                 let custom_name = self.vehicle.entity.custom_name.load().as_ref().clone();
-                boat.interact(custom_name, self.get_chest_boat_translation(), player);
+                boat.interact(
+                    &self.vehicle.entity,
+                    custom_name,
+                    self.get_chest_boat_translation(),
+                    player,
+                );
                 return true;
             }
             return false;

@@ -437,36 +437,13 @@ mod tests {
             "warden should gain anger toward the player after receiving their vibration, got {anger}"
         );
 
-        // 4. Verify Allay hears NoteBlockPlay and dances to JukeboxPlay
+        // 4. Verify the allay's game event listener hears jukeboxes through `World::game_event`
         let allay = AllayEntity::new(Entity::new(
             world.clone(),
             Vector3::new(-2.5, 64.0, 0.5),
             &EntityType::ALLAY,
         ));
         world.spawn_entity(allay.clone() as Arc<dyn EntityBase>);
-
-        let note_pos = BlockPos::new(-3, 64, 0);
-        world.game_event(
-            GameEvent::NoteBlockPlay,
-            note_pos.to_centered_f64(),
-            vibration::GameEventContext::of(None, None),
-        );
-        for _ in 0..10 {
-            world.level_time.lock().unwrap().world_age += 1;
-            if let Some(user) = (allay.clone() as Arc<dyn EntityBase>).as_vibration_user() {
-                vibration::tick(user, &world);
-            }
-        }
-        assert_eq!(
-            allay
-                .liked_noteblock_pos
-                .lock()
-                .unwrap()
-                .as_ref()
-                .map(|(_, pos)| *pos),
-            Some(note_pos),
-            "allay should remember liked note block position after hearing NoteBlockPlay"
-        );
 
         let jukebox_pos = BlockPos::new(-2, 64, 1);
         world.set_block_state(

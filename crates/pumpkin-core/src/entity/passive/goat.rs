@@ -335,8 +335,11 @@ mod tests {
             Vector3::new(0.5, 64.0, 0.5),
             &EntityType::GOAT,
         ));
-        let attack_damage =
-            || goat.mob_entity.living_entity.get_attribute_base(&Attributes::ATTACK_DAMAGE);
+        let attack_damage = || {
+            goat.mob_entity
+                .living_entity
+                .get_attribute_base(&Attributes::ATTACK_DAMAGE)
+        };
         goat.set_baby(true);
         assert_eq!(attack_damage(), BABY_ATTACK_DAMAGE);
         goat.set_baby(false);

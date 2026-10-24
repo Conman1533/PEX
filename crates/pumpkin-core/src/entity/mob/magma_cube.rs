@@ -69,6 +69,10 @@ impl Mob for MagmaCubeEntity {
         false
     }
 
+    fn mob_metadata(&self) -> Option<crate::entity::mob::MobMetadata> {
+        self.slime.mob_metadata()
+    }
+
     fn mob_tick(&self, caller: &dyn EntityBase) {
         self.slime.mob_tick(caller);
     }
