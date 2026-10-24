@@ -1634,6 +1634,19 @@ impl VillagerEntity {
         self.decay_gossips(game_time);
         self.work_at_job_site(game_time, day_time, day);
 
+        // A sleeping villager stays in its bed: drop any path and horizontal drift, but keep
+        // gravity so it still settles onto the bed.
+        if self.get_entity().pose.load() == EntityPose::Sleeping {
+            self.mob_entity
+                .navigator
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .stop();
+            let velocity = self.get_entity().velocity.load();
+            self.get_entity()
+                .velocity
+                .store(Vector3::new(0.0, velocity.y, 0.0));
+        }
         let tick_count = self.get_entity().tick_count.load(Ordering::Relaxed);
         if tick_count % 20 != 0 {
             return;
