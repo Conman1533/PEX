@@ -5075,17 +5075,18 @@ impl Player {
         {
             speed *= ((self.get_haste_amplifier() + 1) as f32).mul_add(0.2, 1.0);
         }
-        // Fatigue
         if let Some(fatigue) = self.living_entity.get_effect(&StatusEffect::MINING_FATIGUE) {
-            let fatigue_speed = match fatigue.amplifier {
-                0 => 0.3,
-                1 => 0.09,
-                2 => 0.0027,
-                _ => 8.1E-4,
-            };
-            speed *= fatigue_speed;
+            speed *= 0.3f64.powi(i32::from(fatigue.amplifier) + 1) as f32;
         }
-        // TODO: Handle when in water
+        speed *= self
+            .living_entity
+            .get_attribute_value(&Attributes::BLOCK_BREAK_SPEED) as f32;
+        if self.living_entity.entity.is_submerged_in_water() {
+            speed *= self
+                .living_entity
+                .get_attribute_value(&Attributes::SUBMERGED_MINING_SPEED)
+                as f32;
+        }
         if !self.living_entity.entity.on_ground.load(Ordering::Relaxed) {
             speed /= 5.0;
         }
@@ -8141,9 +8142,47 @@ impl InventoryPlayer for Player {
 
 #[cfg(test)]
 mod tests {
-    use super::{bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    use super::{Player, bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
+    use crate::world::{BlockFlags, World, test_player, test_world};
+    use pumpkin_data::{Block, attributes::Attributes, effect::StatusEffect, potion::Effect};
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+    use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
+    use pumpkin_world::chunk::ChunkData;
     use uuid::Uuid;
+
+    fn mining_world() -> Arc<World> {
+        let world = test_world();
+        for cx in -1..=1 {
+            for cz in -1..=1 {
+                world
+                    .level
+                    .loaded_chunks
+                    .insert(Vector2::new(cx, cz), ChunkData::empty_sync(cx, cz));
+            }
+        }
+        world
+    }
+
+    fn standing_player(world: &Arc<World>) -> Arc<Player> {
+        let player = test_player(world, Vector3::new(0.5, 64.0, 0.5));
+        player
+            .living_entity
+            .entity
+            .on_ground
+            .store(true, Ordering::Relaxed);
+        player
+    }
+
+    fn assert_speed(player: &Player, expected: f32) {
+        let speed = player.get_mining_speed(&Block::STONE);
+        assert!(
+            (speed - expected).abs() < 1e-6,
+            "destroy speed {speed}, expected {expected}"
+        );
+    }
 
     #[test]
     fn player_screen_slots_map_to_bedrock_inventory() {
@@ -8226,5 +8265,50 @@ mod tests {
             });
         }
         assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn mining_fatigue_multiplies_destroy_speed_by_0_3_per_level() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        for (amplifier, expected) in [(0, 0.3), (1, 0.09), (2, 0.027), (3, 0.0081)] {
+            player.living_entity.add_effect(Effect {
+                effect_type: &StatusEffect::MINING_FATIGUE,
+                duration: 600,
+                amplifier,
+                ambient: false,
+                show_particles: false,
+                show_icon: false,
+                blend: false,
+            });
+            assert_speed(&player, expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn destroy_speed_applies_break_speed_attribute_water_and_air() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        player
+            .living_entity
+            .set_attribute_base(&Attributes::BLOCK_BREAK_SPEED, 2.0);
+        assert_speed(&player, 2.0);
+
+        // Eyes at y 65.62 are under a water source at y 65.
+        for y in [64, 65] {
+            world.set_block_state(
+                &BlockPos::new(0, y, 0),
+                Block::WATER.default_state.id,
+                BlockFlags::empty(),
+            );
+        }
+        assert_speed(&player, 0.4);
+
+        player
+            .living_entity
+            .entity
+            .on_ground
+            .store(false, Ordering::Relaxed);
+        assert_speed(&player, 0.08);
     }
 }
