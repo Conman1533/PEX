@@ -1,4 +1,5 @@
 use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::sound::Sound;
 use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
 
@@ -39,6 +40,10 @@ impl Mob for SkeletonEntity {
 
     fn on_equip_item(&self, slot: &EquipmentSlot) {
         self.entity.on_equip_item(slot);
+    }
+
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntitySkeletonAmbient)
     }
 
     fn populate_default_equipment_slots(

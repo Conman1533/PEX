@@ -1117,6 +1117,11 @@ pub trait Mob: EntityBase + Send + Sync {
         self.get_mob_entity().living_entity.can_attack(target)
     }
 
+    /// The arrow item a bow shot fires, for mobs whose `getArrow` adds effects.
+    fn get_arrow_projectile(&self) -> Option<ItemStack> {
+        None
+    }
+
     /// Takes the navigation lock, so callers must not already hold it.
     fn is_navigator_idle(&self) -> bool {
         self.get_mob_entity().steered().navigator().is_idle()

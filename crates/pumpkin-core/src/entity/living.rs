@@ -240,11 +240,22 @@ impl LivingEntity {
     pub fn make_sound(&self, sound: Sound) {
         self.entity.world.load().play_sound_fine(
             sound,
-            SoundCategory::Neutral,
+            self.sound_category(self.entity.entity_type == &EntityType::PLAYER),
             &self.entity.pos.load(),
             1.0,
             self.get_pitch(),
         );
+    }
+
+    /// Vanilla `getSoundSource`: players, monsters and everything else.
+    pub(crate) fn sound_category(&self, is_player: bool) -> SoundCategory {
+        if is_player {
+            SoundCategory::Players
+        } else if self.entity.entity_type.category == &pumpkin_data::entity::MobCategory::MONSTER {
+            SoundCategory::Hostile
+        } else {
+            SoundCategory::Neutral
+        }
     }
 
     pub(crate) fn get_pitch(&self) -> f32 {
@@ -2204,8 +2215,8 @@ impl LivingEntity {
                 dyn_self
                     .get_mob()
                     .and_then(|mob| mob.as_custom_sound())
-                    .map_or(
-                        SoundCategory::Players,
+                    .map_or_else(
+                        || self.sound_category(dyn_self.get_player().is_some()),
                         super::custom_sound::CustomSound::sound_category,
                     ),
                 &self.entity.pos.load(),
@@ -3461,8 +3472,8 @@ impl LivingEntity {
                 caller
                     .get_mob()
                     .and_then(|mob| mob.as_custom_sound())
-                    .map_or(
-                        SoundCategory::Players,
+                    .map_or_else(
+                        || self.sound_category(caller.get_player().is_some()),
                         super::custom_sound::CustomSound::sound_category,
                     ),
                 &self.entity.pos.load(),

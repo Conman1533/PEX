@@ -1,5 +1,6 @@
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::entity::EntityType;
+use pumpkin_data::sound::Sound;
 use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
 
@@ -69,5 +70,9 @@ impl Mob for WitherSkeletonEntity {
         // vanilla lights it for 100 seconds
         arrow.set_flame(true);
         arrow
+    }
+
+    fn get_ambient_sound(&self) -> Option<Sound> {
+        Some(Sound::EntityWitherSkeletonAmbient)
     }
 }
