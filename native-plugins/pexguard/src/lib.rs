@@ -5,6 +5,7 @@ mod commands;
 mod listeners;
 mod region;
 mod store;
+mod uuid_migration;
 
 use pex_common::Prefix;
 use pumpkin::plugin::{Context, Plugin, PluginFuture};
@@ -68,7 +69,9 @@ impl Plugin for PexGuard {
             context.init_log();
             let data_folder = context.get_data_folder();
             // Refuse to start on a broken file rather than run unprotected and overwrite it.
-            let regions = store::load(&data_folder)?;
+            let mut regions = store::load(&data_folder)?;
+            let world_dir = context.server.basic_config.get_world_path();
+            uuid_migration::migrate(&data_folder, &world_dir, &mut regions);
             let count = regions.regions.len();
             let shared = Shared {
                 regions: Arc::new(Mutex::new(regions)),
