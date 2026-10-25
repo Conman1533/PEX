@@ -245,9 +245,9 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Decisions
 
-- **Q4.1** Migrate automatically on the first 2.0 start, or only when the admin passes a flag? Automatic is safer for players; a flag is safer for hosts who edit player files themselves.
+- **Q4.1** (answered 2026-10-25: automatic, with a backup first.) Migrate automatically on the first 2.0 start, or only when the admin passes a flag? Automatic is safer for players; a flag is safer for hosts who edit player files themselves.
 - **Q4.2** Should BungeeCord or Velocity setups that forward no UUID keep the old UUIDs for one release?
-- **Q4.3** Where does "migration done" live: in `pumpkin.toml` (via `config_version`, which ties this to 3.1) or in the world (`data/pex/migrations.dat`), so a world copied to another server isn't migrated twice?
+- **Q4.3** (answered 2026-10-25: in `pumpkin.toml`, through 3.1's `config_version`.) Where does "migration done" live: in `pumpkin.toml` (via `config_version`, which ties this to 3.1) or in the world (`data/pex/migrations.dat`), so a world copied to another server isn't migrated twice?
 - **Q4.5** 4.1 merges the open upstream PR #4172 into its branch, as alpha has done with other upstream PRs. Acceptable, or a cherry-pick or an independent commit?
 - **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
@@ -523,9 +523,9 @@ Cross-goal dependencies to keep in mind:
 | Q3.3 | Keep comments in `pumpkin.toml` at the cost of a `toml_edit` dependency? |
 | Q3.4 | Newer `config_version` than the server knows: warn and start, or refuse? |
 | Q3.5 | One log line per filled-in key, or one summary line? |
-| Q4.1 | UUID migration automatic on first start, or behind a flag? |
+| Q4.1 | Answered: automatic on first start, with a backup |
 | Q4.2 | Keep old UUIDs for one release behind proxies that forward none? |
-| Q4.3 | Migration marker in `pumpkin.toml` or in the world? |
+| Q4.3 | Answered: marker in `pumpkin.toml` (3.1's `config_version`) |
 | Q4.4 | Which live servers run in offline mode? |
 | Q4.5 | Merge open upstream PR #4172 for 4.1, or cherry-pick or rewrite? |
 | Q5.1 | Default redstone only, or experimental redstone too? |
