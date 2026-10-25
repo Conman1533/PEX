@@ -14,8 +14,19 @@ pub const UNVERSIONED_CONFIG_VERSION: u32 = 1;
 pub struct Migration {
     /// The `config_version` a file has after this step.
     pub version: u32,
-    /// Changes the file and returns one line for each change it made.
-    pub apply: fn(&mut DocumentMut) -> Vec<String>,
+    /// What the step changes.
+    pub step: Step,
+}
+
+/// What a [`Migration`] changes.
+pub enum Step {
+    /// The config file: changes it and returns one line for each change it made.
+    Config(fn(&mut DocumentMut) -> Vec<String>),
+    /// Server files outside the config, which the server migrates after loading it. The loader
+    /// can't do that work, so it hands a file that needs this step back as a
+    /// [`crate::PendingSave`] for the server to save once the work succeeded. The version never
+    /// claims work that didn't happen.
+    ServerFiles,
 }
 
 /// The version files are brought up to: that of the last migration.
@@ -67,11 +78,23 @@ pub(crate) fn migrate(
     let mut changes: Vec<String> = migrations
         .iter()
         .filter(|migration| migration.version > version)
-        .flat_map(|migration| (migration.apply)(document))
+        .filter_map(|migration| match migration.step {
+            Step::Config(apply) => Some(apply),
+            Step::ServerFiles => None,
+        })
+        .flat_map(|apply| apply(document))
         .collect();
     changes.extend(add_missing_keys(document, defaults));
     changes.extend(set_config_version(document, latest_version(migrations)));
     changes
+}
+
+/// Whether a file at `version` still needs a [`Step::ServerFiles`] migration.
+#[must_use]
+pub(crate) fn needs_server_files(migrations: &[Migration], version: u32) -> bool {
+    migrations
+        .iter()
+        .any(|migration| migration.version > version && matches!(migration.step, Step::ServerFiles))
 }
 
 /// Adds every key of `defaults` that `document` lacks, and returns one line per added key.
@@ -243,7 +266,7 @@ fn copy_dir_contents(from: &Path, to: &Path) -> io::Result<()> {
 mod tests {
     use toml_edit::DocumentMut;
 
-    use super::{Migration, migrate};
+    use super::{Migration, Step, migrate};
 
     fn times_ten(document: &mut DocumentMut) -> Vec<String> {
         let x = document["x"].as_integer().unwrap();
@@ -260,11 +283,11 @@ mod tests {
     const MIGRATIONS: &[Migration] = &[
         Migration {
             version: 2,
-            apply: times_ten,
+            step: Step::Config(times_ten),
         },
         Migration {
             version: 3,
-            apply: plus_one,
+            step: Step::Config(plus_one),
         },
     ];
 

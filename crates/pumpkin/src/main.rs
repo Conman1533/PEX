@@ -24,12 +24,12 @@ use tokio::signal::unix::{SignalKind, signal};
 use pumpkin_core::{
     CRASH_REPORT, SERVER_EXIT_CODE, SERVER_IS_STOPPING,
     crash::{CrashReport, FullBacktrace},
-    data::VanillaData,
+    data::{VanillaData, offline_uuid_migration::migrate_offline_uuids},
     stop_or_exit_server,
 };
 use pumpkin_core::{PumpkinServer, stop_server};
 
-use pumpkin_config::{LoadConfiguration, LoadMessage, PumpkinConfig};
+use pumpkin_config::{LoadConfiguration, LoadMessage, OFFLINE_UUID_VERSION, PumpkinConfig};
 use pumpkin_core::plugin::loader::PluginLoader;
 use pumpkin_util::text::{
     TextComponent,
@@ -70,9 +70,7 @@ async fn main() {
 
     let exec_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-    let (config, config_messages) = PumpkinConfig::load(&exec_dir);
-
-    let vanilla_data = VanillaData::load();
+    let (config, config_messages, pending_config) = PumpkinConfig::load(&exec_dir);
 
     pumpkin_core::init_logger(&config.advanced);
     // The config is read before the logger exists, so its lines are logged here.
@@ -163,6 +161,23 @@ async fn main() {
             tracing::error!("Unable to setup signal handlers: {err}");
         }
     });
+
+    // pumpkin.toml only gets its new version once the server files it stands for are migrated,
+    // so a failed or interrupted migration runs again on the next start.
+    if let Some(pending) = pending_config {
+        if pending.version() < OFFLINE_UUID_VERSION
+            && let Err(err) =
+                migrate_offline_uuids(&exec_dir, &config.basic.get_world_path(), pending.version())
+        {
+            tracing::error!("Couldn't move offline players to vanilla UUIDs: {err}");
+            tracing::error!(
+                "Stopping before pumpkin.toml records the migration, so the next start tries again"
+            );
+            exit(1);
+        }
+        pending.save().iter().for_each(LoadMessage::log);
+    }
+    let vanilla_data = VanillaData::load();
 
     let plugin_loaders: Vec<Arc<dyn PluginLoader>> = vec![Arc::new(WasmPluginLoader::new(
         config.advanced.plugins.verify_signatures,
