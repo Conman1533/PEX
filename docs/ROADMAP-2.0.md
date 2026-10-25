@@ -221,9 +221,11 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Current state
 
-- `offline_uuid` (`crates/pumpkin-core/src/net/mod.rs:74`) is the first 16 bytes of SHA-256 of the name, with no version bits. Vanilla's `UUIDUtil.createOfflinePlayerUUID` (`/Vault-Mk4/vanilla-26.3/src/net/minecraft/core/UUIDUtil.java:87`) is `UUID.nameUUIDFromBytes("OfflinePlayer:" + name)`, a version 3 MD5 UUID. The gameplay benchmark's `whitelist.py` has to generate both kinds for this reason.
+- `offline_uuid` (`crates/pumpkin-core/src/net/mod.rs:74`) is the first 16 bytes of SHA-256 of the name, with no version bits. Vanilla's `UUIDUtil.createOfflinePlayerUUID` (`/srv/pex/vanilla-26.3/src/net/minecraft/core/UUIDUtil.java:87`) is `UUID.nameUUIDFromBytes("OfflinePlayer:" + name)`, a version 3 MD5 UUID. The gameplay benchmark's `whitelist.py` has to generate both kinds for this reason.
 - Callers: offline login (`net/java/login/login_start.rs:69`, which also falls back to the nil UUID on error), BungeeCord forwarding without a UUID (`net/proxy/bungeecord.rs:71`), `/fetchprofile` (`command/commands/fetchprofile.rs:199`) and game profile arguments (`command/argument_types/game_profile.rs:99`).
 - Data keyed by UUID: `players/data/<uuid>.dat`, `players/advancements/<uuid>.json` (both under the world, `server/mod.rs:244`), stats, `ops.json`, `whitelist.json`, `banned-players.json`, `usercache.json`. Inside the world, entity NBT refers to players by UUID (tamed animals' owner, item thrower and owner, projectile owner, anger targets, villager gossip, trial spawner and vault player lists). PEXGuard stores region members as UUID strings and PEXProtect logs UUIDs in SQLite.
+- Upstream Pumpkin-MC/Pumpkin#4172 (open, approved 2026-10-24) makes `offline_uuid` vanilla's version 3 UUID; 4.1 merged it.
+- Vanilla's own lists differ from PEX's in ways 4.2 must handle: `CachedUserNameToIdResolver.get` lowercases the name before `NameAndId.createOffline`, so vanilla's offline `whitelist add Notch` stores `notch` with notch's UUID; PEX hashes the name as typed (`command/argument_types/game_profile.rs:100`) and lowercases cache keys with `to_ascii_lowercase` instead of `toLowerCase(Locale.ROOT)`. PEX's `usercache.json` reader (`data/usercache.rs:196`) skips entries whose `expiresOn` isn't RFC 3339, so a vanilla `usercache.json` (`yyyy-MM-dd HH:mm:ss Z`) loads empty, entries expire after 30 days instead of one calendar month (`:221`), and PEX keeps the JSON lists in `data/` (`data/mod.rs:6`) where vanilla keeps them in the server root.
 - The old UUID is a hash, so it can't be turned back into a name. A migration has to get names from `usercache.json` and the JSON lists, compute both UUIDs, and report player files it can't match.
 
 ### Pieces
@@ -246,6 +248,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 - **Q4.1** Migrate automatically on the first 2.0 start, or only when the admin passes a flag? Automatic is safer for players; a flag is safer for hosts who edit player files themselves.
 - **Q4.2** Should BungeeCord or Velocity setups that forward no UUID keep the old UUIDs for one release?
 - **Q4.3** Where does "migration done" live: in `pumpkin.toml` (via `config_version`, which ties this to 3.1) or in the world (`data/pex/migrations.dat`), so a world copied to another server isn't migrated twice?
+- **Q4.5** 4.1 merges the open upstream PR #4172 into its branch, as alpha has done with other upstream PRs. Acceptable, or a cherry-pick or an independent commit?
 - **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
 ## Goal 5: redstone parity
@@ -524,6 +527,7 @@ Cross-goal dependencies to keep in mind:
 | Q4.2 | Keep old UUIDs for one release behind proxies that forward none? |
 | Q4.3 | Migration marker in `pumpkin.toml` or in the world? |
 | Q4.4 | Which live servers run in offline mode? |
+| Q4.5 | Merge open upstream PR #4172 for 4.1, or cherry-pick or rewrite? |
 | Q5.1 | Default redstone only, or experimental redstone too? |
 | Q5.2 | Is locational (position-dependent) behaviour required? |
 | Q6.1 | Proof of survival parity: staged bot, unassisted bot, human, or a mix? |
@@ -553,6 +557,7 @@ Cross-goal dependencies to keep in mind:
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
+| 4.1 | `fix/offline-uuid-vanilla` | done, pushed `bc4461e09`: merges upstream #4172 (`offline_uuid` is vanilla's MD5 version 3 UUID, returns `Uuid`, all four callers updated, nil fallback removed), adds `legacy_offline_uuid` (the PEX 1.x SHA-256 UUID) for 4.2, and tests against values from the vanilla 26.3 server and its `UUIDUtil` (CJK and 4-byte UTF-8 names included) and from the PEX 1.2.0 release. Boot tests in offline and BungeeCord mode match vanilla's files. **Must not ship without 4.2**: on its own a 1.2 player loses their data, op and whitelist entries (shown in the boot test). Local CI green apart from the known failures. Needs a real-client check and a capture. | `pr-drafts/fix-offline-uuid-vanilla.md` |
 | 0.2 | `fix/codegen-deterministic` | done, pushed `62fbd4945` (3 commits): NBT literals written with sorted compound keys (`NbtCompound` is a `HashMap` with a random seed, so `item.rs`, `registry.rs` and `structure_template.rs` changed every run), the plugin SDK output now goes through rustfmt like the other generators, and `java-packets.wit` regenerated (stale since `ace306d39`, adds the `trail-particle-option` record to the public WIT). Three runs in a row give identical sha256 over all 190 generated files; all 8,398 literals match `pumpkin-nbt`'s own bytes apart from key order. Local CI green apart from the known failures. | `pr-drafts/fix-codegen-deterministic.md` |
 | 6.10 | `fix/block-break-timing` | done, pushed `42d078520` (3 commits): a finished dig must match the dig position and reach 0.7 progress like vanilla `handleBlockBreakAction`, early finishes become a delayed destroy and the client gets its block back, one shared `destroy_block`, mining fatigue `0.3^(amplifier+1)` plus `block_break_speed` and `submerged_mining_speed`. Unit tests and bot test `bot:survival_dig_timing` fail without the fix. Local CI green apart from the known failures (`/srv/pex/ci/fix-block-break-timing/20261025-023754/`). Needs a real-client play test with a recording before the PR. Rebase on 6.1 is trivial (both add the same `finish_digging`). | `pr-drafts/fix-block-break-timing.md` |
 | 3.1 | `feat/config-version` | done, pushed `8569d579d`: integer `config_version` (missing means 1), ordered migrations like vanilla `FileFixerUpper`, `pumpkin.toml.v<old>.bak` backups that never overwrite, edits with `toml_edit` so comments and unknown keys survive, and load messages now reach the log. Fixtures are the files v1.0.0, v1.1.0 and v1.2.0 actually wrote. Local CI green apart from the known failures (`/srv/pex/ci/feat-config-version/20261025-023248/`). | `pr-drafts/feat-config-version.md` |
@@ -567,6 +572,10 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (4.1) `crates/pumpkin-protocol/src/java/server/login/login_start.rs:45`: the `SLoginStart` fallback uses `Uuid::new_v3(&Uuid::nil(), "OfflinePlayer:"+name)`, which also hashes the 16 namespace bytes (Notch gives `0a6bfc7c-...`, vanilla `b50ad385-...`). Only reached with `online_mode = true` and `encryption = false` (`net/java/login/login_start.rs:66`).
+- (4.1) `crates/pumpkin-core/src/net/mod.rs:446` `is_valid_player_name` accepts non-ASCII names and counts 16 UTF-8 bytes; vanilla `StringUtil.isValidPlayerName` rejects characters at or below 32 and at or above 127 and counts UTF-16 units, so such PEX players can't join vanilla (matters for 4.5).
+- (4.1) `/srv/pex/gameplay-bench/whitelist.py` and `/srv/pex/tools/whitelist-pumpkin-bots.json` generate SHA-256 UUIDs for PEX; switch them to version 3 once 4.1 and 4.2 merge.
+- (4.1) Editing `local-ci.sh` in place while a run was executing it crashed that run at its last line; script edits now go through `/srv/pex/tools/edit-script.sh` (copy, patch, rename).
 - (0.2) `tools/pumpkin-codegen/src/sdk/mod.rs:19` and `wit/v0_2/mod.rs:67` write files even when unchanged, so every codegen run rebuilds the plugin API and v0.2 host crates.
 - (0.2) `format_code` in `tools/pumpkin-codegen/src/main.rs` silently falls back to unformatted output when rustfmt is missing; `wit/v0_2/mod.rs:95` duplicates it.
 - (0.2) `tools/pumpkin-codegen/src/bedrock_creative.rs:109-115` reads its own previous output back in when `assets/bedrock/creative_items.nbt` is missing, instead of failing.
