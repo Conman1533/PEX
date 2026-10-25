@@ -199,7 +199,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
 | 3.1 | `config_version` in `pumpkin.toml` and an ordered list of migrations. A file without the key is treated as 1.2. Before changing anything, copy the file to `pumpkin.toml.v<old>.bak`. Log one line per change. Decide in the PR whether to add `toml_edit` to keep comments. | `feat/config-version` | | Unit tests: default files generated from the `v1.0.0`, `v1.1.0` and `v1.2.0` tags migrate to the current schema; a current file is left byte for byte unchanged |
-| 3.2 | First migration: remove `world.chunk.write_in_place`. Warn once at startup about any remaining unknown key, by its full path (`config_version` is not a struct field and must count as known). The 1.0 and 1.1 fixtures from 3.1 (`crates/pumpkin-config/tests/fixtures/`) contain `write_in_place = true`; the migration changes the expected log lines in `tests/config_version.rs`. | `fix/config-dead-keys` | 3.1 | Unit test with a 1.0 file containing the key; boot test shows no warning on a migrated file |
+| 3.2 | First config migration after 4.2 (4.2 takes `config_version = 2`, so this is 3 if 4.2 merges first): remove `world.chunk.write_in_place`. Warn once at startup about any remaining unknown key, by its full path (`config_version` is not a struct field and must count as known). The 1.0 and 1.1 fixtures from 3.1 (`crates/pumpkin-config/tests/fixtures/`) contain `write_in_place = true`; the migration changes the expected log lines in `tests/config_version.rs`. | `fix/config-dead-keys` | 3.1 | Unit test with a 1.0 file containing the key; boot test shows no warning on a migrated file |
 | 3.3 | Invalid values (read upstream Pumpkin-MC/Pumpkin#2985 and its tests first): report the key, the bad value and the expected type, and then follow Q3.1 (refuse to start, or use that key's default and keep the rest). Same for TOML syntax errors. | `fix/config-invalid-values` | 3.1, Q3.1 | Unit test: a file with one bad value keeps every other value; the log line names the key |
 | 3.4 | The same versioning and error handling for plugin configs in `pex_common::load_config`, and a first migration for each bundled plugin if any of their keys changed since 1.2. | `feat/plugin-config-version` | 3.1 | Unit tests in `native-plugins/common` |
 | 3.5 | Boot test on copies of real configs (check first how the PEX egg on Pelican edits `pumpkin.toml`; upstream #3410 shows the Pterodactyl egg's line-prefix parser only matches on first boot): take read-only copies of `pumpkin.toml` from servers 30 and 34 and a free-tier server (copy via the panel host without changing anything), run the migration, and check the result boots with the same effective settings. | `test/config-migration-real` | 3.2, 3.3 | Before and after files and the boot log in the PR |
@@ -250,6 +250,8 @@ Every family piece does the same thing: audit each mob against its vanilla class
 - **Q4.2** Should BungeeCord or Velocity setups that forward no UUID keep the old UUIDs for one release?
 - **Q4.3** (answered 2026-10-25: in `pumpkin.toml`, through 3.1's `config_version`.) Where does "migration done" live: in `pumpkin.toml` (via `config_version`, which ties this to 3.1) or in the world (`data/pex/migrations.dat`), so a world copied to another server isn't migrated twice?
 - **Q4.5** 4.1 merges the open upstream PR #4172 into its branch, as alpha has done with other upstream PRs. Acceptable, or a cherry-pick or an independent commit?
+- **Q4.6** 4.2 refuses to start the server when the migration fails, so players don't create new-UUID files that would collide with their old data later. Agree?
+- **Q4.7** Rerunning the migration on purpose (a 1.x world copied into a migrated server) means setting `config_version = 1`, which also reruns any later config steps. Acceptable while those steps are safe to run twice?
 - **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
 ## Goal 5: redstone parity
@@ -357,6 +359,8 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 | 7.3 | Item and block entity formats from data versions 4996 to 5016 that 7.2 shows are lost or changed | `fix/world-format-5016` | 7.2 | 7.2 passes with those fields no longer ignored |
 | 7.4 | Version constants and saved data: POI `DataVersion`, structure template version, `level.dat` fields, everything under `data/` | `fix/world-saved-data` | 7.2 | 7.2 covers `level.dat` and `data/` with no unexplained differences |
 | 7.5 | Vanilla side: start vanilla 26.3 on a world saved by PEX, let it load every chunk of the fixture area, stop, and check the log for data fixer warnings, chunk errors and lost block entities, then compare vanilla's re-save with PEX's save | `test/world-roundtrip-vanilla` | 7.2 | Script and log in the PR; no errors in vanilla's log |
+| 7.8 | Player data saves: `crates/pumpkin-world/src/data/player_data.rs:124` writes `<uuid>.dat` with `File::create`, so a crash mid-save truncates it; vanilla `PlayerDataStorage.save` writes a temp file and swaps it in with `Util.safeReplaceFile` and a `.dat_old`. | `fix/player-data-atomic-save` | | Test that a write interrupted after the temp file leaves the old data loadable |
+| 7.9 | Advancements and statistics in vanilla's formats: PEX writes `{"adv": {"criterion": {"secs_since_epoch", ...}}}` (`entity/player/advancement.rs`) instead of vanilla `PlayerAdvancements` (`criteria`, `done`, `DataVersion`), and keeps statistics in the player NBT instead of `players/stats/<uuid>.json`. A world moved to vanilla loses both. Read and write vanilla's formats, migrating PEX's once. | `fix/vanilla-advancement-stats-format` | 3.1 | 7.2's round trip covers `players/advancements` and `players/stats` with no differences |
 | 7.6 | Conversion safety: keep or back up source files during conversion according to Q7.3 | `fix/convert-keep-source` | Q7.3 | Unit test: the converter leaves the sources (or a backup) |
 | 7.7 | Long-play round trip: run the survival stages from goal 6 on PEX, then open the world in vanilla and check inventories, chests and the End state (dragon killed, gateways) | `test/world-roundtrip-play` | 7.5, 6.7 | Vanilla loads it with the dragon fight marked done and every chest intact |
 
@@ -529,6 +533,8 @@ Cross-goal dependencies to keep in mind:
 | Q4.2 | Keep old UUIDs for one release behind proxies that forward none? |
 | Q4.3 | Answered: marker in `pumpkin.toml` (3.1's `config_version`) |
 | Q4.4 | Which live servers run in offline mode? |
+| Q4.6 | Refuse to start when the UUID migration fails? |
+| Q4.7 | Rerun the migration by setting `config_version = 1`? |
 | Q4.5 | Merge open upstream PR #4172 for 4.1, or cherry-pick or rewrite? |
 | Q5.1 | Default redstone only, or experimental redstone too? |
 | Q5.2 | Is locational (position-dependent) behaviour required? |
@@ -561,7 +567,7 @@ Alpha `d30c773bb` (2026-10-25) holds 0.1, 0.2, 1.1, 3.1, 5.1, 6.1 and 6.10, and 
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | **merged into alpha `d30c773bb` on 2026-10-25**, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest | `pr-drafts/fix-clippy-alpha.md` |
-| 4.2 | `feat/offline-uuid-migration` | in progress (base: alpha plus 4.1; automatic migration with a backup, marker through `config_version`) | |
+| 4.2 | `feat/offline-uuid-migration` | done, pushed `cffeb7e41` (contains 4.1): on the first start, offline player files (`players/data`, `advancements`, `stats`, the `.dat` `UUID` tag) and the ops, whitelist, ban and user cache lists move to vanilla UUIDs, after backups (`world/players.v1.bak`, `data/<list>.json.v1.bak`), with `world/players/uuid-migration.json` for 4.3 and 4.4. `config_version = 2` is stamped only after success; a failure exits with code 1 and leaves `pumpkin.toml` at 1, so the next start retries. Boot test 1.2.0 to branch: same op, positions, inventories and advancements; restart and resume are byte-identical. Local CI green apart from the known and flaky failures. Needs a real-client play test and a recording. 4.1 and 4.2 go into alpha together. | `pr-drafts/feat-offline-uuid-migration.md` |
 | 0.4 | `fix/tester-setblock-flake` | in progress (taken over from a stopped session: fix committed, proving it under load) | |
 | 2.1 | `feat/plugin-build-id` | done, pushed `4ccd66fca` (on alpha `d30c773bb`): `pumpkin::plugin::BUILD_ID` (commit, rustc, target, `Cargo.lock` hash, features, debug assertions) exported by `export_plugin!` and `#[plugin_impl]`; the loader refuses a different or missing id with one line naming both. Unit tests fail without the check; boot tests: same-build plugins load, v1.2.0 plugins and a plugin from another commit are refused, musl still builds. Local CI green apart from the known and flaky failures. | `pr-drafts/feat-plugin-build-id.md` |
 | 6.11 | `fix/teleport-confirm-id` | in progress (taken over from a stopped session) | |
@@ -580,6 +586,9 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (4.2) References inside player data (a shoulder parrot's `Owner`, ender pearl owners) aren't migrated by 4.2; 4.3's UUID walk must include `world/players/data/*.dat`, not only region and entity files.
+- (4.2) `LoadJSONConfiguration::load` (`data/mod.rs`) falls back to an empty list when ops, whitelist or bans fail to parse, and the next save overwrites the admin's file. 4.2 made the error visible but didn't change the fallback.
+- (4.2) Entity-selector arguments reject non-ASCII player names (`give 玩家一号 torch 21` gives "Invalid name or UUID"), while login, `op` and `whitelist add` accept them. Seen on 1.2.0 and alpha.
 - (2.1) The v1.2.0 release plugins export `PUMPKIN_API_VERSION` 2 while alpha is 3, so alpha already refused them; the build id is what catches plugins from other commits with the same API version.
 - (2.1) A plugin built outside the workspace that depends on `pumpkin-core` by path or git gets the server's id (`crates/pumpkin-core/build.rs` hashes the server's `Cargo.lock`); documented in `PORTING_GUIDE.md` hard rule 1.
 - (2.1) Nothing in the workspace expands `#[plugin_impl]` (`crates/pumpkin-api-macros/src/lib.rs`), so CI never compiles its output.
