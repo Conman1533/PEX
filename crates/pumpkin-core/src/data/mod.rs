@@ -12,6 +12,7 @@ pub mod banlist_serializer;
 pub mod banned_ip;
 pub mod banned_player;
 pub mod datapack;
+pub mod offline_uuid_migration;
 pub mod player_server;
 pub mod usercache;
 pub mod whitelist;

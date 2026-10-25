@@ -72,7 +72,7 @@ pub mod whitelist;
 pub mod world;
 
 use advancement::AdvancementConfig;
-use migration::{CONFIG_VERSION_KEY, Migration, UNVERSIONED_CONFIG_VERSION};
+use migration::{CONFIG_VERSION_KEY, Migration, Step, UNVERSIONED_CONFIG_VERSION};
 use networking::NetworkingConfig;
 use player_data::PlayerDataConfig;
 use resource_pack::ResourcePackConfig;
@@ -93,8 +93,15 @@ pub struct PumpkinConfig {
     pub telemetry: TelemetryConfig,
 }
 
+/// The `config_version` from which offline-mode players are stored under vanilla's offline UUIDs
+/// instead of the ones PEX 1.x gave them. The server moves their files before it saves this version.
+pub const OFFLINE_UUID_VERSION: u32 = 2;
+
 impl LoadConfiguration for PumpkinConfig {
-    const MIGRATIONS: &'static [Migration] = &[];
+    const MIGRATIONS: &'static [Migration] = &[Migration {
+        version: OFFLINE_UUID_VERSION,
+        step: Step::ServerFiles,
+    }];
 
     fn get_path() -> &'static Path {
         Path::new("pumpkin.toml")
@@ -306,6 +313,54 @@ impl LoadMessage {
     }
 }
 
+/// A migrated config file that [`LoadConfiguration::load`] didn't write, because its new version
+/// also stands for [`Step::ServerFiles`] work the server still has to do.
+#[must_use = "the file keeps its old version until it is saved"]
+pub struct PendingSave {
+    path: PathBuf,
+    /// The file as it was, or `None` if there was no file.
+    original: Option<String>,
+    document: DocumentMut,
+    version: u32,
+    changes: Vec<String>,
+}
+
+impl PendingSave {
+    /// The version the file had, which the server files are also at. A missing file counts as
+    /// unversioned, since an old world may sit next to it.
+    #[must_use]
+    pub const fn version(&self) -> u32 {
+        self.version
+    }
+
+    /// Backs up the file and writes the migrated one. Call it once the server files are migrated
+    /// too. Returns the lines to log.
+    #[must_use]
+    pub fn save(self) -> Vec<LoadMessage> {
+        let mut messages = Vec::new();
+        match &self.original {
+            Some(original) => save_migrated(
+                &self.path,
+                original,
+                &self.document,
+                self.version,
+                self.changes,
+                &mut messages,
+            ),
+            None => {
+                if let Err(err) = fs::write(&self.path, self.document.to_string()) {
+                    messages.push(LoadMessage::Warn(format!(
+                        "Couldn't write default config to {:?}. Reason: {}",
+                        self.path.display(),
+                        err
+                    )));
+                }
+            }
+        }
+        messages
+    }
+}
+
 /// Trait for loading and validating configuration from a TOML file.
 ///
 /// Provides default implementations for loading, migrating and filling in
@@ -319,9 +374,10 @@ pub trait LoadConfiguration {
     /// Creates the directory if it doesn't exist and reads the TOML file. An older file is
     /// updated by [`Self::MIGRATIONS`], missing keys get their defaults, and a changed file is
     /// backed up before it is rewritten. Returns the validated configuration and the lines to
-    /// log once the logger is ready.
+    /// log once the logger is ready. While a [`Step::ServerFiles`] migration is pending, the file
+    /// isn't written: the server writes it with the returned [`PendingSave`] once that work is done.
     #[must_use]
-    fn load(config_dir: &Path) -> (Self, Vec<LoadMessage>)
+    fn load(config_dir: &Path) -> (Self, Vec<LoadMessage>, Option<PendingSave>)
     where
         Self: Sized + Default + Serialize + DeserializeOwned,
     {
@@ -333,7 +389,7 @@ pub trait LoadConfiguration {
         let path = config_dir.join(Self::get_path());
         let mut messages = Vec::new();
 
-        let config = if path.exists() {
+        let (config, save) = if path.exists() {
             let file_content = match fs::read_to_string(&path) {
                 Ok(content) => content,
                 Err(err) => {
@@ -341,38 +397,49 @@ pub trait LoadConfiguration {
                         "Couldn't read configuration file at {}: {err}",
                         path.display()
                     )));
-                    return (Self::default(), messages);
+                    return (Self::default(), messages, None);
                 }
             };
             load_existing(&path, &file_content, &mut messages)
         } else {
             let content = Self::default();
-            match default_document(&content) {
+            let save = match default_document(&content) {
                 Ok(mut document) => {
                     migration::set_config_version(
                         &mut document,
                         migration::latest_version(Self::MIGRATIONS),
                     );
-                    if let Err(err) = fs::write(&path, document.to_string()) {
-                        messages.push(LoadMessage::Warn(format!(
-                            "Couldn't write default config to {:?}. Reason: {}",
-                            path.display(),
-                            err
-                        )));
-                    }
+                    Some(PendingSave {
+                        path,
+                        original: None,
+                        document,
+                        version: UNVERSIONED_CONFIG_VERSION,
+                        changes: Vec::new(),
+                    })
                 }
-                Err(err) => messages.push(LoadMessage::Warn(format!(
-                    "Couldn't serialize default config for {:?}. Reason: {}",
-                    path.display(),
-                    err
-                ))),
-            }
-
-            content
+                Err(err) => {
+                    messages.push(LoadMessage::Warn(format!(
+                        "Couldn't serialize default config for {:?}. Reason: {}",
+                        path.display(),
+                        err
+                    )));
+                    None
+                }
+            };
+            (content, save)
         };
 
+        let pending = save.and_then(|save| {
+            if migration::needs_server_files(Self::MIGRATIONS, save.version) {
+                Some(save)
+            } else {
+                messages.extend(save.save());
+                None
+            }
+        });
+
         config.validate();
-        (config, messages)
+        (config, messages, pending)
     }
 
     /// Returns the path to the configuration file relative to the config directory.
@@ -382,8 +449,13 @@ pub trait LoadConfiguration {
     fn validate(&self);
 }
 
-/// Parses an existing config file, brings it up to date and saves it if anything changed.
-fn load_existing<C>(path: &Path, file_content: &str, messages: &mut Vec<LoadMessage>) -> C
+/// Parses an existing config file and brings it up to date. Returns the config and, if anything
+/// changed, the file to save.
+fn load_existing<C>(
+    path: &Path,
+    file_content: &str,
+    messages: &mut Vec<LoadMessage>,
+) -> (C, Option<PendingSave>)
 where
     C: LoadConfiguration + Default + Serialize + DeserializeOwned,
 {
@@ -394,22 +466,29 @@ where
                 "Couldn't parse TOML at {}. Reason: {err}. Using default config.",
                 path.display()
             )));
-            return C::default();
+            return (C::default(), None);
         }
     };
 
     let default_config = C::default();
     let Ok(defaults) = default_document(&default_config) else {
-        return default_config;
+        return (default_config, None);
     };
 
     let latest = migration::latest_version(C::MIGRATIONS);
+    let mut save = None;
     if let Some(version) = migration::file_version(&document)
         .filter(|version| (UNVERSIONED_CONFIG_VERSION..=latest).contains(version))
     {
         let changes = migration::migrate(&mut document, version, C::MIGRATIONS, &defaults);
         if !changes.is_empty() {
-            save_migrated(path, file_content, &document, version, changes, messages);
+            save = Some(PendingSave {
+                path: path.to_owned(),
+                original: Some(file_content.to_owned()),
+                document: document.clone(),
+                version,
+                changes,
+            });
         }
     } else {
         let found = document
@@ -424,7 +503,8 @@ where
         let _ = migration::add_missing_keys(&mut document, &defaults);
     }
 
-    toml::from_str(&document.to_string()).unwrap_or_else(|_| C::default())
+    let config = toml::from_str(&document.to_string()).unwrap_or_else(|_| C::default());
+    (config, save)
 }
 
 /// Backs the file up as it was, then writes the migrated document in its place.
