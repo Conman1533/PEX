@@ -328,6 +328,8 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 - **Q6.1** What counts as proof: a bot run with staged setup commands (teleports and `/locate` allowed, items only from gameplay), a fully unassisted bot, or a human playthrough as well?
 - **Q6.2** Which known deviations are accepted (client-authoritative movement, anti-cheat differences)?
+- **Q6.5** Vanilla 26.3 `ServerPlayerGameMode.tick` passes `delayedTickStart` itself as the tick count of a delayed destroy (bytecode offset 51), so for anyone online about 150 ticks a delayed destroy finishes on the next tick. Paper passes `gameTicks - delayedTickStart`. 6.10 follows Paper. Keep that, or copy vanilla's behaviour?
+- **Q6.6** PEX counts player ticks like vanilla, without Paper's lag compensation, so when TPS drops a correctly timed dig takes the delayed path: the block flickers back and breaks a moment later. Acceptable?
 - **Q6.4** The `pumpkin-tester` world uses a random seed. Stages that depend on terrain (6.3 onward) need a fixed one: on the shared tester server, or on a separate server per stage?
 - **Q6.3** Should `fix/flush-block-entities-before-unload` (or the design decision in `ISSUE-block-entities-lost-on-unload.md`) be settled before 6.2? Survival without reliable chests isn't survival parity.
 
@@ -528,6 +530,8 @@ Cross-goal dependencies to keep in mind:
 | Q6.2 | Which deviations are accepted? |
 | Q6.3 | Settle block entity loss on unload before the survival stages? |
 | Q6.4 | Fixed seed for terrain-dependent survival stages: shared tester server or one server per stage? |
+| Q6.5 | Delayed destroy timing: Paper's fix (6.10's choice) or vanilla 26.3's bug? |
+| Q6.6 | No lag compensation for dig timing: acceptable? |
 | Q7.1 | Default chunk format for 2.0: Pump or Anvil? |
 | Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? |
 | Q7.3 | On conversion: keep, back up, or delete source region files? |
@@ -549,6 +553,7 @@ Cross-goal dependencies to keep in mind:
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
+| 6.10 | `fix/block-break-timing` | done, pushed `42d078520` (3 commits): a finished dig must match the dig position and reach 0.7 progress like vanilla `handleBlockBreakAction`, early finishes become a delayed destroy and the client gets its block back, one shared `destroy_block`, mining fatigue `0.3^(amplifier+1)` plus `block_break_speed` and `submerged_mining_speed`. Unit tests and bot test `bot:survival_dig_timing` fail without the fix. Local CI green apart from the known failures (`/srv/pex/ci/fix-block-break-timing/20261025-023754/`). Needs a real-client play test with a recording before the PR. Rebase on 6.1 is trivial (both add the same `finish_digging`). | `pr-drafts/fix-block-break-timing.md` |
 | 3.1 | `feat/config-version` | done, pushed `8569d579d`: integer `config_version` (missing means 1), ordered migrations like vanilla `FileFixerUpper`, `pumpkin.toml.v<old>.bak` backups that never overwrite, edits with `toml_edit` so comments and unknown keys survive, and load messages now reach the log. Fixtures are the files v1.0.0, v1.1.0 and v1.2.0 actually wrote. Local CI green apart from the known failures (`/srv/pex/ci/feat-config-version/20261025-023248/`). | `pr-drafts/feat-config-version.md` |
 | 1.1 | `test/mob-parity-table` | done, pushed `a37d261e9`: `docs/MOB-PARITY.md` (90 rows, all `not audited`), mock players and `assert_entity_not_present_in_box` in the GameTest helper, `pumpkin:cow_follows_wheat_and_panics_when_hit` (fails without `TemptGoal` 11 of 11 runs, without the panic goal 5 of 5). Local CI green except the known scaffolding GameTest (`/srv/pex/ci/test-mob-parity-table/20261024-221123/`). Needs merge. | `pr-drafts/test-mob-parity-table.md` |
 | 5.1 | `test/redstone-dual-run` | done, pushed `bf917f65f`: datapack `assets/tests/datapacks/pumpkin-dual-run/` with 5 block-based redstone tests built and saved by vanilla, `tools/dual-run/` (runner and structure builder), START test blocks now stay powered like vanilla `TestBlockEntity.trigger`, and `pumpkin-tester` runs every embedded datapack test. All 5 pass on vanilla and PEX; each deliberately broken build fails only its test. Local CI green apart from the known failures (`/srv/pex/ci/test-redstone-dual-run/20261024-225651/`). | `pr-drafts/test-redstone-dual-run.md` |
@@ -561,6 +566,13 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (6.10) PEX never sends the level events 2019 and 2020 (`PARTICLES_DESTROY_PROGRESS`, `PARTICLES_AND_SOUND_DESTROY_PROGRESS`) that vanilla `ServerPlayerGameMode.tick` sends while a block is being dug, and ignores `ChangeDestroyDirection` (`net/java/play/player_action.rs:225`). Other players may not see or hear digging; needs a real-client check.
+- (6.10) Aqua Affinity has no effect: vanilla applies its `submerged_mining_speed` modifier server side and syncs it; PEX only syncs Efficiency by hand (`entity/player.rs` `sync_mining_efficiency`).
+- (6.10) `Entity::is_submerged_in_water` (`entity/mod.rs:2697`) compares the eyes with `getHeight`; 26.3 `EntityFluidInteraction` uses `getHeightForCamera`, so water under a solid block counts as full.
+- (6.10) The Bedrock break path in `Player::tick` (`entity/player.rs:3000`) records the block state id as the mined statistic; every other path uses the block id.
+- (6.10) `CancelledDigging` from out of reach is ignored (`net/java/play/player_action.rs:141`); vanilla still aborts the dig, so the crack can stay visible to others.
+- (6.10) Not ported from `handleBlockBreakAction`: the block update for positions above max y, aborts from out of reach, the extra crack reset on a mismatched abort, a start on air.
+- (6.10) A full disk at about 23:25 on 2026-10-24 made a `git checkout` truncate a source file in one worktree; restored from git, `git fsck` clean.
 - (3.1) Upstream Pumpkin-MC/Pumpkin#3420 (open, agent-opened) makes the same config load failures visible with `eprintln!`; it overlaps 3.1's `LoadMessage` change.
 - (3.1) `unshare -n` works in CT 117, so a release binary can boot on its default ports without clashing with other sessions.
 - (5.1) `crates/pumpkin-core/src/data/datapack/mod.rs` `scan_datapacks_dir` (around line 1281) only loads world datapacks that `level.dat` lists as enabled; vanilla `MinecraftServer.configurePackRepository` (around line 1593) enables new world packs automatically.
