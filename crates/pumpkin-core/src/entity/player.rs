@@ -237,7 +237,9 @@ use pumpkin_data::attributes::Attributes;
 use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::{AttributeModifiersImpl, EnchantmentsImpl, Operation};
-use pumpkin_data::data_component_impl::{EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl};
+use pumpkin_data::data_component_impl::{
+    CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
+};
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
 use pumpkin_data::item_stack::{DamageResult, ItemStack};
@@ -371,6 +373,10 @@ pub const DATA_VERSION: i32 = 5023; // 26.3
 /// must apply the same gating.
 pub const MINE_BLOCK_EXHAUSTION: f32 = 0.005; // Vanilla: 0.005F
 
+/// Share of the server's own dig progress a finished dig needs to break the block at once. The
+/// gap to 1.0 is room for latency. Vanilla: `ServerPlayerGameMode#handleBlockBreakAction`.
+const STOP_DESTROY_MIN_PROGRESS: f32 = 0.7;
+
 const fn bedrock_inventory_slot(player_screen_slot: i16) -> Option<u32> {
     match player_screen_slot {
         9..=35 => Some(player_screen_slot as u32),
@@ -461,6 +467,9 @@ pub struct Player {
     pub start_mining_time: AtomicI32,
     pub tick_counter: AtomicI32,
     pub mining_pos: Mutex<BlockPos>,
+    /// A block whose finished dig came before the server's progress allowed it, and the tick the
+    /// dig started. Vanilla `hasDelayedDestroy`, `delayedDestroyPos` and `delayedTickStart`.
+    pub delayed_destroy: AtomicCell<Option<(BlockPos, i32)>>,
     pub last_input: AtomicI8,
     /// A counter for teleport IDs used to track pending teleports.
     pub teleport_id_count: AtomicI32,
@@ -761,6 +770,7 @@ impl Player {
             teleport_id_count: AtomicI32::new(0),
             mining: AtomicBool::new(false),
             mining_pos: Mutex::new(BlockPos::ZERO),
+            delayed_destroy: AtomicCell::new(None),
             abilities: std::sync::Mutex::new(abilities),
             stats: std::sync::Mutex::new(statistics::Statistics::default()),
             gamemode: AtomicCell::new(gamemode),
@@ -2936,7 +2946,14 @@ impl Player {
             self.sleeping_since.store(Some(sleeping_since + 1));
         }
 
-        if self.mining.load(Ordering::Relaxed)
+        if self.delayed_destroy.load().is_some() {
+            let world = self.world();
+            if let Some(pos) = self.tick_delayed_destroy(&world)
+                && let Some(p) = world.get_player_by_uuid(self.gameprofile.id)
+            {
+                p.destroy_block(&world, server, pos);
+            }
+        } else if self.mining.load(Ordering::Relaxed)
             && let Some(p) = self.world().get_player_by_uuid(self.gameprofile.id)
         {
             let world_clone = p.world();
@@ -3105,6 +3122,108 @@ impl Player {
                 BlockBreakingProgress::Stop,
             );
         }
+    }
+
+    /// Handles a finished dig (`STOP_DESTROY_BLOCK`) and returns true when the block may break
+    /// now. A finish that comes before the server's own progress reaches
+    /// `STOP_DESTROY_MIN_PROGRESS` leaves a delayed destroy instead, which `tick` completes once
+    /// the server's progress reaches 1. Vanilla `ServerPlayerGameMode#handleBlockBreakAction`.
+    pub(crate) fn stop_destroy_block(&self, world: &World, position: BlockPos) -> bool {
+        let mining_pos = *self
+            .mining_pos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if position != mining_pos {
+            return false;
+        }
+        let (block, state) = world.get_block_and_state(&position);
+        if state.is_air() {
+            return false;
+        }
+        let start = self.start_mining_time.load(Ordering::Relaxed);
+        let ticks = self.tick_counter.load(Ordering::Relaxed) - start;
+        let progress = block::calc_block_breaking(self, state, block) * (ticks + 1) as f32;
+        if progress >= STOP_DESTROY_MIN_PROGRESS {
+            self.mining.store(false, Ordering::Relaxed);
+            return true;
+        }
+        if self.delayed_destroy.load().is_none() {
+            self.mining.store(false, Ordering::Relaxed);
+            self.delayed_destroy.store(Some((position, start)));
+        }
+        false
+    }
+
+    /// The delayed destroy part of vanilla `ServerPlayerGameMode#tick`. Returns the block to break
+    /// once the server's progress since the dig started reaches 1.
+    fn tick_delayed_destroy(&self, world: &World) -> Option<BlockPos> {
+        let (pos, tick_start) = self.delayed_destroy.load()?;
+        let state = world.get_block_state(&pos);
+        if state.is_air() {
+            self.delayed_destroy.store(None);
+            return None;
+        }
+        // Vanilla 26.3 passes `delayedTickStart`, the tick the dig started, as the number of ticks
+        // dug, so for a player who has been online a while the block breaks on the next tick.
+        // Count the ticks since the dig started instead, as Paper 26.3 does.
+        if !self.continue_mining(pos, world, state, tick_start) {
+            return None;
+        }
+        self.delayed_destroy.store(None);
+        Some(pos)
+    }
+
+    /// Whether the held item or the game mode keeps the player from breaking `block`. Vanilla
+    /// `Item#canDestroyBlock` and `Player#blockActionRestricted`.
+    pub(crate) fn cannot_mine(&self, server: &Server, block: &Block) -> bool {
+        let held = self.inventory().held_item();
+        let gamemode = self.gamemode.load();
+        !server.item_registry.can_mine(held.item, self)
+            || gamemode == GameMode::Spectator
+            || (gamemode == GameMode::Creative
+                && held
+                    .get_data_component::<ToolImpl>()
+                    .is_some_and(|t| !t.can_destroy_blocks_in_creative))
+            || (gamemode == GameMode::Adventure
+                && !held
+                    .get_data_component::<CanBreakImpl>()
+                    .is_some_and(|c| c.matches_block(block)))
+    }
+
+    /// Breaks a block the player dug, with its drops, tool damage, exhaustion and stats. Returns
+    /// false when nothing broke. Vanilla `ServerPlayerGameMode#destroyBlock`.
+    pub(crate) fn destroy_block(
+        self: &Arc<Self>,
+        world: &Arc<World>,
+        server: &Server,
+        position: BlockPos,
+    ) -> bool {
+        let (block, state) = world.get_block_and_state(&position);
+        if self.cannot_mine(server, block) {
+            return false;
+        }
+        let block_drop =
+            self.gamemode.load() != GameMode::Creative && self.can_harvest(state, block);
+        let flags = if block_drop {
+            pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        } else {
+            pumpkin_world::world::BlockFlags::SKIP_DROPS
+                | pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        };
+        if world.break_block(&position, Some(self), flags).is_none() {
+            return false;
+        }
+        server
+            .block_registry
+            .broken(world, block, self, &position, server, state);
+        self.apply_tool_damage_for_block_break(state);
+        if block_drop {
+            self.add_exhaustion(MINE_BLOCK_EXHAUSTION);
+        }
+        let item_id = self.inventory().held_item().item.id;
+        self.increment_stat(StatisticCategory::Used, item_id as i32, 1);
+        self.increment_stat(StatisticCategory::Mined, block.id.as_u16() as i32, 1);
+        true
     }
 
     pub fn jump(&self) {
@@ -5075,17 +5194,18 @@ impl Player {
         {
             speed *= ((self.get_haste_amplifier() + 1) as f32).mul_add(0.2, 1.0);
         }
-        // Fatigue
         if let Some(fatigue) = self.living_entity.get_effect(&StatusEffect::MINING_FATIGUE) {
-            let fatigue_speed = match fatigue.amplifier {
-                0 => 0.3,
-                1 => 0.09,
-                2 => 0.0027,
-                _ => 8.1E-4,
-            };
-            speed *= fatigue_speed;
+            speed *= 0.3f64.powi(i32::from(fatigue.amplifier) + 1) as f32;
         }
-        // TODO: Handle when in water
+        speed *= self
+            .living_entity
+            .get_attribute_value(&Attributes::BLOCK_BREAK_SPEED) as f32;
+        if self.living_entity.entity.is_submerged_in_water() {
+            speed *= self
+                .living_entity
+                .get_attribute_value(&Attributes::SUBMERGED_MINING_SPEED)
+                as f32;
+        }
         if !self.living_entity.entity.on_ground.load(Ordering::Relaxed) {
             speed /= 5.0;
         }
@@ -8141,9 +8261,47 @@ impl InventoryPlayer for Player {
 
 #[cfg(test)]
 mod tests {
-    use super::{bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    use super::{Player, bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
+    use crate::world::{BlockFlags, World, test_player, test_world};
+    use pumpkin_data::{Block, attributes::Attributes, effect::StatusEffect, potion::Effect};
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+    use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
+    use pumpkin_world::chunk::ChunkData;
     use uuid::Uuid;
+
+    fn mining_world() -> Arc<World> {
+        let world = test_world();
+        for cx in -1..=1 {
+            for cz in -1..=1 {
+                world
+                    .level
+                    .loaded_chunks
+                    .insert(Vector2::new(cx, cz), ChunkData::empty_sync(cx, cz));
+            }
+        }
+        world
+    }
+
+    fn standing_player(world: &Arc<World>) -> Arc<Player> {
+        let player = test_player(world, Vector3::new(0.5, 64.0, 0.5));
+        player
+            .living_entity
+            .entity
+            .on_ground
+            .store(true, Ordering::Relaxed);
+        player
+    }
+
+    fn assert_speed(player: &Player, expected: f32) {
+        let speed = player.get_mining_speed(&Block::STONE);
+        assert!(
+            (speed - expected).abs() < 1e-6,
+            "destroy speed {speed}, expected {expected}"
+        );
+    }
 
     #[test]
     fn player_screen_slots_map_to_bedrock_inventory() {
@@ -8226,5 +8384,107 @@ mod tests {
             });
         }
         assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn mining_fatigue_multiplies_destroy_speed_by_0_3_per_level() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        for (amplifier, expected) in [(0, 0.3), (1, 0.09), (2, 0.027), (3, 0.0081)] {
+            player.living_entity.add_effect(Effect {
+                effect_type: &StatusEffect::MINING_FATIGUE,
+                duration: 600,
+                amplifier,
+                ambient: false,
+                show_particles: false,
+                show_icon: false,
+                blend: false,
+            });
+            assert_speed(&player, expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn destroy_speed_applies_break_speed_attribute_water_and_air() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        player
+            .living_entity
+            .set_attribute_base(&Attributes::BLOCK_BREAK_SPEED, 2.0);
+        assert_speed(&player, 2.0);
+
+        // Eyes at y 65.62 are under a water source at y 65.
+        for y in [64, 65] {
+            world.set_block_state(
+                &BlockPos::new(0, y, 0),
+                Block::WATER.default_state.id,
+                BlockFlags::empty(),
+            );
+        }
+        assert_speed(&player, 0.4);
+
+        player
+            .living_entity
+            .entity
+            .on_ground
+            .store(false, Ordering::Relaxed);
+        assert_speed(&player, 0.08);
+    }
+
+    #[tokio::test]
+    async fn finished_dig_needs_seven_tenths_of_the_server_progress() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        let pos = BlockPos::new(2, 64, 0);
+        world.set_block_state(&pos, Block::DIRT.default_state.id, BlockFlags::empty());
+        // Dirt by hand: 1 / 0.5 hardness / 30 = 1/15 of the block per tick.
+        let dig = |ticks| {
+            player.delayed_destroy.store(None);
+            player.mining.store(true, Ordering::Relaxed);
+            *player.mining_pos.lock().unwrap() = pos;
+            player.start_mining_time.store(100, Ordering::Relaxed);
+            player.tick_counter.store(100 + ticks, Ordering::Relaxed);
+        };
+
+        // 10/15 of the block: too early, the block waits for the server.
+        dig(9);
+        assert!(!player.stop_destroy_block(&world, pos));
+        assert_eq!(player.delayed_destroy.load(), Some((pos, 100)));
+        assert!(!player.mining.load(Ordering::Relaxed));
+
+        // 11/15 is past 0.7.
+        dig(10);
+        assert!(player.stop_destroy_block(&world, pos));
+        assert_eq!(player.delayed_destroy.load(), None);
+
+        // A finish for another block than the one being dug is ignored.
+        dig(1000);
+        assert!(!player.stop_destroy_block(&world, BlockPos::new(3, 64, 0)));
+        assert_eq!(player.delayed_destroy.load(), None);
+        assert!(player.mining.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn delayed_destroy_waits_for_full_progress_since_the_dig_started() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        let pos = BlockPos::new(2, 64, 0);
+        world.set_block_state(&pos, Block::DIRT.default_state.id, BlockFlags::empty());
+        player.delayed_destroy.store(Some((pos, 1000)));
+
+        // 14/15 of the block after 13 ticks.
+        player.tick_counter.store(1013, Ordering::Relaxed);
+        assert_eq!(player.tick_delayed_destroy(&world), None);
+        assert_eq!(player.delayed_destroy.load(), Some((pos, 1000)));
+
+        player.tick_counter.store(1014, Ordering::Relaxed);
+        assert_eq!(player.tick_delayed_destroy(&world), Some(pos));
+        assert_eq!(player.delayed_destroy.load(), None);
+
+        // A block that is already gone ends the delayed destroy.
+        player.delayed_destroy.store(Some((pos, 1000)));
+        world.set_block_state(&pos, Block::AIR.default_state.id, BlockFlags::empty());
+        assert_eq!(player.tick_delayed_destroy(&world), None);
+        assert_eq!(player.delayed_destroy.load(), None);
     }
 }

@@ -64,20 +64,7 @@ impl JavaClient {
                         }
                     }
 
-                    let inventory = player.inventory();
-                    let held = inventory.held_item();
-                    let gamemode = player.gamemode.load();
-                    let cannot_mine = !server.item_registry.can_mine(held.item, player)
-                        || gamemode == GameMode::Spectator
-                        || (gamemode == GameMode::Creative
-                            && held
-                                .get_data_component::<pumpkin_data::data_component_impl::ToolImpl>()
-                                .is_some_and(|t| !t.can_destroy_blocks_in_creative))
-                        || (gamemode == GameMode::Adventure
-                            && !held
-                                .get_data_component::<pumpkin_data::data_component_impl::CanBreakImpl>()
-                                .is_some_and(|c| c.matches_block(block)));
-                    if cannot_mine {
+                    if player.cannot_mine(server, block) {
                         player.try_send_client_packet(&CBlockUpdate::new(
                             position,
                             VarInt(i32::from(state.id.as_u16())),
@@ -86,9 +73,8 @@ impl JavaClient {
                         return;
                     }
 
-                    // TODO: do validation
                     // TODO: Config
-                    if gamemode == GameMode::Creative {
+                    if player.gamemode.load() == GameMode::Creative {
                         // Block break & play sound
                         let new_state = world.break_block(
                             &position,
@@ -115,37 +101,18 @@ impl JavaClient {
                         let speed = block::calc_block_breaking(player, state, block);
                         // Instant break
                         if speed >= 1.0 {
-                            let broken_state = world.get_block_state(&position);
-                            let can_harvest = player.can_harvest(broken_state, block);
-                            let flags = if can_harvest {
-                                BlockFlags::NOTIFY_ALL
-                            } else {
-                                BlockFlags::SKIP_DROPS | BlockFlags::NOTIFY_ALL
-                            };
-                            let new_state = world.break_block(&position, Some(player), flags);
-                            if new_state.is_some() {
-                                server.block_registry.broken(
-                                    &world,
-                                    block,
-                                    player,
-                                    &position,
-                                    server,
-                                    broken_state,
-                                );
-                                player.apply_tool_damage_for_block_break(broken_state);
-                                if can_harvest {
-                                    player.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                                }
-                                let item_id = player.inventory().held_item().item.id;
-                                player.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                                player.increment_stat(
-                                    StatisticCategory::Mined,
-                                    block.id.as_u16() as i32,
-                                    1,
-                                );
-                            }
+                            player.destroy_block(&world, server, position);
                             self.sync_block_state_to_client(&world, position);
                         } else {
+                            // Vanilla: a new dig while another is running means the client
+                            // insta-mined a block the server didn't, so send that block back.
+                            if player.mining.load(Ordering::Relaxed) {
+                                let old_pos = *player
+                                    .mining_pos
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                self.sync_block_state_to_client(&world, old_pos);
+                            }
                             player.mining.store(true, Ordering::Relaxed);
                             *player
                                 .mining_pos
@@ -202,7 +169,6 @@ impl JavaClient {
                     self.update_sequence(player_action.sequence.0);
                 }
                 Status::FinishedDigging => {
-                    // TODO: do validation
                     let location = player_action.position;
                     if !player.can_interact_with_block_at(&location, 1.0) {
                         warn!(
@@ -213,45 +179,15 @@ impl JavaClient {
                         return;
                     }
 
-                    // Block break & play sound
                     let entity = &player.get_entity();
                     let world = entity.world.load_full();
-
-                    player.mining.store(false, Ordering::Relaxed);
-                    world.set_block_breaking(entity, location, BlockBreakingProgress::Stop);
-
-                    let (block, state) = world.get_block_and_state(&location);
-                    let block_drop = player.gamemode.load() != GameMode::Creative
-                        && player.can_harvest(state, block);
-
-                    let new_state = world.break_block(
-                        &location,
-                        Some(player),
-                        if block_drop {
-                            BlockFlags::NOTIFY_ALL
-                        } else {
-                            BlockFlags::SKIP_DROPS | BlockFlags::NOTIFY_ALL
-                        },
-                    );
-                    if new_state.is_some() {
-                        server
-                            .block_registry
-                            .broken(&world, block, player, &location, server, state);
-
-                        player.apply_tool_damage_for_block_break(state);
-                        if block_drop {
-                            player.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                        }
-                        let item_id = player.inventory().held_item().item.id;
-                        player.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                        player.increment_stat(
-                            StatisticCategory::Mined,
-                            block.id.as_u16() as i32,
-                            1,
-                        );
+                    // A finish the server doesn't accept yet sends nothing: the acknowledgement
+                    // makes the client put the block back, as in vanilla.
+                    if player.stop_destroy_block(&world, location) {
+                        world.set_block_breaking(entity, location, BlockBreakingProgress::Stop);
+                        player.destroy_block(&world, server, location);
+                        self.sync_block_state_to_client(&world, location);
                     }
-
-                    self.sync_block_state_to_client(&world, location);
 
                     self.update_sequence(player_action.sequence.0);
                 }
