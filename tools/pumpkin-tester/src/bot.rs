@@ -84,6 +84,8 @@ pub struct HeadlessBot {
     pub item_entities: HashMap<i32, Vector3<f64>>,
     /// Chunks the server has sent and not unloaded.
     pub chunks: HashSet<(i32, i32)>,
+    /// While set, teleports are kept here instead of being confirmed, like a client that lags.
+    pub held_teleports: Option<Vec<CPlayerPosition>>,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -193,6 +195,7 @@ impl HeadlessBot {
             inventory: ClientInventory::new(),
             item_entities: HashMap::new(),
             chunks: HashSet::new(),
+            held_teleports: None,
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -292,26 +295,11 @@ impl HeadlessBot {
             id if id == CPlayerPosition::to_id(CURRENT_MC_VERSION) => {
                 let teleport = CPlayerPosition::read(&mut payload, &CURRENT_MC_VERSION)
                     .map_err(|err| read_error(id, &err))?;
-                self.position = teleport.position;
-                self.yaw = teleport.yaw;
-                self.pitch = teleport.pitch;
-                self.send_packet(&SConfirmTeleport {
-                    teleport_id: teleport.teleport_id,
-                    position: teleport.position,
-                    yaw: teleport.yaw,
-                    pitch: teleport.pitch,
-                })
-                .await?;
-                // The vanilla client follows the confirmation with its new position, not on the
-                // ground. Pumpkin moves the player's chunk view on that packet.
-                self.send_packet(&SPlayerPositionRotation {
-                    position: teleport.position,
-                    yaw: teleport.yaw,
-                    pitch: teleport.pitch,
-                    collision: 0,
-                })
-                .await?;
-                self.teleports_confirmed += 1;
+                if let Some(held) = &mut self.held_teleports {
+                    held.push(teleport);
+                } else {
+                    self.confirm_teleport(&teleport).await?;
+                }
             }
             id if id == CChunkData::to_id(CURRENT_MC_VERSION) => {
                 let x = payload.get_i32_be().map_err(|err| read_error(id, &err))?;
@@ -428,6 +416,31 @@ impl HeadlessBot {
                 self.item_entities.remove(&entity_id);
             }
         }
+        Ok(())
+    }
+
+    /// Moves to where `teleport` puts the bot and confirms it.
+    pub async fn confirm_teleport(&mut self, teleport: &CPlayerPosition) -> Result<(), String> {
+        self.position = teleport.position;
+        self.yaw = teleport.yaw;
+        self.pitch = teleport.pitch;
+        self.send_packet(&SConfirmTeleport {
+            teleport_id: teleport.teleport_id,
+            position: teleport.position,
+            yaw: teleport.yaw,
+            pitch: teleport.pitch,
+        })
+        .await?;
+        // The vanilla client follows the confirmation with its new position, not on the ground.
+        // Pumpkin moves the player's chunk view on that packet.
+        self.send_packet(&SPlayerPositionRotation {
+            position: teleport.position,
+            yaw: teleport.yaw,
+            pitch: teleport.pitch,
+            collision: 0,
+        })
+        .await?;
+        self.teleports_confirmed += 1;
         Ok(())
     }
 
