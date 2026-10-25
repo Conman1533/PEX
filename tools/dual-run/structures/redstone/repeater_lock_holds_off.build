@@ -1,0 +1,15 @@
+# From pumpkin:redstone_repeater_locking_holds_off.
+# The repeater in front of START is locked from the side by a powered repeater, so it
+# must not pass START on to FAIL. ACCEPT is three delay 4 repeaters (24 game ticks)
+# away from START, well after an unlocked repeater would have fired.
+# size: 7 2 3
+fill ~ ~ ~ ~6 ~ ~2 stone
+setblock ~2 ~1 ~ test_block[mode=start]{mode:"start",message:""}
+setblock ~ ~1 ~1 redstone_block
+setblock ~1 ~1 ~1 repeater[facing=west,delay=1]
+setblock ~2 ~1 ~1 repeater[facing=north,delay=1]
+setblock ~2 ~1 ~2 test_block[mode=fail]{mode:"fail",message:"locked repeater passed its input on"}
+setblock ~3 ~1 ~ repeater[facing=west,delay=4]
+setblock ~4 ~1 ~ repeater[facing=west,delay=4]
+setblock ~5 ~1 ~ repeater[facing=west,delay=4]
+setblock ~6 ~1 ~ test_block[mode=accept]{mode:"accept",message:""}

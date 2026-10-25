@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:block_based",
+  "environment": "minecraft:default",
+  "structure": "pumpkin:redstone/torch_double_inverter",
+  "max_ticks": 40
+}

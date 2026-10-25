@@ -58,13 +58,7 @@ pub async fn run_gametests(
     summary_lines: &mut Vec<String>,
 ) -> Result<(), String> {
     let world = server.get_world_from_dimension(&Dimension::OVERWORLD);
-
-    let mut all_tests = vec![
-        "minecraft:always_pass",
-        "pumpkin:summon_command_regression",
-        "pumpkin:creeper_should_run_from_cat",
-    ];
-    all_tests.extend_from_slice(builtin_game_test_ids());
+    let all_tests = all_test_ids();
 
     // Pre-load the 4x4 chunk test arena once so all 3D-stacked tests run in memory
     let base_cx = TEST_BASE_X >> 4;
@@ -197,6 +191,23 @@ async fn run_batch(
         summary_lines.push(format!("  {msg}"));
     }
     Ok(())
+}
+
+/// The builtin tests plus every test embedded from `assets/tests/datapacks`, such as
+/// the pumpkin-dual-run tests that are checked against vanilla.
+fn all_test_ids() -> Vec<&'static str> {
+    let mut all_tests = vec![
+        "minecraft:always_pass",
+        "pumpkin:summon_command_regression",
+        "pumpkin:creeper_should_run_from_cat",
+    ];
+    all_tests.extend_from_slice(builtin_game_test_ids());
+    for &test_id in pumpkin_data::test_instance::all_test_instance_names() {
+        if !all_tests.contains(&test_id) {
+            all_tests.push(test_id);
+        }
+    }
+    all_tests
 }
 
 fn force_load_surroundings_chunks(

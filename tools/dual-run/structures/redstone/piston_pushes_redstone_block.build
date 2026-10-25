@@ -1,0 +1,9 @@
+# From pumpkin:sticky_piston_redstone_block_powers_lamp.
+# START powers a piston from behind. The piston pushes a redstone block one block
+# east, next to ACCEPT.
+# size: 5 2 3
+fill ~ ~ ~ ~4 ~ ~2 stone
+setblock ~ ~1 ~1 test_block[mode=start]{mode:"start",message:""}
+setblock ~1 ~1 ~1 piston[facing=east]
+setblock ~2 ~1 ~1 redstone_block
+setblock ~4 ~1 ~1 test_block[mode=accept]{mode:"accept",message:""}

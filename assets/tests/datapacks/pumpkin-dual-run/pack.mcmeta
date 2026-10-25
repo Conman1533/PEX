@@ -1,0 +1,7 @@
+{
+  "pack": {
+    "description": "PEX dual-run GameTests: block-based tests that run on vanilla 26.3 and on PEX",
+    "min_format": 121,
+    "max_format": 121
+  }
+}
