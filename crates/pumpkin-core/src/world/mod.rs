@@ -431,6 +431,7 @@ impl World {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn update_active_chunks(&self) {
         let sim_dist = self.server.upgrade().map_or(10, |s| {
             s.advanced_config.networking.java.simulation_distance.get()
