@@ -36,6 +36,26 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// that makes old binary plugins incompatible.
 pub const PLUGIN_API_VERSION: u32 = 3;
 
+/// The build this crate was compiled in: commit, compiler, target, `Cargo.lock` hash, features
+/// and debug assertions.
+///
+/// Native plugins share Rust types with the server, so the loader only loads a plugin whose
+/// exported `PUMPKIN_BUILD_ID` equals this.
+pub const BUILD_ID: &str = env!("PUMPKIN_BUILD_ID");
+
+/// Type of the `PUMPKIN_BUILD_ID` symbol native plugins export.
+pub type BuildIdSymbol = [u8; BUILD_ID.len() + 1];
+
+/// [`BUILD_ID`] as a NUL-terminated string, the value of the `PUMPKIN_BUILD_ID` symbol.
+pub const BUILD_ID_SYMBOL: BuildIdSymbol = {
+    let mut symbol = [0; BUILD_ID.len() + 1];
+    symbol
+        .split_at_mut(BUILD_ID.len())
+        .0
+        .copy_from_slice(BUILD_ID.as_bytes());
+    symbol
+};
+
 const PLUGIN_DIR: &str = "./plugins";
 
 /// A trait for handling events dynamically.

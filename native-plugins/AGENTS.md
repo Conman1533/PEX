@@ -4,7 +4,7 @@ This folder holds PEX's native plugins. Each plugin is a Rust `cdylib`, built as
 
 **Before writing or changing any plugin, read `PORTING_GUIDE.md` in full.** It has the rules, templates, API tables, verified pitfalls and the testing procedure. The short version:
 
-1. Plugins must stay workspace members (listed in `../Cargo.toml`). That's what guarantees they're built from the same source, lockfile and compiler as the server; a plugin built any other way loads and then corrupts memory. Never run `cargo update`.
+1. Plugins must stay workspace members (listed in `../Cargo.toml`). That's what guarantees they're built from the same source, lockfile and compiler as the server; the server refuses plugins whose build id (commit, compiler, target, lockfile hash, features) differs, but a plugin built outside the workspace can pass that check and then corrupt memory. Never run `cargo update`.
 2. Plugin commits don't change `../crates/`. Report missing APIs and events instead.
 3. New plugins start as a copy of `template/`. Use `pex_common::export_plugin!`, never `#[plugin_impl]`.
 4. Call `context.init_log()` first in `on_load`. Enter `server.runtime` at the top of every handler and executor that calls server code. Don't use Tokio APIs in plugin code.

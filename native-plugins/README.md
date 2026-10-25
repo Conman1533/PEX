@@ -16,7 +16,7 @@ Plugins written in Rust against the PEX server itself. They're built with the se
 
 To build them yourself, `cargo build --release` builds the server and the plugins together. The plugin files are in `target/release/`: `worldpumpkin.dll`, `pexguard.dll` and `pexprotect.dll` on Windows, or `libworldpumpkin.so` and so on on Linux and macOS.
 
-**Always use plugin files from the same build as the server.** Native plugins aren't portable between server versions the way Java plugins are: a file from another build loads without an error and then misbehaves or crashes. Update the plugins every time you update the server.
+**Always use plugin files from the same build as the server.** Native plugins aren't portable between server versions the way Java plugins are: the server refuses to load a plugin file from another build and logs "Plugin build mismatch" (or "Plugin has no build id" for plugins from 1.x releases). Update the plugins every time you update the server.
 
 The static `musl` Linux builds can't load native plugins. Use the regular Linux build if you want plugins.
 

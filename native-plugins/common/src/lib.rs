@@ -34,6 +34,10 @@ macro_rules! export_plugin {
         pub static PUMPKIN_API_VERSION: u32 = $crate::pumpkin::plugin::PLUGIN_API_VERSION;
 
         #[unsafe(no_mangle)]
+        pub static PUMPKIN_BUILD_ID: $crate::pumpkin::plugin::BuildIdSymbol =
+            $crate::pumpkin::plugin::BUILD_ID_SYMBOL;
+
+        #[unsafe(no_mangle)]
         pub fn plugin() -> Box<dyn $crate::pumpkin::plugin::Plugin> {
             Box::new(<$plugin>::new())
         }
