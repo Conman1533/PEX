@@ -15,6 +15,7 @@ pub fn main() {
     for (build_fn, file) in targets {
         println!("Generating SDK for {}", file);
         let code = build_fn();
+        let code = crate::format_code(&code).unwrap_or(code);
         let path = Path::new(SDK_OUT_DIR).join(file);
         fs::write(&path, code).unwrap_or_else(|_| panic!("Failed to write {file}"));
     }

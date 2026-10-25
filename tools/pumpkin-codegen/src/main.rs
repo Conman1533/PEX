@@ -69,6 +69,7 @@ mod material_rule;
 mod message_type;
 mod meta_data_type;
 mod mob_variant;
+mod nbt;
 mod noise_parameter;
 mod noise_router;
 mod noise_settings;

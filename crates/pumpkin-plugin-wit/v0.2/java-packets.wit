@@ -1667,6 +1667,12 @@ interface java-packets {
     /// `block` particles or RGB values for `dust`).
     data: list<u8>,
   }
+  /// Vanilla `TrailParticleOption`, the options a `trail` particle carries.
+  record trail-particle-option {
+    target: tuple<f64, f64, f64>,
+    color: s32,
+    duration: s32,
+  }
   record c-play-ping {
     id: s32,
   }
