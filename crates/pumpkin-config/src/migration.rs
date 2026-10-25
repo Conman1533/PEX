@@ -165,18 +165,23 @@ pub(crate) fn set_config_version(document: &mut DocumentMut, version: u32) -> Op
     Some(format!("set {CONFIG_VERSION_KEY} to {version}"))
 }
 
-/// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
-/// An existing backup is never overwritten: a taken name gets a counter, as in vanilla
-/// `FileUtil.findAvailableName`.
-pub(crate) fn write_backup(path: &Path, contents: &str, version: u32) -> io::Result<PathBuf> {
+/// The name of the `copy`th backup of `path` at `version`: `<file name>.v<version>.bak`, then
+/// `<file name>.v<version> (<copy>).bak`, as in vanilla `FileUtil.findAvailableName`.
+fn backup_path(path: &Path, version: u32, copy: u32) -> PathBuf {
     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    path.with_file_name(if copy == 0 {
+        format!("{file_name}.v{version}.bak")
+    } else {
+        format!("{file_name}.v{version} ({copy}).bak")
+    })
+}
+
+/// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
+/// An existing backup is never overwritten: a taken name gets a counter.
+pub fn write_backup(path: &Path, contents: &str, version: u32) -> io::Result<PathBuf> {
     let mut copy = 0u32;
     loop {
-        let backup = path.with_file_name(if copy == 0 {
-            format!("{file_name}.v{version}.bak")
-        } else {
-            format!("{file_name}.v{version} ({copy}).bak")
-        });
+        let backup = backup_path(path, version, copy);
         match OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -196,6 +201,42 @@ pub(crate) fn write_backup(path: &Path, contents: &str, version: u32) -> io::Res
             Err(err) => return Err(err),
         }
     }
+}
+
+/// Copies the directory `path` and everything in it to `<name>.v<version>.bak` next to it, like
+/// [`write_backup`], and returns the copy's path.
+pub fn backup_dir(path: &Path, version: u32) -> io::Result<PathBuf> {
+    let mut copy = 0u32;
+    loop {
+        let backup = backup_path(path, version, copy);
+        match fs::create_dir(&backup) {
+            Ok(()) => {
+                return match copy_dir_contents(path, &backup) {
+                    Ok(()) => Ok(backup),
+                    Err(err) => {
+                        let _ = fs::remove_dir_all(&backup);
+                        Err(err)
+                    }
+                };
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => copy += 1,
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+fn copy_dir_contents(from: &Path, to: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            fs::create_dir(&target)?;
+            copy_dir_contents(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
