@@ -271,11 +271,11 @@ use pumpkin_protocol::java::client::play::{
     CCloseContainer, CCombatDeath, CCustomPayload, CDisguisedChatMessage, CEntityAnimation,
     CEntityPositionSync, CGameEvent, CHurtAnimation, CItemCooldown, CMapItemData, COpenBook,
     COpenScreen, COpenSignEditor, CParticle, CPlayServerLinks, CPlayerAbilities, CPlayerInfoUpdate,
-    CPlayerPosition, CPlayerSpawnPosition, CRespawn, CSetCamera, CSetContainerContent,
-    CSetContainerProperty, CSetContainerSlot, CSetCursorItem, CSetExperience, CSetHealth,
-    CSetPlayerInventory, CSetSelectedSlot, CSoundEffect, CStopSound, CSubtitle, CSystemChatMessage,
-    CTabList, CTitleAnimation, CTitleText, CUnloadChunk, CUpdateMobEffect, CUpdateTime, GameEvent,
-    MapIcon, MapPatch, PlayerAction, PlayerInfoFlags, PlayerSpawnData, PreviousMessage, Statistic,
+    CPlayerSpawnPosition, CRespawn, CSetCamera, CSetContainerContent, CSetContainerProperty,
+    CSetContainerSlot, CSetCursorItem, CSetExperience, CSetHealth, CSetPlayerInventory,
+    CSetSelectedSlot, CSoundEffect, CStopSound, CSubtitle, CSystemChatMessage, CTabList,
+    CTitleAnimation, CTitleText, CUnloadChunk, CUpdateMobEffect, CUpdateTime, GameEvent, MapIcon,
+    MapPatch, PlayerAction, PlayerInfoFlags, PlayerSpawnData, PreviousMessage, Statistic,
 };
 use pumpkin_protocol::java::server::play::{
     SClickSlot, SContainerButtonClick, SRenameItem, SlotActionType,
@@ -409,6 +409,33 @@ pub enum SpamType {
 /// Center chunk and levels of the view and simulation tickets a player holds.
 pub type HeldChunkTickets = (Vector2<i32>, Option<i8>, Option<i8>);
 
+/// Vanilla `ServerGamePacketListenerImpl`'s teleport bookkeeping for a Java client.
+#[derive(Default)]
+pub struct AwaitingTeleport {
+    /// `awaitingTeleport`: the id of the last teleport sent to the client.
+    pub id: i32,
+    /// `awaitingPositionFromClient`: where the last teleport put the player, until the client
+    /// confirms it.
+    pub position: Option<Vector3<f64>>,
+    /// `awaitingTeleportTime`: the player tick the last teleport was sent on, or of the last
+    /// movement packet while none was awaited.
+    pub time: i32,
+}
+
+impl AwaitingTeleport {
+    /// Waits for the client to confirm a teleport to `position` sent on `tick`, and returns the
+    /// new teleport id.
+    pub const fn start(&mut self, position: Vector3<f64>, tick: i32) -> i32 {
+        self.time = tick;
+        self.id += 1;
+        if self.id == i32::MAX {
+            self.id = 0;
+        }
+        self.position = Some(position);
+        self.id
+    }
+}
+
 #[repr(C)]
 pub struct Player {
     /// The underlying living entity object that represents the player.
@@ -471,10 +498,8 @@ pub struct Player {
     /// dig started. Vanilla `hasDelayedDestroy`, `delayedDestroyPos` and `delayedTickStart`.
     pub delayed_destroy: AtomicCell<Option<(BlockPos, i32)>>,
     pub last_input: AtomicI8,
-    /// A counter for teleport IDs used to track pending teleports.
-    pub teleport_id_count: AtomicI32,
-    /// The pending teleport information, including the teleport ID and target location.
-    pub awaiting_teleport: Mutex<Option<(VarInt, Vector3<f64>)>>,
+    /// The last teleport sent to a Java client and whether it still has to confirm it.
+    pub awaiting_teleport: Mutex<AwaitingTeleport>,
     /// The coordinates of the chunk section the player is currently watching.
     pub watched_section: AtomicCell<Cylindrical>,
     /// The last time the player performed an action (for idle timeout).
@@ -751,7 +776,7 @@ impl Player {
             )),
             gameprofile,
             client,
-            awaiting_teleport: Mutex::new(None),
+            awaiting_teleport: Mutex::new(AwaitingTeleport::default()),
             breath_manager: BreathManager::default(),
             // TODO: Load this from previous instance
             hunger_manager: HungerManager::default(),
@@ -767,7 +792,6 @@ impl Player {
             last_input: AtomicI8::new(0),
             carried_item: Mutex::new(None),
             experience_pick_up_delay: Mutex::new(0),
-            teleport_id_count: AtomicI32::new(0),
             mining: AtomicBool::new(false),
             mining_pos: Mutex::new(BlockPos::ZERO),
             delayed_destroy: AtomicCell::new(None),
@@ -4328,9 +4352,6 @@ impl Player {
     /// Rarly used, for example when waking up the player from a bed or their first time spawn. Otherwise, the `teleport` method should be used.
     /// The player should respond with the `SConfirmTeleport` packet.
     pub fn request_teleport(&self, position: Vector3<f64>, yaw: f32, pitch: f32) {
-        // This is the ultra special magic code used to create the teleport id
-        // This returns the old value
-        // This operation wraps around on overflow.
         let Some(server) = self.world().server.upgrade() else {
             return;
         };
@@ -4347,32 +4368,12 @@ impl Player {
             }
         }
 
-        let i = self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
         self.chunk_send_epoch.fetch_add(1, Ordering::Relaxed);
-        let teleport_id = i + 1;
         self.living_entity.entity.set_pos(position);
         let entity = &self.living_entity.entity;
         entity.set_rotation(yaw, pitch);
         match self.client.as_ref() {
-            ClientPlatform::Java(client) => {
-                *self
-                    .awaiting_teleport
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                    Some((teleport_id.into(), position));
-                let packet = CPlayerPosition::new(
-                    teleport_id.into(),
-                    position,
-                    Vector3::new(0.0, 0.0, 0.0),
-                    yaw,
-                    pitch,
-                    // TODO
-                    Vec::new(),
-                );
-                if let Ok(data) = client.serialize_packet(&packet) {
-                    client.try_enqueue_packet(data);
-                }
-            }
+            ClientPlatform::Java(client) => client.teleport(self, position, yaw, pitch, Vec::new()),
             ClientPlatform::Bedrock(client) => {
                 let packet = CBedrockMovePlayer::new(
                     VarULong(self.entity_id() as u64),

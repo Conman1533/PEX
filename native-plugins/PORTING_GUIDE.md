@@ -453,12 +453,12 @@ Two plugins each have their own copy of every type. Passing your own struct betw
 
 ### 6.6 Cancelling movement: don't teleport the player yourself
 
-**When a `PlayerMoveEvent` is cancelled, PEX already teleports the player back** (`force_tp` in `net/java/play/player_position.rs`). Just set `event.cancelled = true`. Don't call `request_teleport` as well: PEX only remembers the newest teleport id (`player.awaiting_teleport`) and **kicks the player** ("Wrong teleport id") when the client confirms an older one, so two teleports in a row get the player kicked. Verified with a bot: Guard's first version did both and the player was kicked within a second; cancelling alone works (`pexguard/src/listeners.rs`, `MoveHandler`).
+**When a `PlayerMoveEvent` is cancelled, PEX already teleports the player back** (`force_tp` in `net/java/play/player_position.rs`). Just set `event.cancelled = true`. Don't call `request_teleport` as well: like vanilla, PEX only waits for the newest teleport (`player.awaiting_teleport`) and ignores the client's confirmation of an older one, so your teleport replaces the one PEX just sent and the player rubber-bands twice. Older PEX builds kicked the player ("Wrong teleport id") when that older confirmation arrived; Guard's first version did both and its players were kicked within a second. Cancelling alone works (`pexguard/src/listeners.rs`, `MoveHandler`).
 
 The same rule applies to any code that teleports in reaction to movement (freezing, anti-cheat, warps on step). Check `player.awaiting_teleport` first and skip the teleport while one is pending:
 
 ```rust
-let pending = player.awaiting_teleport.lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_some();
+let pending = player.awaiting_teleport.lock().unwrap_or_else(std::sync::PoisonError::into_inner).position.is_some();
 if !pending {
     player.request_teleport(pos, yaw, pitch);
 }
