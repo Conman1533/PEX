@@ -1,0 +1,136 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
+use std::fs;
+use std::path::Path;
+
+use pumpkin_config::chunk::ChunkConfig;
+use pumpkin_config::migration::{CONFIG_VERSION_KEY, latest_version};
+use pumpkin_config::{LoadConfiguration, LoadMessage, PumpkinConfig};
+use tempfile::TempDir;
+
+/// The `pumpkin.toml` each release wrote on its first start in an empty directory.
+const RELEASE_FILES: [(&str, &str); 3] = [
+    ("v1.0.0", include_str!("fixtures/pumpkin-v1.0.0.toml")),
+    ("v1.1.0", include_str!("fixtures/pumpkin-v1.1.0.toml")),
+    ("v1.2.0", include_str!("fixtures/pumpkin-v1.2.0.toml")),
+];
+
+fn load_file(dir: &Path, contents: &str) -> (PumpkinConfig, Vec<LoadMessage>) {
+    fs::write(dir.join("pumpkin.toml"), contents).unwrap();
+    PumpkinConfig::load(dir)
+}
+
+fn read(dir: &Path, name: &str) -> String {
+    fs::read_to_string(dir.join(name)).unwrap()
+}
+
+fn info(line: &str) -> LoadMessage {
+    LoadMessage::Info(line.to_owned())
+}
+
+#[test]
+fn release_files_migrate_to_the_current_version() {
+    let latest = latest_version(PumpkinConfig::MIGRATIONS);
+    for (release, original) in RELEASE_FILES {
+        let dir = TempDir::new().unwrap();
+        let (config, messages) = load_file(dir.path(), original);
+
+        assert_eq!(
+            read(dir.path(), "pumpkin.toml.v1.bak"),
+            original,
+            "{release}"
+        );
+        assert_eq!(
+            messages,
+            [
+                info("Saved a copy of pumpkin.toml as pumpkin.toml.v1.bak before changing it"),
+                info("pumpkin.toml: added [world.entity_islands] with default values"),
+                info(&format!(
+                    "pumpkin.toml: set {CONFIG_VERSION_KEY} to {latest}"
+                )),
+            ],
+            "{release}"
+        );
+
+        let migrated = read(dir.path(), "pumpkin.toml");
+        let table: toml::Table = toml::from_str(&migrated).unwrap();
+        assert_eq!(
+            table[CONFIG_VERSION_KEY].as_integer(),
+            Some(latest.into()),
+            "{release}"
+        );
+        // Nothing the release wrote is lost or reordered; the changes are only additions.
+        let mut remaining = migrated.lines();
+        for line in original.lines() {
+            assert!(
+                remaining.any(|kept| kept == line),
+                "{release} lost {line:?}"
+            );
+        }
+        assert_eq!(
+            config.basic.seed.0.to_string(),
+            table["seed"].as_str().unwrap(),
+            "{release}"
+        );
+        assert_eq!(
+            matches!(config.advanced.world.chunk, ChunkConfig::Anvil(_)),
+            release != "v1.2.0",
+            "{release} chunk format"
+        );
+
+        // A migrated file is current: loading it again changes nothing.
+        let (_, messages) = PumpkinConfig::load(dir.path());
+        assert!(messages.is_empty(), "{release}: {messages:?}");
+        assert_eq!(read(dir.path(), "pumpkin.toml"), migrated, "{release}");
+    }
+}
+
+#[test]
+fn current_file_is_left_byte_for_byte() {
+    let dir = TempDir::new().unwrap();
+    let (_, messages) = PumpkinConfig::load(dir.path());
+    assert!(messages.is_empty(), "{messages:?}");
+
+    let generated = read(dir.path(), "pumpkin.toml");
+    let (_, messages) = PumpkinConfig::load(dir.path());
+    assert!(messages.is_empty(), "{messages:?}");
+    assert_eq!(read(dir.path(), "pumpkin.toml"), generated);
+
+    let edited = format!(
+        "# Survival server\n{}",
+        generated.replace("tps = 20.0", "tps   =  20.0 # vanilla")
+    );
+    let (_, messages) = load_file(dir.path(), &edited);
+    assert!(messages.is_empty(), "{messages:?}");
+    assert_eq!(read(dir.path(), "pumpkin.toml"), edited);
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1, "no backup");
+}
+
+#[test]
+fn an_earlier_backup_is_not_overwritten() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("pumpkin.toml.v1.bak"), "earlier").unwrap();
+    let (_, original) = RELEASE_FILES[2];
+    let (_, messages) = load_file(dir.path(), original);
+
+    assert_eq!(read(dir.path(), "pumpkin.toml.v1.bak"), "earlier");
+    assert_eq!(read(dir.path(), "pumpkin.toml.v1 (1).bak"), original);
+    assert_eq!(
+        messages[0],
+        info("Saved a copy of pumpkin.toml as pumpkin.toml.v1 (1).bak before changing it")
+    );
+}
+
+#[test]
+fn file_from_a_newer_server_is_left_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let newer = format!(
+        "{CONFIG_VERSION_KEY} = {}\n",
+        latest_version(PumpkinConfig::MIGRATIONS) + 1
+    );
+    let (_, messages) = load_file(dir.path(), &newer);
+
+    assert_eq!(read(dir.path(), "pumpkin.toml"), newer);
+    assert!(matches!(messages.as_slice(), [LoadMessage::Warn(_)]));
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1, "no backup");
+}
