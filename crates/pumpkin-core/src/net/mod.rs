@@ -23,10 +23,9 @@ use pumpkin_util::{
     version::{BedrockMinecraftVersion, JavaMinecraftVersion},
 };
 use serde::{Deserialize, Deserializer};
-use sha1::Digest;
-use sha2::Sha256;
 use tokio::task::JoinHandle;
 
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 pub mod authentication;
@@ -71,8 +70,20 @@ where
     Ok(ArcSwap::new(Arc::new(v)))
 }
 
-pub fn offline_uuid(username: &str) -> Result<Uuid, uuid::Error> {
-    Uuid::from_slice(&Sha256::digest(username)[..16])
+/// Mirrors vanilla `UUIDUtil.createOfflinePlayerUUID`: `UUID.nameUUIDFromBytes` (MD5, version 3) of `"OfflinePlayer:" + name`.
+#[must_use]
+pub fn offline_uuid(username: &str) -> Uuid {
+    uuid::Builder::from_md5_bytes(md5::compute(format!("OfflinePlayer:{username}")).0).into_uuid()
+}
+
+/// Returns the offline UUID PEX 1.x gave a name: the first 16 bytes of its SHA-256, without version bits.
+///
+/// Only for migrating data saved under those UUIDs. Players get [`offline_uuid`].
+#[must_use]
+pub fn legacy_offline_uuid(username: &str) -> Uuid {
+    let mut bytes = [0; 16];
+    bytes.copy_from_slice(&Sha256::digest(username)[..16]);
+    Uuid::from_bytes(bytes)
 }
 
 /// Represents a player's configuration settings.
@@ -604,7 +615,45 @@ pub enum DisconnectReason {
 
 #[cfg(test)]
 mod tests {
-    use crate::net::is_valid_player_name;
+    use crate::net::{is_valid_player_name, legacy_offline_uuid, offline_uuid};
+
+    /// Expected values come from vanilla `UUIDUtil.createOfflinePlayerUUID`. A vanilla 26.3 server in
+    /// offline mode wrote all but `Zażółć` to `usercache.json` on login, or to `whitelist.json` for
+    /// non-ASCII names, which it refuses at login.
+    #[test]
+    fn offline_uuid_matches_vanilla() {
+        for (name, expected) in [
+            ("Notch", "b50ad385-829d-3141-a216-7e7d7539ba7f"),
+            ("jeb_", "a762f560-4fce-3236-812a-b80efff0b62b"),
+            ("Zażółć", "80cedc37-455d-33fc-8fdd-d2ccdb657fc2"),
+            ("Player_123456789", "c0d79c73-221a-32dc-b983-3cfa4a8a971a"),
+            ("玩家一号", "563807d4-80f7-3b64-9ebb-4dbce5bc9f41"),
+            ("🎮gamer", "501e0b86-57fc-33e9-9853-97f55e79973f"),
+        ] {
+            assert_eq!(
+                offline_uuid(name).to_string(),
+                expected,
+                "offline UUID of {name}"
+            );
+        }
+    }
+
+    /// Expected values are what PEX 1.2.0 wrote to `data/whitelist.json` in offline mode.
+    #[test]
+    fn legacy_offline_uuid_matches_pex_1_2() {
+        for (name, expected) in [
+            ("Notch", "ff4af744-2839-cc96-4605-0dd2214a30c1"),
+            ("Player_123456789", "fe3625b2-f47a-1462-c456-19d51eedef7d"),
+            ("玩家一号", "e893d087-028b-377e-080a-c57e028f96e9"),
+            ("🎮gamer", "45399c0f-6260-6f57-26d6-1a2841727956"),
+        ] {
+            assert_eq!(
+                legacy_offline_uuid(name).to_string(),
+                expected,
+                "legacy offline UUID of {name}"
+            );
+        }
+    }
 
     /// Test case for a standard, valid English name at max length.
     #[test]
