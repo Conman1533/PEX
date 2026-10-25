@@ -863,6 +863,25 @@ impl GenerationSchedule {
                 continue;
             }
 
+            if holder.public {
+                // The levels this pass works from can be behind the tickets: a player joining into
+                // this chunk adds one and then reads the chunk as loaded. Vanilla keeps a holder
+                // that gets a ticket back before it is dropped (`ChunkMap.updateChunkScheduling`).
+                // Checking after taking the chunk out means a ticket sent at any point is seen
+                // either here or by the reader, who then waits for the chunk to load.
+                let chunk = self.unpublish_chunk(pos);
+                if self.send_level.has_pending_load(pos) {
+                    if let Some(chunk) = chunk {
+                        self.publish_chunk(pos, chunk.clone());
+                        self.listener.process_new_chunk(pos, &chunk);
+                    }
+                    self.chunk_map.insert(pos, holder);
+                    self.unload_chunks.insert(pos);
+                    continue;
+                }
+                holder.public = false;
+            }
+
             for task in holder.tasks {
                 if !task.is_null() {
                     let is_in_flight = self.graph.nodes.get(task).is_some_and(|n| n.in_flight);
@@ -875,11 +894,6 @@ impl GenerationSchedule {
 
             self.graph.drop_edge_chain(holder.occupied_by);
             holder.occupied_by = EdgeKey::null();
-
-            if holder.public {
-                self.unpublish_chunk(pos);
-                holder.public = false;
-            }
 
             if let Some(tmp) = holder.chunk {
                 match tmp {
@@ -1739,5 +1753,89 @@ impl GenerationSchedule {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chunk::ChunkData;
+
+    /// A scheduler without worker threads, driven by hand.
+    fn idle_schedule(send_level: Arc<LevelChannel>) -> GenerationSchedule {
+        let (send_chunk, recv_chunk) = crossbeam::channel::unbounded();
+        let (io_read, _) = tokio::sync::mpsc::channel(1);
+        let (io_write, _) = tokio::sync::mpsc::channel(1);
+        GenerationSchedule {
+            queue: BinaryHeap::new(),
+            graph: DAG::default(),
+            last_level: ChunkLevel::default(),
+            last_high_priority: Vec::new(),
+            send_level,
+            public_chunk_map: Arc::new(DashMap::new()),
+            loaded_chunk_changes: Arc::new(crossbeam::queue::SegQueue::new()),
+            chunk_map: HashMap::default(),
+            unload_chunks: HashSetType::default(),
+            waiting_for_chunks: HashSetType::default(),
+            io_lock: Arc::new((
+                Mutex::new(HashMapType::default()),
+                tokio::sync::Notify::new(),
+            )),
+            running_task_count: 0,
+            max_in_flight: 1,
+            queue_dirty: false,
+            recv_chunk,
+            io_read,
+            io_write,
+            send_chunk,
+            listener: Arc::new(ChunkListener::new()),
+            lighting_config: LightingEngineConfig::default(),
+            last_unload: std::time::Instant::now(),
+            generation_pool: Arc::new(
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .expect("thread pool"),
+            ),
+        }
+    }
+
+    #[test]
+    fn unload_keeps_chunk_whose_ticket_is_still_in_the_channel() {
+        let channel = Arc::new(LevelChannel::new());
+        let mut schedule = idle_schedule(channel.clone());
+        let pos = ChunkPos::new(0, 0);
+        let chunk = ChunkData::empty_sync(pos.x, pos.y);
+
+        // A full chunk whose last ticket went away, waiting for the next unload pass.
+        schedule.chunk_map.insert(
+            pos,
+            ChunkHolder {
+                current_stage: StagedChunkEnum::Full,
+                chunk: Some(Chunk::Level(chunk.clone())),
+                public: true,
+                ..Default::default()
+            },
+        );
+        schedule.public_chunk_map.insert(pos, chunk);
+        schedule.unload_chunks.insert(pos);
+
+        // A player joins into it: its ticket reaches the channel before the unload pass applies
+        // the latest levels.
+        let mut changes = HashMapType::default();
+        changes.insert(pos, (StagedChunkEnum::None, StagedChunkEnum::Full));
+        let mut levels = ChunkLevel::default();
+        levels.insert(pos, ChunkLoading::FULL_CHUNK_LEVEL);
+        channel.set_level((changes, levels));
+
+        schedule.process_unload_queue();
+
+        assert!(schedule.public_chunk_map.contains_key(&pos));
+        assert!(
+            schedule
+                .chunk_map
+                .get(&pos)
+                .is_some_and(|holder| holder.public)
+        );
     }
 }
