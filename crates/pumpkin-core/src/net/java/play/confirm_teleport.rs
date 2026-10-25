@@ -1,44 +1,49 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
-impl JavaClient {
-    pub fn handle_confirm_teleport(&self, player: &Player, confirm_teleport: &SConfirmTeleport) {
-        enum TeleportResult {
-            Success,
-            WrongId,
-            NotTeleporting,
-        }
+/// Vanilla `ServerGamePacketListenerImpl.containsInvalidValues`.
+const fn contains_invalid_values(position: Vector3<f64>, yaw: f32, pitch: f32) -> bool {
+    position.x.is_nan()
+        || position.y.is_nan()
+        || position.z.is_nan()
+        || !yaw.is_finite()
+        || !pitch.is_finite()
+}
 
-        let result = {
+impl JavaClient {
+    /// Vanilla `ServerGamePacketListenerImpl.handleAcceptTeleportPacket`.
+    pub fn handle_confirm_teleport(&self, player: &Player, confirm_teleport: &SConfirmTeleport) {
+        let position = {
             let mut awaiting_teleport = player
                 .awaiting_teleport
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if let Some((id, position)) = awaiting_teleport.as_ref() {
-                if id == &confirm_teleport.teleport_id {
-                    // We should set the position now to what we requested in the teleport packet.
-                    // This may fix issues when the client sends the position while being teleported.
-                    player.get_entity().set_pos(*position);
-                    *awaiting_teleport = None;
-                    TeleportResult::Success
-                } else {
-                    TeleportResult::WrongId
-                }
+            // A confirmation of an older teleport arrives when the server teleported the player
+            // again before the client answered. Only the last teleport counts.
+            if confirm_teleport.teleport_id.0 != awaiting_teleport.id {
+                return;
+            }
+            if contains_invalid_values(
+                confirm_teleport.position,
+                confirm_teleport.yaw,
+                confirm_teleport.pitch,
+            ) {
+                None
             } else {
-                TeleportResult::NotTeleporting
+                awaiting_teleport.position.take()
             }
         };
 
-        match result {
-            TeleportResult::Success => {}
-            TeleportResult::WrongId => {
-                self.try_kick(&TextComponent::text("Wrong teleport id"));
-            }
-            TeleportResult::NotTeleporting => {
-                self.try_kick(&TextComponent::text(
-                    "Send Teleport confirm, but we did not teleport",
-                ));
-            }
-        }
+        let Some(position) = position else {
+            self.try_kick(&TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
+                translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
+                [],
+            ));
+            return;
+        };
+        // Vanilla then handles the position in the confirmation like a movement packet; PEX takes
+        // the client's position from its next movement packet.
+        player.get_entity().set_pos(position);
     }
 }

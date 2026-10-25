@@ -41,8 +41,8 @@ use pumpkin_protocol::{
     codec::var_int::VarInt,
     codec::var_ulong::VarULong,
     java::client::play::{
-        CEntityPositionSync, CPlayerPosition, CSetEntityMetadata, CSetPassengers, CSpawnEntity,
-        Metadata, MetadataSerializer,
+        CEntityPositionSync, CSetEntityMetadata, CSetPassengers, CSpawnEntity, Metadata,
+        MetadataSerializer,
     },
 };
 use pumpkin_util::math::vector3::Axis;
@@ -3908,27 +3908,23 @@ impl Entity {
             let vehicle_box = self.bounding_box.load();
             let passenger_entity = passenger.get_entity();
 
-            // Pre-allocate teleport ID and block movement packets BEFORE sending
-            // CSetPassengers. This prevents a race condition where the client receives
-            // the dismount packet, sends stale position packets from the old riding
-            // position, and the server processes them before the teleport arrives.
-            let teleport_id = if reposition && let Some(player) = passenger.get_player() {
-                let id = player
-                    .teleport_id_count
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                    + 1;
-                // Use fallback position as placeholder — updated below with real position
+            // Block movement packets BEFORE sending CSetPassengers. This prevents a race
+            // condition where the client receives the dismount packet, sends stale position
+            // packets from the old riding position, and the server processes them before the
+            // teleport arrives. The placeholder is never sent; the dismount teleport below
+            // replaces it.
+            if reposition
+                && let Some(player) = passenger.get_player()
+                && let ClientPlatform::Java(_) = player.client.as_ref()
+            {
                 let placeholder =
                     Vector3::new(self.pos.load().x, vehicle_box.max.y, self.pos.load().z);
-                *player
+                player
                     .awaiting_teleport
                     .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                    Some((id.into(), placeholder));
-                Some(id)
-            } else {
-                None
-            };
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .start(placeholder, player.tick_counter.load(Relaxed));
+            }
 
             // Vanilla: ridingCooldown = 60 (prevents immediate re-mount)
             passenger_entity.riding_cooldown.store(60, Relaxed);
@@ -4128,22 +4124,15 @@ impl Entity {
 
             // Phase 2: Teleport to safety (unblocks movement)
             if let Some(player) = passenger.get_player() {
-                if let Some(id) = teleport_id {
-                    player.get_entity().set_pos(dismount_pos);
-                    // Update awaiting_teleport with the real dismount position
-                    *player
-                        .awaiting_teleport
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                        Some((id.into(), dismount_pos));
-                    // Use send_client_packet so the teleport goes through
-                    // the same packet queue as CSetPassengers, preserving send order.
-                    // Vanilla uses DELTA | ROT flags: position absolute, delta/rotation relative.
-                    // With rotation relative and yaw/pitch=0, the client preserves its current look.
-                    player.try_send_client_packet(&CPlayerPosition::new(
-                        id.into(),
+                player.get_entity().set_pos(dismount_pos);
+                // The teleport goes through the same packet queue as CSetPassengers, preserving
+                // send order.
+                // Vanilla uses DELTA | ROT flags: position absolute, delta/rotation relative.
+                // With rotation relative and yaw/pitch=0, the client preserves its current look.
+                if let ClientPlatform::Java(client) = player.client.as_ref() {
+                    client.teleport(
+                        player,
                         dismount_pos,
-                        Vector3::new(0.0, 0.0, 0.0),
                         0.0,
                         0.0,
                         vec![
@@ -4153,7 +4142,7 @@ impl Entity {
                             PositionFlag::YRot,
                             PositionFlag::XRot,
                         ],
-                    ));
+                    );
                 }
 
                 // Vanilla: setSneaking(false) after dismount via sneak input

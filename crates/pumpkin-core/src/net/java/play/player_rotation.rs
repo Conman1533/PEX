@@ -18,7 +18,11 @@ impl JavaClient {
             return;
         }
         let entity = &player.get_entity();
-        entity.on_ground.store(rotation.ground, Ordering::Relaxed);
+        // Vanilla `handleMovePlayer` only takes the rotation until the client confirms the last
+        // teleport.
+        if !self.update_awaiting_teleport(player) {
+            entity.on_ground.store(rotation.ground, Ordering::Relaxed);
+        }
         entity.set_rotation(
             wrap_degrees(rotation.yaw) % 360.0,
             wrap_degrees(rotation.pitch),
