@@ -3275,6 +3275,7 @@ dependencies = [
  "reqwest",
  "rsa",
  "rustc-hash",
+ "rustc_version",
  "rustc_version_runtime",
  "rustls",
  "rustyline",

@@ -115,6 +115,12 @@ indexmap.workspace = true
 xxhash-rust.workspace = true
 
 
+[build-dependencies]
+# Plugin build id
+hex.workspace = true
+rustc_version.workspace = true
+sha2.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

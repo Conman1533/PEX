@@ -18,7 +18,7 @@ When unsure how to do something, find how one of these does it and copy that pat
 
 ## 0. Hard rules
 
-1. **Plugins only work with the server build they were built with.** Native plugins share memory layouts with the server. A plugin from a different PEX commit, from upstream Pumpkin, or built with a different Rust compiler will load *without any error* and then crash or corrupt memory. That's why plugins are workspace members: `cargo build` produces the server and every plugin together. Never build a plugin outside this workspace or ship it with a different server binary.
+1. **Plugins only work with the server build they were built with.** Native plugins share memory layouts with the server. The server refuses a plugin whose build id (commit, compiler, target, `Cargo.lock` hash, features, debug assertions) differs from its own, which catches plugins from another PEX commit, from upstream Pumpkin or from another Rust compiler. The id can't see uncommitted changes or a plugin built outside this workspace against its own lockfile; such a plugin loads *without any error* and then crashes or corrupts memory. That's why plugins are workspace members: `cargo build` produces the server and every plugin together. Never build a plugin outside this workspace or ship it with a different server binary.
 2. **Use workspace dependency versions.** Prefer `<crate>.workspace = true` for anything in `../Cargo.toml`'s `[workspace.dependencies]`. Before adding a new crate, run `grep -n '^name = "<crate>"' -A1 ../Cargo.lock`; if it's already locked, use that version. Never run `cargo update`.
 3. **Plugin changes don't touch the server crates.** Don't edit anything under `../crates/` in a plugin commit. If PEX is missing an API or event, write that down in your report; fixing the server is a separate change.
 4. **No `unwrap`, `expect`, `panic!`, `todo!`, `println!` or `eprintln!`.** Clippy denies them in this workspace. Use `?`, `unwrap_or_else(PoisonError::into_inner)` for mutexes, and `tracing::{info, warn, error}` for logs.
@@ -35,7 +35,7 @@ When unsure how to do something, find how one of these does it and copy that pat
 | :-- | :-- |
 | It is a Rust `cdylib` (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS). | Put `crate-type = ["cdylib"]` (or `["cdylib", "rlib"]` if other crates or tests need it) in `[lib]`. |
 | It statically links its **own copy** of `pumpkin-core`, `tokio`, `tracing` and `std`. | Global state inside those crates is duplicated. See §6 for the two things this breaks: logging and the Tokio runtime. |
-| The server calls three exported symbols: `METADATA`, `PUMPKIN_API_VERSION`, `plugin`. | `export_plugin!` generates all three. |
+| The server reads four exported symbols: `PUMPKIN_BUILD_ID`, `PUMPKIN_API_VERSION`, `METADATA`, `plugin`. | `export_plugin!` generates all four. |
 | The plugin gets an `Arc<Context>` in `on_load`. `context.server` is the whole `Arc<Server>`. | There is no sandbox. You can call any public server function. Use that power carefully. |
 | The plugin's name is its Cargo package name. | Package `pexguard` gets data folder `plugins/data/pexguard/` and permission namespace `pexguard:`. Choose a short, lowercase, unique package name. |
 
