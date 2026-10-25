@@ -30,7 +30,7 @@ What is already in the CT for every session:
 | Earlier PR drafts (format to copy) | `/srv/pex/pr-drafts` |
 | Dual-run GameTest runner and vanilla structure builder (on `test/redstone-dual-run` until merged) | `tools/dual-run/` in that branch |
 
-The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 12`, and don't use fat LTO release builds unless the piece is about release builds. A debug target dir with tests takes 20 to 28 GB, so the 100 GB disk holds three at a time; delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
+The CT shares the pve host with production (Pelican CT 109 with the game servers, hermes-jail, Jellyfin), and the host is short on RAM. Keep at most three sessions compiling at once, build with `-j 8` (`/srv/pex/env.sh` sets it, together with CI's `-Dwarnings` and `CARGO_INCREMENTAL=0`), and don't use fat LTO release builds unless the piece is about release builds. With incremental compilation a debug target dir with tests reached 31 to 41 GB and filled the disk on 2026-10-24, which is why `env.sh` turns it off; without it the 100 GB disk holds three target dirs at a time; delete a piece's target dir once its branch is pushed and handed over. The CT has rustc 1.99.0 and 1.99.1 (current stable, which `rust-toolchain.toml`'s `stable` selects). Cross compilers for release builds (aarch64, mingw) are not installed yet; 10.x pieces add them.
 
 ### Baseline on alpha
 
@@ -186,7 +186,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 - All server settings are in one file, `pumpkin.toml` (`crates/pumpkin-config/src/lib.rs:94`). There is no version key in it.
 - Loading (`LoadConfiguration::load`, `lib.rs:288`) merges the file over the defaults. When keys are missing it fills them in and rewrites the whole file with `toml::to_string`, which drops the admin's comments and ordering.
-- **An invalid value resets the whole file to defaults without saying which key.** `merge_with_default_toml` does `merged_value.try_into().unwrap_or_else(|_| Self::default())` (`lib.rs:397`), and the error is discarded. A TOML syntax error also falls back to all defaults (`lib.rs:315-318`), though that case is logged.
+- **An invalid value resets the whole file to defaults without saying which key.** `merge_with_default_toml` does `merged_value.try_into().unwrap_or_else(|_| Self::default())` (`lib.rs:397`), and the error is discarded. A TOML syntax error also falls back to all defaults (`lib.rs:315-318`). Neither is visible: `load` runs before `init_logger` (`crates/pumpkin/src/main.rs:73-77`), so every `tracing` line it emits is dropped, and v1.2.0 boots on all defaults with a broken file and prints nothing (checked by 3.1).
 - Unknown keys are kept in the file and silently ignored, because serde ignores unknown fields and the rewrite only happens when keys are missing.
 - Dead keys: comparing the config structs at `v1.0.0`, `v1.1.0`, `v1.2.0` and alpha, the only field removed is `AnvilChunkConfig.write_in_place` (`[world.chunk]`). Upstream #4062 (`b7174db92`) replaced it; the 1.2 release notes tell admins it is ignored. Added since 1.2.0: `LevelConfig.entity_islands` (with `knockback_reach` and `unaudited_reach`) and `BedrockPack.path`.
 - The default chunk format changed from Anvil to Pump in 1.2; existing files keep their `type`.
@@ -198,10 +198,10 @@ Every family piece does the same thing: audit each mob against its vanilla class
 | ID | Piece | Branch / short name | Depends on | Done means |
 | :-- | :-- | :-- | :-- | :-- |
 | 3.1 | `config_version` in `pumpkin.toml` and an ordered list of migrations. A file without the key is treated as 1.2. Before changing anything, copy the file to `pumpkin.toml.v<old>.bak`. Log one line per change. Decide in the PR whether to add `toml_edit` to keep comments. | `feat/config-version` | | Unit tests: default files generated from the `v1.0.0`, `v1.1.0` and `v1.2.0` tags migrate to the current schema; a current file is left byte for byte unchanged |
-| 3.2 | First migration: remove `world.chunk.write_in_place`. Warn once at startup about any remaining unknown key, by its full path. | `fix/config-dead-keys` | 3.1 | Unit test with a 1.0 file containing the key; boot test shows no warning on a migrated file |
-| 3.3 | Invalid values: report the key, the bad value and the expected type, and then follow Q3.1 (refuse to start, or use that key's default and keep the rest). Same for TOML syntax errors. | `fix/config-invalid-values` | 3.1, Q3.1 | Unit test: a file with one bad value keeps every other value; the log line names the key |
+| 3.2 | First migration: remove `world.chunk.write_in_place`. Warn once at startup about any remaining unknown key, by its full path (`config_version` is not a struct field and must count as known). The 1.0 and 1.1 fixtures from 3.1 (`crates/pumpkin-config/tests/fixtures/`) contain `write_in_place = true`; the migration changes the expected log lines in `tests/config_version.rs`. | `fix/config-dead-keys` | 3.1 | Unit test with a 1.0 file containing the key; boot test shows no warning on a migrated file |
+| 3.3 | Invalid values (read upstream Pumpkin-MC/Pumpkin#2985 and its tests first): report the key, the bad value and the expected type, and then follow Q3.1 (refuse to start, or use that key's default and keep the rest). Same for TOML syntax errors. | `fix/config-invalid-values` | 3.1, Q3.1 | Unit test: a file with one bad value keeps every other value; the log line names the key |
 | 3.4 | The same versioning and error handling for plugin configs in `pex_common::load_config`, and a first migration for each bundled plugin if any of their keys changed since 1.2. | `feat/plugin-config-version` | 3.1 | Unit tests in `native-plugins/common` |
-| 3.5 | Boot test on copies of real configs: take read-only copies of `pumpkin.toml` from servers 30 and 34 and a free-tier server (copy via the panel host without changing anything), run the migration, and check the result boots with the same effective settings. | `test/config-migration-real` | 3.2, 3.3 | Before and after files and the boot log in the PR |
+| 3.5 | Boot test on copies of real configs (check first how the PEX egg on Pelican edits `pumpkin.toml`; upstream #3410 shows the Pterodactyl egg's line-prefix parser only matches on first boot): take read-only copies of `pumpkin.toml` from servers 30 and 34 and a free-tier server (copy via the panel host without changing anything), run the migration, and check the result boots with the same effective settings. | `test/config-migration-real` | 3.2, 3.3 | Before and after files and the boot log in the PR |
 
 ### Proof
 
@@ -213,7 +213,9 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 - **Q3.1** On an invalid value: refuse to start and name the key, or start with that key's default and warn? The current behaviour (reset everything quietly) is the worst of both.
 - **Q3.2** Should migrations rewrite the admin's file in place (with a backup), or leave it and write the result next to it for the admin to swap in?
-- **Q3.3** Are comments in `pumpkin.toml` worth a new dependency (`toml_edit`)?
+- **Q3.3** Are comments in `pumpkin.toml` worth a new dependency (`toml_edit`)? 3.1 added it (one new crate in `Cargo.lock`; it shares the parser crates with `toml`), and switching back only affects the migration code.
+- **Q3.4** A `pumpkin.toml` with a newer `config_version` than the server knows: warn and start (3.1's choice), or refuse to start like vanilla does for a world from an incompatible version?
+- **Q3.5** Filling a minimal hand-written file logs one line per missing key (about 30 for a four-line file). Acceptable, or one summary line?
 
 ## Goal 4: offline UUIDs match vanilla
 
@@ -514,6 +516,8 @@ Cross-goal dependencies to keep in mind:
 | Q3.1 | Invalid config value: refuse to start, or use that key's default and warn? |
 | Q3.2 | Migrate `pumpkin.toml` in place with a backup, or write the result beside it? |
 | Q3.3 | Keep comments in `pumpkin.toml` at the cost of a `toml_edit` dependency? |
+| Q3.4 | Newer `config_version` than the server knows: warn and start, or refuse? |
+| Q3.5 | One log line per filled-in key, or one summary line? |
 | Q4.1 | UUID migration automatic on first start, or behind a flag? |
 | Q4.2 | Keep old UUIDs for one release behind proxies that forward none? |
 | Q4.3 | Migration marker in `pumpkin.toml` or in the world? |
@@ -545,6 +549,7 @@ Cross-goal dependencies to keep in mind:
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | done, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest; needs merge | `pr-drafts/fix-clippy-alpha.md` |
+| 3.1 | `feat/config-version` | done, pushed `8569d579d`: integer `config_version` (missing means 1), ordered migrations like vanilla `FileFixerUpper`, `pumpkin.toml.v<old>.bak` backups that never overwrite, edits with `toml_edit` so comments and unknown keys survive, and load messages now reach the log. Fixtures are the files v1.0.0, v1.1.0 and v1.2.0 actually wrote. Local CI green apart from the known failures (`/srv/pex/ci/feat-config-version/20261025-023248/`). | `pr-drafts/feat-config-version.md` |
 | 1.1 | `test/mob-parity-table` | done, pushed `a37d261e9`: `docs/MOB-PARITY.md` (90 rows, all `not audited`), mock players and `assert_entity_not_present_in_box` in the GameTest helper, `pumpkin:cow_follows_wheat_and_panics_when_hit` (fails without `TemptGoal` 11 of 11 runs, without the panic goal 5 of 5). Local CI green except the known scaffolding GameTest (`/srv/pex/ci/test-mob-parity-table/20261024-221123/`). Needs merge. | `pr-drafts/test-mob-parity-table.md` |
 | 5.1 | `test/redstone-dual-run` | done, pushed `bf917f65f`: datapack `assets/tests/datapacks/pumpkin-dual-run/` with 5 block-based redstone tests built and saved by vanilla, `tools/dual-run/` (runner and structure builder), START test blocks now stay powered like vanilla `TestBlockEntity.trigger`, and `pumpkin-tester` runs every embedded datapack test. All 5 pass on vanilla and PEX; each deliberately broken build fails only its test. Local CI green apart from the known failures (`/srv/pex/ci/test-redstone-dual-run/20261024-225651/`). | `pr-drafts/test-redstone-dual-run.md` |
 | 6.1 | `test/survival-harness` | done, pushed `c3266dbda`: stage harness in `pumpkin-tester` (client-packet bot with its own inventory model, digging, pickups, menu clicks) and stage 1, wood to stone pickaxe; 10 of 10 runs pass; fails without the crafting table recipe. Local CI green apart from the known scaffolding GameTest and the doc-test job, which fails for any tester-only change (`rust.yml:184`, see below). | `pr-drafts/test-survival-harness.md` |
@@ -556,6 +561,8 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (3.1) Upstream Pumpkin-MC/Pumpkin#3420 (open, agent-opened) makes the same config load failures visible with `eprintln!`; it overlaps 3.1's `LoadMessage` change.
+- (3.1) `unshare -n` works in CT 117, so a release binary can boot on its default ports without clashing with other sessions.
 - (5.1) `crates/pumpkin-core/src/data/datapack/mod.rs` `scan_datapacks_dir` (around line 1281) only loads world datapacks that `level.dat` lists as enabled; vanilla `MinecraftServer.configurePackRepository` (around line 1593) enables new world packs automatically.
 - (5.1) `crates/pumpkin-core/src/block/blocks/test_block.rs:76` returns `emits_redstone_power` true; vanilla `TestBlock` doesn't override `isSignalSource`, so wire connects to test blocks only in PEX.
 - (5.1) `crates/pumpkin-gametest/src/runner/mod.rs` `finish_failure` reports a failure at the tick it's detected; vanilla `GameTestInfo.fail` stores it and reports it a tick later, and the timeout text differs from vanilla's `test.error.timeout.no_result`. Pass and fail results agree.
