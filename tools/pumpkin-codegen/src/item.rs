@@ -2,7 +2,7 @@ use crate::block::{Block, BlockAssets};
 use crate::enchantments::AttributeModifierSlot;
 use heck::{ToPascalCase, ToShoutySnakeCase};
 use proc_macro2::{Span, TokenStream};
-use pumpkin_nbt::{Nbt, compound::NbtCompound};
+use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::registry::TagType;
 use pumpkin_util::text::TextContent;
 use pumpkin_util::{registry::RegistryEntryList, text::TextComponent};
@@ -1657,7 +1657,7 @@ pub struct BedrockItem {
     registry_key: String,
     version: BedrockItemVersion,
     component_based: bool,
-    components: Nbt,
+    components: NbtCompound,
 }
 
 /// Reads `items.json` and generates the complete item registry `TokenStream`.
@@ -1897,7 +1897,7 @@ pub fn build() -> TokenStream {
             version: item.version,
             component_based: item.component_based,
             components: if let Some(c) = components {
-                Nbt::new("".to_string(), c.clone())
+                c
             } else {
                 if item.component_based {
                     eprintln!(
@@ -1905,7 +1905,7 @@ pub fn build() -> TokenStream {
                         item.name
                     );
                 }
-                Nbt::new("".to_string(), NbtCompound::new())
+                NbtCompound::new()
             },
         });
     }
@@ -1977,8 +1977,10 @@ pub fn build() -> TokenStream {
         );
         let component_based = item.component_based;
 
-        let components_bytes_lit =
-            LitByteStr::new(&item.components.write_bedrock(), Span::call_site());
+        let components_bytes_lit = LitByteStr::new(
+            &crate::nbt::write_bedrock(item.components),
+            Span::call_site(),
+        );
 
         bedrock_constants.extend(quote! {
             pub const #const_ident: Self = Self {
