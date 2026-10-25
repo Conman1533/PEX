@@ -11,6 +11,7 @@ mod dispensers_and_droppers_extended;
 mod doors_and_gates;
 mod doors_trapdoors_gates_variants;
 mod entities_and_ai;
+mod farm_animals;
 mod fluids_and_sponge;
 mod furnace_smelting;
 mod golems;
@@ -252,9 +253,19 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:item_entities_stack_up_to_combined_count",
 ];
 
+/// Tests that add a mock player. The tester runs each of them on its own: a player anywhere in
+/// the world makes mobs without persistence despawn more than 128 blocks away from it (like the
+/// creeper summoned by `creeper_should_run_from_cat`), and mobs follow players into other tests.
+const MOCK_PLAYER_TEST_IDS: &[&str] = &["pumpkin:cow_follows_wheat_and_panics_when_hit"];
+
 #[must_use]
 pub const fn builtin_game_test_ids() -> &'static [&'static str] {
     BUILTIN_TEST_IDS
+}
+
+#[must_use]
+pub const fn mock_player_game_test_ids() -> &'static [&'static str] {
+    MOCK_PLAYER_TEST_IDS
 }
 
 #[expect(
@@ -516,6 +527,13 @@ pub fn ensure_builtin_game_tests_registered() {
             3,
             1,
             entities_and_ai::test_zombie_pathfinds_to_villager,
+        );
+        register_function_test(
+            "pumpkin:cow_follows_wheat_and_panics_when_hit",
+            "pumpkin:empty_11x4x5",
+            140,
+            0,
+            farm_animals::test_cow_follows_wheat_and_panics_when_hit,
         );
 
         // redstone_wire_and_power (14)

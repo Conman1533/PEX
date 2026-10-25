@@ -137,8 +137,8 @@ pub struct JavaClient {
 }
 
 impl JavaClient {
+    /// A client with no connection behind it, for unit tests and `GameTest` mock players.
     #[must_use]
-    #[cfg(test)]
     pub fn new_for_test(gameprofile: GameProfile) -> Self {
         let (send, recv) = tokio::sync::mpsc::unbounded_channel();
         Self {

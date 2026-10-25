@@ -707,6 +707,7 @@ impl GameTestSession {
     }
 
     async fn handle_attempt_pass(&mut self, tick: u32) {
+        self.world.remove_mock_players().await;
         if let Some(placement) = &self.placement {
             // GameTestInfo::succeed removes non-player entities before the listeners
             // report success or schedule a copyReset rerun.
@@ -746,6 +747,7 @@ impl GameTestSession {
         error: GameTestError,
         marker: Option<(BlockPos, String)>,
     ) {
+        self.world.remove_mock_players().await;
         if let Some(placement) = &self.placement {
             let message = error.to_string();
             if let Err(controller_error) = self

@@ -104,6 +104,22 @@ pub trait GameTestWorld: Send + Sync {
         ))
     }
 
+    /// Adds a creative mode player holding `held_item` in its main hand at `position`, like
+    /// vanilla `GameTestHelper.makeMockServerPlayerInLevel`. It stays until
+    /// [`Self::remove_mock_players`].
+    async fn spawn_mock_player(
+        &self,
+        _held_item: &str,
+        _position: Vector3<f64>,
+    ) -> GameTestResult<()> {
+        Err(GameTestError::World(
+            "mock players are not supported by this GameTestWorld".to_string(),
+        ))
+    }
+
+    /// Removes the players added by [`Self::spawn_mock_player`]. Called when an attempt finishes.
+    async fn remove_mock_players(&self) {}
+
     async fn entity_count_in_box(
         &self,
         _entity_name: &str,
