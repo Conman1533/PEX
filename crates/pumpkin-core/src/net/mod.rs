@@ -606,13 +606,18 @@ pub enum DisconnectReason {
 mod tests {
     use crate::net::{is_valid_player_name, offline_uuid};
 
-    /// Expected values come from vanilla `UUIDUtil.createOfflinePlayerUUID`.
+    /// Expected values come from vanilla `UUIDUtil.createOfflinePlayerUUID`. A vanilla 26.3 server in
+    /// offline mode wrote all but `Zażółć` to `usercache.json` on login, or to `whitelist.json` for
+    /// non-ASCII names, which it refuses at login.
     #[test]
     fn offline_uuid_matches_vanilla() {
         for (name, expected) in [
             ("Notch", "b50ad385-829d-3141-a216-7e7d7539ba7f"),
             ("jeb_", "a762f560-4fce-3236-812a-b80efff0b62b"),
             ("Zażółć", "80cedc37-455d-33fc-8fdd-d2ccdb657fc2"),
+            ("Player_123456789", "c0d79c73-221a-32dc-b983-3cfa4a8a971a"),
+            ("玩家一号", "563807d4-80f7-3b64-9ebb-4dbce5bc9f41"),
+            ("🎮gamer", "501e0b86-57fc-33e9-9853-97f55e79973f"),
         ] {
             assert_eq!(
                 offline_uuid(name).to_string(),
