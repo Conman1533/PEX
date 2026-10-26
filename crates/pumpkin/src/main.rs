@@ -26,7 +26,10 @@ use pumpkin_core::{
     crash::{CrashReport, FullBacktrace},
     data::{
         VanillaData,
-        offline_uuid_migration::{migrate_offline_uuids, world::migrate_world_uuids},
+        offline_uuid_migration::{
+            migrate_offline_uuids,
+            world::{migrate_world_uuids, migrate_world_uuids_of_new_players},
+        },
     },
     stop_or_exit_server,
 };
@@ -165,10 +168,10 @@ async fn main() {
         }
     });
 
+    let world_path = config.basic.get_world_path();
     // pumpkin.toml only gets its new version once the server files it stands for are migrated,
     // so a failed or interrupted migration runs again on the next start.
     if let Some(pending) = pending_config {
-        let world_path = config.basic.get_world_path();
         if pending.version() < OFFLINE_UUID_VERSION
             && let Err(err) = migrate_offline_uuids(&exec_dir, &world_path, pending.version())
                 .and_then(|()| {
@@ -187,6 +190,17 @@ async fn main() {
             exit(1);
         }
         pending.save().iter().for_each(LoadMessage::log);
+    }
+    // Players moved to vanilla UUIDs at login since the last start are still named by their old
+    // UUIDs in the world. This has to run before any chunk loads.
+    if let Err(err) =
+        migrate_world_uuids_of_new_players(&exec_dir, &world_path, &config.advanced.world.chunk)
+    {
+        tracing::error!(
+            "Couldn't move references in the world to the new UUIDs of players moved at login: {err}"
+        );
+        tracing::error!("Stopping, so the next start tries again");
+        exit(1);
     }
     let vanilla_data = VanillaData::load();
 
