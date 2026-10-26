@@ -220,7 +220,7 @@ pub(crate) fn write_all_at(file: &File, buf: &[u8], offset: u64) -> std::io::Res
 
 /// Writes `bytes` next to `path` and renames it over `path`, so a crash leaves either the old or
 /// the new file.
-pub(crate) fn write_file_atomically(path: &Path, bytes: &[u8], sync: bool) -> std::io::Result<()> {
+pub fn write_file_atomically(path: &Path, bytes: &[u8], sync: bool) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
