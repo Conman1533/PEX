@@ -2,18 +2,20 @@ use std::{
     fs::{self, File},
     io::ErrorKind,
     path::Path,
+    sync::{Mutex, PoisonError},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tracing::error;
+use tracing::{error, info, warn};
 
 use pumpkin_nbt::{
     compound::NbtCompound,
-    nbt_compress::{read_gzip_compound_tag, write_gzip_compound_tag},
+    nbt_compress::{read_gzip_compound_tag, write_gzip_compound_tag_to_bytes},
     tag::NbtTag,
 };
 use pumpkin_util::{Difficulty, world_seed::Seed};
 use serde::{Deserialize, Serialize};
 
+use crate::data::file_util::{file_name_date_now, safe_replace_or_move_file, write_and_replace};
 use crate::world_info::{
     DataPacks, MAXIMUM_READABLE_WORLD_DATA_VERSION, MAXIMUM_SUPPORTED_LEVEL_VERSION,
     MAXIMUM_SUPPORTED_WORLD_DATA_VERSION, MINIMUM_SUPPORTED_LEVEL_VERSION,
@@ -35,6 +37,10 @@ pub const LEVEL_DAT_BACKUP_FILE_NAME: &str = "level.dat_old";
 
 const LEVEL_DATA_TAG: &str = "Data";
 const WORLD_GEN_SETTINGS_TAG: &str = "WorldGenSettings";
+
+/// Keeps two saves from interleaving, which could make one read `level.dat` while the other has
+/// moved it to `level.dat_old`. Vanilla saves level data only on the server thread.
+static LEVEL_DAT_SAVE_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct AnvilLevelInfo;
 
@@ -350,28 +356,63 @@ fn stamp_current_version(level_data: &mut LevelData) {
     level_data.world_version = WorldVersion::default();
 }
 
+fn read_level_dat_root(path: &Path) -> Result<NbtCompound, WorldInfoError> {
+    read_gzip_compound_tag(File::open(path)?)
+        .map_err(|e| WorldInfoError::DeserializationError(e.to_string()))
+}
+
 fn existing_level_dat_root(path: &Path) -> Result<NbtCompound, WorldInfoError> {
-    match File::open(path) {
-        Ok(file) => read_gzip_compound_tag(file)
-            .map_err(|e| WorldInfoError::DeserializationError(e.to_string())),
-        Err(e) if e.kind() == ErrorKind::NotFound => Ok(NbtCompound::new()),
-        Err(e) => Err(e.into()),
+    match read_level_dat_root(path) {
+        Err(WorldInfoError::IoError(e)) if e.kind() == ErrorKind::NotFound => {
+            Ok(NbtCompound::new())
+        }
+        result => result,
+    }
+}
+
+/// Reads `level.dat`, or `level.dat_old` when `level.dat` is missing or can't be read, like
+/// vanilla `LevelStorageAccess.getUnfixedDataTagWithFallback`.
+fn read_level_dat_with_fallback(level_folder: &Path) -> Result<NbtCompound, WorldInfoError> {
+    let path = level_folder.join(LEVEL_DAT_FILE_NAME);
+    let old_path = level_folder.join(LEVEL_DAT_BACKUP_FILE_NAME);
+    // Vanilla `LevelStorageAccess.hasWorldData`.
+    if !path.exists() && !old_path.exists() {
+        return Err(WorldInfoError::InfoNotFound);
+    }
+
+    let error = match read_level_dat_root(&path) {
+        Ok(root) => return Ok(root),
+        Err(error) => error,
+    };
+    warn!("Failed to load world data from {}: {error}", path.display());
+    if !old_path.exists() {
+        return Err(error);
+    }
+    info!("Attempting to use fallback {}", old_path.display());
+    let root = read_level_dat_root(&old_path)?;
+    restore_level_data_from_old(level_folder, &path, &old_path);
+    Ok(root)
+}
+
+/// Moves `level.dat_old` back to `level.dat` and keeps a `level.dat` that failed to load as
+/// `level.dat_corrupted_<time>`, like vanilla `LevelStorageAccess.restoreLevelDataFromOld`.
+fn restore_level_data_from_old(level_folder: &Path, path: &Path, old_path: &Path) {
+    let corrupted_path = level_folder.join(format!(
+        "{LEVEL_DAT_FILE_NAME}_corrupted_{}",
+        file_name_date_now()
+    ));
+    if let Err(e) = safe_replace_or_move_file(path, old_path, &corrupted_path, true) {
+        warn!(
+            "Failed to restore {} from {}: {e}",
+            path.display(),
+            old_path.display()
+        );
     }
 }
 
 impl WorldInfoReader for AnvilLevelInfo {
     fn read_world_info(&self, level_folder: &Path) -> Result<LevelData, WorldInfoError> {
-        let path = level_folder.join(LEVEL_DAT_FILE_NAME);
-
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                return Err(WorldInfoError::InfoNotFound);
-            }
-            Err(error) => return Err(error.into()),
-        };
-        let root = read_gzip_compound_tag(file)
-            .map_err(|e| WorldInfoError::DeserializationError(e.to_string()))?;
+        let root = read_level_dat_with_fallback(level_folder)?;
         let Some(data) = root.get_compound(LEVEL_DATA_TAG) else {
             error!("The level.dat file has no {LEVEL_DATA_TAG} compound and is therefore corrupt");
             return Err(WorldInfoError::DeserializationError("Missing Data".into()));
@@ -437,9 +478,10 @@ impl WorldInfoWriter for AnvilLevelInfo {
 
         // ── Write level.dat ───────────────────────────────────────────────────
         let path = level_folder.join(LEVEL_DAT_FILE_NAME);
-        let path_new = level_folder.join("level.dat_new");
-        let path_old = level_folder.join(LEVEL_DAT_BACKUP_FILE_NAME);
 
+        let _guard = LEVEL_DAT_SAVE_LOCK
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let mut root = existing_level_dat_root(&path)?;
         let mut data_comp = root
             .get_compound(LEVEL_DATA_TAG)
@@ -448,13 +490,17 @@ impl WorldInfoWriter for AnvilLevelInfo {
         level_data_to_nbt(&level_data, &mut data_comp);
         root.put_compound(LEVEL_DATA_TAG, data_comp);
 
-        write_gzip_compound_tag(root, File::create(&path_new)?)
+        // Vanilla `LevelStorageAccess.saveLevelData`: the new file is `level<random>.dat`.
+        let bytes = write_gzip_compound_tag_to_bytes(root)
             .map_err(|e| WorldInfoError::SerializationError(e.to_string()))?;
-
-        if path.exists() {
-            fs::copy(&path, &path_old)?;
-        }
-        fs::rename(&path_new, &path)?;
+        write_and_replace(
+            level_folder,
+            "level",
+            ".dat",
+            &bytes,
+            &path,
+            &level_folder.join(LEVEL_DAT_BACKUP_FILE_NAME),
+        )?;
 
         let data_version = level_data.data_version;
 
@@ -640,8 +686,12 @@ mod test {
             .write_world_info(&LevelData::default(Seed(42)), &level_folder)
             .unwrap();
 
-        assert!(level_folder.join(LEVEL_DAT_FILE_NAME).is_file());
-        assert!(!level_folder.join("level.dat_new").exists());
+        let level_files: Vec<_> = fs::read_dir(&level_folder)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .filter(|name| name.to_string_lossy().starts_with("level"))
+            .collect();
+        assert_eq!(level_files, [LEVEL_DAT_FILE_NAME]);
     }
 
     #[test]

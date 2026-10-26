@@ -1,18 +1,15 @@
+use crate::data::file_util::{file_name_date_now, write_and_replace};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::nbt_compress::{read_gzip_compound_tag, write_gzip_compound_tag_to_bytes};
 use std::fs::{self, File, create_dir_all};
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
-use time::OffsetDateTime;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 const PLAYER_DATA_SUFFIX: &str = ".dat";
 const PLAYER_DATA_OLD_SUFFIX: &str = ".dat_old";
-
-/// How many times vanilla `Util.runWithRetries` tries each step of `Util.safeReplaceFile`.
-const SAFE_REPLACE_ATTEMPTS: u32 = 10;
 
 /// Manages the storage and retrieval of player data from disk and memory cache.
 ///
@@ -141,17 +138,9 @@ impl PlayerDataStorage {
     /// next save replaces it (vanilla `PlayerDataStorage.backup`).
     fn backup(&self, uuid: &Uuid, suffix: &str) {
         let path = self.player_file(uuid, suffix);
-        // Vanilla `FileNameDateFormatter`, in UTC instead of the local time zone.
-        let now = OffsetDateTime::now_utc();
-        let backup_path = self.data_path.join(format!(
-            "{uuid}_corrupted_{:04}-{:02}-{:02}_{:02}-{:02}-{:02}{suffix}",
-            now.year(),
-            u8::from(now.month()),
-            now.day(),
-            now.hour(),
-            now.minute(),
-            now.second()
-        ));
+        let backup_path = self
+            .data_path
+            .join(format!("{uuid}_corrupted_{}{suffix}", file_name_date_now()));
         if let Err(e) = fs::copy(&path, &backup_path) {
             warn!(
                 "Failed to copy {} to {}: {e}",
@@ -192,69 +181,20 @@ impl PlayerDataStorage {
         let bytes = write_gzip_compound_tag_to_bytes(data)
             .map_err(|e| PlayerDataError::Nbt(e.to_string()))?;
 
-        // Like vanilla `Files.createTempFile`, this is `<uuid>-<random>.dat` and readable only by
-        // its owner. Unlike vanilla, it is removed again if the save fails.
-        let mut new_file = tempfile::Builder::new()
-            .prefix(&format!("{uuid}-"))
-            .suffix(PLAYER_DATA_SUFFIX)
-            .tempfile_in(&self.data_path)?;
-        new_file.write_all(&bytes)?;
-        // Vanilla `NbtIo.writeCompressed` opens the file with `SYNC`.
-        new_file.as_file().sync_data()?;
-        let mut new_path = new_file.into_temp_path();
-
         let _guard = self
             .replace_lock
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        safe_replace_file(
+        // The new file is `<uuid>-<random>.dat`, like vanilla's.
+        write_and_replace(
+            &self.data_path,
+            &format!("{uuid}-"),
+            PLAYER_DATA_SUFFIX,
+            &bytes,
             path,
-            &new_path,
             &self.player_file(uuid, PLAYER_DATA_OLD_SUFFIX),
         )?;
-        // The new file is `<uuid>.dat` now.
-        new_path.disable_cleanup(true);
         Ok(())
-    }
-}
-
-/// Replaces `target` with `new` and keeps the previous `target` as `backup`, like vanilla
-/// `Util.safeReplaceFile`. If `new` can't be moved into place, the backup is moved back.
-///
-/// Vanilla deletes `backup` and `target` before moving onto them because Java's `Files.move`
-/// doesn't replace files; `fs::rename` replaces them atomically.
-fn safe_replace_file(target: &Path, new: &Path, backup: &Path) -> io::Result<()> {
-    let backed_up = target.exists();
-    if backed_up {
-        rename_with_retries(target, backup)?;
-    }
-    rename_with_retries(new, target).inspect_err(|_| {
-        if backed_up && let Err(e) = rename_with_retries(backup, target) {
-            warn!(
-                "Failed to restore {} from {}: {e}",
-                target.display(),
-                backup.display()
-            );
-        }
-    })
-}
-
-/// `fs::rename`, tried up to [`SAFE_REPLACE_ATTEMPTS`] times like vanilla `Util.runWithRetries`.
-fn rename_with_retries(from: &Path, to: &Path) -> io::Result<()> {
-    let mut attempt = 1;
-    loop {
-        match fs::rename(from, to) {
-            Ok(()) => return Ok(()),
-            Err(e) if attempt < SAFE_REPLACE_ATTEMPTS => {
-                debug!(
-                    "Failed to rename {} to {}, retrying {attempt}/{SAFE_REPLACE_ATTEMPTS}: {e}",
-                    from.display(),
-                    to.display()
-                );
-                attempt += 1;
-            }
-            Err(e) => return Err(e),
-        }
     }
 }
 
