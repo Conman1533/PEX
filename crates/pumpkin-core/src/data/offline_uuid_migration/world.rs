@@ -35,9 +35,11 @@ use super::{MAPPING_FILE, MigrationError, PLAYERS_DIR, at, read_mapping};
 const REGION_FOLDERS: [&str; 2] = ["region", "entities"];
 /// The folder in the world, and in each dimension, with saved data (vanilla `LevelResource.DATA`).
 const DATA_DIR: &str = "data";
-/// Player data and saved data files are `<name>.dat` (vanilla `PlayerDataStorage`,
-/// `SavedDataStorage.getDataFile`).
-const NBT_FILE_EXTENSION: &str = "dat";
+/// Player data is `<uuid>.dat`, and vanilla `PlayerDataStorage.save` keeps the previous one as
+/// `<uuid>.dat_old`, which `PlayerDataStorage.load` falls back to.
+const PLAYER_DATA_EXTENSIONS: [&str; 2] = ["dat", "dat_old"];
+/// Saved data is `<name>.dat` (vanilla `SavedDataStorage.getDataFile`).
+const SAVED_DATA_EXTENSIONS: [&str; 1] = ["dat"];
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Changes the players in the world's [`MAPPING_FILE`] from their old to their new UUIDs wherever
@@ -86,9 +88,12 @@ pub fn migrate_world_uuids(
     };
 
     let mut files_changed = 0;
-    let mut nbt_files = list_nbt_files(&players_dir.join("data"))?;
+    let mut nbt_files = list_nbt_files(&players_dir.join("data"), &PLAYER_DATA_EXTENSIONS)?;
     for dimension in &dimensions {
-        nbt_files.extend(list_nbt_files(&dimension.join(DATA_DIR))?);
+        nbt_files.extend(list_nbt_files(
+            &dimension.join(DATA_DIR),
+            &SAVED_DATA_EXTENSIONS,
+        )?);
     }
     for path in nbt_files {
         files_changed += usize::from(edit_nbt_file(&path, edit, version)?);
@@ -173,8 +178,8 @@ fn replace_in_tag(tag: &mut NbtTag, uuids: &FxHashMap<Uuid, Uuid>) -> usize {
     }
 }
 
-/// The `.dat` files in `dir` and the folders in it. A missing folder has none.
-fn list_nbt_files(dir: &Path) -> Result<Vec<PathBuf>, MigrationError> {
+/// The files with one of `extensions` in `dir` and the folders in it. A missing folder has none.
+fn list_nbt_files(dir: &Path, extensions: &[&str]) -> Result<Vec<PathBuf>, MigrationError> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -184,10 +189,10 @@ fn list_nbt_files(dir: &Path) -> Result<Vec<PathBuf>, MigrationError> {
     for entry in entries {
         let path = entry.map_err(at(dir))?.path();
         if path.is_dir() {
-            files.extend(list_nbt_files(&path)?);
+            files.extend(list_nbt_files(&path, extensions)?);
         } else if path
             .extension()
-            .is_some_and(|extension| extension == NBT_FILE_EXTENSION)
+            .is_some_and(|extension| extensions.iter().any(|wanted| extension == *wanted))
         {
             files.push(path);
         }
@@ -488,6 +493,8 @@ mod tests {
 
         let notch = world.join(format!("players/data/{NOTCH_NEW}.dat"));
         write_gzip(&notch, &player_data(NOTCH_OLD));
+        let notch_dat_old = world.join(format!("players/data/{NOTCH_NEW}.dat_old"));
+        write_gzip(&notch_dat_old, &player_data(NOTCH_OLD));
         let boss_events_dat = world.join("data/minecraft/custom_boss_events.dat");
         write_gzip(&boss_events_dat, &boss_events(NOTCH_OLD));
         let raids = overworld.join("data/minecraft/raids.dat");
@@ -513,6 +520,7 @@ mod tests {
         );
         assert_eq!(read_region::<PumpFile>(&nether_pump), [entities(NOTCH_NEW)]);
         assert_eq!(read_gzip(&notch), player_data(NOTCH_NEW));
+        assert_eq!(read_gzip(&notch_dat_old), player_data(NOTCH_NEW));
         assert_eq!(read_gzip(&boss_events_dat), boss_events(NOTCH_NEW));
         assert_eq!(read_gzip(&raids), raids_data(NOTCH_NEW));
 
@@ -522,6 +530,7 @@ mod tests {
             &region_linear,
             &nether_pump,
             &notch,
+            &notch_dat_old,
             &boss_events_dat,
             &raids,
         ];
