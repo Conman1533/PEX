@@ -55,6 +55,9 @@ impl UserCache {
 
     pub fn save(&self) {
         let path = Self::path();
+        if !super::may_save(&path) {
+            return;
+        }
         if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
         {
@@ -159,16 +162,7 @@ impl UserCache {
     }
 
     fn load_entries() -> Vec<UserCacheEntry> {
-        let path = Self::path();
-        let Ok(raw) = fs::read_to_string(path) else {
-            return Vec::new();
-        };
-
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) else {
-            return Vec::new();
-        };
-
-        let Some(array) = json.as_array() else {
+        let Some(array) = super::load_list::<Vec<serde_json::Value>>(&Self::path()) else {
             return Vec::new();
         };
 
