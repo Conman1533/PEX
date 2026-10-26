@@ -98,23 +98,22 @@ impl ServerPlayerData {
         }
     }
 
-    /// Saves all players' data immediately.
+    /// Saves the data of every given player now, for shutdown and `save-all`.
     ///
-    /// This function immediately saves all online players' data to disk.
-    /// Useful for server shutdown or backup operations.
-    pub fn save_all_players(&self, server: &Server) -> Result<(), PlayerDataError> {
-        let mut total_players = 0;
-
-        // Save players from all worlds
-        for world in server.worlds.load().iter() {
-            for player in world.players.load().iter() {
-                self.extract_data_and_save_player(player)?;
-                total_players += 1;
+    /// Like vanilla `PlayerList.saveAll`, a failed save is logged and doesn't stop the others.
+    pub fn save_all_players(&self, players: &[Arc<Player>]) {
+        let mut saved = 0;
+        for player in players {
+            match self.extract_data_and_save_player(player) {
+                Ok(()) => saved += 1,
+                Err(e) => error!(
+                    "Failed to save player data for {}: {e}",
+                    player.gameprofile.name
+                ),
             }
         }
 
-        debug!("Saved data for {total_players} online players");
-        Ok(())
+        debug!("Saved data for {saved} of {} online players", players.len());
     }
 
     /// Loads player data and applies it to a player.
@@ -182,8 +181,11 @@ impl ServerPlayerData {
 #[cfg(test)]
 mod test {
     use crate::data::player_server::ServerPlayerData;
+    use crate::world::{test_player, test_world};
     use pumpkin_nbt::compound::NbtCompound;
+    use pumpkin_util::math::vector3::Vector3;
     use pumpkin_world::data::player_data::PlayerDataStorage;
+    use std::fs;
     use std::time::Duration;
     use std::time::Instant;
     use tempfile::tempdir;
@@ -288,6 +290,36 @@ mod test {
         assert!(
             Instant::now().duration_since(player_data.last_save.load()) < Duration::from_secs(1)
         );
+    }
+
+    #[tokio::test]
+    async fn save_all_players_continues_after_a_failed_save() {
+        let temp_dir = tempdir().unwrap();
+        let player_data = ServerPlayerData::new(temp_dir.path(), Duration::from_mins(5), true);
+        let world = test_world();
+        let players: Vec<_> = (0..3)
+            .map(|_| test_player(&world, Vector3::new(0.5, 64.0, 0.5)))
+            .collect();
+
+        // A directory where the first player's `.dat_old` goes makes that save fail, also for root.
+        let failing = players[0].gameprofile.id;
+        fs::write(temp_dir.path().join(format!("{failing}.dat")), b"").unwrap();
+        fs::create_dir_all(temp_dir.path().join(format!("{failing}.dat_old/blocker"))).unwrap();
+
+        player_data.save_all_players(&players);
+
+        assert!(
+            fs::read(temp_dir.path().join(format!("{failing}.dat")))
+                .unwrap()
+                .is_empty()
+        );
+        for player in &players[1..] {
+            let uuid = player.gameprofile.id;
+            assert!(
+                player_data.load_data(&uuid).unwrap().is_some(),
+                "{uuid} wasn't saved after the failed save"
+            );
+        }
     }
 
     #[tokio::test]

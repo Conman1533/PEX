@@ -506,18 +506,13 @@ impl PumpkinServer {
 
         info!("Stopped accepting incoming connections");
 
-        if let Err(e) = self
-            .server
-            .player_data_storage
-            .save_all_players(&self.server)
-        {
-            error!("Error saving all players during shutdown: {e}");
-        }
+        let players = self.server.get_all_players();
+        self.server.player_data_storage.save_all_players(&players);
 
         if let Err(e) = self
             .server
             .advancement_manager
-            .save_all_players(&self.server.get_all_players())
+            .save_all_players(&players)
             .await
         {
             error!("Error saving all players advancements during shutdown: {e}");

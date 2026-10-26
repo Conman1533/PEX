@@ -35,14 +35,11 @@ use pumpkin_protocol::java::client::play::{CChangeDifficulty, CTabList};
 use pumpkin_protocol::{ClientPacket, java::client::config::CPluginMessage};
 use pumpkin_util::Difficulty;
 use pumpkin_util::text::TextComponent;
-use pumpkin_world::world_info::anvil::{
-    AnvilLevelInfo, LEVEL_DAT_BACKUP_FILE_NAME, LEVEL_DAT_FILE_NAME,
-};
+use pumpkin_world::world_info::anvil::{AnvilLevelInfo, LEVEL_DAT_FILE_NAME};
 use pumpkin_world::world_info::{LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter};
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
 use rsa::RsaPublicKey;
-use std::fs;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU32};
@@ -185,16 +182,7 @@ impl Server {
         let block_registry = super::block::registry::default_registry();
 
         let level_info = match AnvilLevelInfo.read_world_info(&world_path) {
-            Ok(level_info) => {
-                let dat_path = world_path.join(LEVEL_DAT_FILE_NAME);
-                if dat_path.exists() {
-                    let backup_path = world_path.join(LEVEL_DAT_BACKUP_FILE_NAME);
-                    if let Err(err) = fs::copy(&dat_path, &backup_path) {
-                        warn!("Failed to create backup {LEVEL_DAT_BACKUP_FILE_NAME}: {err}");
-                    }
-                }
-                level_info
-            }
+            Ok(level_info) => level_info,
             Err(WorldInfoError::InfoNotFound) => {
                 warn!(
                     "No {LEVEL_DAT_FILE_NAME} in {}, creating a new world with seed {}",
@@ -223,7 +211,7 @@ impl Server {
                 error!("Failed to load the world data in {}!", world_path.display());
                 error!("{error}");
                 error!(
-                    "Refusing to continue: a default world would generate different terrain on top of the existing region files. Restore {LEVEL_DAT_FILE_NAME} from {LEVEL_DAT_BACKUP_FILE_NAME}, which also holds a copy of the world seed, or move the world folder aside to start a new world."
+                    "Refusing to continue: a default world would generate different terrain on top of the existing region files. Restore {LEVEL_DAT_FILE_NAME} from a backup, or move the world folder aside to start a new world."
                 );
                 error!("Failed to load the world data! See the logs for more info.");
                 std::process::exit(1);
@@ -599,16 +587,10 @@ impl Server {
             return Err(format!("Failed to save world info: {err}"));
         }
 
-        if let Err(err) = self.player_data_storage.save_all_players(self) {
-            error!("Failed to save player data: {err}");
-            return Err(format!("Failed to save player data: {err}"));
-        }
+        let players = self.get_all_players();
+        self.player_data_storage.save_all_players(&players);
 
-        if let Err(err) = self
-            .advancement_manager
-            .save_all_players(&self.get_all_players())
-            .await
-        {
+        if let Err(err) = self.advancement_manager.save_all_players(&players).await {
             error!("Failed to save player advancements: {err}");
             return Err(format!("Failed to save player advancements: {err}"));
         }
