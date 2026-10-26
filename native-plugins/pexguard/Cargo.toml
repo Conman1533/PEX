@@ -13,11 +13,17 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 pex-common = { path = "../common" }
 pumpkin = { path = "../../crates/pumpkin-core", package = "pumpkin-core" }
+pumpkin-config.workspace = true
 pumpkin-data.workspace = true
 pumpkin-util.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 toml.workspace = true
 tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
