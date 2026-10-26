@@ -2,6 +2,7 @@ use pumpkin_protocol::java::client::play::{
     CInitializeWorldBorder, CSetBorderCenter, CSetBorderLerpSize, CSetBorderSize,
     CSetBorderWarningDelay, CSetBorderWarningDistance,
 };
+use pumpkin_util::math::position::BlockPos;
 
 use crate::net::java::JavaClient;
 
@@ -140,6 +141,13 @@ impl Worldborder {
         let min_z = self.center_z - half;
         let max_z = self.center_z + half;
         x >= min_x && x < max_x && z >= min_z && z < max_z
+    }
+
+    /// Vanilla `WorldBorder.isWithinBounds(BlockPos)`: only the block's minimum corner has to be
+    /// inside, unlike `contains_block`.
+    #[must_use]
+    pub fn is_within_bounds(&self, pos: &BlockPos) -> bool {
+        self.contains(f64::from(pos.0.x), f64::from(pos.0.z))
     }
 
     #[must_use]
