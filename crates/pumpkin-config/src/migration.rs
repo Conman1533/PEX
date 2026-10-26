@@ -14,8 +14,19 @@ pub const UNVERSIONED_CONFIG_VERSION: u32 = 1;
 pub struct Migration {
     /// The `config_version` a file has after this step.
     pub version: u32,
-    /// Changes the file and returns one line for each change it made.
-    pub apply: fn(&mut DocumentMut) -> Vec<String>,
+    /// What the step changes.
+    pub step: Step,
+}
+
+/// What a [`Migration`] changes.
+pub enum Step {
+    /// The config file: changes it and returns one line for each change it made.
+    Config(fn(&mut DocumentMut) -> Vec<String>),
+    /// Server files outside the config, which the server migrates after loading it. The loader
+    /// can't do that work, so it hands a file that needs this step back as a
+    /// [`crate::PendingSave`] for the server to save once the work succeeded. The version never
+    /// claims work that didn't happen.
+    ServerFiles,
 }
 
 /// The version files are brought up to: that of the last migration.
@@ -67,11 +78,23 @@ pub(crate) fn migrate(
     let mut changes: Vec<String> = migrations
         .iter()
         .filter(|migration| migration.version > version)
-        .flat_map(|migration| (migration.apply)(document))
+        .filter_map(|migration| match migration.step {
+            Step::Config(apply) => Some(apply),
+            Step::ServerFiles => None,
+        })
+        .flat_map(|apply| apply(document))
         .collect();
     changes.extend(add_missing_keys(document, defaults));
     changes.extend(set_config_version(document, latest_version(migrations)));
     changes
+}
+
+/// Whether a file at `version` still needs a [`Step::ServerFiles`] migration.
+#[must_use]
+pub(crate) fn needs_server_files(migrations: &[Migration], version: u32) -> bool {
+    migrations
+        .iter()
+        .any(|migration| migration.version > version && matches!(migration.step, Step::ServerFiles))
 }
 
 /// Adds every key of `defaults` that `document` lacks, and returns one line per added key.
@@ -165,25 +188,30 @@ pub(crate) fn set_config_version(document: &mut DocumentMut, version: u32) -> Op
     Some(format!("set {CONFIG_VERSION_KEY} to {version}"))
 }
 
-/// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
-/// An existing backup is never overwritten: a taken name gets a counter, as in vanilla
-/// `FileUtil.findAvailableName`.
-pub(crate) fn write_backup(path: &Path, contents: &str, version: u32) -> io::Result<PathBuf> {
+/// The name of the `copy`th backup of `path` at `version`: `<file name>.v<version>.bak`, then
+/// `<file name>.v<version> (<copy>).bak`, as in vanilla `FileUtil.findAvailableName`.
+fn backup_path(path: &Path, version: u32, copy: u32) -> PathBuf {
     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    path.with_file_name(if copy == 0 {
+        format!("{file_name}.v{version}.bak")
+    } else {
+        format!("{file_name}.v{version} ({copy}).bak")
+    })
+}
+
+/// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
+/// An existing backup is never overwritten: a taken name gets a counter.
+pub fn write_backup(path: &Path, contents: impl AsRef<[u8]>, version: u32) -> io::Result<PathBuf> {
     let mut copy = 0u32;
     loop {
-        let backup = path.with_file_name(if copy == 0 {
-            format!("{file_name}.v{version}.bak")
-        } else {
-            format!("{file_name}.v{version} ({copy}).bak")
-        });
+        let backup = backup_path(path, version, copy);
         match OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&backup)
         {
             Ok(mut file) => {
-                return match file.write_all(contents.as_bytes()) {
+                return match file.write_all(contents.as_ref()) {
                     Ok(()) => Ok(backup),
                     Err(err) => {
                         // Don't leave a partial copy that looks like a good backup.
@@ -198,11 +226,47 @@ pub(crate) fn write_backup(path: &Path, contents: &str, version: u32) -> io::Res
     }
 }
 
+/// Copies the directory `path` and everything in it to `<name>.v<version>.bak` next to it, like
+/// [`write_backup`], and returns the copy's path.
+pub fn backup_dir(path: &Path, version: u32) -> io::Result<PathBuf> {
+    let mut copy = 0u32;
+    loop {
+        let backup = backup_path(path, version, copy);
+        match fs::create_dir(&backup) {
+            Ok(()) => {
+                return match copy_dir_contents(path, &backup) {
+                    Ok(()) => Ok(backup),
+                    Err(err) => {
+                        let _ = fs::remove_dir_all(&backup);
+                        Err(err)
+                    }
+                };
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => copy += 1,
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+fn copy_dir_contents(from: &Path, to: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            fs::create_dir(&target)?;
+            copy_dir_contents(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use toml_edit::DocumentMut;
 
-    use super::{Migration, migrate};
+    use super::{Migration, Step, migrate};
 
     fn times_ten(document: &mut DocumentMut) -> Vec<String> {
         let x = document["x"].as_integer().unwrap();
@@ -219,11 +283,11 @@ mod tests {
     const MIGRATIONS: &[Migration] = &[
         Migration {
             version: 2,
-            apply: times_ten,
+            step: Step::Config(times_ten),
         },
         Migration {
             version: 3,
-            apply: plus_one,
+            step: Step::Config(plus_one),
         },
     ];
 

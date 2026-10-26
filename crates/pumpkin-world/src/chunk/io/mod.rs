@@ -12,10 +12,11 @@ use std::{
 use bytes::Bytes;
 use pumpkin_util::math::vector2::Vector2;
 
-use super::{ChunkReadingError, ChunkWritingError};
+use super::{ChunkReadingError, ChunkWritingError, format::anvil::REGION_SIZE};
 use crate::level::LevelFolder;
 
 pub mod converter;
+pub mod editor;
 pub mod file_manager;
 
 pub(crate) async fn run_blocking<T, F>(task: F) -> Result<T, tokio::task::JoinError>
@@ -167,6 +168,15 @@ pub const fn region_chunk_index(chunk: Vector2<i32>) -> usize {
     ((chunk.y & 31) * 32 + (chunk.x & 31)) as usize
 }
 
+/// The chunk at `index` inside `region`, the inverse of [`region_chunk_index`].
+#[must_use]
+pub const fn chunk_in_region(region: Vector2<i32>, index: usize) -> Vector2<i32> {
+    Vector2::new(
+        region.x * REGION_SIZE as i32 + (index % REGION_SIZE) as i32,
+        region.y * REGION_SIZE as i32 + (index / REGION_SIZE) as i32,
+    )
+}
+
 #[must_use]
 pub const fn region_of(chunk: Vector2<i32>) -> Vector2<i32> {
     Vector2::new(chunk.x >> 5, chunk.y >> 5)
@@ -220,7 +230,7 @@ pub(crate) fn write_all_at(file: &File, buf: &[u8], offset: u64) -> std::io::Res
 
 /// Writes `bytes` next to `path` and renames it over `path`, so a crash leaves either the old or
 /// the new file.
-pub(crate) fn write_file_atomically(path: &Path, bytes: &[u8], sync: bool) -> std::io::Result<()> {
+pub fn write_file_atomically(path: &Path, bytes: &[u8], sync: bool) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
