@@ -259,6 +259,8 @@ Every family piece does the same thing: audit each mob against its vanilla class
 - **Q4.10** When its migration fails, PEXGuard still loads with the old UUIDs: members count as non-members, but every region stays protected. Prefer that to refusing to load?
 - **Q4.11** 4.3 rewrites UUIDs only where they are a whole value, not inside longer strings (command blocks with UUID selectors, signs, books), to avoid touching free text. Should it cover those?
 - **Q4.12** 4.3 writes a `.v1.bak` copy next to each changed region file. Fine for a few pets; a world with many references gets many backup files. Keep, or collect region backups in one folder?
+- **Q7.5** A broken ban list: vanilla 26.3 refuses to start; PEX (before and after 7.10) starts with no bans, keeping the file. Should PEX refuse to start too?
+- **Q7.6** 7.10 keeps a broken list file and skips saves to it until it loads. The alternative is moving it aside (`ops.json.broken`) and saving normally. Which?
 - **Q7.4** 7.8 writes player files with mode 0600 like vanilla; PEX used to write 0644. Fine for Pelican and the free-tier tooling?
 - **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
@@ -379,6 +381,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 | 7.9 | Advancements and statistics in vanilla's formats: PEX writes `{"adv": {"criterion": {"secs_since_epoch", ...}}}` (`entity/player/advancement.rs`) instead of vanilla `PlayerAdvancements` (`criteria`, `done`, `DataVersion`), and keeps statistics in the player NBT instead of `players/stats/<uuid>.json`. A world moved to vanilla loses both. Read and write vanilla's formats, migrating PEX's once. | `fix/vanilla-advancement-stats-format` | 3.1 | 7.2's round trip covers `players/advancements` and `players/stats` with no differences |
 | 7.10 | Ops, whitelist and ban lists: `LoadJSONConfiguration::load` (`crates/pumpkin-core/src/data/mod.rs`) falls back to an empty list when the file doesn't parse, and the next save overwrites the admin's file. Refuse to overwrite a file that failed to load (keep it, log the error by name), like vanilla's `StoredUserList.load` failure handling. | `fix/json-list-load-safety` | | Test: a broken `ops.json` is left byte for byte after a save |
 | 7.11 | World saves that can still lose data: `level.dat` is written as `level.dat_new` with `File::create` and no sync, then `level.dat` is copied to `level.dat_old` (`crates/pumpkin-world/src/world_info/anvil.rs:441`), and `read_world_info` (`:363`) has no `level.dat_old` fallback; vanilla `LevelStorageSource.saveLevelData` uses `Util.safeReplaceFile` and `getUnfixedDataTagWithFallback` restores from `level.dat_old`. Also `save_all_players` (`crates/pumpkin-core/src/data/player_server.rs:105`) returns at the first failed save, so one bad file stops `save-all` and shutdown from saving everyone after it; vanilla `PlayerList.saveAll` saves every player and logs failures. Reuse 7.8's safe replace. | `fix/level-dat-and-save-all` | 7.8 for the shared helper, or alone | Tests: an interrupted `level.dat` save leaves a loadable world; a broken `level.dat` loads `level.dat_old`; one failing player save doesn't stop the others |
+| 7.12 | Ops, whitelist, ban and user cache files that vanilla can read: PEX writes ban dates as `+00:00` (`data/banlist_serializer.rs` `DATE_FORMAT`) where vanilla `BanListEntry.DATE_FORMAT` (`yyyy-MM-dd HH:mm:ss Z`) writes `+0000`, so neither can read the other's ban files; PEX skips vanilla `usercache.json` entries (`data/usercache.rs` `load_entries`, `expiresOn` isn't RFC 3339) and drops them on the next save; PEX rejects a whole file over one bad entry where vanilla `StoredUserList.load` skips it and Gson parses leniently; list saves use `fs::write`, not 7.8's safe replace; and the save warnings say "operator config" for every list. | `fix/vanilla-list-formats` | 7.8, 7.10 | Round-trip tests with list files written by the vanilla 26.3 server (in `/srv/pex/scratch/json-list-load-safety/fixtures/`) |
 | 7.6 | Conversion safety: keep or back up source files during conversion according to Q7.3 | `fix/convert-keep-source` | Q7.3 | Unit test: the converter leaves the sources (or a backup) |
 | 7.7 | Long-play round trip: run the survival stages from goal 6 on PEX, then open the world in vanilla and check inventories, chests and the End state (dragon killed, gateways) | `test/world-roundtrip-play` | 7.5, 6.7 | Vanilla loads it with the dragon fight marked done and every chest intact |
 
@@ -573,6 +576,8 @@ Cross-goal dependencies to keep in mind:
 | Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? |
 | Q7.3 | On conversion: keep, back up, or delete source region files? |
 | Q7.4 | Player files 0600 like vanilla, or keep 0644? |
+| Q7.5 | Refuse to start on a broken ban list, like vanilla? |
+| Q7.6 | Broken list files: keep and skip saves, or move aside? |
 | Q8.1 | Bedrock: 2.0 requirement or experimental? |
 | Q8.2 | Which Bedrock features first? |
 | Q8.3 | Who runs the real Bedrock client checklist, on what device? |
@@ -593,8 +598,9 @@ Alpha `d30c773bb` (2026-10-25) holds 0.1, 0.2, 1.1, 3.1, 5.1, 6.1 and 6.10, and 
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | **merged into alpha `d30c773bb` on 2026-10-25**, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest | `pr-drafts/fix-clippy-alpha.md` |
+| 6.16 | `fix/interact-range` | in progress | |
 | 7.11 | `fix/level-dat-and-save-all` | in progress | |
-| 7.10 | `fix/json-list-load-safety` | in progress | |
+| 7.10 | `fix/json-list-load-safety` | done, pushed `e4d3978ff` (on alpha `84e5d54f9`): ops, whitelist, ban lists and the user cache are no longer saved over when they failed to load; one log line names the file and error at load and on each skipped save; an empty file loads as an empty list like vanilla. Unit test (fails without the check) and boot tests with five broken files: all byte for byte after `op`, `whitelist add`, `ban`, `ban-ip` and `stop`; recovery after a fix and `whitelist reload`. Local CI green apart from the known failure. No in-game effect. Merges cleanly with 4.2 to 4.4 and 7.8. | `pr-drafts/fix-json-list-load-safety.md` |
 | 7.8 | `fix/player-data-atomic-save` | done, pushed `82da3c1cf` (on alpha `84e5d54f9`): ports `PlayerDataStorage.save`/`load` and `Util.safeReplaceFile`: write a synced temp file, keep `<uuid>.dat_old`, fall back to it when `.dat` is missing or broken, copy a broken `.dat` to `<uuid>_corrupted_<date>.dat`. A kill-during-save loop left an unreadable `.dat` in 199 of 200 kills on alpha and 0 of 200 on the branch. Player files are now 0600 like vanilla. Local CI green apart from the known failures. No in-game effect unless a save is interrupted. | `pr-drafts/fix-player-data-atomic-save.md` |
 | 4.4 | `feat/offline-uuid-plugins` | done, pushed `e4d2ae342` (contains 4.2): PEXGuard moves region owners and members to the new UUIDs on load, after a `regions.toml.v1.bak` backup, records the applied mapping, and also moves members the mapping can't name by their stored name. Boot test 1.2.0 to branch: members keep building rights, non-members stay blocked, PEXProtect history intact; without the change all members lose access. PEXProtect needed no change. Local CI green apart from the known failures. Needs a real-client play test and a capture. Goes into alpha with 4.1 to 4.3 and 4.7. | `pr-drafts/feat-offline-uuid-plugins.md` |
 | 4.7 | `feat/offline-uuid-login-migration` | in progress | |
@@ -618,6 +624,9 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (7.10) Roadmap 7.10 said vanilla keeps a broken list file; vanilla 26.3 only does that for the ban lists, by refusing to start. A broken `ops.json` is replaced with `[]` at startup and a broken `whitelist.json` by the next `whitelist add` (measured on the 26.3 server).
+- (7.10) Vanilla 26.3 in offline mode lowercases names that aren't in the user cache, so `whitelist add Alex` stores `alex` with the UUID of `OfflinePlayer:alex`, and a player joining as `Alex` doesn't match. PEX keeps the case as typed. Relevant to goal 4 and to 4.6.
+- (7.10) Inside `unshare -n` the loopback is down; run `ip link set lo up` first so bots can reach 127.0.0.1.
 - (7.8) Autosave snapshots on the tick and writes later on Rayon (`crates/pumpkin-core/src/data/player_server.rs:66`), so an older snapshot can overwrite a newer disconnect or shutdown save (upstream #3512, open).
 - (7.8) `crates/pumpkin-core/src/lib.rs:626` (Java) and `:731` (Bedrock) run the synchronous player-leave file I/O on a Tokio worker; `Server::save_all` (`server/mod.rs:602`) calls the synchronous `save_all_players` from async code.
 - (7.8) Upstream issue Pumpkin-MC/Pumpkin#3511 is the same bug as 7.8; #3634 (open, agent-opened) and #3529 (closed) write through a temp file without `.dat_old`.
