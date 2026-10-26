@@ -7,7 +7,7 @@ use std::{
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use pumpkin_config::networking::compression::CompressionInfo;
-use pumpkin_data::packet::CURRENT_MC_VERSION;
+use pumpkin_data::{packet::CURRENT_MC_VERSION, translation};
 use pumpkin_protocol::{
     ClientPacket, ConnectionState, PacketDecodeError, RawPacket, ServerPacket,
     codec::var_int::VarInt,
@@ -520,8 +520,15 @@ impl PendingConnection {
                 if let Some(reason) = can_not_join(&profile, &self.address, server).await {
                     self.kick(reason).await;
                     Ok(Some(PacketHandlerResult::Stop))
-                } else {
+                } else if server.migrate_offline_player(&profile).await {
                     Ok(Some(PacketHandlerResult::ReadyToPlay(profile, config)))
+                } else {
+                    self.kick(TextComponent::translate(
+                        translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_DATA,
+                        [],
+                    ))
+                    .await;
+                    Ok(Some(PacketHandlerResult::Stop))
                 }
             }
             id if id == SKnownPacks::to_id(version) => {
