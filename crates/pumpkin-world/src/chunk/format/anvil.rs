@@ -15,7 +15,9 @@ use tracing::warn;
 use crate::chunk::{
     ChunkParsingError, ChunkReadingError, ChunkSerializingError, ChunkWritingError,
     CompressionError,
-    io::{Dirtiable, RegionFile, read_exact_at, write_all_at, write_file_atomically},
+    io::{
+        Dirtiable, RegionFile, chunk_in_region, read_exact_at, write_all_at, write_file_atomically,
+    },
 };
 
 /// The side size of a region in chunks (one region is 32x32 chunks)
@@ -546,9 +548,9 @@ impl AnvilRegion {
     }
 
     fn external_path(&self, index: usize) -> PathBuf {
-        let x = self.region.x * REGION_SIZE as i32 + (index % REGION_SIZE) as i32;
-        let z = self.region.y * REGION_SIZE as i32 + (index / REGION_SIZE) as i32;
-        self.path.with_file_name(format!("c.{x}.{z}.mcc"))
+        let chunk = chunk_in_region(self.region, index);
+        self.path
+            .with_file_name(format!("c.{}.{}.mcc", chunk.x, chunk.y))
     }
 
     /// Whether the record at `location` points to a `.mcc` file. Stubs take one sector, so

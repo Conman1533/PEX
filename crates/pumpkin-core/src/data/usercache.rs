@@ -8,7 +8,7 @@ use time::{Duration, OffsetDateTime};
 use tracing::warn;
 use uuid::Uuid;
 
-const USER_CACHE_PATH: &str = "usercache.json";
+pub(super) const USER_CACHE_PATH: &str = "usercache.json";
 const USER_CACHE_MRU_LIMIT: usize = 1000;
 
 #[derive(Clone, Debug)]

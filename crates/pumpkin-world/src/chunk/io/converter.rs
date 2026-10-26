@@ -10,11 +10,11 @@ use tracing::warn;
 use crate::chunk::{
     ChunkData, ChunkReadingError, ChunkWritingError,
     format::{
-        anvil::{AnvilRegion, CHUNK_COUNT, REGION_SIZE},
+        anvil::{AnvilRegion, CHUNK_COUNT},
         linear::LinearV2File,
         pump::{PUMP_CHUNK_MAGIC, PumpFile},
     },
-    io::RegionFile,
+    io::{RegionFile, chunk_in_region},
 };
 
 #[derive(Error, Debug)]
@@ -138,10 +138,7 @@ fn transcode_chunks<Src: RegionFile, Dst: RegionFile>(
     let encoded: Result<Vec<(usize, Dst::Encoded)>, ChunkConversionError> = raw_chunks
         .into_par_iter()
         .map(|(index, raw)| {
-            let chunk_pos = Vector2::new(
-                region.x * REGION_SIZE as i32 + (index % REGION_SIZE) as i32,
-                region.y * REGION_SIZE as i32 + (index / REGION_SIZE) as i32,
-            );
+            let chunk_pos = chunk_in_region(region, index);
             let decoded = Src::decode_chunk(raw)?;
             let payload = transcode_payload(decoded, chunk_pos, dst_format)?;
             let encoded = Dst::encode_chunk(payload, dst_config)?;
@@ -282,6 +279,25 @@ pub fn convert_region(
     }
 }
 
+/// The region files in `folder` (such as a dimension's `region/` or `entities/` folder), with
+/// their region coordinates and format. A missing folder has none.
+pub fn region_files(folder: &Path) -> std::io::Result<Vec<(PathBuf, Vector2<i32>, RegionFormat)>> {
+    let entries = match std::fs::read_dir(folder) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err),
+    };
+    let mut files = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        if let Some((region, format)) = entry.file_name().to_str().and_then(parse_region_file_name)
+        {
+            files.push((entry.path(), region, format));
+        }
+    }
+    Ok(files)
+}
+
 /// Converts all region files in `folder` (such as a dimension's `region/` or `entities/` folder)
 /// that are in another format into `target`.
 pub fn convert_folder(
@@ -289,28 +305,11 @@ pub fn convert_folder(
     target: &ChunkConfig,
     remove_source: bool,
 ) -> Result<ConversionStats, ChunkConversionError> {
-    let entries = match std::fs::read_dir(folder) {
-        Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(ConversionStats::default());
-        }
-        Err(err) => return Err(ChunkConversionError::Io(err)),
-    };
-
     let target_format = RegionFormat::from_config(target);
-    let mut to_convert: Vec<(PathBuf, Vector2<i32>, RegionFormat)> = Vec::new();
-    for entry in entries {
-        let entry = entry?;
-        let file_name = entry.file_name();
-        let Some(name_str) = file_name.to_str() else {
-            continue;
-        };
-        if let Some((region, format)) = parse_region_file_name(name_str)
-            && format != target_format
-        {
-            to_convert.push((entry.path(), region, format));
-        }
-    }
+    let to_convert: Vec<(PathBuf, Vector2<i32>, RegionFormat)> = region_files(folder)?
+        .into_iter()
+        .filter(|(_, _, format)| *format != target_format)
+        .collect();
 
     if to_convert.is_empty() {
         return Ok(ConversionStats::default());
@@ -330,14 +329,10 @@ pub fn convert_folder(
     })
 }
 
-/// Discovers all dimension folders under `root_folder` (both 26.2 `dimensions/<ns>/<name>` and
-/// legacy root/`DIM-1`/`DIM1`) and converts their `region/` and `entities/` directories to
-/// `target`.
-pub fn convert_world(
-    root_folder: &Path,
-    target: &ChunkConfig,
-    remove_source: bool,
-) -> Result<ConversionStats, ChunkConversionError> {
+/// The places a dimension's folder can be under `root_folder`: 26.2 `dimensions/<ns>/<name>`, and
+/// the legacy root, `DIM-1` and `DIM1`. Not all of them exist.
+#[must_use]
+pub fn dimension_folders(root_folder: &Path) -> Vec<PathBuf> {
     let mut dim_folders = vec![
         root_folder.to_path_buf(),
         root_folder.join("DIM-1"),
@@ -354,9 +349,18 @@ pub fn convert_world(
             }
         }
     }
+    dim_folders
+}
 
+/// Discovers all dimension folders under `root_folder` (see [`dimension_folders`]) and converts
+/// their `region/` and `entities/` directories to `target`.
+pub fn convert_world(
+    root_folder: &Path,
+    target: &ChunkConfig,
+    remove_source: bool,
+) -> Result<ConversionStats, ChunkConversionError> {
     let mut total = ConversionStats::default();
-    for dim_folder in dim_folders {
+    for dim_folder in dimension_folders(root_folder) {
         for subfolder in ["region", "entities"] {
             let folder = dim_folder.join(subfolder);
             if folder.is_dir() {
@@ -381,6 +385,7 @@ pub fn parse_chunk_config(format: &str, anvil_default: AnvilChunkConfig) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chunk::format::anvil::REGION_SIZE;
     use bytes::Bytes;
     use tempfile::TempDir;
 
