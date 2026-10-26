@@ -2,13 +2,17 @@
 //!
 //! A PEX 1.x offline UUID ([`legacy_offline_uuid`]) is a hash of the name, so it can't be turned
 //! back into one. The names come from `usercache.json` and the player lists instead, the way
-//! vanilla `OldUsersConverter` takes them from the old name-keyed lists.
+//! vanilla `OldUsersConverter` takes them from the old name-keyed lists. Players they don't name
+//! are moved when they log in ([`migrate_offline_player`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Cursor};
+use std::iter;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
+use pumpkin_config::OFFLINE_UUID_VERSION;
 use pumpkin_config::migration::{backup_dir, write_backup};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::nbt_compress::{read_gzip_compound_tag, write_gzip_compound_tag_to_bytes};
@@ -43,6 +47,12 @@ const PLAYER_FILES: [(&str, &str, bool); 4] = [
     ("advancements", ".json", false),
     ("stats", ".json", false),
 ];
+
+/// The `config_version` of the files that still use PEX 1.x UUIDs, for naming their backups.
+const LEGACY_VERSION: u32 = OFFLINE_UUID_VERSION - 1;
+
+/// Held while a player is moved at login, since every move adds to the same mapping file.
+static LOGIN_MIGRATION: Mutex<()> = Mutex::new(());
 
 /// A file the migration couldn't read or write.
 #[derive(Debug, thiserror::Error)]
@@ -139,7 +149,8 @@ pub fn migrate_offline_uuids(
     )?;
 
     for file in &files {
-        move_player_file(file, &players[&file.old_uuid])?;
+        let player = &players[&file.old_uuid];
+        move_player_file(file, migrated_contents(file, player)?, player)?;
     }
     for list in changed_lists {
         let json = serde_json::to_string_pretty(&list.entries)
@@ -162,6 +173,91 @@ pub fn migrate_offline_uuids(
         );
     }
     Ok(())
+}
+
+/// Moves the files PEX 1.x saved under an offline player's old UUID to vanilla's when they log in.
+///
+/// It is for players [`migrate_offline_uuids`] couldn't name, and runs before their data is
+/// loaded, the way vanilla `PlayerList.locateStatsFile` moves a statistics file named after the
+/// player when they join. Nothing moves while the new UUID has files of its own, unless the mapping
+/// shows that an earlier move of this player stopped halfway. As in [`migrate_offline_uuids`],
+/// backups come first and the player is added to [`MAPPING_FILE`] before any file moves. Returns
+/// whether it moved anything.
+pub fn migrate_offline_player(world_dir: &Path, name: &str) -> Result<bool, MigrationError> {
+    let players_dir = world_dir.join(PLAYERS_DIR);
+    let player = MappedPlayer {
+        name: name.to_owned(),
+        old_uuid: legacy_offline_uuid(name),
+        new_uuid: offline_uuid(name),
+    };
+    let files: Vec<PlayerFile> = PLAYER_FILES
+        .into_iter()
+        .map(|(dir, suffix, player_data)| {
+            let dir = players_dir.join(dir);
+            PlayerFile {
+                from: dir.join(format!("{}{suffix}", player.old_uuid)),
+                to: dir.join(format!("{}{suffix}", player.new_uuid)),
+                old_uuid: player.old_uuid,
+                player_data,
+            }
+        })
+        .collect();
+
+    let _guard = LOGIN_MIGRATION
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if !files.iter().any(|file| file.from.is_file()) {
+        return Ok(false);
+    }
+    let mapping_path = players_dir.join(MAPPING_FILE);
+    let mapping = read_mapping(&mapping_path)?;
+    let started = mapping
+        .iter()
+        .flat_map(|mapping| &mapping.players)
+        .any(|mapped| mapped.old_uuid == player.old_uuid);
+    if !started && files.iter().any(|file| file.to.exists()) {
+        warn!(
+            "Kept the files of {name} under {}, the UUID PEX 1.x gave them, because they already have files under {}",
+            player.old_uuid, player.new_uuid
+        );
+        return Ok(false);
+    }
+
+    let mut moves = Vec::new();
+    for file in files.into_iter().filter(|file| file.from.is_file()) {
+        let contents = migrated_contents(&file, &player)?;
+        if !is_taken(&file, &contents)? {
+            moves.push((file, contents));
+        }
+    }
+    // Files next to a different one under the new UUID stay, as the run that started the move
+    // already reported.
+    if moves.is_empty() {
+        return Ok(false);
+    }
+    for (file, _) in &moves {
+        let original = fs::read(&file.from).map_err(at(&file.from))?;
+        let backup = write_backup(&file.from, original, LEGACY_VERSION).map_err(at(&file.from))?;
+        log_backup(&file.from, &backup);
+    }
+    let unmatched = mapping
+        .map(|mapping| mapping.unmatched)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|uuid| *uuid != player.old_uuid)
+        .collect();
+    write_mapping(&mapping_path, iter::once(player.clone()), &unmatched)?;
+    for (file, contents) in moves {
+        move_player_file(&file, contents, &player)?;
+    }
+
+    info!(
+        "Moved the files of {name} from {}, the UUID PEX 1.x gave them, to vanilla's {}. Both are in {}",
+        player.old_uuid,
+        player.new_uuid,
+        mapping_path.display()
+    );
+    Ok(true)
 }
 
 fn read_player_lists(data_dir: &Path) -> Result<Vec<PlayerList>, MigrationError> {
@@ -281,17 +377,24 @@ fn update_entries(
     }
 }
 
+/// Reads the mapping file at `path`, or returns `None` if there is none.
+fn read_mapping(path: &Path) -> Result<Option<Mapping>, MigrationError> {
+    match fs::read(path) {
+        Ok(json) => serde_json::from_slice(&json)
+            .map(Some)
+            .map_err(|err| at(path)(err.into())),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(at(path)(err)),
+    }
+}
+
 /// Adds `migrated` to the mapping file, keeping the players an earlier run recorded.
 fn write_mapping(
     path: &Path,
     migrated: impl Iterator<Item = MappedPlayer>,
     unmatched: &BTreeSet<Uuid>,
 ) -> Result<(), MigrationError> {
-    let previous: Option<Mapping> = match fs::read(path) {
-        Ok(json) => Some(serde_json::from_slice(&json).map_err(|err| at(path)(err.into()))?),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-        Err(err) => return Err(at(path)(err)),
-    };
+    let previous = read_mapping(path)?;
     let mut players: BTreeMap<Uuid, MappedPlayer> = previous
         .iter()
         .flat_map(|mapping| mapping.players.iter().cloned())
@@ -324,21 +427,32 @@ fn read_contents(path: &Path, player_data: bool) -> Result<Contents, MigrationEr
     Ok(Contents::Bytes(bytes))
 }
 
-/// Writes `file` under the new UUID and removes the old one. Player data also gets the new UUID
-/// in its `UUID` tag, because vanilla `Entity.load` gives it to the player. Keeps both if the new
-/// UUID already has a different file.
-fn move_player_file(file: &PlayerFile, player: &MappedPlayer) -> Result<(), MigrationError> {
+/// What `file` holds once it is under the new UUID. Player data gets the new UUID in its `UUID`
+/// tag, because vanilla `Entity.load` gives it to the player.
+fn migrated_contents(file: &PlayerFile, player: &MappedPlayer) -> Result<Contents, MigrationError> {
     let mut contents = read_contents(&file.from, file.player_data)?;
     if let Contents::PlayerData(nbt) = &mut contents
         && nbt.get_uuid("UUID") == Some(player.old_uuid)
     {
         nbt.put_uuid("UUID", player.new_uuid);
     }
-    if file.to.exists() {
-        // A run that stopped between writing the new file and removing the old one leaves both.
-        if read_contents(&file.to, file.player_data)? == contents {
-            return fs::remove_file(&file.from).map_err(at(&file.from));
-        }
+    Ok(contents)
+}
+
+/// Whether the new UUID already has a file where `file` goes, other than the copy a run that
+/// stopped between writing it and removing the old one left.
+fn is_taken(file: &PlayerFile, contents: &Contents) -> Result<bool, MigrationError> {
+    Ok(file.to.exists() && read_contents(&file.to, file.player_data)? != *contents)
+}
+
+/// Writes `contents` from [`migrated_contents`] under the new UUID and removes the old file. Keeps
+/// both if the new UUID already has a different file.
+fn move_player_file(
+    file: &PlayerFile,
+    contents: Contents,
+    player: &MappedPlayer,
+) -> Result<(), MigrationError> {
+    if is_taken(file, &contents)? {
         warn!(
             "Kept {}: {} already has {}",
             file.from.display(),
@@ -347,12 +461,15 @@ fn move_player_file(file: &PlayerFile, player: &MappedPlayer) -> Result<(), Migr
         );
         return Ok(());
     }
-    let bytes = match contents {
-        Contents::PlayerData(nbt) => write_gzip_compound_tag_to_bytes(nbt)
-            .map_err(|err| at(&file.from)(io::Error::other(err)))?,
-        Contents::Bytes(bytes) => bytes,
-    };
-    write_file_atomically(&file.to, &bytes, true).map_err(at(&file.to))?;
+    // Otherwise a run that stopped before removing the old file already wrote it.
+    if !file.to.exists() {
+        let bytes = match contents {
+            Contents::PlayerData(nbt) => write_gzip_compound_tag_to_bytes(nbt)
+                .map_err(|err| at(&file.from)(io::Error::other(err)))?,
+            Contents::Bytes(bytes) => bytes,
+        };
+        write_file_atomically(&file.to, &bytes, true).map_err(at(&file.to))?;
+    }
     fs::remove_file(&file.from).map_err(at(&file.from))
 }
 
@@ -366,7 +483,7 @@ fn log_backup(path: &Path, backup: &Path) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -376,7 +493,7 @@ mod tests {
     use tempfile::TempDir;
     use uuid::Uuid;
 
-    use super::migrate_offline_uuids;
+    use super::{migrate_offline_player, migrate_offline_uuids};
 
     // The lists PEX 1.2.0 wrote in offline mode after `whitelist add` for five names, `op Notch`
     // and `ban jeb_ griefing`, with Notch, Player_123456789, 玩家一号 and Ghost logged in. Ghost is
@@ -448,6 +565,8 @@ mod tests {
     );
     /// Ghost's PEX 1.2.0 UUID.
     const GHOST: &str = "df1bc498-4a05-5e10-b286-3eb03abf1170";
+    /// The UUID a vanilla 26.3 server gave Ghost at login, from its `usercache.json`.
+    const GHOST_VANILLA: &str = "48f83307-567a-33d7-8604-3b22ee4c1b84";
     /// Notch's Mojang UUID, which an online-mode player file has.
     const MOJANG: &str = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
 
@@ -675,6 +794,141 @@ mod tests {
                 "玩家一号",
                 "🎮gamer"
             ]
+        );
+    }
+
+    /// A 1.2.0 server after the migration at startup, with Ghost, whom it couldn't name, also
+    /// holding advancements and a `.dat_old`.
+    fn migrated_server_with_ghost(dir: &Path) {
+        server_1_2(dir);
+        write(
+            dir,
+            &format!("world/players/advancements/{GHOST}.json"),
+            br#"{"player": 9}"#,
+        );
+        write(
+            dir,
+            &format!("world/players/data/{GHOST}.dat_old"),
+            &player_data(GHOST, 8),
+        );
+        migrate_offline_uuids(dir, Path::new("world"), 1).unwrap();
+    }
+
+    /// The paths whose contents differ between two snapshots, including added and removed files.
+    fn changed_paths(
+        before: &BTreeMap<PathBuf, Vec<u8>>,
+        after: &BTreeMap<PathBuf, Vec<u8>>,
+    ) -> BTreeSet<PathBuf> {
+        before
+            .keys()
+            .chain(after.keys())
+            .filter(|path| before.get(*path) != after.get(*path))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn moves_an_unmatched_player_when_they_log_in_once() {
+        let dir = TempDir::new().unwrap();
+        let dir = dir.path();
+        migrated_server_with_ghost(dir);
+        let world = dir.join("world");
+        let before = snapshot(dir);
+
+        // Notch was moved at startup, and Steve never played on 1.x.
+        for name in ["Notch", "Steve"] {
+            assert!(!migrate_offline_player(&world, name).unwrap());
+        }
+        assert_eq!(snapshot(dir), before);
+
+        assert!(migrate_offline_player(&world, "Ghost").unwrap());
+
+        let after = snapshot(dir);
+        let path = |path: String| PathBuf::from(format!("world/players/{path}"));
+        assert_eq!(
+            changed_paths(&before, &after),
+            BTreeSet::from([
+                path(format!("data/{GHOST}.dat")),
+                path(format!("data/{GHOST}.dat.v1.bak")),
+                path(format!("data/{GHOST_VANILLA}.dat")),
+                path(format!("data/{GHOST}.dat_old")),
+                path(format!("data/{GHOST}.dat_old.v1.bak")),
+                path(format!("data/{GHOST_VANILLA}.dat_old")),
+                path(format!("advancements/{GHOST}.json")),
+                path(format!("advancements/{GHOST}.json.v1.bak")),
+                path(format!("advancements/{GHOST_VANILLA}.json")),
+                path("uuid-migration.json".to_owned()),
+            ])
+        );
+        for (file, xp_level) in [("dat", 9), ("dat_old", 8)] {
+            let nbt = read_nbt(dir, &format!("world/players/data/{GHOST_VANILLA}.{file}"));
+            assert_eq!(nbt.get_uuid("UUID"), Some(GHOST_VANILLA.parse().unwrap()));
+            assert_eq!(nbt.get_int("XpLevel"), Some(xp_level));
+        }
+        for (old, new) in [
+            (
+                format!("data/{GHOST}.dat"),
+                format!("data/{GHOST}.dat.v1.bak"),
+            ),
+            (
+                format!("data/{GHOST}.dat_old"),
+                format!("data/{GHOST}.dat_old.v1.bak"),
+            ),
+            (
+                format!("advancements/{GHOST}.json"),
+                format!("advancements/{GHOST}.json.v1.bak"),
+            ),
+            (
+                format!("advancements/{GHOST}.json"),
+                format!("advancements/{GHOST_VANILLA}.json"),
+            ),
+        ] {
+            assert_eq!(after[&path(new)], before[&path(old)]);
+        }
+        let mapping = read_json(dir, "world/players/uuid-migration.json");
+        assert_eq!(
+            mapping["players"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|player| player["name"] == "Ghost"),
+            Some(&mapped("Ghost", (GHOST, GHOST_VANILLA)))
+        );
+        assert_eq!(mapping["unmatched"], json!([]));
+
+        assert!(!migrate_offline_player(&world, "Ghost").unwrap());
+        assert_eq!(snapshot(dir), after);
+    }
+
+    #[test]
+    fn keeps_files_when_the_new_uuid_has_its_own_and_finishes_a_stopped_move() {
+        let dir = TempDir::new().unwrap();
+        let dir = dir.path();
+        migrated_server_with_ghost(dir);
+        let world = dir.join("world");
+        // Ghost has already played under the new UUID.
+        let new_advancements = format!("world/players/advancements/{GHOST_VANILLA}.json");
+        write(dir, &new_advancements, br#"{"player": 0}"#);
+        let before = snapshot(dir);
+        assert!(!migrate_offline_player(&world, "Ghost").unwrap());
+        assert_eq!(snapshot(dir), before);
+
+        // A move that stopped after the player data: the mapping lists Ghost, and the
+        // advancements are still under the old UUID.
+        fs::remove_file(dir.join(&new_advancements)).unwrap();
+        assert!(migrate_offline_player(&world, "Ghost").unwrap());
+        let old_advancements = format!("world/players/advancements/{GHOST}.json");
+        fs::rename(dir.join(&new_advancements), dir.join(&old_advancements)).unwrap();
+
+        assert!(migrate_offline_player(&world, "Ghost").unwrap());
+        assert!(!dir.join(&old_advancements).exists());
+        assert_eq!(
+            fs::read(dir.join(&new_advancements)).unwrap(),
+            before[Path::new(&old_advancements)]
+        );
+        assert_eq!(
+            read_player_data(dir, GHOST_VANILLA).get_int("XpLevel"),
+            Some(9)
         );
     }
 }
