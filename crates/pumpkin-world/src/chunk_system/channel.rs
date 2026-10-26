@@ -112,6 +112,19 @@ impl LevelChannel {
             .1 = Some(pos);
         self.notify.notify_one();
     }
+    /// Whether a change that hasn't been taken yet gives `pos` a stage again.
+    pub fn has_pending_load(&self, pos: ChunkPos) -> bool {
+        self.value
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .0
+            .as_ref()
+            .is_some_and(|(changes, _)| {
+                changes
+                    .get(&pos)
+                    .is_some_and(|&(_, new)| new != StagedChunkEnum::None)
+            })
+    }
     pub fn get(&self) -> (Option<LevelChange>, Option<Vec<ChunkPos>>) {
         let mut lock = self
             .value

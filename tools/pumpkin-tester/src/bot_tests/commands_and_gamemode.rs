@@ -34,7 +34,6 @@ pub async fn run_commands_and_gamemode_tests(
         (bot1.position.y.floor() as i32) + 10,
         bot1.position.z.floor() as i32,
     );
-    let _ = world.get_block(&marker_pos);
     bot1.send_command(&format!(
         "setblock {} {} {} minecraft:emerald_block",
         marker_pos.0.x, marker_pos.0.y, marker_pos.0.z

@@ -98,6 +98,9 @@ pub fn plugin_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[unsafe(no_mangle)]
         pub static PUMPKIN_API_VERSION: u32 = pumpkin::plugin::PLUGIN_API_VERSION;
 
+        #[unsafe(no_mangle)]
+        pub static PUMPKIN_BUILD_ID: pumpkin::plugin::BuildIdSymbol = pumpkin::plugin::BUILD_ID_SYMBOL;
+
         #input_struct
 
         impl pumpkin::plugin::Plugin for #struct_ident {

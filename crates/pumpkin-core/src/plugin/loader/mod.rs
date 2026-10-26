@@ -65,6 +65,19 @@ pub enum LoaderError {
     InvalidLoaderData,
 
     #[error(
+        "Plugin has no build id, so it comes from an older or different server build (server {server_build_id}). Use the plugins built with this server."
+    )]
+    BuildIdMissing { server_build_id: String },
+
+    #[error(
+        "Plugin build mismatch (plugin {plugin_build_id}, server {server_build_id}). Use the plugins built with this server."
+    )]
+    BuildIdMismatch {
+        plugin_build_id: String,
+        server_build_id: String,
+    },
+
+    #[error(
         "Plugin was built for an incompatible API version. Please rebuild it against this Pumpkin build."
     )]
     ApiVersionMissing,

@@ -6,7 +6,7 @@ use std::{
 
 use pumpkin_core::server::Server;
 use pumpkin_data::dimension::Dimension;
-use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
 
 use crate::bot::{HeadlessBot, MAX_POLL_TICKS};
 
@@ -75,6 +75,21 @@ pub async fn run_login_and_movement_tests(
         "[PASS] bot:movement_sync ({}ms)",
         move_start.elapsed().as_millis()
     ));
+
+    // Vanilla `PrepareSpawnTask` loads the chunks within 3 chunks of the spawn chunk before a
+    // player joins, but Pumpkin only loads the spawn chunk, so the bot can stand next to a chunk
+    // that is still generating. The later tests use blocks up to two blocks from the bot, and in
+    // an unloaded chunk `/setblock` fails like vanilla `BlockPosArgument.getLoadedBlockPos` and
+    // `World::set_block_state` writes nothing, so wait until the chunks around the bot are loaded.
+    let center = target_pos.to_block_pos().chunk_position();
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            world
+                .level
+                .get_or_fetch_chunk(Vector2::new(center.x + dx, center.y + dz), |_| ())
+                .await;
+        }
+    }
 
     Ok((bot1, bot2))
 }

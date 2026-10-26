@@ -1,6 +1,10 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
+/// Ticks without a confirmation after which vanilla `updateAwaitingTeleport` sends the teleport
+/// again.
+const AWAITING_TELEPORT_RESEND_TICKS: i32 = 20;
+
 impl JavaClient {
     const fn clamp_horizontal(pos: f64) -> f64 {
         pos.clamp(-3.0E7, 3.0E7)
@@ -63,19 +67,6 @@ impl JavaClient {
         if player.get_entity().has_vehicle() {
             return;
         }
-        // Ignore movement packets while awaiting a teleport confirmation (vanilla behavior)
-        if player
-            .awaiting_teleport
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some()
-        {
-            return;
-        }
-        if player.is_movement_locked.load(Ordering::Relaxed) {
-            self.force_tp(player, player.get_entity().pos.load());
-            return;
-        }
         // y = feet Y
         let position = packet.position;
         if position.x.is_nan() || position.y.is_nan() || position.z.is_nan() {
@@ -84,6 +75,14 @@ impl JavaClient {
                 translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
                 [],
             ));
+            return;
+        }
+        // Vanilla `handleMovePlayer` ignores positions until the client confirms the last teleport.
+        if self.update_awaiting_teleport(player) {
+            return;
+        }
+        if player.is_movement_locked.load(Ordering::Relaxed) {
+            self.force_tp(player, player.get_entity().pos.load());
             return;
         }
         let position = Vector3::new(
@@ -200,21 +199,6 @@ impl JavaClient {
         if player.get_entity().has_vehicle() {
             return;
         }
-        // Ignore movement packets while awaiting a teleport confirmation (vanilla behavior)
-        if player
-            .awaiting_teleport
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some()
-        {
-            return;
-        }
-        if player.is_movement_locked.load(Ordering::Relaxed) {
-            let entity = player.get_entity();
-            entity.set_rotation(packet.yaw, packet.pitch);
-            self.force_tp(player, entity.pos.load());
-            return;
-        }
         // y = feet Y
         let position = packet.position;
         if !position.x.is_finite()
@@ -228,6 +212,20 @@ impl JavaClient {
                 translation::java::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT,
                 [],
             ));
+            return;
+        }
+        // Vanilla `handleMovePlayer` ignores positions until the client confirms the last teleport,
+        // but still takes the rotation.
+        if self.update_awaiting_teleport(player) {
+            player
+                .get_entity()
+                .set_rotation(wrap_degrees(packet.yaw) % 360.0, wrap_degrees(packet.pitch));
+            return;
+        }
+        if player.is_movement_locked.load(Ordering::Relaxed) {
+            let entity = player.get_entity();
+            entity.set_rotation(packet.yaw, packet.pitch);
+            self.force_tp(player, entity.pos.load());
             return;
         }
 
@@ -345,25 +343,75 @@ impl JavaClient {
             }
 
             'cancelled: {
-                self.force_tp(player, position);
+                self.force_tp(player, player.get_entity().pos.load());
             }
         }}
     }
 
     pub fn force_tp(&self, player: &Arc<Player>, position: Vector3<f64>) {
-        let teleport_id = player.teleport_id_count.fetch_add(1, Ordering::Relaxed) + 1;
-        *player
+        let entity = player.get_entity();
+        self.teleport(
+            player,
+            position,
+            entity.yaw.load(),
+            entity.pitch.load(),
+            Vec::new(),
+        );
+    }
+
+    /// Vanilla `ServerGamePacketListenerImpl.teleport`: sends the client to `position` and waits
+    /// for it to confirm this teleport. Confirmations of earlier teleports are ignored from now on.
+    /// The caller has already moved the player to `position`, which is absolute: `relatives` may
+    /// only make the velocity and rotation relative.
+    pub fn teleport(
+        &self,
+        player: &Player,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        relatives: Vec<PositionFlag>,
+    ) {
+        let teleport_id = player
             .awaiting_teleport
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some((teleport_id.into(), position));
-        player.try_send_client_packet(&CPlayerPosition::new(
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .start(position, player.tick_counter.load(Ordering::Relaxed));
+        // Sent after the lock is released: plugins see the packet in `PacketSentEvent`.
+        self.try_send_packet(&CPlayerPosition::new(
             teleport_id.into(),
-            player.get_entity().pos.load(),
+            position,
             Vector3::new(0.0, 0.0, 0.0),
-            player.get_entity().yaw.load(),
-            player.get_entity().pitch.load(),
-            Vec::new(),
+            yaw,
+            pitch,
+            relatives,
         ));
+    }
+
+    /// Vanilla `updateAwaitingTeleport`: whether the client still has to confirm the last
+    /// teleport. Sends it again when the client keeps moving without confirming it.
+    pub(super) fn update_awaiting_teleport(&self, player: &Player) -> bool {
+        let tick = player.tick_counter.load(Ordering::Relaxed);
+        let resend = {
+            let mut awaiting = player
+                .awaiting_teleport
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(position) = awaiting.position else {
+                awaiting.time = tick;
+                return false;
+            };
+            (tick.wrapping_sub(awaiting.time) > AWAITING_TELEPORT_RESEND_TICKS).then_some(position)
+        };
+        if let Some(position) = resend {
+            let entity = player.get_entity();
+            self.teleport(
+                player,
+                position,
+                entity.yaw.load(),
+                entity.pitch.load(),
+                Vec::new(),
+            );
+        }
+        true
     }
 }

@@ -6,6 +6,7 @@ mod loot_tables;
 mod player_actions;
 mod sheep_shearing;
 mod status_ping;
+mod teleport_confirm;
 mod world_interaction;
 
 use std::{net::SocketAddr, sync::Arc};
@@ -23,6 +24,8 @@ pub async fn run_bot_tests(
 
     let (mut bot1, bot2) =
         login_and_movement::run_login_and_movement_tests(server, addr, summary_lines).await?;
+
+    teleport_confirm::run_teleport_confirm_tests(server, &mut bot1, summary_lines).await?;
 
     commands_and_gamemode::run_commands_and_gamemode_tests(
         server,

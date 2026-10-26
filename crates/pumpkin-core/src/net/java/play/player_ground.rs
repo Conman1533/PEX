@@ -6,6 +6,10 @@ impl JavaClient {
         // A movement packet was received this tick — tracked for SClientTickEnd zeroing.
         self.received_movement_this_tick
             .store(true, Ordering::Relaxed);
+        // Vanilla `handleMovePlayer` ignores it until the client confirms the last teleport.
+        if self.update_awaiting_teleport(player) {
+            return;
+        }
         player
             .living_entity
             .entity
