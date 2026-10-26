@@ -259,6 +259,7 @@ Every family piece does the same thing: audit each mob against its vanilla class
 - **Q4.10** When its migration fails, PEXGuard still loads with the old UUIDs: members count as non-members, but every region stays protected. Prefer that to refusing to load?
 - **Q4.11** 4.3 rewrites UUIDs only where they are a whole value, not inside longer strings (command blocks with UUID selectors, signs, books), to avoid touching free text. Should it cover those?
 - **Q4.12** 4.3 writes a `.v1.bak` copy next to each changed region file. Fine for a few pets; a world with many references gets many backup files. Keep, or collect region backups in one folder?
+- **Q7.4** 7.8 writes player files with mode 0600 like vanilla; PEX used to write 0644. Fine for Pelican and the free-tier tooling?
 - **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
 ## Goal 5: redstone parity
@@ -377,6 +378,7 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 | 7.8 | Player data saves: `crates/pumpkin-world/src/data/player_data.rs:124` writes `<uuid>.dat` with `File::create`, so a crash mid-save truncates it; vanilla `PlayerDataStorage.save` writes a temp file and swaps it in with `Util.safeReplaceFile` and a `.dat_old`. | `fix/player-data-atomic-save` | | Test that a write interrupted after the temp file leaves the old data loadable |
 | 7.9 | Advancements and statistics in vanilla's formats: PEX writes `{"adv": {"criterion": {"secs_since_epoch", ...}}}` (`entity/player/advancement.rs`) instead of vanilla `PlayerAdvancements` (`criteria`, `done`, `DataVersion`), and keeps statistics in the player NBT instead of `players/stats/<uuid>.json`. A world moved to vanilla loses both. Read and write vanilla's formats, migrating PEX's once. | `fix/vanilla-advancement-stats-format` | 3.1 | 7.2's round trip covers `players/advancements` and `players/stats` with no differences |
 | 7.10 | Ops, whitelist and ban lists: `LoadJSONConfiguration::load` (`crates/pumpkin-core/src/data/mod.rs`) falls back to an empty list when the file doesn't parse, and the next save overwrites the admin's file. Refuse to overwrite a file that failed to load (keep it, log the error by name), like vanilla's `StoredUserList.load` failure handling. | `fix/json-list-load-safety` | | Test: a broken `ops.json` is left byte for byte after a save |
+| 7.11 | World saves that can still lose data: `level.dat` is written as `level.dat_new` with `File::create` and no sync, then `level.dat` is copied to `level.dat_old` (`crates/pumpkin-world/src/world_info/anvil.rs:441`), and `read_world_info` (`:363`) has no `level.dat_old` fallback; vanilla `LevelStorageSource.saveLevelData` uses `Util.safeReplaceFile` and `getUnfixedDataTagWithFallback` restores from `level.dat_old`. Also `save_all_players` (`crates/pumpkin-core/src/data/player_server.rs:105`) returns at the first failed save, so one bad file stops `save-all` and shutdown from saving everyone after it; vanilla `PlayerList.saveAll` saves every player and logs failures. Reuse 7.8's safe replace. | `fix/level-dat-and-save-all` | 7.8 for the shared helper, or alone | Tests: an interrupted `level.dat` save leaves a loadable world; a broken `level.dat` loads `level.dat_old`; one failing player save doesn't stop the others |
 | 7.6 | Conversion safety: keep or back up source files during conversion according to Q7.3 | `fix/convert-keep-source` | Q7.3 | Unit test: the converter leaves the sources (or a backup) |
 | 7.7 | Long-play round trip: run the survival stages from goal 6 on PEX, then open the world in vanilla and check inventories, chests and the End state (dragon killed, gateways) | `test/world-roundtrip-play` | 7.5, 6.7 | Vanilla loads it with the dragon fight marked done and every chest intact |
 
@@ -570,6 +572,7 @@ Cross-goal dependencies to keep in mind:
 | Q7.1 | Default chunk format for 2.0: Pump or Anvil? |
 | Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? |
 | Q7.3 | On conversion: keep, back up, or delete source region files? |
+| Q7.4 | Player files 0600 like vanilla, or keep 0644? |
 | Q8.1 | Bedrock: 2.0 requirement or experimental? |
 | Q8.2 | Which Bedrock features first? |
 | Q8.3 | Who runs the real Bedrock client checklist, on what device? |
@@ -590,8 +593,9 @@ Alpha `d30c773bb` (2026-10-25) holds 0.1, 0.2, 1.1, 3.1, 5.1, 6.1 and 6.10, and 
 | Piece | Branch | State | PR draft |
 | :-- | :-- | :-- | :-- |
 | 0.1 (alpha clippy errors, found by the baseline) | `fix/clippy-alpha` | **merged into alpha `d30c773bb` on 2026-10-25**, pushed `ff3ff4f28`, local CI green except the known scaffolding GameTest | `pr-drafts/fix-clippy-alpha.md` |
+| 7.11 | `fix/level-dat-and-save-all` | in progress | |
 | 7.10 | `fix/json-list-load-safety` | in progress | |
-| 7.8 | `fix/player-data-atomic-save` | in progress | |
+| 7.8 | `fix/player-data-atomic-save` | done, pushed `82da3c1cf` (on alpha `84e5d54f9`): ports `PlayerDataStorage.save`/`load` and `Util.safeReplaceFile`: write a synced temp file, keep `<uuid>.dat_old`, fall back to it when `.dat` is missing or broken, copy a broken `.dat` to `<uuid>_corrupted_<date>.dat`. A kill-during-save loop left an unreadable `.dat` in 199 of 200 kills on alpha and 0 of 200 on the branch. Player files are now 0600 like vanilla. Local CI green apart from the known failures. No in-game effect unless a save is interrupted. | `pr-drafts/fix-player-data-atomic-save.md` |
 | 4.4 | `feat/offline-uuid-plugins` | done, pushed `e4d2ae342` (contains 4.2): PEXGuard moves region owners and members to the new UUIDs on load, after a `regions.toml.v1.bak` backup, records the applied mapping, and also moves members the mapping can't name by their stored name. Boot test 1.2.0 to branch: members keep building rights, non-members stay blocked, PEXProtect history intact; without the change all members lose access. PEXProtect needed no change. Local CI green apart from the known failures. Needs a real-client play test and a capture. Goes into alpha with 4.1 to 4.3 and 4.7. | `pr-drafts/feat-offline-uuid-plugins.md` |
 | 4.7 | `feat/offline-uuid-login-migration` | in progress | |
 | 4.3 | `feat/offline-uuid-world` | done, pushed `e945866fd` (contains 4.2): inside 4.2's migration step, rewrites old player UUIDs (int-array and dashed-string forms) in `region/` and `entities/` of every dimension in Anvil, Linear and Pump (new `chunk::io::editor::edit_region`), in player `.dat` files and in saved data, after per-file `.v1.bak` backups; a rerun changes nothing, a failure exits and retries. Boot test 1.2.0 to branch: the tamed wolf sits and follows for its owner and the trial spawner lists the new UUID; without 4.3 it doesn't. 64,896 chunks in 6.5 s (Anvil) to 12 s (Pump), debug build. Local CI green apart from the known failures. Needs a real-client play test and a capture. Merges cleanly with 4.4 on alpha `84e5d54f9`. | `pr-drafts/feat-offline-uuid-world.md` |
@@ -614,6 +618,10 @@ Sessions add things here that are outside their piece: bugs, missing features, w
 
 - (10.1) Goal 10 originally said the fork's Actions are enabled; only the repository setting is. Corrected above.
 - (10.1) `.github/workflows/nightly.yml:166` `make_latest: true` would make the next nightly the Latest release and break the panel plugin's download if it ever follows Latest. See 10.7.
+- (7.8) Autosave snapshots on the tick and writes later on Rayon (`crates/pumpkin-core/src/data/player_server.rs:66`), so an older snapshot can overwrite a newer disconnect or shutdown save (upstream #3512, open).
+- (7.8) `crates/pumpkin-core/src/lib.rs:626` (Java) and `:731` (Bedrock) run the synchronous player-leave file I/O on a Tokio worker; `Server::save_all` (`server/mod.rs:602`) calls the synchronous `save_all_players` from async code.
+- (7.8) Upstream issue Pumpkin-MC/Pumpkin#3511 is the same bug as 7.8; #3634 (open, agent-opened) and #3529 (closed) write through a temp file without `.dat_old`.
+- (7.8) Deleting only `<uuid>.dat` no longer resets a player, since `.dat_old` loads instead (same as vanilla); worth a release note.
 - (4.3) `crates/pumpkin-world/src/chunk/format/pump.rs` `decode_chunk` reports zstd failures and bad lengths as I/O errors, so callers can't tell a damaged chunk from a disk error.
 - (4.3) Not migrated by 4.3: structure templates in `generated/`, `.dat_old` files, uncompressed saved data (warned).
 - (4.4) PEXProtect `u:` lookups are case-sensitive (`native-plugins/pexprotect/src/db.rs`, `actor IN (...)`): `co lookup u:carol` finds nothing for Carol.
