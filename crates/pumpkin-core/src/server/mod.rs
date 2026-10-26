@@ -587,16 +587,10 @@ impl Server {
             return Err(format!("Failed to save world info: {err}"));
         }
 
-        if let Err(err) = self.player_data_storage.save_all_players(self) {
-            error!("Failed to save player data: {err}");
-            return Err(format!("Failed to save player data: {err}"));
-        }
+        let players = self.get_all_players();
+        self.player_data_storage.save_all_players(&players);
 
-        if let Err(err) = self
-            .advancement_manager
-            .save_all_players(&self.get_all_players())
-            .await
-        {
+        if let Err(err) = self.advancement_manager.save_all_players(&players).await {
             error!("Failed to save player advancements: {err}");
             return Err(format!("Failed to save player advancements: {err}"));
         }
