@@ -33,15 +33,16 @@ pub const MAPPING_FILE: &str = "uuid-migration.json";
 const PLAYERS_DIR: &str = "players";
 
 /// The per-player files under [`PLAYERS_DIR`], named `<uuid><suffix>` (vanilla
-/// `LevelResource.PLAYER_DATA_DIR`, `PLAYER_ADVANCEMENTS_DIR` and `PLAYER_STATS_DIR`). PEX keeps
-/// statistics in the player data, but a world that ran on vanilla may have them.
-const PLAYER_FILES: [(&str, &str); 3] = [
-    ("data", PLAYER_DATA_SUFFIX),
-    ("advancements", ".json"),
-    ("stats", ".json"),
+/// `LevelResource.PLAYER_DATA_DIR`, `PLAYER_ADVANCEMENTS_DIR` and `PLAYER_STATS_DIR`), and whether
+/// they are player data. Vanilla `PlayerDataStorage` keeps the previous player data as `.dat_old`
+/// and loads it when `.dat` can't be read. PEX keeps statistics in the player data, but a world
+/// that ran on vanilla may have them.
+const PLAYER_FILES: [(&str, &str, bool); 4] = [
+    ("data", ".dat", true),
+    ("data", ".dat_old", true),
+    ("advancements", ".json", false),
+    ("stats", ".json", false),
 ];
-
-const PLAYER_DATA_SUFFIX: &str = ".dat";
 
 /// A file the migration couldn't read or write.
 #[derive(Debug, thiserror::Error)]
@@ -218,7 +219,7 @@ fn find_player_files(
 ) -> Result<(Vec<PlayerFile>, BTreeSet<Uuid>), MigrationError> {
     let mut files = Vec::new();
     let mut unmatched = BTreeSet::new();
-    for (dir, suffix) in PLAYER_FILES {
+    for (dir, suffix, player_data) in PLAYER_FILES {
         let dir = players_dir.join(dir);
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
@@ -240,7 +241,7 @@ fn find_player_files(
                     from: entry.path(),
                     to: dir.join(format!("{}{suffix}", player.new_uuid)),
                     old_uuid: uuid,
-                    player_data: suffix == PLAYER_DATA_SUFFIX,
+                    player_data,
                 });
             } else if !is_vanilla_uuid(uuid) {
                 unmatched.insert(uuid);
@@ -464,8 +465,11 @@ mod tests {
     }
 
     fn read_player_data(dir: &Path, uuid: &str) -> NbtCompound {
-        let path = dir.join(format!("world/players/data/{uuid}.dat"));
-        read_gzip_compound_tag(fs::File::open(path).unwrap()).unwrap()
+        read_nbt(dir, &format!("world/players/data/{uuid}.dat"))
+    }
+
+    fn read_nbt(dir: &Path, path: &str) -> NbtCompound {
+        read_gzip_compound_tag(fs::File::open(dir.join(path)).unwrap()).unwrap()
     }
 
     /// A 1.2.0 server directory: the lists above, player data with a different `XpLevel` for
@@ -534,6 +538,14 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let dir = dir.path();
         server_1_2(dir);
+        // What a build that saves player data like vanilla `PlayerDataStorage` adds.
+        let notch_dat_old = |uuid: &str| format!("world/players/data/{uuid}.dat_old");
+        let notch_corrupted = format!(
+            "world/players/data/{}_corrupted_2026-10-26_17-41-37.dat",
+            NOTCH.0
+        );
+        write(dir, &notch_dat_old(NOTCH.0), &player_data(NOTCH.0, 11));
+        write(dir, &notch_corrupted, b"not nbt");
         let before = snapshot(dir);
 
         migrate_offline_uuids(dir, Path::new("world"), 1).unwrap();
@@ -552,9 +564,19 @@ mod tests {
             dir.join(format!("world/players/stats/{}.json", NOTCH.1))
                 .exists()
         );
-        for untouched in [GHOST, MOJANG] {
-            let path = format!("world/players/data/{untouched}.dat");
-            assert_eq!(fs::read(dir.join(&path)).unwrap(), before[Path::new(&path)]);
+        let dat_old = read_nbt(dir, &notch_dat_old(NOTCH.1));
+        assert_eq!(dat_old.get_uuid("UUID"), Some(NOTCH.1.parse().unwrap()));
+        assert_eq!(dat_old.get_int("XpLevel"), Some(11));
+        assert!(!dir.join(notch_dat_old(NOTCH.0)).exists());
+        for untouched in [
+            format!("world/players/data/{GHOST}.dat"),
+            format!("world/players/data/{MOJANG}.dat"),
+            notch_corrupted,
+        ] {
+            assert_eq!(
+                fs::read(dir.join(&untouched)).unwrap(),
+                before[Path::new(&untouched)]
+            );
         }
 
         for (name, original) in LISTS {
