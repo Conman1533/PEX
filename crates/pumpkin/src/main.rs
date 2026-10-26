@@ -24,7 +24,10 @@ use tokio::signal::unix::{SignalKind, signal};
 use pumpkin_core::{
     CRASH_REPORT, SERVER_EXIT_CODE, SERVER_IS_STOPPING,
     crash::{CrashReport, FullBacktrace},
-    data::{VanillaData, offline_uuid_migration::migrate_offline_uuids},
+    data::{
+        VanillaData,
+        offline_uuid_migration::{migrate_offline_uuids, world::migrate_world_uuids},
+    },
     stop_or_exit_server,
 };
 use pumpkin_core::{PumpkinServer, stop_server};
@@ -165,9 +168,17 @@ async fn main() {
     // pumpkin.toml only gets its new version once the server files it stands for are migrated,
     // so a failed or interrupted migration runs again on the next start.
     if let Some(pending) = pending_config {
+        let world_path = config.basic.get_world_path();
         if pending.version() < OFFLINE_UUID_VERSION
-            && let Err(err) =
-                migrate_offline_uuids(&exec_dir, &config.basic.get_world_path(), pending.version())
+            && let Err(err) = migrate_offline_uuids(&exec_dir, &world_path, pending.version())
+                .and_then(|()| {
+                    migrate_world_uuids(
+                        &exec_dir,
+                        &world_path,
+                        &config.advanced.world.chunk,
+                        pending.version(),
+                    )
+                })
         {
             tracing::error!("Couldn't move offline players to vanilla UUIDs: {err}");
             tracing::error!(
