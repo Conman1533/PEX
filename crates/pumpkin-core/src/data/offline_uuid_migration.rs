@@ -110,7 +110,8 @@ struct PlayerFile {
 ///
 /// Only UUIDs that are the PEX 1.x UUID of a name in those lists change, so Mojang UUIDs and
 /// players already on vanilla's UUIDs are left alone, and a second run changes nothing. A run that
-/// stopped halfway is finished by the next one.
+/// stopped halfway is finished by the next one. A list that isn't valid JSON stops the run before
+/// anything changes.
 pub fn migrate_offline_uuids(
     server_dir: &Path,
     world_dir: &Path,
@@ -274,18 +275,15 @@ fn read_player_lists(data_dir: &Path) -> Result<Vec<PlayerList>, MigrationError>
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(err) => return Err(at(&path)(err)),
         };
-        match serde_json::from_str(&original) {
-            Ok(entries) => lists.push(PlayerList {
-                path,
-                original,
-                entries,
-                changed: false,
-            }),
-            Err(err) => warn!(
-                "Couldn't read {} as a list of players, so its entries keep their old UUIDs: {err}",
-                path.display()
-            ),
-        }
+        // A list it can't read is an error, so the migration isn't recorded as done and runs
+        // again once the list is fixed.
+        let entries = serde_json::from_str(&original).map_err(|err| at(&path)(err.into()))?;
+        lists.push(PlayerList {
+            path,
+            original,
+            entries,
+            changed: false,
+        });
     }
     Ok(lists)
 }
@@ -795,6 +793,25 @@ mod tests {
                 "🎮gamer"
             ]
         );
+    }
+
+    #[test]
+    fn stops_before_changing_anything_on_a_list_it_cannot_read() {
+        let dir = TempDir::new().unwrap();
+        let dir = dir.path();
+        server_1_2(dir);
+        write(dir, "data/ops.json", br#"[{"uuid": "#);
+        let before = snapshot(dir);
+
+        let error = migrate_offline_uuids(dir, Path::new("world"), 1).unwrap_err();
+        let ops = dir.join("data/ops.json");
+        assert!(error.to_string().starts_with(&ops.display().to_string()));
+        assert_eq!(snapshot(dir), before);
+
+        // Once the admin fixes the list, the next start migrates it.
+        write(dir, "data/ops.json", OPS.as_bytes());
+        migrate_offline_uuids(dir, Path::new("world"), 1).unwrap();
+        assert_eq!(read_json(dir, "data/ops.json")[0]["uuid"], NOTCH.1);
     }
 
     /// A 1.2.0 server after the migration at startup, with Ghost, whom it couldn't name, also
