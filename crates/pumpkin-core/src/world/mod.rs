@@ -274,6 +274,8 @@ pub struct World {
     /// active chunks instead of scanning every loaded block entity each tick.
     pub block_entities: DashMap<Vector2<i32>, FxHashMap<BlockPos, Arc<dyn BlockEntity>>>,
     pending_block_entity_migrations: crossbeam::queue::SegQueue<Vector2<i32>>,
+    /// Block entities the tick has already reported as invalid for their block.
+    invalid_ticking_block_entities: std::sync::Mutex<Vec<Weak<dyn BlockEntity>>>,
     /// Persistent custom data for the world (matching Bukkit's `PersistentDataHolder`)
     pub custom_data: std::sync::Mutex<NbtCompound>,
     /// Persistent custom data for block entities at specific positions
@@ -425,6 +427,7 @@ impl World {
             server,
             block_entities: DashMap::new(),
             pending_block_entity_migrations: crossbeam::queue::SegQueue::new(),
+            invalid_ticking_block_entities: std::sync::Mutex::new(Vec::new()),
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
             entity_tracker: entity_tracker::EntityTracker::new(),
@@ -1785,7 +1788,7 @@ impl World {
         block_entities.par_chunks(16).for_each(|batch| {
             let _guard = be_handle.enter();
             for be in batch {
-                be.tick(self);
+                self.tick_block_entity(be);
             }
         });
         // Drained after all ticks, so changes (hopper -> chest) land in the same tick.
@@ -6347,6 +6350,39 @@ impl World {
         }
     }
 
+    /// Vanilla `LevelChunk.BoundTickingBlockEntity.tick`: a block entity ticks only while its chunk
+    /// is loaded and its block still takes it. One left behind on another block is reported once.
+    fn tick_block_entity(self: &Arc<Self>, block_entity: &Arc<dyn BlockEntity>) {
+        let position = block_entity.get_position();
+        // The live map can still hold block entities of a chunk that is unloaded or loading.
+        let Some(state_id) = self.get_block_state_id_if_loaded(&position) else {
+            return;
+        };
+        if block_entity.is_valid_block_state(state_id.to_state()) {
+            block_entity.tick(self);
+            return;
+        }
+        let mut reported = self
+            .invalid_ticking_block_entities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        reported.retain(|reported| reported.strong_count() > 0);
+        if reported
+            .iter()
+            .any(|reported| std::ptr::addr_eq(reported.as_ptr(), Arc::as_ptr(block_entity)))
+        {
+            return;
+        }
+        reported.push(Arc::downgrade(block_entity));
+        drop(reported);
+        warn!(
+            "Block entity {} @ {} state minecraft:{} invalid for ticking:",
+            block_entity.resource_location(),
+            position,
+            Block::from_state_id(state_id).name
+        );
+    }
+
     /// Sends output-signal updates for block entities changed this tick, in list order.
     fn flush_comparator_updates(self: &Arc<Self>, block_entities: &[Arc<dyn BlockEntity>]) {
         for be in block_entities {
@@ -8014,6 +8050,77 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Block entities left behind by their block or chunk must not tick: their ticks read the block
+    /// at their position, and the daylight detector and the furnace panicked on air.
+    #[tokio::test]
+    async fn block_entity_tick_skips_block_entities_whose_block_is_gone() {
+        use std::sync::Arc;
+
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::{chunk::ChunkData, world::BlockFlags};
+
+        use crate::block::entities::{
+            BlockEntity, bed::BedBlockEntity, daylight_detector::DaylightDetectorBlockEntity,
+            furnace::FurnaceBlockEntity, furnace_like_block_entity::CookingBlockEntityBase,
+        };
+
+        let world = super::test_world();
+        world
+            .level
+            .loaded_chunks
+            .insert(Vector2::new(0, 0), ChunkData::empty_sync(0, 0));
+        // The detector updates its signal on every 20th tick, and at night it writes a new power.
+        world.level_time.lock().unwrap().world_age = 20;
+        world.set_time_of_day(18000);
+        // On its last tick of fuel, so its next tick writes the unlit furnace state.
+        let burning_furnace = |position| {
+            let furnace = Arc::new(FurnaceBlockEntity::new(position));
+            furnace.set_lit_time_remaining(1);
+            furnace
+        };
+        let furnace_pos = BlockPos::new(3, 64, 1);
+        world.set_block_state(
+            &furnace_pos,
+            Block::FURNACE.default_state.id,
+            BlockFlags::empty(),
+        );
+        let furnace = burning_furnace(furnace_pos);
+        // Beds have no vanilla block entity type, but they keep a block entity for Bedrock.
+        let bed_pos = BlockPos::new(4, 64, 1);
+        world.set_block_state(
+            &bed_pos,
+            Block::RED_BED.default_state.id,
+            BlockFlags::SKIP_BLOCK_ADDED_CALLBACK,
+        );
+        let bed = Arc::new(BedBlockEntity::new(bed_pos));
+        // Their blocks were replaced by air without them.
+        let detector = Arc::new(DaylightDetectorBlockEntity::new(BlockPos::new(1, 64, 1)));
+        let orphan_furnace = burning_furnace(BlockPos::new(2, 64, 1));
+        // Its chunk isn't loaded.
+        let unloaded_furnace = burning_furnace(BlockPos::new(40, 64, 40));
+
+        for _ in 0..2 {
+            for block_entity in [
+                detector.clone() as Arc<dyn BlockEntity>,
+                orphan_furnace.clone(),
+                furnace.clone(),
+                bed.clone(),
+                unloaded_furnace.clone(),
+            ] {
+                world.tick_block_entity(&block_entity);
+            }
+        }
+
+        assert!(!furnace.is_burning(), "a furnace on its block ticks");
+        assert!(orphan_furnace.is_burning());
+        assert!(unloaded_furnace.is_burning());
+        // The detector and the furnace on air, each reported once.
+        assert_eq!(
+            world.invalid_ticking_block_entities.lock().unwrap().len(),
+            2
+        );
     }
 
     #[test]
