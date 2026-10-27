@@ -2,11 +2,14 @@ use crate::block::registry::BlockRegistry;
 use crate::command::commands::default_dispatcher;
 use crate::command::commands::defaultgamemode::DefaultGamemode;
 use crate::data::VanillaData;
+use crate::data::offline_uuid_migration::migrate_offline_player;
 use crate::data::player_server::ServerPlayerData;
 use crate::entity::NBTStorage;
 use crate::item::registry::ItemRegistry;
 use crate::net::authentication::fetch_mojang_public_keys;
-use crate::net::{ClientPlatform, DisconnectReason, EncryptionError, GameProfile, PlayerConfig};
+use crate::net::{
+    ClientPlatform, DisconnectReason, EncryptionError, GameProfile, PlayerConfig, offline_uuid,
+};
 use crate::plugin::PluginManager;
 use crate::plugin::loader::PluginLoader;
 use crate::plugin::player::player_login::PlayerLoginEvent;
@@ -602,6 +605,34 @@ impl Server {
         self.management_hub.broadcast_server_saved();
 
         Ok(())
+    }
+
+    /// Moves the files PEX 1.x saved under an offline player's old UUID to vanilla's before their
+    /// data is loaded, for players the migration at startup couldn't name (see
+    /// [`migrate_offline_player`]).
+    ///
+    /// Returns false if that failed. The player shouldn't join then: they would start over under
+    /// the new UUID while their data stays under the old one.
+    pub async fn migrate_offline_player(&self, profile: &GameProfile) -> bool {
+        // Offline mode, and BungeeCord without a forwarded UUID, give players vanilla's offline UUID.
+        if profile.id != offline_uuid(&profile.name) {
+            return true;
+        }
+        let world_dir = self.basic_config.get_world_path();
+        let name = profile.name.clone();
+        let error =
+            match tokio::task::spawn_blocking(move || migrate_offline_player(&world_dir, &name))
+                .await
+            {
+                Ok(Ok(_)) => return true,
+                Ok(Err(error)) => error.to_string(),
+                Err(error) => error.to_string(),
+            };
+        error!(
+            "Couldn't move {} from the UUID PEX 1.x gave them to vanilla's: {error}",
+            profile.name
+        );
+        false
     }
 
     /// Adds a new player to the server.
