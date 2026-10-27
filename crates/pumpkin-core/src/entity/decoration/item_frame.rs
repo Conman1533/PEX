@@ -439,6 +439,11 @@ impl EntityBase for ItemFrameEntity {
         true
     }
 
+    /// Vanilla `BlockAttachedEntity.isPickable`.
+    fn can_hit(&self) -> bool {
+        true
+    }
+
     fn cast_any(&self) -> &dyn std::any::Any {
         self
     }

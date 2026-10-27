@@ -20,10 +20,10 @@ use pumpkin_protocol::{
             login::CLoginSuccess,
             play::{
                 CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CKeepAlive,
-                CLogin, COpenScreen, CPingResponse, CPlayerPosition, CRemoveEntities,
-                CSetContainerContent, CSetContainerSlot, CSetCursorItem, CSetPlayerInventory,
-                CSetSelectedSlot, CSpawnEntity, CUnloadChunk, CUpdateEntityPos,
-                CUpdateEntityPosRot,
+                CLogin, COpenScreen, CPingResponse, CPlayDisconnect, CPlayerPosition,
+                CRemoveEntities, CSetContainerContent, CSetContainerSlot, CSetCursorItem,
+                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CUnloadChunk,
+                CUpdateEntityPos, CUpdateEntityPosRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -34,9 +34,10 @@ use pumpkin_protocol::{
             login::{SLoginAcknowledged, SLoginStart},
             play::{
                 Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot,
-                SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPlayPingRequest,
-                SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
-                SPlayerPositionRotation, SSetHeldItem, SUseItemOn, SlotActionType, Status,
+                SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPickItemFromEntity,
+                SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
+                SPlayerPositionRotation, SSetHeldItem, SSpectateEntity, SUseItemOn, SlotActionType,
+                Status,
             },
         },
     },
@@ -86,6 +87,8 @@ pub struct HeadlessBot {
     pub chunks: HashSet<(i32, i32)>,
     /// While set, teleports are kept here instead of being confirmed, like a client that lags.
     pub held_teleports: Option<Vec<CPlayerPosition>>,
+    /// Payload of the play disconnect packet, once the server has sent one.
+    pub disconnect_reason: Option<Bytes>,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -196,6 +199,7 @@ impl HeadlessBot {
             item_entities: HashMap::new(),
             chunks: HashSet::new(),
             held_teleports: None,
+            disconnect_reason: None,
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -319,6 +323,9 @@ impl HeadlessBot {
             }
             id if id == CPingResponse::to_id(CURRENT_MC_VERSION) => {
                 self.last_pong = payload.get_i64_be().map_err(|err| read_error(id, &err))?;
+            }
+            id if id == CPlayDisconnect::to_id(CURRENT_MC_VERSION) => {
+                self.disconnect_reason = Some(packet.payload.clone());
             }
             id => {
                 self.handle_inventory_packet(id, &mut payload)
@@ -530,6 +537,24 @@ impl HeadlessBot {
     pub async fn attack_entity(&mut self, entity_id: i32) -> Result<(), String> {
         self.send_packet(&SAttack {
             entity_id: VarInt(entity_id),
+        })
+        .await
+    }
+
+    /// Middle-clicks an entity, like the vanilla client's pick block on an entity.
+    pub async fn pick_item_from_entity(&mut self, entity_id: i32) -> Result<(), String> {
+        self.send_packet(&SPickItemFromEntity {
+            id: VarInt(entity_id),
+            include_data: false,
+        })
+        .await
+    }
+
+    /// Left-clicks an entity in spectator mode.
+    pub async fn spectate_entity(&mut self, entity_id: i32) -> Result<(), String> {
+        // Vanilla `OPTIONAL_VAR_INT` sends the id plus one; 0 means no target.
+        self.send_packet(&SSpectateEntity {
+            target: VarInt(entity_id + 1),
         })
         .await
     }
