@@ -60,12 +60,7 @@ impl JavaClient {
             return;
         };
 
-        let p_eye = player.get_entity().get_eye_pos();
-        let t_eye = target.get_eye_pos();
-        let dx = p_eye.x - t_eye.x;
-        let dy = p_eye.y - t_eye.y;
-        let dz = p_eye.z - t_eye.z;
-        if dx * dx + dy * dy + dz * dz > 64.0 {
+        if !player.can_pick_item_from_entity(target.get_entity()) {
             return;
         }
 

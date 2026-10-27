@@ -382,9 +382,9 @@ const STOP_DESTROY_MIN_PROGRESS: f32 = 0.7;
 /// `entity_interaction_range` attribute while the player is in creative.
 const CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER: f64 = 2.0;
 
-/// Reach the server allows beyond the player's own when an interact or attack packet names an
-/// entity, for latency. Vanilla passes 3.0 in `ServerGamePacketListenerImpl.handleInteract` and
-/// `handleAttack`.
+/// Reach the server allows beyond the player's own when a packet names an entity, for latency.
+/// Vanilla passes 3.0 in `ServerGamePacketListenerImpl.handleInteract`, `handleAttack`,
+/// `handlePickItemFromEntity` and `handleSpectatorAction`.
 const ENTITY_PACKET_RANGE_BUFFER: f64 = 3.0;
 
 const fn bedrock_inventory_slot(player_screen_slot: i16) -> Option<u32> {
@@ -4493,6 +4493,17 @@ impl Player {
         self.is_within_world_border(target)
             && self.is_within_attack_range(
                 &self.inventory().held_item(),
+                &target.bounding_box.load(),
+                ENTITY_PACKET_RANGE_BUFFER,
+            )
+    }
+
+    /// Vanilla `ServerGamePacketListenerImpl.handlePickItemFromEntity` picks from `target` only
+    /// when it is within entity interaction range. It doesn't check the world border, and
+    /// `Player.isWithinEntityInteractionRange(Entity, double)` refuses a removed entity.
+    pub fn can_pick_item_from_entity(&self, target: &Entity) -> bool {
+        !target.is_removed()
+            && self.is_within_entity_interaction_range(
                 &target.bounding_box.load(),
                 ENTITY_PACKET_RANGE_BUFFER,
             )
