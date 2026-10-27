@@ -19,7 +19,11 @@ impl JavaClient {
         };
 
         let world = player.world();
-        if let Some(target) = world.get_entity_by_id(target_id) {
+        // `can_hit` is Pumpkin's name for vanilla `isPickable`.
+        if let Some(target) = world.get_entity_by_id(target_id)
+            && player.can_interact_with_entity(target.get_entity())
+            && target.can_hit()
+        {
             let target_pos = target.get_entity().pos.load();
             let target_yaw = target.get_entity().yaw.load();
             let target_pitch = target.get_entity().pitch.load();
