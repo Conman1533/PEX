@@ -4477,8 +4477,9 @@ impl Player {
             && distance <= f64::from(max_reach + hitbox_margin) + buffer
     }
 
-    /// Vanilla `ServerGamePacketListenerImpl.handleInteract` acts on `target` only when its block is
-    /// inside the world border and it is within entity interaction range.
+    /// Vanilla `ServerGamePacketListenerImpl.handleInteract` and `handleSpectatorAction` act on
+    /// `target` only when its block is inside the world border and it is within entity interaction
+    /// range.
     pub fn can_interact_with_entity(&self, target: &Entity) -> bool {
         self.is_within_world_border(target)
             && self.is_within_entity_interaction_range(
