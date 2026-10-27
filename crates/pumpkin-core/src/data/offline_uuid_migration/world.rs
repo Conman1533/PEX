@@ -7,7 +7,12 @@
 //! Vanilla still reads a tamed animal's or horse's `Owner` as a `UUID.toString()` string
 //! (`EntityReference.readWithOldOwnerConversion`), so those strings are changed too. Values are
 //! only changed when they are the old UUID of a player in the mapping file.
+//!
+//! [`RECORD_FILE`] lists the players whose references are moved, so players added to the mapping
+//! later, such as those [`migrate_offline_player`](super::migrate_offline_player) moves at login,
+//! are moved at the next start.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
@@ -24,24 +29,33 @@ use pumpkin_world::chunk::io::converter::{ChunkConversionError, dimension_folder
 use pumpkin_world::chunk::io::editor::edit_region;
 use pumpkin_world::chunk::io::write_file_atomically;
 use rayon::prelude::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{info, warn};
 use uuid::Uuid;
 use uuid::fmt::Hyphenated;
 
-use super::{MAPPING_FILE, MigrationError, PLAYERS_DIR, at, read_mapping};
+use super::{
+    LEGACY_VERSION, MAPPING_FILE, MappedPlayer, MigrationError, PLAYERS_DIR, at, read_mapping,
+    write_mapping,
+};
 
 /// The folders in a dimension with region files that can name players. `poi` can't.
 const REGION_FOLDERS: [&str; 2] = ["region", "entities"];
 /// The folder in the world, and in each dimension, with saved data (vanilla `LevelResource.DATA`).
 const DATA_DIR: &str = "data";
-/// Player data and saved data files are `<name>.dat` (vanilla `PlayerDataStorage`,
-/// `SavedDataStorage.getDataFile`).
-const NBT_FILE_EXTENSION: &str = "dat";
+/// Player data is `<uuid>.dat`, and vanilla `PlayerDataStorage.save` keeps the previous one as
+/// `<uuid>.dat_old`, which `PlayerDataStorage.load` falls back to.
+const PLAYER_DATA_EXTENSIONS: [&str; 2] = ["dat", "dat_old"];
+/// Saved data is `<name>.dat` (vanilla `SavedDataStorage.getDataFile`).
+const SAVED_DATA_EXTENSIONS: [&str; 1] = ["dat"];
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(10);
 
+/// The file next to [`MAPPING_FILE`] that lists, in the same format, the players whose references
+/// in the world are moved.
+const RECORD_FILE: &str = "uuid-migration-world.json";
+
 /// Changes the players in the world's [`MAPPING_FILE`] from their old to their new UUIDs wherever
-/// the world names them.
+/// the world names them, and adds them to [`RECORD_FILE`].
 ///
 /// That covers entities and block entities in every dimension's region files, whatever their
 /// format, player data and saved data. Whatever it changes is copied to `<name>.v<version>.bak`
@@ -53,18 +67,59 @@ pub fn migrate_world_uuids(
     version: u32,
 ) -> Result<(), MigrationError> {
     let world_dir = server_dir.join(world_dir);
+    let players = read_mapping(&world_dir.join(PLAYERS_DIR).join(MAPPING_FILE))?
+        .map(|mapping| mapping.players)
+        .unwrap_or_default();
+    move_references(&world_dir, players, chunk_config, version)
+}
+
+/// Does what [`migrate_world_uuids`] does for the players in [`MAPPING_FILE`] that [`RECORD_FILE`]
+/// doesn't list yet. Without any, it reads no region file.
+///
+/// Backups are named after the `config_version` of files with PEX 1.x UUIDs, like those of
+/// [`migrate_offline_player`](super::migrate_offline_player).
+pub fn migrate_world_uuids_of_new_players(
+    server_dir: &Path,
+    world_dir: &Path,
+    chunk_config: &ChunkConfig,
+) -> Result<(), MigrationError> {
+    let world_dir = server_dir.join(world_dir);
     let players_dir = world_dir.join(PLAYERS_DIR);
-    let uuids: FxHashMap<Uuid, Uuid> = read_mapping(&players_dir.join(MAPPING_FILE))?
+    let Some(mapping) = read_mapping(&players_dir.join(MAPPING_FILE))? else {
+        return Ok(());
+    };
+    let recorded: FxHashSet<Uuid> = read_mapping(&players_dir.join(RECORD_FILE))?
         .iter()
-        .flat_map(|mapping| &mapping.players)
+        .flat_map(|record| &record.players)
+        .map(|player| player.old_uuid)
+        .collect();
+    let new_players = mapping
+        .players
+        .into_iter()
+        .filter(|player| !recorded.contains(&player.old_uuid))
+        .collect();
+    move_references(&world_dir, new_players, chunk_config, LEGACY_VERSION)
+}
+
+/// Moves the references to `players`, then adds them to [`RECORD_FILE`]. A failure leaves the
+/// record as it was, so the next start goes through the world for them again.
+fn move_references(
+    world_dir: &Path,
+    players: Vec<MappedPlayer>,
+    chunk_config: &ChunkConfig,
+    version: u32,
+) -> Result<(), MigrationError> {
+    let uuids: FxHashMap<Uuid, Uuid> = players
+        .iter()
         .map(|player| (player.old_uuid, player.new_uuid))
         .collect();
     if uuids.is_empty() {
         return Ok(());
     }
+    let players_dir = world_dir.join(PLAYERS_DIR);
 
     let start = Instant::now();
-    let dimensions = dimension_folders(&world_dir);
+    let dimensions = dimension_folders(world_dir);
     let mut regions = Vec::new();
     for dimension in &dimensions {
         for folder in REGION_FOLDERS {
@@ -86,9 +141,12 @@ pub fn migrate_world_uuids(
     };
 
     let mut files_changed = 0;
-    let mut nbt_files = list_nbt_files(&players_dir.join("data"))?;
+    let mut nbt_files = list_nbt_files(&players_dir.join("data"), &PLAYER_DATA_EXTENSIONS)?;
     for dimension in &dimensions {
-        nbt_files.extend(list_nbt_files(&dimension.join(DATA_DIR))?);
+        nbt_files.extend(list_nbt_files(
+            &dimension.join(DATA_DIR),
+            &SAVED_DATA_EXTENSIONS,
+        )?);
     }
     for path in nbt_files {
         files_changed += usize::from(edit_nbt_file(&path, edit, version)?);
@@ -135,7 +193,11 @@ pub fn migrate_world_uuids(
             chunks_changed.into_inner(),
         );
     }
-    Ok(())
+    write_mapping(
+        &players_dir.join(RECORD_FILE),
+        players.into_iter(),
+        &BTreeSet::new(),
+    )
 }
 
 /// Replaces every old UUID in `compound` with its new one, and returns how many it replaced.
@@ -173,8 +235,8 @@ fn replace_in_tag(tag: &mut NbtTag, uuids: &FxHashMap<Uuid, Uuid>) -> usize {
     }
 }
 
-/// The `.dat` files in `dir` and the folders in it. A missing folder has none.
-fn list_nbt_files(dir: &Path) -> Result<Vec<PathBuf>, MigrationError> {
+/// The files with one of `extensions` in `dir` and the folders in it. A missing folder has none.
+fn list_nbt_files(dir: &Path, extensions: &[&str]) -> Result<Vec<PathBuf>, MigrationError> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -184,10 +246,10 @@ fn list_nbt_files(dir: &Path) -> Result<Vec<PathBuf>, MigrationError> {
     for entry in entries {
         let path = entry.map_err(at(dir))?.path();
         if path.is_dir() {
-            files.extend(list_nbt_files(&path)?);
+            files.extend(list_nbt_files(&path, extensions)?);
         } else if path
             .extension()
-            .is_some_and(|extension| extension == NBT_FILE_EXTENSION)
+            .is_some_and(|extension| extensions.iter().any(|wanted| extension == *wanted))
         {
             files.push(path);
         }
@@ -253,16 +315,19 @@ mod tests {
     use pumpkin_world::chunk::format::linear::LinearV2File;
     use pumpkin_world::chunk::format::pump::PumpFile;
     use pumpkin_world::chunk::io::RegionFile;
-    use serde_json::json;
+    use serde_json::{Value, json};
     use tempfile::TempDir;
 
-    use super::migrate_world_uuids;
+    use super::{RECORD_FILE, migrate_world_uuids, migrate_world_uuids_of_new_players};
+    use crate::data::offline_uuid_migration::migrate_offline_player;
 
     // Notch's PEX 1.2.0 UUID and the one a vanilla 26.3 server gives the name (from 4.2's tests).
     const NOTCH_OLD: &str = "ff4af744-2839-cc96-4605-0dd2214a30c1";
     const NOTCH_NEW: &str = "b50ad385-829d-3141-a216-7e7d7539ba7f";
     /// Ghost's PEX 1.2.0 UUID, which no name matched.
     const GHOST: &str = "df1bc498-4a05-5e10-b286-3eb03abf1170";
+    /// The UUID a vanilla 26.3 server gave Ghost at login (from 4.7's tests).
+    const GHOST_NEW: &str = "48f83307-567a-33d7-8604-3b22ee4c1b84";
     /// Notch's Mojang UUID.
     const MOJANG: &str = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
     const WOLF: &str = "3c6c1d4e-8f6a-4d7b-9b1e-2a4f6c8e0d12";
@@ -435,6 +500,18 @@ mod tests {
         })
     }
 
+    fn read_record(world: &Path) -> Value {
+        serde_json::from_slice(&fs::read(world.join("players").join(RECORD_FILE)).unwrap()).unwrap()
+    }
+
+    fn record_of(players: &[(&str, &str, &str)]) -> Value {
+        let players: Vec<Value> = players
+            .iter()
+            .map(|(name, old, new)| json!({ "name": name, "old_uuid": old, "new_uuid": new }))
+            .collect();
+        json!({ "players": players, "unmatched": [] })
+    }
+
     /// Every file under `dir` with its contents.
     fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
         let mut files = BTreeMap::new();
@@ -488,6 +565,8 @@ mod tests {
 
         let notch = world.join(format!("players/data/{NOTCH_NEW}.dat"));
         write_gzip(&notch, &player_data(NOTCH_OLD));
+        let notch_dat_old = world.join(format!("players/data/{NOTCH_NEW}.dat_old"));
+        write_gzip(&notch_dat_old, &player_data(NOTCH_OLD));
         let boss_events_dat = world.join("data/minecraft/custom_boss_events.dat");
         write_gzip(&boss_events_dat, &boss_events(NOTCH_OLD));
         let raids = overworld.join("data/minecraft/raids.dat");
@@ -513,6 +592,7 @@ mod tests {
         );
         assert_eq!(read_region::<PumpFile>(&nether_pump), [entities(NOTCH_NEW)]);
         assert_eq!(read_gzip(&notch), player_data(NOTCH_NEW));
+        assert_eq!(read_gzip(&notch_dat_old), player_data(NOTCH_NEW));
         assert_eq!(read_gzip(&boss_events_dat), boss_events(NOTCH_NEW));
         assert_eq!(read_gzip(&raids), raids_data(NOTCH_NEW));
 
@@ -522,6 +602,7 @@ mod tests {
             &region_linear,
             &nether_pump,
             &notch,
+            &notch_dat_old,
             &boss_events_dat,
             &raids,
         ];
@@ -539,8 +620,118 @@ mod tests {
             let path = path.strip_prefix(server).unwrap();
             assert_eq!(after[path], before[path], "{}", path.display());
         }
+        assert_eq!(
+            read_record(&world),
+            record_of(&[("Notch", NOTCH_OLD, NOTCH_NEW)])
+        );
 
         migrate_world_uuids(server, Path::new("world"), &config, 1).unwrap();
+        assert_eq!(snapshot(server), after);
+    }
+
+    fn wolves(owners: &[&str]) -> NbtCompound {
+        let wolves = owners
+            .iter()
+            .map(|owner| {
+                nbt_compound_tag! {
+                    "id": NbtTag::from("minecraft:wolf"),
+                    "Owner": uuid(owner)
+                }
+            })
+            .collect();
+        compound(nbt_compound_tag! { "Entities": NbtTag::List(wolves) })
+    }
+
+    /// Ghost's player data, with their own UUID and their shoulder parrot's owner both `ghost`.
+    fn ghost_data(ghost: &str) -> NbtCompound {
+        compound(nbt_compound_tag! {
+            "UUID": uuid(ghost),
+            "ShoulderEntityLeft": nbt_compound_tag! {
+                "id": NbtTag::from("minecraft:parrot"),
+                "Owner": uuid(ghost)
+            }
+        })
+    }
+
+    /// Starts after the `config_version` 1 to 2 step of a build without [`RECORD_FILE`]: Notch's
+    /// references are moved, Ghost is unmatched. Ghost is then moved at login.
+    #[test]
+    fn moves_references_to_players_added_to_the_mapping_at_the_next_start() {
+        let dir = TempDir::new().unwrap();
+        let server = dir.path();
+        let world = server.join("world");
+        let mapping = json!({
+            "players": [{ "name": "Notch", "old_uuid": NOTCH_OLD, "new_uuid": NOTCH_NEW }],
+            "unmatched": [GHOST],
+        });
+        fs::create_dir_all(world.join("players")).unwrap();
+        fs::write(
+            world.join("players/uuid-migration.json"),
+            mapping.to_string(),
+        )
+        .unwrap();
+        let overworld = world.join("dimensions/minecraft/overworld");
+        let anvil = AnvilChunkConfig::default();
+        let entities_mca = overworld.join("entities/r.0.0.mca");
+        write_region::<AnvilRegion>(&entities_mca, &anvil, &[wolves(&[NOTCH_NEW, GHOST])]);
+        let region_mca = overworld.join("region/r.0.0.mca");
+        write_region::<AnvilRegion>(&region_mca, &anvil, &[chunk_with_block_entities(NOTCH_NEW)]);
+        write_gzip(
+            &world.join(format!("players/data/{GHOST}.dat")),
+            &ghost_data(GHOST),
+        );
+        let config = ChunkConfig::Anvil(anvil);
+        let run = || migrate_world_uuids_of_new_players(server, Path::new("world"), &config);
+
+        // Without a record every player counts as new, but Notch's references are already moved.
+        let before = snapshot(server);
+        run().unwrap();
+        let after = snapshot(server);
+        let record_path = Path::new("world/players").join(RECORD_FILE);
+        assert!(!before.contains_key(&record_path));
+        assert_eq!(after.len(), before.len() + 1);
+        assert!(
+            before
+                .iter()
+                .all(|(path, contents)| after[path] == *contents)
+        );
+        let notch = ("Notch", NOTCH_OLD, NOTCH_NEW);
+        assert_eq!(read_record(&world), record_of(&[notch]));
+
+        // With no new players, no region file is read: this one would fail.
+        let not_a_region = overworld.join("region/r.1.0.mca");
+        fs::create_dir(&not_a_region).unwrap();
+        run().unwrap();
+        assert_eq!(snapshot(server), after);
+
+        // Ghost logs in, and their files move to the new UUID with their parrot's old owner.
+        assert!(migrate_offline_player(&world, "Ghost").unwrap());
+        let error = run().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with(&not_a_region.display().to_string())
+        );
+        assert_eq!(read_record(&world), record_of(&[notch]));
+
+        // The next start tries again.
+        fs::remove_dir(&not_a_region).unwrap();
+        run().unwrap();
+        assert_eq!(
+            read_region::<AnvilRegion>(&entities_mca),
+            [wolves(&[NOTCH_NEW, GHOST_NEW])]
+        );
+        let ghost = world.join(format!("players/data/{GHOST_NEW}.dat"));
+        assert_eq!(read_gzip(&ghost), ghost_data(GHOST_NEW));
+        let region_mca = region_mca.strip_prefix(server).unwrap();
+        assert_eq!(snapshot(server)[region_mca], after[region_mca]);
+        assert_eq!(
+            read_record(&world),
+            record_of(&[("Ghost", GHOST, GHOST_NEW), notch])
+        );
+
+        let after = snapshot(server);
+        run().unwrap();
         assert_eq!(snapshot(server), after);
     }
 }
