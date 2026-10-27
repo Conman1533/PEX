@@ -472,3 +472,57 @@ mod override_tests {
         assert!(!dispatcher.has_command("ver"));
     }
 }
+
+/// Player names in `give`, `tp` and `name=`, against what the vanilla 26.3 console answers.
+#[cfg(test)]
+mod player_name_tests {
+    use std::sync::Arc;
+
+    use pumpkin_config::CommandsConfig;
+    use pumpkin_util::permission::PermissionManager;
+
+    use super::default_dispatcher;
+    use crate::command::CommandSource;
+    use crate::command::argument_types::entity_selector::parser::{
+        EXPECTED_END_OF_OPTIONS_ERROR_TYPE, INVALID_NAME_OR_UUID_ERROR_TYPE,
+    };
+    use crate::command::context::command_context::ContextChain;
+    use crate::command::errors::error_types::DISPATCHER_UNKNOWN_ARGUMENT;
+
+    #[test]
+    fn non_ascii_player_names_must_be_quoted() {
+        let manager = PermissionManager::new();
+        let dispatcher = default_dispatcher(&manager, &CommandsConfig::default());
+        let source = Arc::new(CommandSource::dummy());
+
+        for input in [
+            "give \"玩家一号\" torch 21",
+            "give '玩家一号' torch 21",
+            "tp \"玩家一号\" 1 -50 1",
+            "tp Steve \"玩家一号\"",
+            "execute as @a[name=\"玩家一号\"] run say hi",
+        ] {
+            let result = dispatcher.parse_input(input, &source);
+            assert!(result.errors.is_empty(), "{input}: {:?}", result.errors);
+            assert_eq!(result.reader.remaining_length(), 0, "{input}");
+            // `tp` redirects to `teleport`, so its command is in a child context.
+            assert!(
+                ContextChain::try_flatten(&result.context.build(input)).is_some(),
+                "{input}"
+            );
+        }
+
+        for (input, expected) in [
+            ("give 玩家一号 torch 21", &INVALID_NAME_OR_UUID_ERROR_TYPE),
+            ("tp 玩家一号 1 -50 1", &DISPATCHER_UNKNOWN_ARGUMENT),
+            ("tp 玩家一号 Steve", &DISPATCHER_UNKNOWN_ARGUMENT),
+            (
+                "execute as @a[name=玩家一号] run say hi",
+                &EXPECTED_END_OF_OPTIONS_ERROR_TYPE,
+            ),
+        ] {
+            let error = dispatcher.execute_input(input, &source).expect_err(input);
+            assert!(error.is(expected), "{input}: {:?}", error.message);
+        }
+    }
+}

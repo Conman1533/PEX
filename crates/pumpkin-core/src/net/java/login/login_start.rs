@@ -29,7 +29,10 @@ impl PendingConnection {
             return Some(PacketHandlerResult::Stop);
         }
 
-        if !is_valid_player_name(&login_start.name) {
+        if !is_allowed_login_name(
+            &login_start.name,
+            server.advanced_config.networking.java.validate_player_names,
+        ) {
             self.kick(TextComponent::text("Invalid characters in username"))
                 .await;
             return Some(PacketHandlerResult::Stop);

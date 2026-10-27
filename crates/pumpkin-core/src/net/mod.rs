@@ -454,11 +454,22 @@ pub enum EncryptionError {
     VerifyTokenMismatch,
 }
 
-fn is_valid_player_name(name: &str) -> bool {
-    if name.len() > 16 {
-        return false;
+/// Vanilla `StringUtil.isValidPlayerName`: at most 16 characters, each above a space and below DEL.
+///
+/// Only ASCII passes, so counting bytes is the same as vanilla counting UTF-16 code units.
+pub(crate) fn is_valid_player_name(name: &str) -> bool {
+    name.len() <= 16 && name.bytes().all(|b| b > b' ' && b < 0x7F)
+}
+
+/// Whether a Java player may log in as `name`. With `validate` (`validate_player_names` in
+/// `[networking.java]`, on by default) that is [`is_valid_player_name`]; without it, the rule
+/// PEX 1.x had: at most 16 bytes and no spaces or control characters.
+pub(crate) fn is_allowed_login_name(name: &str, validate: bool) -> bool {
+    if validate {
+        is_valid_player_name(name)
+    } else {
+        name.len() <= 16 && !name.chars().any(|c| c.is_control() || c == ' ')
     }
-    !name.chars().any(|c| c.is_control() || c == ' ')
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -685,24 +696,39 @@ mod tests {
         );
     }
 
-    /// Test case for allowed high-codepoint Unicode characters (like Chinese/CJK).
+    /// Vanilla 26.3 refuses these at login ("Invalid characters in username"): every character
+    /// must be ASCII.
     #[test]
-    fn valid_unicode_chinese() {
-        let name = "玩家一号"; // 4 characters, 12 bytes
-        assert!(
-            is_valid_player_name(name),
-            "Chinese characters should be valid"
-        );
+    fn invalid_non_ascii() {
+        for name in ["玩家一号", "Player_玩家", "Ünïcødé"] {
+            assert!(!is_valid_player_name(name), "{name} should be invalid");
+        }
     }
 
-    /// Test case for a mix of valid ASCII and Unicode characters.
+    /// With `validate_player_names` off, login takes what PEX 1.x took: non-ASCII names up to 16
+    /// bytes, still no spaces or control characters.
     #[test]
-    fn valid_mixed_chars() {
-        let name = "Player_玩家"; // 9 characters
-        assert!(
-            is_valid_player_name(name),
-            "Mixed ASCII and Unicode should be valid"
-        );
+    fn login_names_without_validation() {
+        use crate::net::is_allowed_login_name;
+
+        for name in ["玩家一号", "Player_玩家", "Ünïcødé", "Steve"] {
+            assert!(
+                is_allowed_login_name(name, false),
+                "{name} with validation off"
+            );
+        }
+        for name in ["玩家一号", "Player_玩家", "Ünïcødé"] {
+            assert!(
+                !is_allowed_login_name(name, true),
+                "{name} with validation on"
+            );
+        }
+        for name in ["超长玩家名称哈哈", "Player Name", "Player\0Name"] {
+            assert!(
+                !is_allowed_login_name(name, false),
+                "{name:?} with validation off"
+            );
+        }
     }
 
     /// Test case for a name that exceeds the 16-byte limit (ASCII).
@@ -712,16 +738,6 @@ mod tests {
         assert!(
             !is_valid_player_name(name),
             "Name over 16 bytes (ASCII) should be invalid"
-        );
-    }
-
-    /// Test case for a name that exceeds the 16-byte limit (Unicode).
-    #[test]
-    fn invalid_length_unicode_over() {
-        let name = "超长玩家名称哈哈"; // 8 Chinese characters * 3 bytes/char = 24 bytes
-        assert!(
-            !is_valid_player_name(name),
-            "Name over 16 bytes (Unicode) should be invalid by byte count"
         );
     }
 

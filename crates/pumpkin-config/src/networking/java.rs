@@ -15,6 +15,13 @@ pub struct JavaConfig {
     pub encryption: bool,
     /// Whether online mode is enabled. Requires valid Minecraft accounts.
     pub online_mode: bool,
+    /// Whether Java players must have a name vanilla accepts at login: at most 16 characters,
+    /// each from `!` to `~` (vanilla `StringUtil.isValidPlayerName`). Off also lets in names with
+    /// other characters, such as CJK or accented letters, up to 16 bytes, as PEX 1.x did (Paper's
+    /// `unsupported-settings.perform-username-validation` is the same switch). Names with spaces
+    /// or control characters are refused either way. Players with such names can't join a vanilla
+    /// server, and commands reach them only with the name in quotes.
+    pub validate_player_names: bool,
     /// The maximum number of players allowed on the server. Specifying `0` disables the limit.
     pub max_players: u32,
     /// The maximum view distance for players.
@@ -50,6 +57,7 @@ impl Default for JavaConfig {
             address,
             encryption: true,
             online_mode: true,
+            validate_player_names: true,
             max_players: 1000,
             view_distance,
             simulation_distance,

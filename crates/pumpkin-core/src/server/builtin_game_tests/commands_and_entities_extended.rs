@@ -352,3 +352,64 @@ pub(super) async fn test_item_entities_different_types_do_not_merge(
         .then_succeed();
     Ok(())
 }
+
+/// A name Brigadier doesn't read unquoted. Bedrock players can have names like it.
+const NON_ASCII_PLAYER_NAME: &str = "玩家一号";
+
+/// `give`, `tp` and `@a[name=...]` reach a player with such a name when it is quoted, as on
+/// vanilla (`EntitySelectorParser.parseNameOrUUID` and the `name` option read it with
+/// `readString`).
+pub(super) async fn test_quoted_non_ascii_player_name(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    helper
+        .spawn_named_mock_player_at(
+            NON_ASCII_PLAYER_NAME,
+            "minecraft:stick",
+            Vector3::new(1.5, 1.0, 1.5),
+        )
+        .await?;
+    let origin = BlockPos::new(0, 1, 0);
+    let destination = helper.absolute_vec(Vector3::new(3.5, 1.0, 3.5));
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(
+                    &origin,
+                    &format!("give \"{NON_ASCII_PLAYER_NAME}\" minecraft:torch 21"),
+                )
+                .await?;
+            // A maximum of 0 makes `clear` count without removing anything.
+            let torches = helper
+                .execute_command(
+                    &origin,
+                    &format!("clear \"{NON_ASCII_PLAYER_NAME}\" minecraft:torch 0"),
+                )
+                .await?;
+            helper.assert_true(torches == 21, format!("expected 21 torches, found {torches}"))?;
+            helper
+                .execute_command(
+                    &origin,
+                    &format!(
+                        "tp \"{NON_ASCII_PLAYER_NAME}\" {} {} {}",
+                        destination.x, destination.y, destination.z
+                    ),
+                )
+                .await?;
+            helper
+                .execute_command(
+                    &origin,
+                    &format!(
+                        "execute as @a[name=\"{NON_ASCII_PLAYER_NAME}\"] at @s run setblock ~ ~ ~ minecraft:gold_block"
+                    ),
+                )
+                .await?;
+            helper
+                .assert_block_present(&BlockPos::new(3, 1, 3), &Block::GOLD_BLOCK)
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}

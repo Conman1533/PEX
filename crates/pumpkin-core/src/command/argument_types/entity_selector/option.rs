@@ -324,6 +324,8 @@ impl EntitySelectorOption {
             Self::Name => {
                 let start = parser.reader.cursor();
                 let invert = parser.consume_inverted_start();
+                // Vanilla `readString`: a name Brigadier doesn't allow unquoted (`玩家一号`) can be quoted.
+                let string = parser.reader.read_string()?;
                 if parser.has_flag(if invert {
                     Flags::NAME_NOT_EQUALS_SET
                 } else {
@@ -332,7 +334,6 @@ impl EntitySelectorOption {
                     parser.reader.set_cursor(start);
                     return Err(self.inapplicable_error(parser.reader));
                 }
-                let string = parser.reader.read_unquoted_string();
                 parser.add_predicate(EntitySelectorPredicate::Name(string, invert));
                 parser.set_flag(
                     if invert {

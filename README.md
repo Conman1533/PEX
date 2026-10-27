@@ -82,6 +82,7 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
   - `slow-ticks.log` breaks down every slow tick by world and phase (chunks, players, entities, entity tracking, block entities), with counts and memory use.
   - `summary.csv` records tick times, counts and memory once a minute.
   - The `[metrics]` section of `pumpkin.toml` has `enabled` to turn them off and `slow_tick_ms` to change the slow tick threshold (default 100).
+- **Player names at login follow vanilla**: a Java player whose name has a character other than ASCII `!` to `~` (CJK, accented letters, emoji) is refused with "Invalid characters in username", as on vanilla. Servers with such players can set `validate_player_names = false` under `[networking.java]` in `pumpkin.toml` to let them in, as PEX 1.x did (up to 16 bytes, no spaces or control characters); commands reach them with the name in quotes, such as `/give "玩家一号" torch`. Bedrock names aren't checked.
 - **Chunks unload when players leave**: the server no longer keeps the last player's view-distance chunks loaded forever after they disconnect.
 - **Idle servers hand memory back to the OS**: freed memory is returned once a minute on Linux (glibc). With the chunk unloading fix, idle RAM after everyone leaves dropped about 35% in testing (327 MB to 214 MB).
 - **Scheduled block and fluid ticks only run in active chunks**, as in vanilla, so loaded but inactive chunks cost no tick time (upstream PR [#3553](https://github.com/Pumpkin-MC/Pumpkin/pull/3553)).

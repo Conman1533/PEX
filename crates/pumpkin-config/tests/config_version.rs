@@ -58,6 +58,7 @@ fn release_files_migrate_to_the_current_version() {
             [
                 info("Saved a copy of pumpkin.toml as pumpkin.toml.v1.bak before changing it"),
                 info("pumpkin.toml: added [world.entity_islands] with default values"),
+                info("pumpkin.toml: added networking.java.validate_player_names = true"),
                 info(&format!(
                     "pumpkin.toml: set {CONFIG_VERSION_KEY} to {latest}"
                 )),

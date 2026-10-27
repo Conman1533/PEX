@@ -376,12 +376,13 @@ impl<S: CommandSource> CommandDispatcher<S> {
     /// Executes a given result that has already been parsed from an input.
     pub fn execute(&self, parsed: ParsingResult<'_, S>) -> Result<i32, CommandSyntaxError> {
         if parsed.reader.peek().is_some() {
-            return if let Some(err) = parsed.errors.values().next() {
-                Err(err.clone())
-            } else if parsed.context.range.is_empty() {
-                Err(Self::unknown_command_error(&parsed.reader))
-            } else {
-                Err(DISPATCHER_UNKNOWN_ARGUMENT.create(&parsed.reader))
+            // Vanilla `Commands.getParseException`: a branch's own error only when it is the only one.
+            return match parsed.errors.values().next() {
+                Some(err) if parsed.errors.len() == 1 => Err(err.clone()),
+                _ if parsed.context.range.is_empty() => {
+                    Err(Self::unknown_command_error(&parsed.reader))
+                }
+                _ => Err(DISPATCHER_UNKNOWN_ARGUMENT.create(&parsed.reader)),
             };
         }
 
@@ -556,7 +557,8 @@ impl<S: CommandSource> CommandDispatcher<S> {
         source.send_message(error.message.color(Color::Named(NamedColor::Red)));
 
         if let Some(context) = error.context {
-            let i = context.input.len().min(context.cursor);
+            let i = context.input.floor_char_boundary(context.cursor);
+            let (start, cut_off) = context_start(&context.input[..i]);
 
             let mut error_text = TextComponent::empty()
                 .color(Color::Named(NamedColor::Gray))
@@ -564,11 +566,9 @@ impl<S: CommandSource> CommandDispatcher<S> {
                     command: format!("/{command}").into(),
                 });
 
-            if i > 10 {
+            if cut_off {
                 error_text = error_text.add_text("...");
             }
-
-            let start = i.saturating_sub(10);
 
             let command_snippet = &context.input[start..i];
             error_text = error_text.add_text(command_snippet.to_owned());
@@ -961,6 +961,26 @@ impl<S: CommandSource> CommandDispatcher<S> {
     }
 }
 
+/// Brigadier `CommandSyntaxException.CONTEXT_AMOUNT`: how much of the input an error shows before
+/// its cursor.
+const CONTEXT_AMOUNT: usize = 10;
+
+/// Returns where the input shown before an error's cursor starts in `before_cursor`, and whether
+/// earlier input is cut off. Vanilla `Commands.finishParsing` counts UTF-16 code units, the unit
+/// of Java strings; this stops at whole characters, so it never slices one apart.
+fn context_start(before_cursor: &str) -> (usize, bool) {
+    let mut start = before_cursor.len();
+    let mut units = 0;
+    for (index, c) in before_cursor.char_indices().rev() {
+        units += c.len_utf16();
+        if units > CONTEXT_AMOUNT {
+            return (start, true);
+        }
+        start = index;
+    }
+    (start, false)
+}
+
 #[cfg(test)]
 mod test {
     use pumpkin_util::text::TextComponent;
@@ -970,10 +990,14 @@ mod test {
     };
     use crate::argument_types::core::integer::IntegerArgumentType;
     use crate::context::command_context::CommandContext;
-    use crate::errors::error_types::DISPATCHER_UNKNOWN_COMMAND;
+    use crate::errors::error_types::{
+        DISPATCHER_UNKNOWN_ARGUMENT, DISPATCHER_UNKNOWN_COMMAND, READER_EXPECTED_INT,
+    };
     use crate::node::dispatcher::CommandDispatcher;
     use crate::node::{CommandExecutor, CommandExecutorResult};
     use crate::source::{CommandSource, DummySource};
+    use crate::string_reader::StringReader;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn unknown_command() {
@@ -1320,5 +1344,83 @@ mod test {
         assert_eq!(dispatcher.execute_input("//set", &source), Ok(42));
         // Execution via /set alias (as sent by Java client for //set)
         assert_eq!(dispatcher.execute_input("/set", &source), Ok(42));
+    }
+
+    /// Vanilla answers `tp 玩家一号 1 2 3` with "Incorrect argument for command": all three `tp`
+    /// branches fail, so no single branch error is reported.
+    #[test]
+    fn several_failed_branches_report_an_incorrect_argument() {
+        let executor: fn(&CommandContext) -> CommandExecutorResult = |_| Ok(1);
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            CommandArgumentBuilder::new("one", "One argument branch").then(
+                RequiredArgumentBuilder::new("value", IntegerArgumentType::any())
+                    .executes(executor),
+            ),
+        );
+        dispatcher.register(
+            CommandArgumentBuilder::new("two", "Two argument branches")
+                .then(
+                    RequiredArgumentBuilder::new("first", IntegerArgumentType::any())
+                        .executes(executor),
+                )
+                .then(
+                    RequiredArgumentBuilder::new("second", IntegerArgumentType::any())
+                        .executes(executor),
+                ),
+        );
+        let source = DummySource::dummy();
+        assert!(
+            dispatcher
+                .execute_input("one x", &source)
+                .is_err_and(|error| error.is(&READER_EXPECTED_INT))
+        );
+        assert!(
+            dispatcher
+                .execute_input("two x", &source)
+                .is_err_and(|error| error.is(&DISPATCHER_UNKNOWN_ARGUMENT))
+        );
+    }
+
+    /// Expected text is what the vanilla 26.3 console printed for the same commands. Ten
+    /// characters before the cursor are shown, counted in UTF-16 code units like Java strings.
+    #[test]
+    fn error_context_counts_characters() {
+        #[derive(Clone, Default)]
+        struct RecordingSource(Arc<Mutex<Vec<String>>>);
+        impl CommandSource for RecordingSource {
+            fn send_message(&self, message: TextComponent) {
+                self.0.lock().unwrap().push(message.get_text());
+            }
+        }
+
+        for (input, cursor, expected) in [
+            (
+                "give 玩家一号 torch 21",
+                5,
+                "give 玩家一号 torch 21<--[HERE]",
+            ),
+            (
+                "tp \"玩家一号\" 玩家一号",
+                18,
+                "tp \"玩家一号\" 玩家一号<--[HERE]",
+            ),
+            (
+                "give \"玩家一号\" 玩家一号",
+                20,
+                "...ve \"玩家一号\" 玩家一号<--[HERE]",
+            ),
+        ] {
+            let mut reader = StringReader::new(input);
+            reader.set_cursor(cursor);
+            let source = RecordingSource::default();
+            CommandDispatcher::<RecordingSource>::send_error_to_source(
+                &source,
+                DISPATCHER_UNKNOWN_ARGUMENT.create(&reader),
+                input,
+            );
+            let sent = source.0.lock().unwrap();
+            assert_eq!(sent.last().map(String::as_str), Some(expected), "{input}");
+        }
     }
 }
