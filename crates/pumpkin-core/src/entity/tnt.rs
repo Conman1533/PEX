@@ -171,6 +171,11 @@ impl EntityBase for TNTEntity {
         0.49
     }
 
+    /// Vanilla `PrimedTnt.isPickable`.
+    fn can_hit(&self) -> bool {
+        !self.entity.is_removed()
+    }
+
     fn cast_any(&self) -> &dyn std::any::Any {
         self
     }
