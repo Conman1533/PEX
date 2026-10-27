@@ -22,7 +22,7 @@ use crate::{
     net::{
         EncryptionError, GameProfile, PacketHandlerResult,
         authentication::{self, AuthError},
-        is_valid_player_name,
+        is_allowed_login_name,
         java::pending::PendingConnection,
         offline_uuid,
         proxy::{bungeecord, velocity, vine},

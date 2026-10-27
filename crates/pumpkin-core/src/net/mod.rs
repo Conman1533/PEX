@@ -446,8 +446,19 @@ pub enum EncryptionError {
 /// Vanilla `StringUtil.isValidPlayerName`: at most 16 characters, each above a space and below DEL.
 ///
 /// Only ASCII passes, so counting bytes is the same as vanilla counting UTF-16 code units.
-fn is_valid_player_name(name: &str) -> bool {
+pub(crate) fn is_valid_player_name(name: &str) -> bool {
     name.len() <= 16 && name.bytes().all(|b| b > b' ' && b < 0x7F)
+}
+
+/// Whether a Java player may log in as `name`. With `validate` (`validate_player_names` in
+/// `[networking.java]`, on by default) that is [`is_valid_player_name`]; without it, the rule
+/// PEX 1.x had: at most 16 bytes and no spaces or control characters.
+pub(crate) fn is_allowed_login_name(name: &str, validate: bool) -> bool {
+    if validate {
+        is_valid_player_name(name)
+    } else {
+        name.len() <= 16 && !name.chars().any(|c| c.is_control() || c == ' ')
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -642,6 +653,32 @@ mod tests {
     fn invalid_non_ascii() {
         for name in ["玩家一号", "Player_玩家", "Ünïcødé"] {
             assert!(!is_valid_player_name(name), "{name} should be invalid");
+        }
+    }
+
+    /// With `validate_player_names` off, login takes what PEX 1.x took: non-ASCII names up to 16
+    /// bytes, still no spaces or control characters.
+    #[test]
+    fn login_names_without_validation() {
+        use crate::net::is_allowed_login_name;
+
+        for name in ["玩家一号", "Player_玩家", "Ünïcødé", "Steve"] {
+            assert!(
+                is_allowed_login_name(name, false),
+                "{name} with validation off"
+            );
+        }
+        for name in ["玩家一号", "Player_玩家", "Ünïcødé"] {
+            assert!(
+                !is_allowed_login_name(name, true),
+                "{name} with validation on"
+            );
+        }
+        for name in ["超长玩家名称哈哈", "Player Name", "Player\0Name"] {
+            assert!(
+                !is_allowed_login_name(name, false),
+                "{name:?} with validation off"
+            );
         }
     }
 

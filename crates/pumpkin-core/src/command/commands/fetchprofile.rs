@@ -9,6 +9,7 @@ use crate::command::node::dispatcher::CommandDispatcher;
 use crate::command::node::{CommandExecutor, CommandExecutorResult};
 use crate::entity::EntityBase;
 use crate::net::authentication::{fetch_profile_by_uuid, lookup_profile_by_name};
+use crate::net::is_allowed_login_name;
 use crate::net::{GameProfile, offline_uuid};
 use crate::server::Server;
 use pumpkin_data::translation;
@@ -145,6 +146,15 @@ fn report_resolved_profile(
 async fn fetch_profile_by_name_helper(server: &Server, name: &str) -> Option<GameProfile> {
     if let Some(player) = server.get_player_by_name(name) {
         return Some(player.gameprofile.clone());
+    }
+
+    // Vanilla `ProfileResolver.fetchByName` finds nothing for a name that fails
+    // `isValidPlayerName`; here it is the login rule, so names players can join with resolve.
+    if !is_allowed_login_name(
+        name,
+        server.advanced_config.networking.java.validate_player_names,
+    ) {
+        return None;
     }
 
     let cached_entry = server.data.user_cache.write().unwrap().get_by_name(name);
