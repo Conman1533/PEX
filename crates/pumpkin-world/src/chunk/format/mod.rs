@@ -75,6 +75,12 @@ impl Dirtiable for ChunkData {
     }
 }
 
+/// Whether chunk NBT starts with a root compound that has a name (an empty one, as vanilla and PEX
+/// write it), rather than an unnamed root.
+pub(crate) fn has_named_root(chunk_data: &[u8]) -> bool {
+    chunk_data.starts_with(&[pumpkin_nbt::COMPOUND_ID, 0, 0])
+}
+
 /// The section stores `Y` as a byte, short, int or long depending on who wrote
 /// the file. The datafixer writes ints. Reading only bytes would map every int
 /// section to `Y = 0`, and they would overwrite each other.
@@ -221,10 +227,7 @@ impl ChunkData {
             return Self::internal_from_pump_bytes(chunk_data, position);
         }
 
-        let is_named = chunk_data.len() >= 3
-            && chunk_data[0] == 0x0a
-            && chunk_data[1] == 0x00
-            && chunk_data[2] == 0x00;
+        let is_named = has_named_root(chunk_data);
 
         let mut cursor = std::io::Cursor::new(chunk_data);
         let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
@@ -1250,10 +1253,7 @@ impl ChunkEntityData {
         chunk_data: &[u8],
         position: Vector2<i32>,
     ) -> Result<Self, ChunkParsingError> {
-        let is_named = chunk_data.len() >= 3
-            && chunk_data[0] == 0x0a
-            && chunk_data[1] == 0x00
-            && chunk_data[2] == 0x00;
+        let is_named = has_named_root(chunk_data);
         let mut cursor = std::io::Cursor::new(chunk_data);
         let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(
             pumpkin_nbt::deserializer::NbtStreamReader(&mut cursor),

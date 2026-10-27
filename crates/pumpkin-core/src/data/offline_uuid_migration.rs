@@ -26,6 +26,8 @@ use super::whitelist::WhitelistConfig;
 use super::{DATA_FOLDER, LoadJSONConfiguration};
 use crate::net::{legacy_offline_uuid, offline_uuid};
 
+pub mod world;
+
 /// The file in the world's `players` directory that lists each migrated player's old and new
 /// UUID, for migrating references to them in the world and in plugin data.
 pub const MAPPING_FILE: &str = "uuid-migration.json";
@@ -280,17 +282,24 @@ fn update_entries(
     }
 }
 
+/// Reads the mapping file at `path`, or returns `None` if there is none.
+fn read_mapping(path: &Path) -> Result<Option<Mapping>, MigrationError> {
+    match fs::read(path) {
+        Ok(json) => serde_json::from_slice(&json)
+            .map(Some)
+            .map_err(|err| at(path)(err.into())),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(at(path)(err)),
+    }
+}
+
 /// Adds `migrated` to the mapping file, keeping the players an earlier run recorded.
 fn write_mapping(
     path: &Path,
     migrated: impl Iterator<Item = MappedPlayer>,
     unmatched: &BTreeSet<Uuid>,
 ) -> Result<(), MigrationError> {
-    let previous: Option<Mapping> = match fs::read(path) {
-        Ok(json) => Some(serde_json::from_slice(&json).map_err(|err| at(path)(err.into()))?),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-        Err(err) => return Err(at(path)(err)),
-    };
+    let previous = read_mapping(path)?;
     let mut players: BTreeMap<Uuid, MappedPlayer> = previous
         .iter()
         .flat_map(|mapping| mapping.players.iter().cloned())

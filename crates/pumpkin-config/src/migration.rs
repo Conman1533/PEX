@@ -201,7 +201,7 @@ fn backup_path(path: &Path, version: u32, copy: u32) -> PathBuf {
 
 /// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
 /// An existing backup is never overwritten: a taken name gets a counter.
-pub fn write_backup(path: &Path, contents: &str, version: u32) -> io::Result<PathBuf> {
+pub fn write_backup(path: &Path, contents: impl AsRef<[u8]>, version: u32) -> io::Result<PathBuf> {
     let mut copy = 0u32;
     loop {
         let backup = backup_path(path, version, copy);
@@ -211,7 +211,7 @@ pub fn write_backup(path: &Path, contents: &str, version: u32) -> io::Result<Pat
             .open(&backup)
         {
             Ok(mut file) => {
-                return match file.write_all(contents.as_bytes()) {
+                return match file.write_all(contents.as_ref()) {
                     Ok(()) => Ok(backup),
                     Err(err) => {
                         // Don't leave a partial copy that looks like a good backup.
