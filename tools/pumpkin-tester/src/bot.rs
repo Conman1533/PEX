@@ -33,10 +33,10 @@ use pumpkin_protocol::{
             handshake::SHandShake,
             login::{SLoginAcknowledged, SLoginStart},
             play::{
-                Action, SChatCommand, SChunkBatch, SClickSlot, SCloseContainer, SConfirmTeleport,
-                SKeepAlive, SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded,
-                SPlayerPosition, SPlayerPositionRotation, SSetHeldItem, SUseItemOn, SlotActionType,
-                Status,
+                Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot,
+                SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPlayPingRequest,
+                SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
+                SPlayerPositionRotation, SSetHeldItem, SUseItemOn, SlotActionType, Status,
             },
         },
     },
@@ -505,6 +505,31 @@ impl HeadlessBot {
             inside_block: false,
             is_against_world_border: false,
             sequence: VarInt(sequence),
+        })
+        .await
+    }
+
+    /// Right-clicks an entity with the main hand. `location` is where the click hit it, relative
+    /// to its position, as the vanilla client sends it. Keep it nonzero: `LpVector3d::read`
+    /// misreads a zero vector.
+    pub async fn interact_entity(
+        &mut self,
+        entity_id: i32,
+        location: Vector3<f64>,
+    ) -> Result<(), String> {
+        self.send_packet(&SInteract {
+            entity_id: VarInt(entity_id),
+            r#type: VarInt(ActionType::InteractAt as i32),
+            target_position: Some(location),
+            hand: Some(VarInt(0)),
+            sneaking: false,
+        })
+        .await
+    }
+
+    pub async fn attack_entity(&mut self, entity_id: i32) -> Result<(), String> {
+        self.send_packet(&SAttack {
+            entity_id: VarInt(entity_id),
         })
         .await
     }

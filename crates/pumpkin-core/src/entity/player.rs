@@ -236,10 +236,10 @@ impl BedrockPlayer<'_> {
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
-use pumpkin_data::data_component_impl::{AttributeModifiersImpl, EnchantmentsImpl, Operation};
 use pumpkin_data::data_component_impl::{
-    CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
+    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
 };
+use pumpkin_data::data_component_impl::{AttributeModifiersImpl, EnchantmentsImpl, Operation};
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
 use pumpkin_data::item_stack::{DamageResult, ItemStack};
@@ -376,6 +376,15 @@ pub const MINE_BLOCK_EXHAUSTION: f32 = 0.005; // Vanilla: 0.005F
 /// Share of the server's own dig progress a finished dig needs to break the block at once. The
 /// gap to 1.0 is room for latency. Vanilla: `ServerPlayerGameMode#handleBlockBreakAction`.
 const STOP_DESTROY_MIN_PROGRESS: f32 = 0.7;
+
+/// Amount of vanilla `ServerPlayer.CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER`, which adds to the
+/// `entity_interaction_range` attribute while the player is in creative.
+const CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER: f64 = 2.0;
+
+/// Reach the server allows beyond the player's own when an interact or attack packet names an
+/// entity, for latency. Vanilla passes 3.0 in `ServerGamePacketListenerImpl.handleInteract` and
+/// `handleAttack`.
+const ENTITY_PACKET_RANGE_BUFFER: f64 = 3.0;
 
 const fn bedrock_inventory_slot(player_screen_slot: i16) -> Option<u32> {
     match player_screen_slot {
@@ -4417,6 +4426,78 @@ impl Player {
             y: entity_pos.y + eye_height,
             z: entity_pos.z,
         }) < d * d
+    }
+
+    /// Vanilla `Player.entityInteractionRange`: the `entity_interaction_range` attribute, plus the
+    /// modifier vanilla `ServerPlayer.updatePlayerAttributes` adds in creative.
+    pub fn entity_interaction_range(&self) -> f64 {
+        let range = self
+            .living_entity
+            .get_attribute_value(&Attributes::ENTITY_INTERACTION_RANGE);
+        if self.gamemode.load() == GameMode::Creative {
+            range + CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER
+        } else {
+            range
+        }
+    }
+
+    /// Vanilla `Player.isWithinEntityInteractionRange(AABB, double)`.
+    pub fn is_within_entity_interaction_range(&self, bounds: &BoundingBox, buffer: f64) -> bool {
+        let max_range = self.entity_interaction_range() + buffer;
+        bounds.squared_magnitude(self.eye_position()) < max_range * max_range
+    }
+
+    /// Vanilla `Player.isWithinAttackRange`: the weapon's `attack_range` component, or
+    /// `AttackRange.defaultFor`, which is the entity interaction range with no hitbox margin.
+    pub fn is_within_attack_range(
+        &self,
+        weapon: &ItemStack,
+        bounds: &BoundingBox,
+        buffer: f64,
+    ) -> bool {
+        let creative = self.gamemode.load() == GameMode::Creative;
+        let (min_reach, max_reach, hitbox_margin) =
+            match weapon.get_data_component::<AttackRangeImpl>() {
+                Some(range) if creative => (
+                    range.min_creative_reach,
+                    range.max_creative_reach,
+                    range.hitbox_margin,
+                ),
+                Some(range) => (range.min_reach, range.max_reach, range.hitbox_margin),
+                None => (0.0, self.entity_interaction_range() as f32, 0.0),
+            };
+        let distance = bounds.squared_magnitude(self.eye_position()).sqrt();
+        distance >= f64::from(min_reach - hitbox_margin) - buffer
+            && distance <= f64::from(max_reach + hitbox_margin) + buffer
+    }
+
+    /// Vanilla `ServerGamePacketListenerImpl.handleInteract` acts on `target` only when its block is
+    /// inside the world border and it is within entity interaction range.
+    pub fn can_interact_with_entity(&self, target: &Entity) -> bool {
+        self.is_within_world_border(target)
+            && self.is_within_entity_interaction_range(
+                &target.bounding_box.load(),
+                ENTITY_PACKET_RANGE_BUFFER,
+            )
+    }
+
+    /// Vanilla `ServerGamePacketListenerImpl.handleAttack` attacks `target` only when its block is
+    /// inside the world border and it is within the main hand weapon's attack range.
+    pub fn can_attack_entity(&self, target: &Entity) -> bool {
+        self.is_within_world_border(target)
+            && self.is_within_attack_range(
+                &self.inventory().held_item(),
+                &target.bounding_box.load(),
+                ENTITY_PACKET_RANGE_BUFFER,
+            )
+    }
+
+    fn is_within_world_border(&self, target: &Entity) -> bool {
+        self.world()
+            .worldborder
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_within_bounds(&target.block_pos.load())
     }
 
     #[must_use]

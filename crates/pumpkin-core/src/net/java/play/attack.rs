@@ -38,6 +38,9 @@ impl JavaClient {
             ));
             return;
         };
+        if !player.can_attack_entity(target.get_entity()) {
+            return;
+        }
         if let Some(player_victim) = &player_target {
             if player_victim.living_entity.health.load() <= 0.0 {
                 return;
