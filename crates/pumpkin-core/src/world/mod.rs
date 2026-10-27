@@ -1,4 +1,4 @@
-use crate::block::entities::{BlockEntity, block_entity_from_nbt};
+use crate::block::entities::{BlockEntity, block_entity_from_nbt, replacing_removes_block_entity};
 use crate::server::metrics::WorldTickReport;
 use dashmap::DashMap;
 use pumpkin_data::chunk::Biome;
@@ -5362,13 +5362,10 @@ impl World {
         let is_new_block = old_block != new_block;
         let block_moved = flags.contains(BlockFlags::MOVED);
 
-        if is_new_block
-            && old_block.default_state.block_entity_type != u16::MAX
-            && old_block.default_state.block_entity_type
-                != new_block.default_state.block_entity_type
-            && let Some(entity) = self.get_block_entity(position)
-        {
-            if !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK) {
+        if replacing_removes_block_entity(old_block, new_block) {
+            if !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK)
+                && let Some(entity) = self.get_block_entity(position)
+            {
                 entity.on_block_replaced(self, position);
             }
             self.remove_block_entity(position);
@@ -8120,6 +8117,51 @@ mod tests {
         assert_eq!(
             world.invalid_ticking_block_entities.lock().unwrap().len(),
             2
+        );
+    }
+
+    /// Vanilla `LevelChunk.setBlockState` drops the block entity of a replaced block unless the
+    /// new block keeps it. Beds have no vanilla block entity type, so theirs was never dropped.
+    #[tokio::test]
+    async fn replacing_a_block_drops_its_block_entity_unless_the_new_block_keeps_it() {
+        use std::sync::Arc;
+
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::{chunk::ChunkData, world::BlockFlags};
+
+        use crate::block::entities::bed::BedBlockEntity;
+
+        let world = super::test_world();
+        world
+            .level
+            .loaded_chunks
+            .insert(Vector2::new(0, 0), ChunkData::empty_sync(0, 0));
+        let set = |position: &BlockPos, block: &Block| {
+            world.set_block_state(position, block.default_state.id, BlockFlags::empty());
+        };
+
+        let bed_pos = BlockPos::new(1, 64, 1);
+        set(&bed_pos, &Block::RED_BED);
+        world.add_block_entity(Arc::new(BedBlockEntity::new(bed_pos)));
+        set(&bed_pos, &Block::AIR);
+        assert!(world.get_block_entity(&bed_pos).is_none());
+
+        let chest_pos = BlockPos::new(2, 64, 1);
+        set(&chest_pos, &Block::COPPER_CHEST);
+        let chest = world.get_block_entity(&chest_pos).unwrap();
+        set(&chest_pos, &Block::EXPOSED_COPPER_CHEST);
+        assert!(
+            Arc::ptr_eq(&chest, &world.get_block_entity(&chest_pos).unwrap()),
+            "an oxidizing copper chest keeps its contents"
+        );
+
+        let banner_pos = BlockPos::new(3, 64, 1);
+        set(&banner_pos, &Block::WHITE_BANNER);
+        let banner = world.get_block_entity(&banner_pos).unwrap();
+        set(&banner_pos, &Block::RED_BANNER);
+        assert!(
+            !Arc::ptr_eq(&banner, &world.get_block_entity(&banner_pos).unwrap()),
+            "another banner doesn't take the old one's patterns"
         );
     }
 
