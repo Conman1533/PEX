@@ -319,8 +319,8 @@ impl<'b, 'a> EntitySelectorParser<'b, 'a> {
             self.entity_uuid = Some(uuid);
             self.includes_entities = true;
         } else {
-            // Check for a player name.
-            if string.is_empty() || string.len() > 16 {
+            // Check for a player name. Vanilla's `String.length()` counts UTF-16 code units.
+            if string.is_empty() || string.encode_utf16().count() > 16 {
                 self.reader.set_cursor(i);
                 return Err(INVALID_NAME_OR_UUID_ERROR_TYPE.create(self.reader));
             }
@@ -618,13 +618,53 @@ impl EntitySelectorParserSuggestions {
 #[cfg(test)]
 mod tests {
     use super::EntitySelectorParser;
+    use crate::command::argument_types::entity_selector::{
+        EntitySelector, EntitySelectorPredicate,
+    };
     use crate::command::string_reader::StringReader;
 
     fn parse(selector: &str) -> bool {
+        parse_selector(selector).is_some()
+    }
+
+    fn parse_selector(selector: &str) -> Option<EntitySelector> {
         let mut reader = StringReader::new(selector);
         EntitySelectorParser::new(&mut reader, true)
             .parse_and_consume()
-            .is_ok()
+            .ok()
+    }
+
+    /// Same answers as vanilla 26.3 for `give <name> torch`: an unquoted name may only use
+    /// Brigadier's unquoted characters, and a name has at most 16 UTF-16 code units.
+    #[test]
+    fn player_names_follow_brigadier_quoting() {
+        assert!(!parse("玩家一号"));
+        for (quoted, name) in [("\"玩家一号\"", "玩家一号"), ("'Bob!'", "Bob!")] {
+            let selector = parse_selector(quoted).expect(quoted);
+            assert_eq!(selector.player_name.as_deref(), Some(name));
+        }
+        assert!(parse("\"一二三四五六七八九十一二三四五六\""));
+        assert!(!parse("\"一二三四五六七八九十一二三四五六七\""));
+        assert!(parse("\"🎮🎮🎮🎮🎮🎮🎮🎮\""));
+        assert!(!parse("\"🎮🎮🎮🎮🎮🎮🎮🎮🎮\""));
+    }
+
+    #[test]
+    fn name_option_reads_quoted_names() {
+        for (selector, inverted) in [
+            ("@a[name=\"玩家一号\"]", false),
+            ("@e[name=!'玩家一号']", true),
+        ] {
+            let parsed = parse_selector(selector).expect(selector);
+            assert!(
+                parsed.predicates.iter().any(|predicate| matches!(
+                    predicate,
+                    EntitySelectorPredicate::Name(name, invert) if name == "玩家一号" && *invert == inverted
+                )),
+                "{selector}"
+            );
+        }
+        assert!(!parse("@a[name=玩家一号]"));
     }
 
     #[test]
