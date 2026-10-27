@@ -237,7 +237,8 @@ use pumpkin_data::attributes::Attributes;
 use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::{
-    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
+    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, MinimumAttackChargeImpl,
+    ToolImpl, WeaponImpl,
 };
 use pumpkin_data::data_component_impl::{AttributeModifiersImpl, EnchantmentsImpl, Operation};
 use pumpkin_data::effect::StatusEffect;
@@ -1434,21 +1435,6 @@ impl Player {
         let attack_speed = base_attack_speed + add_speed;
 
         let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
-        if !is_bedrock
-            && let Some(min_charge) = item_stack
-                .get_data_component::<pumpkin_data::data_component_impl::MinimumAttackChargeImpl>(
-            )
-            && min_charge.charge > 0.0
-        {
-            let charge_progress = self.get_attack_cooldown_progress(
-                f64::from(server.basic_config.tps),
-                5.0,
-                attack_speed,
-            );
-            if (charge_progress as f32) < min_charge.charge {
-                return;
-            }
-        }
         let attack_cooldown_progress = if is_bedrock {
             1.0
         } else {
@@ -3333,6 +3319,26 @@ impl Player {
         let progress_per_tick = tps / attack_speed;
         let progress = x / progress_per_tick;
         progress.clamp(0.0, 1.0)
+    }
+
+    /// Vanilla `Player.cannotAttackWithItem`: `stack` has a `minimum_attack_charge` that the attack
+    /// strength won't reach even `tolerance` ticks from now.
+    pub fn cannot_attack_with_item(&self, stack: &ItemStack, tolerance: u32) -> bool {
+        let required_strength = stack
+            .get_data_component::<MinimumAttackChargeImpl>()
+            .map_or(0.0, |charge| charge.charge);
+        // Vanilla `Player.getCurrentItemAttackStrengthDelay`.
+        let strength_delay = (1.0
+            / self
+                .living_entity
+                .get_attribute_value(&Attributes::ATTACK_SPEED)
+            * 20.0) as f32;
+        let optimistic_strength = self
+            .last_attacked_ticks
+            .load(Ordering::Acquire)
+            .saturating_add(tolerance) as f32
+            / strength_delay;
+        required_strength > 0.0 && optimistic_strength < required_strength
     }
 
     pub async fn fire_packet_sent<P: Send + Sync + std::any::Any>(
