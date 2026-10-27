@@ -410,6 +410,11 @@ impl EntityBase for ArmorStandEntity {
         0.08
     }
 
+    /// Vanilla `ArmorStand.isPickable`.
+    fn can_hit(&self) -> bool {
+        !self.living_entity.entity.is_removed() && !self.is_marker()
+    }
+
     fn cast_any(&self) -> &dyn std::any::Any {
         self
     }
