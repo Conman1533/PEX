@@ -557,7 +557,8 @@ impl<S: CommandSource> CommandDispatcher<S> {
         source.send_message(error.message.color(Color::Named(NamedColor::Red)));
 
         if let Some(context) = error.context {
-            let i = context.input.len().min(context.cursor);
+            let i = context.input.floor_char_boundary(context.cursor);
+            let (start, cut_off) = context_start(&context.input[..i]);
 
             let mut error_text = TextComponent::empty()
                 .color(Color::Named(NamedColor::Gray))
@@ -565,11 +566,9 @@ impl<S: CommandSource> CommandDispatcher<S> {
                     command: format!("/{command}").into(),
                 });
 
-            if i > 10 {
+            if cut_off {
                 error_text = error_text.add_text("...");
             }
-
-            let start = i.saturating_sub(10);
 
             let command_snippet = &context.input[start..i];
             error_text = error_text.add_text(command_snippet.to_owned());
@@ -962,6 +961,26 @@ impl<S: CommandSource> CommandDispatcher<S> {
     }
 }
 
+/// Brigadier `CommandSyntaxException.CONTEXT_AMOUNT`: how much of the input an error shows before
+/// its cursor.
+const CONTEXT_AMOUNT: usize = 10;
+
+/// Returns where the input shown before an error's cursor starts in `before_cursor`, and whether
+/// earlier input is cut off. Vanilla `Commands.finishParsing` counts UTF-16 code units, the unit
+/// of Java strings; this stops at whole characters, so it never slices one apart.
+fn context_start(before_cursor: &str) -> (usize, bool) {
+    let mut start = before_cursor.len();
+    let mut units = 0;
+    for (index, c) in before_cursor.char_indices().rev() {
+        units += c.len_utf16();
+        if units > CONTEXT_AMOUNT {
+            return (start, true);
+        }
+        start = index;
+    }
+    (start, false)
+}
+
 #[cfg(test)]
 mod test {
     use pumpkin_util::text::TextComponent;
@@ -977,6 +996,8 @@ mod test {
     use crate::node::dispatcher::CommandDispatcher;
     use crate::node::{CommandExecutor, CommandExecutorResult};
     use crate::source::{CommandSource, DummySource};
+    use crate::string_reader::StringReader;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn unknown_command() {
@@ -1359,5 +1380,47 @@ mod test {
                 .execute_input("two x", &source)
                 .is_err_and(|error| error.is(&DISPATCHER_UNKNOWN_ARGUMENT))
         );
+    }
+
+    /// Expected text is what the vanilla 26.3 console printed for the same commands. Ten
+    /// characters before the cursor are shown, counted in UTF-16 code units like Java strings.
+    #[test]
+    fn error_context_counts_characters() {
+        #[derive(Clone, Default)]
+        struct RecordingSource(Arc<Mutex<Vec<String>>>);
+        impl CommandSource for RecordingSource {
+            fn send_message(&self, message: TextComponent) {
+                self.0.lock().unwrap().push(message.get_text());
+            }
+        }
+
+        for (input, cursor, expected) in [
+            (
+                "give 玩家一号 torch 21",
+                5,
+                "give 玩家一号 torch 21<--[HERE]",
+            ),
+            (
+                "tp \"玩家一号\" 玩家一号",
+                18,
+                "tp \"玩家一号\" 玩家一号<--[HERE]",
+            ),
+            (
+                "give \"玩家一号\" 玩家一号",
+                20,
+                "...ve \"玩家一号\" 玩家一号<--[HERE]",
+            ),
+        ] {
+            let mut reader = StringReader::new(input);
+            reader.set_cursor(cursor);
+            let source = RecordingSource::default();
+            CommandDispatcher::<RecordingSource>::send_error_to_source(
+                &source,
+                DISPATCHER_UNKNOWN_ARGUMENT.create(&reader),
+                input,
+            );
+            let sent = source.0.lock().unwrap();
+            assert_eq!(sent.last().map(String::as_str), Some(expected), "{input}");
+        }
     }
 }
