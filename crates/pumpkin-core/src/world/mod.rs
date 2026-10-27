@@ -5294,9 +5294,13 @@ impl World {
         if !self.is_in_build_limit(*position) {
             return Block::AIR.default_state.id;
         }
-        let replaced_block_state_id = self
-            .write_block_state_if(position, block_state_id, |_| true)
-            .unwrap_or(Block::AIR.default_state.id);
+        // Nothing is written to a chunk that isn't loaded, and like vanilla `Level.setBlock` when
+        // nothing was set, nothing else happens either.
+        let Some(replaced_block_state_id) =
+            self.write_block_state_if(position, block_state_id, |_| true)
+        else {
+            return Block::AIR.default_state.id;
+        };
         self.on_block_state_set(position, replaced_block_state_id, block_state_id, flags)
     }
 
@@ -8256,6 +8260,25 @@ mod tests {
             !world.get_entities_at_box(&near_chest).is_empty(),
             "the chest's contents are scattered"
         );
+    }
+
+    /// Vanilla `Level.setBlock` has no side effects when nothing was set. A write to a chunk that
+    /// isn't loaded is dropped, so the block's placement callbacks must not run either.
+    #[tokio::test]
+    async fn a_block_set_in_an_unloaded_chunk_has_no_side_effects() {
+        use pumpkin_world::world::BlockFlags;
+
+        let folder = tempfile::tempdir().unwrap();
+        let world = crate::entity::ai::test_support::world(&folder);
+
+        world.set_block_state(
+            &BlockPos::new(1, 64, 1),
+            Block::RED_BED.default_state.id,
+            BlockFlags::NOTIFY_ALL,
+        );
+
+        // A bed's placed callback adds its block entities and its head.
+        assert!(world.block_entities.is_empty());
     }
 
     #[test]
