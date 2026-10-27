@@ -8,6 +8,7 @@ use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world::BlockFlags;
 
+use crate::block::entities::replacing_removes_block_entity;
 use crate::command::argument_builder::{
     ArgumentBuilder, RequiredArgumentBuilder, argument, command, literal,
 };
@@ -103,7 +104,6 @@ fn fill_blocks(
 
             let result = world.level.read_chunk_sync(&chunk_pos, |chunk| {
                 let mut updates_for_chunk = Vec::new();
-                let mut block_entities_to_remove = Vec::new();
                 let min_y_chunk = chunk.section.min_y;
 
                 {
@@ -182,9 +182,6 @@ fn fill_blocks(
                                 };
 
                                 if let Some(state_id) = block_to_place {
-                                    if current_block.default_state.block_entity_type != u16::MAX {
-                                        block_entities_to_remove.push(pos);
-                                    }
                                     updates_for_chunk.push((rel_x, y, rel_z, state_id, pos));
                                 }
                             }
@@ -193,7 +190,7 @@ fn fill_blocks(
                 }
 
                 if updates_for_chunk.is_empty() {
-                    return (Vec::new(), block_entities_to_remove);
+                    return Vec::new();
                 }
 
                 let batch_inputs = updates_for_chunk
@@ -202,18 +199,23 @@ fn fill_blocks(
                 // One result per input, since every queued position is inside an existing section.
                 let replaced = chunk.set_blocks_batch(batch_inputs);
 
-                let chunk_changed = updates_for_chunk
+                updates_for_chunk
                     .into_iter()
                     .zip(replaced)
                     .map(|((_, _, _, new_id, pos), (_, _, _, old_id))| (pos, old_id, new_id))
-                    .collect::<Vec<_>>();
-
-                (chunk_changed, block_entities_to_remove)
+                    .collect::<Vec<_>>()
             });
 
-            if let Some((chunk_changed, be_to_remove)) = result {
-                for pos in be_to_remove {
-                    world.remove_block_entity(&pos);
+            if let Some(chunk_changed) = result {
+                // Vanilla places with UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS: the block entity of a
+                // replaced block goes without dropping its contents, and the same block keeps it.
+                for &(pos, old_id, new_id) in &chunk_changed {
+                    if replacing_removes_block_entity(
+                        Block::from_state_id(old_id),
+                        Block::from_state_id(new_id),
+                    ) {
+                        world.remove_block_entity(&pos);
+                    }
                 }
                 changed_positions.extend(chunk_changed);
             }
