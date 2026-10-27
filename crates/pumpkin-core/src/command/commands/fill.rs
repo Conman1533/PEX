@@ -102,7 +102,7 @@ fn fill_blocks(
             let local_start_z = (min_z - (chunk_z << 4)).clamp(0, 15) as usize;
             let local_end_z = (max_z - (chunk_z << 4)).clamp(0, 15) as usize;
 
-            let result = world.level.read_chunk_sync(&chunk_pos, |chunk| {
+            let updates_for_chunk = world.level.read_chunk_sync(&chunk_pos, |chunk| {
                 let mut updates_for_chunk = Vec::new();
                 let min_y_chunk = chunk.section.min_y;
 
@@ -166,19 +166,9 @@ fn fill_blocks(
                                             Some(BlockStateId::AIR)
                                         }
                                     }
-                                    FillMode::Destroy => {
-                                        if current_state_id != target_state_id {
-                                            world.break_block(
-                                                &pos,
-                                                None,
-                                                BlockFlags::SKIP_DROPS
-                                                    | BlockFlags::NOTIFY_ALL
-                                                    | BlockFlags::FORCE_STATE,
-                                            );
-                                        }
+                                    FillMode::Replace | FillMode::Keep | FillMode::Destroy => {
                                         Some(target_state_id)
                                     }
-                                    FillMode::Replace | FillMode::Keep => Some(target_state_id),
                                 };
 
                                 if let Some(state_id) = block_to_place {
@@ -189,35 +179,43 @@ fn fill_blocks(
                     }
                 }
 
-                if updates_for_chunk.is_empty() {
-                    return Vec::new();
-                }
-
-                let batch_inputs = updates_for_chunk
-                    .iter()
-                    .map(|&(rx, y, rz, sid, _)| (rx, y, rz, sid));
-                // One result per input, since every queued position is inside an existing section.
-                let replaced = chunk.set_blocks_batch(batch_inputs);
-
                 updates_for_chunk
-                    .into_iter()
-                    .zip(replaced)
-                    .map(|((_, _, _, new_id, pos), (_, _, _, old_id))| (pos, old_id, new_id))
-                    .collect::<Vec<_>>()
             });
+            let Some(updates_for_chunk) = updates_for_chunk.filter(|updates| !updates.is_empty())
+            else {
+                continue;
+            };
 
-            if let Some(chunk_changed) = result {
+            // `FillCommand.Mode.DESTROY` breaks each block with its drops before placing. Breaking
+            // writes to the chunk, so it can't happen while the loop above reads the sections.
+            if mode == FillMode::Destroy {
+                for &(_, _, _, _, pos) in &updates_for_chunk {
+                    world.break_block(&pos, None, BlockFlags::NOTIFY_ALL);
+                }
+            }
+
+            let Some(replaced) = world.level.read_chunk_sync(&chunk_pos, |chunk| {
+                // One result per input, since every queued position is inside an existing section.
+                chunk.set_blocks_batch(
+                    updates_for_chunk
+                        .iter()
+                        .map(|&(rx, y, rz, sid, _)| (rx, y, rz, sid)),
+                )
+            }) else {
+                continue;
+            };
+            for ((_, _, _, new_id, pos), (_, _, _, old_id)) in
+                updates_for_chunk.into_iter().zip(replaced)
+            {
                 // Vanilla places with UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS: the block entity of a
                 // replaced block goes without dropping its contents, and the same block keeps it.
-                for &(pos, old_id, new_id) in &chunk_changed {
-                    if replacing_removes_block_entity(
-                        Block::from_state_id(old_id),
-                        Block::from_state_id(new_id),
-                    ) {
-                        world.remove_block_entity(&pos);
-                    }
+                if replacing_removes_block_entity(
+                    Block::from_state_id(old_id),
+                    Block::from_state_id(new_id),
+                ) {
+                    world.remove_block_entity(&pos);
                 }
-                changed_positions.extend(chunk_changed);
+                changed_positions.push((pos, old_id, new_id));
             }
         }
     }

@@ -144,6 +144,7 @@ pub(super) async fn test_tnt_redstone_ignites(helper: GameTestHelper) -> GameTes
 
 /// Vanilla `/fill` places with `UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS`: a chest filled over with a
 /// chest keeps its contents, and a chest replaced by another block loses them without a drop.
+/// `destroy` breaks every block first, dropping it and its contents.
 pub(super) async fn test_fill_over_block_entities(helper: GameTestHelper) -> GameTestResult<()> {
     build_stone_floor(&helper, 5, 5).await?;
 
@@ -151,17 +152,24 @@ pub(super) async fn test_fill_over_block_entities(helper: GameTestHelper) -> Gam
     let same_state = BlockPos::new(0, 1, 1);
     let other_state = BlockPos::new(2, 1, 1);
     let other_block = BlockPos::new(4, 1, 1);
+    let destroyed = BlockPos::new(0, 1, 3);
+    let destroyed_by_other_block = BlockPos::new(4, 1, 3);
 
     let mut facing_east = ChestLikeProperties::default(&Block::CHEST);
     facing_east.facing = HorizontalFacing::East;
-    helper.set_block_default(&same_state, &Block::CHEST).await?;
+    for position in [same_state, other_block, destroyed, destroyed_by_other_block] {
+        helper.set_block_default(&position, &Block::CHEST).await?;
+    }
     helper
         .set_block(&other_state, facing_east.to_state_id(&Block::CHEST))
         .await?;
-    helper
-        .set_block_default(&other_block, &Block::CHEST)
-        .await?;
-    for position in [same_state, other_state, other_block] {
+    for position in [
+        same_state,
+        other_state,
+        other_block,
+        destroyed,
+        destroyed_by_other_block,
+    ] {
         helper
             .set_container_item(&position, 0, "minecraft:diamond", 5)
             .await?;
@@ -176,26 +184,42 @@ pub(super) async fn test_fill_over_block_entities(helper: GameTestHelper) -> Gam
     let _ = helper
         .execute_command(&same_state, &fill(&same_state, "minecraft:chest"))
         .await;
-    helper
-        .execute_command(&other_state, &fill(&other_state, "minecraft:chest"))
-        .await?;
-    helper
-        .execute_command(&other_block, &fill(&other_block, "minecraft:barrel"))
-        .await?;
+    for (position, block) in [
+        (other_state, "minecraft:chest"),
+        (other_block, "minecraft:barrel"),
+        (destroyed, "minecraft:chest destroy"),
+        (destroyed_by_other_block, "minecraft:barrel destroy"),
+    ] {
+        helper
+            .execute_command(&position, &fill(&position, block))
+            .await?;
+    }
 
-    helper
-        .assert_container_contains_count(&same_state, "minecraft:diamond", 5)
-        .await?;
-    helper
-        .assert_container_contains_count(&other_state, "minecraft:diamond", 5)
-        .await?;
+    for kept in [same_state, other_state] {
+        helper
+            .assert_container_contains_count(&kept, "minecraft:diamond", 5)
+            .await?;
+    }
     helper
         .assert_block_present(&other_block, &Block::BARREL)
         .await?;
     helper.assert_container_empty(&other_block).await?;
     helper
-        .assert_item_entity_not_present("minecraft:diamond", &other_block, 1.0)
+        .assert_item_entity_not_present("minecraft:diamond", &other_block, 0.5)
         .await?;
+    for (position, block) in [
+        (destroyed, &Block::CHEST),
+        (destroyed_by_other_block, &Block::BARREL),
+    ] {
+        helper.assert_block_present(&position, block).await?;
+        helper.assert_container_empty(&position).await?;
+        helper
+            .assert_item_entity_present("minecraft:diamond", &position, 0.5)
+            .await?;
+        helper
+            .assert_item_entity_present("minecraft:chest", &position, 0.5)
+            .await?;
+    }
     helper.succeed();
     Ok(())
 }
