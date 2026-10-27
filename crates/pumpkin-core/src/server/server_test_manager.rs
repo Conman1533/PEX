@@ -30,9 +30,6 @@ use crate::{
     world::World,
 };
 
-/// Vanilla `GameTestHelper.makeMockServerPlayerInLevel`'s profile name.
-const MOCK_PLAYER_NAME: &str = "test-mock-player";
-
 static GAME_TEST_QUEUE: LazyLock<Mutex<Vec<GameTestQueueEntry>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 static STOP_GAME_TESTS: AtomicBool = AtomicBool::new(false);
@@ -709,6 +706,7 @@ impl GameTestWorld for ServerGameTestWorld {
 
     async fn spawn_mock_player(
         &self,
+        name: &str,
         held_item: &str,
         position: pumpkin_util::math::vector3::Vector3<f64>,
     ) -> GameTestResult<()> {
@@ -720,7 +718,7 @@ impl GameTestWorld for ServerGameTestWorld {
 
         let profile = GameProfile {
             id: uuid::Uuid::new_v4(),
-            name: MOCK_PLAYER_NAME.to_string(),
+            name: name.to_string(),
             properties: ArcSwap::from_pointee(Vec::new()),
             profile_actions: None,
         };

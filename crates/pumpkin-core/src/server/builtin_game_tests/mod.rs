@@ -256,7 +256,10 @@ const BUILTIN_TEST_IDS: &[&str] = &[
 /// Tests that add a mock player. The tester runs each of them on its own: a player anywhere in
 /// the world makes mobs without persistence despawn more than 128 blocks away from it (like the
 /// creeper summoned by `creeper_should_run_from_cat`), and mobs follow players into other tests.
-const MOCK_PLAYER_TEST_IDS: &[&str] = &["pumpkin:cow_follows_wheat_and_panics_when_hit"];
+const MOCK_PLAYER_TEST_IDS: &[&str] = &[
+    "pumpkin:cow_follows_wheat_and_panics_when_hit",
+    "pumpkin:quoted_non_ascii_player_name_in_commands",
+];
 
 #[must_use]
 pub const fn builtin_game_test_ids() -> &'static [&'static str] {
@@ -534,6 +537,13 @@ pub fn ensure_builtin_game_tests_registered() {
             140,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:quoted_non_ascii_player_name_in_commands",
+            "pumpkin:empty_5x4x5",
+            20,
+            0,
+            commands_and_entities_extended::test_quoted_non_ascii_player_name,
         );
 
         // redstone_wire_and_power (14)

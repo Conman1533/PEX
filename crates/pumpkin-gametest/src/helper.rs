@@ -14,6 +14,9 @@ use crate::model::{GameTestDefinition, GameTestRotation, TestType};
 use crate::structure::TestStructureInstance;
 use crate::world::GameTestWorld;
 
+/// Vanilla `GameTestHelper.makeMockServerPlayerInLevel`'s profile name.
+const MOCK_PLAYER_NAME: &str = "test-mock-player";
+
 pub type BoxedGameTestFuture = Pin<Box<dyn Future<Output = GameTestResult<()>> + Send>>;
 pub type GameTestCallback = Box<dyn FnMut(GameTestHelper) -> BoxedGameTestFuture + Send + Sync>;
 
@@ -545,8 +548,21 @@ impl GameTestHelper {
         held_item: &str,
         relative: Vector3<f64>,
     ) -> GameTestResult<()> {
+        self.spawn_named_mock_player_at(MOCK_PLAYER_NAME, held_item, relative)
+            .await
+    }
+
+    /// Like [`Self::spawn_mock_player_at`], for a player called `name`.
+    pub async fn spawn_named_mock_player_at(
+        &self,
+        name: &str,
+        held_item: &str,
+        relative: Vector3<f64>,
+    ) -> GameTestResult<()> {
         let position = self.absolute_vec(relative);
-        self.world.spawn_mock_player(held_item, position).await
+        self.world
+            .spawn_mock_player(name, held_item, position)
+            .await
     }
 
     pub async fn set_container_item(

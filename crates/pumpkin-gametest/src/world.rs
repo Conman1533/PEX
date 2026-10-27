@@ -104,11 +104,12 @@ pub trait GameTestWorld: Send + Sync {
         ))
     }
 
-    /// Adds a creative mode player holding `held_item` in its main hand at `position`, like
-    /// vanilla `GameTestHelper.makeMockServerPlayerInLevel`. It stays until
+    /// Adds a creative mode player called `name` holding `held_item` in its main hand at
+    /// `position`, like vanilla `GameTestHelper.makeMockServerPlayerInLevel`. It stays until
     /// [`Self::remove_mock_players`].
     async fn spawn_mock_player(
         &self,
+        _name: &str,
         _held_item: &str,
         _position: Vector3<f64>,
     ) -> GameTestResult<()> {
