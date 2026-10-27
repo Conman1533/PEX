@@ -450,6 +450,15 @@ impl BedrockClient {
                 let Some(target) = world.get_entity_by_id(target_runtime_id) else {
                     return;
                 };
+                // Same reach checks as the Java handlers, before the event fires.
+                let in_reach = if action == ActionType::Attack {
+                    player.can_attack_entity(target.get_entity())
+                } else {
+                    player.can_interact_with_entity(target.get_entity())
+                };
+                if !in_reach {
+                    return;
+                }
                 let Some(server) = world.server.upgrade() else {
                     return;
                 };
