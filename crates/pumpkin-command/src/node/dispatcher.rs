@@ -376,12 +376,13 @@ impl<S: CommandSource> CommandDispatcher<S> {
     /// Executes a given result that has already been parsed from an input.
     pub fn execute(&self, parsed: ParsingResult<'_, S>) -> Result<i32, CommandSyntaxError> {
         if parsed.reader.peek().is_some() {
-            return if let Some(err) = parsed.errors.values().next() {
-                Err(err.clone())
-            } else if parsed.context.range.is_empty() {
-                Err(Self::unknown_command_error(&parsed.reader))
-            } else {
-                Err(DISPATCHER_UNKNOWN_ARGUMENT.create(&parsed.reader))
+            // Vanilla `Commands.getParseException`: a branch's own error only when it is the only one.
+            return match parsed.errors.values().next() {
+                Some(err) if parsed.errors.len() == 1 => Err(err.clone()),
+                _ if parsed.context.range.is_empty() => {
+                    Err(Self::unknown_command_error(&parsed.reader))
+                }
+                _ => Err(DISPATCHER_UNKNOWN_ARGUMENT.create(&parsed.reader)),
             };
         }
 
@@ -970,7 +971,9 @@ mod test {
     };
     use crate::argument_types::core::integer::IntegerArgumentType;
     use crate::context::command_context::CommandContext;
-    use crate::errors::error_types::DISPATCHER_UNKNOWN_COMMAND;
+    use crate::errors::error_types::{
+        DISPATCHER_UNKNOWN_ARGUMENT, DISPATCHER_UNKNOWN_COMMAND, READER_EXPECTED_INT,
+    };
     use crate::node::dispatcher::CommandDispatcher;
     use crate::node::{CommandExecutor, CommandExecutorResult};
     use crate::source::{CommandSource, DummySource};
@@ -1320,5 +1323,41 @@ mod test {
         assert_eq!(dispatcher.execute_input("//set", &source), Ok(42));
         // Execution via /set alias (as sent by Java client for //set)
         assert_eq!(dispatcher.execute_input("/set", &source), Ok(42));
+    }
+
+    /// Vanilla answers `tp 玩家一号 1 2 3` with "Incorrect argument for command": all three `tp`
+    /// branches fail, so no single branch error is reported.
+    #[test]
+    fn several_failed_branches_report_an_incorrect_argument() {
+        let executor: fn(&CommandContext) -> CommandExecutorResult = |_| Ok(1);
+        let mut dispatcher = CommandDispatcher::new();
+        dispatcher.register(
+            CommandArgumentBuilder::new("one", "One argument branch").then(
+                RequiredArgumentBuilder::new("value", IntegerArgumentType::any())
+                    .executes(executor),
+            ),
+        );
+        dispatcher.register(
+            CommandArgumentBuilder::new("two", "Two argument branches")
+                .then(
+                    RequiredArgumentBuilder::new("first", IntegerArgumentType::any())
+                        .executes(executor),
+                )
+                .then(
+                    RequiredArgumentBuilder::new("second", IntegerArgumentType::any())
+                        .executes(executor),
+                ),
+        );
+        let source = DummySource::dummy();
+        assert!(
+            dispatcher
+                .execute_input("one x", &source)
+                .is_err_and(|error| error.is(&READER_EXPECTED_INT))
+        );
+        assert!(
+            dispatcher
+                .execute_input("two x", &source)
+                .is_err_and(|error| error.is(&DISPATCHER_UNKNOWN_ARGUMENT))
+        );
     }
 }
