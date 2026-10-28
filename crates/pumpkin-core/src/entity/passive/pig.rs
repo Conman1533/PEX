@@ -45,16 +45,13 @@ pub struct PigEntity {
 
 impl PigEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let world = entity.world.load();
-        let biome = world.get_biome(&entity.block_pos.load());
-        let variant = PigVariant::select_for_biome(biome.registry_id);
         let mob_entity = MobEntity::new(entity);
         let pig = Self {
             mob_entity,
             ageable_data: crate::entity::ageable::AgeableData::default(),
             steering: ItemBasedSteering::default(),
             saddled: AtomicBool::new(false),
-            variant: AtomicU8::new(variant.id()),
+            variant: AtomicU8::new(PigVariant::default().id()),
             sound_variant: AtomicU8::new(PigSoundVariant::Classic as u8),
         };
         let mob_arc = Arc::new(pig);
@@ -193,12 +190,14 @@ impl Mob for PigEntity {
         crate::entity::mob::player_steers(self)
     }
 
-    /// Vanilla `Pig.finalizeSpawn` rolls a random sound variant.
+    /// Vanilla `Pig.finalizeSpawn` picks the variant for the biome and a random sound variant.
     fn finalize_spawn(
         &self,
-        _world: &Arc<World>,
+        world: &Arc<World>,
         group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
     ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        let biome = world.get_biome(&self.get_entity().block_pos.load());
+        self.set_variant(PigVariant::select_for_biome(biome.registry_id));
         let sound_variants = PigSoundVariant::ALL;
         self.set_sound_variant(
             sound_variants[self.get_random().random_range(0..sound_variants.len())],
@@ -316,10 +315,27 @@ impl Mob for PigEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        if item_stack.get_item() == &pumpkin_data::item::Item::SADDLE
-            && self.can_be_saddled()
-            && !self.is_saddled()
+        // Pig.mobInteract: riding first, then feeding, then putting on a saddle.
+        if !self.is_food(item_stack)
+            && self.is_saddled()
+            && !self.get_entity().has_passengers()
+            && !player.get_entity().is_sneaking()
         {
+            let world = player.world();
+            if let Some(vehicle) = world.get_entity_by_id(self.get_entity().entity_id)
+                && let Some(passenger) = world.get_player_by_id(player.entity_id())
+            {
+                self.get_entity()
+                    .add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
+            }
+            return true;
+        }
+
+        if self.animal_interact(player, item_stack) {
+            return true;
+        }
+
+        if item_stack.get_item() == &Item::SADDLE && self.can_be_saddled() && !self.is_saddled() {
             self.set_saddled(true);
             item_stack.decrement_unless_creative(player.gamemode.load(), 1);
             let entity = self.get_entity();
@@ -332,18 +348,7 @@ impl Mob for PigEntity {
             );
             return true;
         }
-
-        if self.is_saddled() && !self.is_food(item_stack) {
-            let world = player.world();
-            if let Some(vehicle) = world.get_entity_by_id(self.get_entity().entity_id)
-                && let Some(passenger) = world.get_player_by_id(player.entity_id())
-            {
-                self.get_entity()
-                    .add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
-                return true;
-            }
-        }
-        self.animal_interact(player, item_stack)
+        false
     }
 }
 
