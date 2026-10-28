@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::entity::EntityStatus;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 use rand::RngExt;
@@ -124,10 +125,11 @@ impl SquidMovement {
                 self.tentacle_speed.store(random_tentacle_speed(&mut rng));
             }
             // Keeps the client's stroke animation in step with the shoves.
-            entity
-                .world
-                .load()
-                .send_entity_status(entity, EntityStatus::SquidAnimSynch, None);
+            entity.world.load().send_entity_status(
+                entity,
+                EntityStatus::SquidAnimSynch,
+                ActorEventID::None,
+            );
         }
         self.tentacle_movement.store(tentacle);
 

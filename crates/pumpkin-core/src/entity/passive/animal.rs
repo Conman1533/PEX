@@ -74,7 +74,7 @@ pub trait Animal: Mob {
         entity.world.load().send_entity_status(
             entity,
             EntityStatus::InLoveHearts,
-            Some(ActorEventID::InLoveHearts),
+            ActorEventID::InLoveHearts,
         );
     }
 
@@ -169,7 +169,7 @@ pub trait Animal: Mob {
         world.send_entity_status(
             entity,
             EntityStatus::InLoveHearts,
-            Some(ActorEventID::InLoveHearts),
+            ActorEventID::InLoveHearts,
         );
         if world.level_info.load().game_rules.mob_drops {
             ExperienceOrbEntity::spawn(

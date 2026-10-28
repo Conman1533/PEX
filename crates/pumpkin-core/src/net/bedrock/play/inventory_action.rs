@@ -299,7 +299,7 @@ impl BedrockClient {
                             player.world().send_entity_status(
                                 player.get_entity(),
                                 crate::entity::equipment_break_status(&EquipmentSlot::MAIN_HAND),
-                                None,
+                                ActorEventID::None,
                             );
                         }
                         player.inventory().set_held_item(stack);
@@ -363,8 +363,7 @@ impl BedrockClient {
                                             item.are_items_and_components_equal(&held)
                                         });
                             if !already_using
-                                && (held.get_data_component::<ConsumableImpl>().is_some()
-                                    || held.get_data_component::<BlocksAttacksImpl>().is_some())
+                                && held.get_data_component::<ConsumableImpl>().is_some()
                             {
                                 if held
                                     .get_data_component::<FoodImpl>()
@@ -509,7 +508,7 @@ impl BedrockClient {
                                     crate::entity::equipment_break_status(
                                         &EquipmentSlot::MAIN_HAND,
                                     ),
-                                    None,
+                                    ActorEventID::None,
                                 );
                             }
                         }

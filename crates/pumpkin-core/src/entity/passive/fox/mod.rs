@@ -10,6 +10,7 @@ use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::world::WorldEvent;
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_util::GameMode;
 use pumpkin_util::math::position::BlockPos;
@@ -636,7 +637,7 @@ impl FoxEntity {
                 world.send_entity_status(
                     self.get_entity(),
                     pumpkin_data::entity::EntityStatus::FoxEat,
-                    None,
+                    ActorEventID::None,
                 );
             }
         }

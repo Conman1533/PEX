@@ -13,6 +13,7 @@ use pumpkin_data::{
     tag::{self, Tag},
 };
 use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::{
     GameMode,
     math::{position::BlockPos, vector3::Vector3},
@@ -646,7 +647,7 @@ impl VibrationUser for WardenEntity {
         self.vibration_cooldown
             .store(VIBRATION_COOLDOWN_TICKS, Ordering::Relaxed);
         let entity = self.get_entity();
-        world.send_entity_status(entity, EntityStatus::TendrilsShiver, None);
+        world.send_entity_status(entity, EntityStatus::TendrilsShiver, ActorEventID::None);
         world.play_sound_fine(
             Sound::EntityWardenTendrilClicks,
             SoundCategory::Hostile,

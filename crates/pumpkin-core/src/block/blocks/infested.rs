@@ -5,6 +5,7 @@ use pumpkin_data::{
     block_properties::{Axis, PaleOakWoodLikeProperties},
     entity::{EntityStatus, EntityType},
 };
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::GameMode;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -99,7 +100,11 @@ impl InfestedBlock {
             Uuid::new_v4(),
         );
         world.spawn_entity(silverfish.clone());
-        world.send_entity_status(silverfish.get_entity(), EntityStatus::Poof, None);
+        world.send_entity_status(
+            silverfish.get_entity(),
+            EntityStatus::Poof,
+            ActorEventID::None,
+        );
     }
 }
 

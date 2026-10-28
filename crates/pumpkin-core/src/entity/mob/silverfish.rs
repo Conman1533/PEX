@@ -5,6 +5,7 @@ use pumpkin_data::BlockDirection;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::tag::{self, Taggable};
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_world::world::BlockFlags;
@@ -136,7 +137,7 @@ impl Goal for SilverfishMergeWithStoneGoal {
                     current == host_state
                 });
             if written.is_some() {
-                world.send_entity_status(mob.get_entity(), EntityStatus::Poof, None);
+                world.send_entity_status(mob.get_entity(), EntityStatus::Poof, ActorEventID::None);
                 mob.get_entity().remove();
             }
         }
