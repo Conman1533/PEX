@@ -1448,6 +1448,7 @@ impl LivingEntity {
             target_actor_runtime_id: pumpkin_protocol::codec::var_ulong::VarULong(entity_id as u64),
             data: 0.0,
             swing_source: None,
+            hand: 0,
         };
 
         world.broadcast_editioned(&je_packet, &be_packet);
@@ -1466,6 +1467,7 @@ impl LivingEntity {
             target_actor_runtime_id: pumpkin_protocol::codec::var_ulong::VarULong(entity_id as u64),
             data: 0.0,
             swing_source: None,
+            hand: 1,
         };
 
         world.broadcast_editioned(&je_packet, &be_packet);
