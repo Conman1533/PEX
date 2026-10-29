@@ -78,7 +78,8 @@ jobs:
         shell: bash
         env:
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.lto || 'true' }}
-        run: cargo build --verbose --release ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        # The musl targets build only the server: musl can't build the native plugins' cdylibs.
+        run: cargo build --verbose --release ${{ matrix.target && format('-p pumpkin --target {0}', matrix.target) || '' }}
       - name: Prepare artifact
         shell: bash
         run: |

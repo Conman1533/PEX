@@ -409,8 +409,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
+      # musl can't build the native plugins' cdylibs, and the musl server can't load them anyway.
       - name: Build release
-        run: cargo build --verbose --release --target ${{ matrix.target }}
+        run: cargo build --verbose --release -p pumpkin --target ${{ matrix.target }}
       - name: Prepare artifact
         run: |
           mkdir -p dist

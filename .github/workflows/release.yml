@@ -60,7 +60,8 @@ jobs:
               TARGET="aarch64-unknown-linux-musl"
             fi
             rustup target add "$TARGET"
-            cargo build --verbose --release --target "$TARGET"
+            # musl can't build the native plugins' cdylibs, and the musl server can't load them anyway.
+            cargo build --verbose --release -p pumpkin --target "$TARGET"
           fi
 
       - name: Prepare artifacts
