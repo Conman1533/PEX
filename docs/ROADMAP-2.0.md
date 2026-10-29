@@ -139,10 +139,10 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Decisions
 
-- **Q1.1** Do the 21 Brain mobs have to run on PEX's Brain framework, or is a goal-based port acceptable when the observable behaviour matches vanilla? Root `AGENTS.md` allows a different design with the same behaviour, but upstream Pumpkin has a planned Brain design and won't take workarounds. A full Brain port is roughly twice the work per mob.
-- **Q1.2** Should the per-mob tests stay in this repository's GameTests, or go to upstream Pumpkin as well?
-- **Q1.3** Is 1.26 to 1.28 (villagers) in scope for 2.0? It's three sessions, and villagers matter for trading but not for the dragon.
-- **Q1.4** Tests that need a player use an in-world mock player with a closed client (1.1, after vanilla's `makeMockServerPlayerInLevel`, which vanilla marks deprecated for removal). Acceptable for PEX, and for upstream if the tests go there?
+- **Q1.1** (answered 2026-10-29: goal-based ports are acceptable when the observable behaviour matches vanilla and a GameTest proves it. Use the Brain framework where it already covers a mob; PEX doesn't upstream, so upstream's Brain-only rule doesn't apply.) Do the 21 Brain mobs have to run on PEX's Brain framework, or is a goal-based port acceptable when the observable behaviour matches vanilla? Root `AGENTS.md` allows a different design with the same behaviour, but upstream Pumpkin has a planned Brain design and won't take workarounds. A full Brain port is roughly twice the work per mob.
+- **Q1.2** (answered 2026-10-29: here only. PEX doesn't upstream.) Should the per-mob tests stay in this repository's GameTests, or go to upstream Pumpkin as well?
+- **Q1.3** (answered 2026-10-29: yes. Trading halls and villager farms are among the first things SMP players notice, so 1.26 to 1.28 are in scope.) Is 1.26 to 1.28 (villagers) in scope for 2.0? It's three sessions, and villagers matter for trading but not for the dragon.
+- **Q1.4** (answered 2026-10-29: yes, for PEX.) Tests that need a player use an in-world mock player with a closed client (1.1, after vanilla's `makeMockServerPlayerInLevel`, which vanilla marks deprecated for removal). Acceptable for PEX, and for upstream if the tests go there?
 
 ## Goal 2: plugin API decision
 
@@ -176,10 +176,10 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Decisions
 
-- **Q2.1** Versioned native ABI (a promise that plugins keep loading across 2.x, several sessions plus ongoing care) or explicitly unstable (plugins only from the same release, enforced by 2.1, one session)? Releases already ship plugins per build, and the panel plugin already installs per release.
-- **Q2.2** When v0.1 goes: finish v0.2 and keep WASM, or drop WASM plugins entirely? Either way PEX diverges from upstream in crates upstream keeps changing, so every upstream merge will conflict there.
-- **Q2.3** Are third-party native plugins a 2.0 goal, or only the three bundled ones?
-- **Q2.4** 2.1's build id can't see dependency features (`--features console-subscriber` adds tokio's `tracing`, and plugins built without it still pass). Normal builds resolve the same features, and releases build everything in one invocation. Acceptable, or is a runtime fingerprint worth calling into the plugin before the check?
+- **Q2.1** (answered 2026-10-29: explicitly unstable: plugins only load into the build they came from (2.1). No ABI promise across releases.) Versioned native ABI (a promise that plugins keep loading across 2.x, several sessions plus ongoing care) or explicitly unstable (plugins only from the same release, enforced by 2.1, one session)? Releases already ship plugins per build, and the panel plugin already installs per release.
+- **Q2.2** (answered 2026-10-29: keep WASM by following upstream: take upstream's v0.2 host as upstream finishes it and remove v0.1 when upstream does. PEX spends no pieces of its own on WASM, which also keeps those crates close to upstream for merges.) When v0.1 goes: finish v0.2 and keep WASM, or drop WASM plugins entirely? Either way PEX diverges from upstream in crates upstream keeps changing, so every upstream merge will conflict there.
+- **Q2.3** (answered 2026-10-29: no. 2.0 covers the three bundled plugins; `PORTING_GUIDE.md` stays, without a compatibility promise.) Are third-party native plugins a 2.0 goal, or only the three bundled ones?
+- **Q2.4** (answered 2026-10-29: acceptable. Releases build everything in one invocation.) 2.1's build id can't see dependency features (`--features console-subscriber` adds tokio's `tracing`, and plugins built without it still pass). Normal builds resolve the same features, and releases build everything in one invocation. Acceptable, or is a runtime fingerprint worth calling into the plugin before the check?
 
 ## Goal 3: config cleanup
 
@@ -212,12 +212,12 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Decisions
 
-- **Q3.1** On an invalid value: refuse to start and name the key, or start with that key's default and warn? The current behaviour (reset everything quietly) is the worst of both.
-- **Q3.2** Should migrations rewrite the admin's file in place (with a backup), or leave it and write the result next to it for the admin to swap in?
-- **Q3.3** Are comments in `pumpkin.toml` worth a new dependency (`toml_edit`)? 3.1 added it (one new crate in `Cargo.lock`; it shares the parser crates with `toml`), and switching back only affects the migration code.
-- **Q3.4** A `pumpkin.toml` with a newer `config_version` than the server knows: warn and start (3.1's choice), or refuse to start like vanilla does for a world from an incompatible version?
-- **Q3.5** Filling a minimal hand-written file logs one line per missing key (about 30 for a four-line file). Acceptable, or one summary line?
-- **Q3.6** PEX's first boot enables anonymous telemetry (heartbeats to `market.pumpkinmc.org`, upstream feature) unless the config turns it off. Keep it on by default for PEX, or off?
+- **Q3.1** (answered 2026-10-29: use that key's default and log a warning naming the key, value and default. A TOML syntax error (nothing can be read) refuses to start with the line and column, since starting on all defaults could silently open a whitelisted or online-mode server.) On an invalid value: refuse to start and name the key, or start with that key's default and warn? The current behaviour (reset everything quietly) is the worst of both.
+- **Q3.2** (answered 2026-10-29: in place with a backup, as 3.1 does.) Should migrations rewrite the admin's file in place (with a backup), or leave it and write the result next to it for the admin to swap in?
+- **Q3.3** (answered 2026-10-29: yes, keep `toml_edit`.) Are comments in `pumpkin.toml` worth a new dependency (`toml_edit`)? 3.1 added it (one new crate in `Cargo.lock`; it shares the parser crates with `toml`), and switching back only affects the migration code.
+- **Q3.4** (answered 2026-10-29: warn and start, as 3.1 does.) A `pumpkin.toml` with a newer `config_version` than the server knows: warn and start (3.1's choice), or refuse to start like vanilla does for a world from an incompatible version?
+- **Q3.5** (answered 2026-10-29: one summary line that lists the filled-in keys.) Filling a minimal hand-written file logs one line per missing key (about 30 for a four-line file). Acceptable, or one summary line?
+- **Q3.6** (answered 2026-10-29: off by default. Admins can turn it on.) PEX's first boot enables anonymous telemetry (heartbeats to `market.pumpkinmc.org`, upstream feature) unless the config turns it off. Keep it on by default for PEX, or off?
 
 ## Goal 4: offline UUIDs match vanilla
 
@@ -251,24 +251,24 @@ Every family piece does the same thing: audit each mob against its vanilla class
 ### Decisions
 
 - **Q4.1** (answered 2026-10-25: automatic, with a backup first.) Migrate automatically on the first 2.0 start, or only when the admin passes a flag? Automatic is safer for players; a flag is safer for hosts who edit player files themselves.
-- **Q4.2** (proceeding with vanilla UUIDs unless the maintainer objects, 2026-10-25) Should BungeeCord or Velocity setups that forward no UUID keep the old UUIDs for one release?
+- **Q4.2** (answered 2026-10-29: vanilla UUIDs for setups that forward none, like vanilla.) Should BungeeCord or Velocity setups that forward no UUID keep the old UUIDs for one release?
 - **Q4.3** (answered 2026-10-25: in `pumpkin.toml`, through 3.1's `config_version`.) Where does "migration done" live: in `pumpkin.toml` (via `config_version`, which ties this to 3.1) or in the world (`data/pex/migrations.dat`), so a world copied to another server isn't migrated twice?
-- **Q4.5** 4.1 merges the open upstream PR #4172 into its branch, as alpha has done with other upstream PRs. Acceptable, or a cherry-pick or an independent commit?
-- **Q4.6** (proceeding with 4.2's choice unless the maintainer objects, 2026-10-25) 4.2 refuses to start the server when the migration fails, so players don't create new-UUID files that would collide with their old data later. Agree?
-- **Q4.7** (proceeding with 4.2's choice unless the maintainer objects, 2026-10-25) Rerunning the migration on purpose (a 1.x world copied into a migrated server) means setting `config_version = 1`, which also reruns any later config steps. Acceptable while those steps are safe to run twice?
-- **Q4.8** 4.4's PEXGuard migration also moves owners and members the mapping doesn't list, when their stored name hashes to the stored old UUID. Keep that?
-- **Q4.9** 4.4 records the applied mapping in `plugins/data/pexguard/uuid-migration.json`, so an admin who restores `regions.toml.v1.bak` must delete it to re-migrate. Keep the record?
-- **Q4.10** When its migration fails, PEXGuard still loads with the old UUIDs: members count as non-members, but every region stays protected. Prefer that to refusing to load?
-- **Q4.11** 4.3 rewrites UUIDs only where they are a whole value, not inside longer strings (command blocks with UUID selectors, signs, books), to avoid touching free text. Should it cover those?
-- **Q4.12** 4.3 writes a `.v1.bak` copy next to each changed region file, and 4.7 next to each player file it moves at login (4.2 uses one `world/players.v1.bak` folder). Fine for a few files; a world with many references gets many backup files. Keep, or collect backups in one folder?
-- **Q4.13** When 4.7's move at login fails, the player is kicked with vanilla's `multiplayer.disconnect.invalid_player_data` and the next login retries, rather than joining with an empty inventory (same reasoning as Q4.6). Agree?
-- **Q4.15** 4.8 treats a missing world-pass record as empty, so the first start of a build with 4.8 reads the whole world once on worlds that ran unreleased 4.3 builds. Acceptable, rather than guessing from 4.7's backups?
-- **Q4.16** Entities and block entities already loaded when 4.7 moves a player keep the old UUID until the next restart (a pet won't obey, a vault rewards again, a trial spawner counts the player as new). Wait one restart, or build a live pass?
-- **Q4.17** 4.8's record lives in `world/players/uuid-migration-world.json`. Name and place acceptable?
+- **Q4.5** (answered 2026-10-29: acceptable, as done.) 4.1 merges the open upstream PR #4172 into its branch, as alpha has done with other upstream PRs. Acceptable, or a cherry-pick or an independent commit?
+- **Q4.6** (answered 2026-10-29: agree, as 4.2 does.) 4.2 refuses to start the server when the migration fails, so players don't create new-UUID files that would collide with their old data later. Agree?
+- **Q4.7** (answered 2026-10-29: acceptable while later config steps stay safe to run twice; each new config step must keep that true.) Rerunning the migration on purpose (a 1.x world copied into a migrated server) means setting `config_version = 1`, which also reruns any later config steps. Acceptable while those steps are safe to run twice?
+- **Q4.8** (answered 2026-10-29: keep.) 4.4's PEXGuard migration also moves owners and members the mapping doesn't list, when their stored name hashes to the stored old UUID. Keep that?
+- **Q4.9** (answered 2026-10-29: keep the record. The release notes say to delete it when restoring the backup.) 4.4 records the applied mapping in `plugins/data/pexguard/uuid-migration.json`, so an admin who restores `regions.toml.v1.bak` must delete it to re-migrate. Keep the record?
+- **Q4.10** (answered 2026-10-29: yes, load with old UUIDs and keep every region protected.) When its migration fails, PEXGuard still loads with the old UUIDs: members count as non-members, but every region stays protected. Prefer that to refusing to load?
+- **Q4.11** (answered 2026-10-29: no, whole values only. Free text is left alone.) 4.3 rewrites UUIDs only where they are a whole value, not inside longer strings (command blocks with UUID selectors, signs, books), to avoid touching free text. Should it cover those?
+- **Q4.12** (answered 2026-10-29: keep the backups next to each file. Vanilla ignores them, and the release notes say they can be deleted once the upgrade is confirmed.) 4.3 writes a `.v1.bak` copy next to each changed region file, and 4.7 next to each player file it moves at login (4.2 uses one `world/players.v1.bak` folder). Fine for a few files; a world with many references gets many backup files. Keep, or collect backups in one folder?
+- **Q4.13** (answered 2026-10-29: agree.) When 4.7's move at login fails, the player is kicked with vanilla's `multiplayer.disconnect.invalid_player_data` and the next login retries, rather than joining with an empty inventory (same reasoning as Q4.6). Agree?
+- **Q4.15** (answered 2026-10-29: acceptable.) 4.8 treats a missing world-pass record as empty, so the first start of a build with 4.8 reads the whole world once on worlds that ran unreleased 4.3 builds. Acceptable, rather than guessing from 4.7's backups?
+- **Q4.16** (answered 2026-10-29: wait one restart and document it. Login migrations are rare.) Entities and block entities already loaded when 4.7 moves a player keep the old UUID until the next restart (a pet won't obey, a vault rewards again, a trial spawner counts the player as new). Wait one restart, or build a live pass?
+- **Q4.17** (answered 2026-10-29: acceptable.) 4.8's record lives in `world/players/uuid-migration-world.json`. Name and place acceptable?
 - **Q4.18** (answered 2026-10-27: vanilla's check plus an opt-out setting, like Paper's `perform-username-validation`; done as `validate_player_names` in `4ed21e1dc`.) 4.6 makes offline and proxy logins refuse names vanilla `StringUtil.isValidPlayerName` refuses (non-ASCII, spaces), which upstream loosened on purpose (`200d85132`).
-- **Q4.19** 4.6's error-context fix (`319d2df91`) or upstream #4000 (open), which fixes the same panic? They differ only for characters outside the BMP.
-- **Q4.14** A player with files under both the old and the new UUID gets one warning line on every login, and both sets of files are kept. Acceptable, or too noisy?
-- **Q4.4** Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
+- **Q4.19** (answered 2026-10-29: 4.6's fix (`319d2df91`). The same change shipped in PEX 1.2.1.) 4.6's error-context fix (`319d2df91`) or upstream #4000 (open), which fixes the same panic? They differ only for characters outside the BMP.
+- **Q4.14** (answered 2026-10-29: acceptable.) A player with files under both the old and the new UUID gets one warning line on every login, and both sets of files are kept. Acceptable, or too noisy?
+- **Q4.4** (answered 2026-10-29: assume servers 30, 34 and the free tier all run offline mode, and run the upgrade on a copy of each world before 2.0 goes live there.) Which live servers run in offline mode? Servers 30 and 34 and the free tier will all go through this.
 
 ## Goal 5: redstone parity
 
@@ -305,8 +305,8 @@ Every family piece does the same thing: audit each mob against its vanilla class
 
 ### Decisions
 
-- **Q5.1** Default (non-experimental) redstone only, or also the 26.x experimental wire behind its datapack feature?
-- **Q5.2** Is position-dependent (locational) behaviour required, or is "same result for contraptions that don't depend on it" enough? 5.2 matters only if it's required.
+- **Q5.1** (answered 2026-10-29: default redstone only for 2.0. Experimental redstone can come later.) Default (non-experimental) redstone only, or also the 26.x experimental wire behind its datapack feature?
+- **Q5.2** (answered 2026-10-29: not required for 2.0. Same results for contraptions that don't depend on position are enough; 5.2 is optional.) Is position-dependent (locational) behaviour required, or is "same result for contraptions that don't depend on it" enough? 5.2 matters only if it's required.
 
 ## Goal 6: survival parity from start to dragon kill
 
@@ -361,20 +361,20 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 ### Decisions
 
-- **Q6.1** What counts as proof: a bot run with staged setup commands (teleports and `/locate` allowed, items only from gameplay), a fully unassisted bot, or a human playthrough as well?
-- **Q6.2** Which known deviations are accepted (client-authoritative movement, anti-cheat differences)?
-- **Q6.9** 6.16 applies Java's reach numbers to Bedrock's `UseItemOnEntity` in a separate commit, unchecked against Bedrock's own reach rules. Keep it, or drop it until a Bedrock client check?
-- **Q6.10** Vanilla puts the creative reach modifiers (+0.5 block, +2 entity) on the player's attributes and syncs them to the client; PEX never applies them and hardcodes creative reach (`block_interaction_range` 4.5/5, and 6.16's +2). Keep hardcoding, or apply the modifiers like vanilla (a separate change that the client sees)?
-- **Q6.11** Fresh worlds log 1 to 4 `sculk_sensor ... invalid for ticking` lines with 6.12, from the worldgen bug in 6.21. Merge 6.12 first, or wait for 6.21?
-- **Q6.12** Upstream #3859 (open) has the same block entity tick check without the log or the unloaded-chunk case, plus a load filter. Take #3859, or 6.12's branch?
-- **Q6.13** `pvp.enabled = false` refuses all melee, mobs included (`net/java/play/attack.rs:58`, `interact.rs:65`), though its doc (`pumpkin-config/src/pvp.rs:9`) says it only turns PvP off; vanilla gates only player victims (`ServerPlayer.canHarmPlayer`). Limit it to players? 6.19 kept the current behaviour.
-- **Q6.14** Remove the pre-26.1 Attack path in `net/java/play/interact.rs:163`? It is reachable only when a plugin sets `PlayerInteractEntityEvent::action` to `Attack`; 6.19 gave it the new charge check, not the rest.
-- **Q6.5** Vanilla 26.3 `ServerPlayerGameMode.tick` passes `delayedTickStart` itself as the tick count of a delayed destroy (bytecode offset 51), so for anyone online about 150 ticks a delayed destroy finishes on the next tick. Paper passes `gameTicks - delayedTickStart`. 6.10 follows Paper. Keep that, or copy vanilla's behaviour?
-- **Q6.6** PEX counts player ticks like vanilla, without Paper's lag compensation, so when TPS drops a correctly timed dig takes the delayed path: the block flickers back and breaks a moment later. Acceptable?
-- **Q6.7** 6.11 keeps vanilla's teleport resend, so a client with a round trip over about 1 s stays frozen after a teleport while it keeps moving, exactly like vanilla 26.3 (alpha let it through after one late confirm). Keep vanilla's behaviour?
-- **Q6.8** 6.11 changed `Player::awaiting_teleport`'s type and removed `teleport_id_count`, both public to native plugins. No bundled plugin uses them. Bump `PLUGIN_API_VERSION`?
-- **Q6.4** The `pumpkin-tester` world uses a random seed. Stages that depend on terrain (6.3 onward) need a fixed one: on the shared tester server, or on a separate server per stage?
-- **Q6.3** Should `fix/flush-block-entities-before-unload` (or the design decision in `ISSUE-block-entities-lost-on-unload.md`) be settled before 6.2? Survival without reliable chests isn't survival parity.
+- **Q6.1** (answered 2026-10-29: a mix: the staged bot is the proof for every stage, and one human playthrough with a real client before the 2.0 release.) What counts as proof: a bot run with staged setup commands (teleports and `/locate` allowed, items only from gameplay), a fully unassisted bot, or a human playthrough as well?
+- **Q6.2** (answered 2026-10-29: client-authoritative movement, no anti-cheat, and the Paper-style fixes chosen in Q6.5. Any other deviation must be listed in the PR that adds it and in a deviations list next to the survival stages.) Which known deviations are accepted (client-authoritative movement, anti-cheat differences)?
+- **Q6.9** (answered 2026-10-29: keep it.) 6.16 applies Java's reach numbers to Bedrock's `UseItemOnEntity` in a separate commit, unchecked against Bedrock's own reach rules. Keep it, or drop it until a Bedrock client check?
+- **Q6.10** (answered 2026-10-29: apply vanilla's attribute modifiers, as a separate, low-priority piece.) Vanilla puts the creative reach modifiers (+0.5 block, +2 entity) on the player's attributes and syncs them to the client; PEX never applies them and hardcodes creative reach (`block_interaction_range` 4.5/5, and 6.16's +2). Keep hardcoding, or apply the modifiers like vanilla (a separate change that the client sees)?
+- **Q6.11** (answered 2026-10-29: merge 6.12 first. It fixes a crash, and the warnings are harmless.) Fresh worlds log 1 to 4 `sculk_sensor ... invalid for ticking` lines with 6.12, from the worldgen bug in 6.21. Merge 6.12 first, or wait for 6.21?
+- **Q6.12** (answered 2026-10-29: 6.12's branch. It also covers the unloaded-chunk case.) Upstream #3859 (open) has the same block entity tick check without the log or the unloaded-chunk case, plus a load filter. Take #3859, or 6.12's branch?
+- **Q6.13** (answered 2026-10-29: limit it to player victims, like vanilla, and keep the config doc as it is.) `pvp.enabled = false` refuses all melee, mobs included (`net/java/play/attack.rs:58`, `interact.rs:65`), though its doc (`pumpkin-config/src/pvp.rs:9`) says it only turns PvP off; vanilla gates only player victims (`ServerPlayer.canHarmPlayer`). Limit it to players? 6.19 kept the current behaviour.
+- **Q6.14** (answered 2026-10-29: remove it. No bundled plugin uses it.) Remove the pre-26.1 Attack path in `net/java/play/interact.rs:163`? It is reachable only when a plugin sets `PlayerInteractEntityEvent::action` to `Attack`; 6.19 gave it the new charge check, not the rest.
+- **Q6.5** (answered 2026-10-29: keep Paper's fix.) Vanilla 26.3 `ServerPlayerGameMode.tick` passes `delayedTickStart` itself as the tick count of a delayed destroy (bytecode offset 51), so for anyone online about 150 ticks a delayed destroy finishes on the next tick. Paper passes `gameTicks - delayedTickStart`. 6.10 follows Paper. Keep that, or copy vanilla's behaviour?
+- **Q6.6** (answered 2026-10-29: acceptable for 2.0. Goal 9 keeps TPS at 20; revisit if players report flicker.) PEX counts player ticks like vanilla, without Paper's lag compensation, so when TPS drops a correctly timed dig takes the delayed path: the block flickers back and breaks a moment later. Acceptable?
+- **Q6.7** (answered 2026-10-29: keep vanilla's behaviour.) 6.11 keeps vanilla's teleport resend, so a client with a round trip over about 1 s stays frozen after a teleport while it keeps moving, exactly like vanilla 26.3 (alpha let it through after one late confirm). Keep vanilla's behaviour?
+- **Q6.8** (answered 2026-10-29: yes, bump it.) 6.11 changed `Player::awaiting_teleport`'s type and removed `teleport_id_count`, both public to native plugins. No bundled plugin uses them. Bump `PLUGIN_API_VERSION`?
+- **Q6.4** (answered 2026-10-29: a fixed seed on the shared tester server, since the host is short on RAM. Use a separate server only for a stage that conflicts with the others.) The `pumpkin-tester` world uses a random seed. Stages that depend on terrain (6.3 onward) need a fixed one: on the shared tester server, or on a separate server per stage?
+- **Q6.3** (answered 2026-10-29: yes. Settle the block entity loss on unload before the survival stages.) Should `fix/flush-block-entities-before-unload` (or the design decision in `ISSUE-block-entities-lost-on-unload.md`) be settled before 6.2? Survival without reliable chests isn't survival parity.
 
 ## Goal 7: worlds round-trip with vanilla 26.3
 
@@ -414,14 +414,14 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 ### Decisions
 
-- **Q7.1** Default chunk format for 2.0: Pump (upstream's default, faster) or Anvil (round-trips with vanilla)? If Pump stays the default, round-trip parity only applies after `--convert-world anvil`.
-- **Q7.2** Can a fixture world of a few MB be committed to the repository, or should it live in a release asset or be regenerated by the script in CI?
-- **Q7.3** On automatic conversion: keep the source files, move them to a backup folder, or keep deleting them as now?
-- **Q7.4** 7.8 writes player files and 7.11 writes `level.dat` with mode 0600 like vanilla; PEX used to write 0644. Fine for Pelican and the free-tier tooling? Backup tools running as another user lose read access, so it needs a release note either way.
-- **Q7.5** A broken ban list: vanilla 26.3 refuses to start; PEX (before and after 7.10) starts with no bans, keeping the file. Should PEX refuse to start too?
-- **Q7.6** 7.10 keeps a broken list file and skips saves to it until it loads. The alternative is moving it aside (`ops.json.broken`) and saving normally. Which?
-- **Q7.7** After 7.11, `save-all` answers "Saved the game" when only player files failed, like vanilla (the failures are logged). Should PEX report failure there instead?
-- **Q7.8** 7.11 removed `write_world_info_reports_final_rename_failure` (the `level.dat_new` it set up no longer exists) and covers the failed rename with the root-safe `file_util::tests::failed_replace_restores_target`, which settles 0.3. Acceptable?
+- **Q7.1** (answered 2026-10-29: Anvil for new configs, so worlds open in vanilla and in map and backup tools. Existing configs keep the format they already name and aren't converted, and Pump stays available as an opt-in.) Default chunk format for 2.0: Pump (upstream's default, faster) or Anvil (round-trips with vanilla)? If Pump stays the default, round-trip parity only applies after `--convert-world anvil`.
+- **Q7.2** (answered 2026-10-29: keep it out of the repository. A script regenerates it, or it is a release asset.) Can a fixture world of a few MB be committed to the repository, or should it live in a release asset or be regenerated by the script in CI?
+- **Q7.3** (answered 2026-10-29: move the source files to a backup folder. Never delete them.) On automatic conversion: keep the source files, move them to a backup folder, or keep deleting them as now?
+- **Q7.4** (answered 2026-10-29: 0600 like vanilla, with a release note.) 7.8 writes player files and 7.11 writes `level.dat` with mode 0600 like vanilla; PEX used to write 0644. Fine for Pelican and the free-tier tooling? Backup tools running as another user lose read access, so it needs a release note either way.
+- **Q7.5** (answered 2026-10-29: refuse to start on a broken ban list (players or IPs), like vanilla, because starting would let banned players in. Other broken lists keep 7.10's behaviour.) A broken ban list: vanilla 26.3 refuses to start; PEX (before and after 7.10) starts with no bans, keeping the file. Should PEX refuse to start too?
+- **Q7.6** (answered 2026-10-29: keep the file and skip saves to it, as 7.10 does.) 7.10 keeps a broken list file and skips saves to it until it loads. The alternative is moving it aside (`ops.json.broken`) and saving normally. Which?
+- **Q7.7** (answered 2026-10-29: keep vanilla's "Saved the game" and add a second line saying how many player files failed, pointing to the log.) After 7.11, `save-all` answers "Saved the game" when only player files failed, like vanilla (the failures are logged). Should PEX report failure there instead?
+- **Q7.8** (answered 2026-10-29: acceptable.) 7.11 removed `write_world_info_reports_final_rename_failure` (the `level.dat_new` it set up no longer exists) and covers the failed rename with the root-safe `file_util::tests::failed_replace_restores_target`, which settles 0.3. Acceptable?
 
 ## Goal 8: Bedrock polish
 
@@ -452,9 +452,9 @@ The pieces of a playthrough exist in code; none has been proven end to end.
 
 ### Decisions
 
-- **Q8.1** Is Bedrock a 2.0 requirement, or does 2.0 ship it as experimental with the coverage table as the honest list of gaps?
-- **Q8.2** Which Bedrock features matter most (survival basics, plugins' forms, cross-play chat)?
-- **Q8.3** Who has a Bedrock client for the human checklist, and on what device?
+- **Q8.1** (answered 2026-10-29: experimental in 2.0, with the coverage table as the list of gaps.) Is Bedrock a 2.0 requirement, or does 2.0 ship it as experimental with the coverage table as the honest list of gaps?
+- **Q8.2** (answered 2026-10-29: survival basics first (join, move, build, inventory, combat), then cross-play chat, then forms.) Which Bedrock features matter most (survival basics, plugins' forms, cross-play chat)?
+- **Q8.3** (answered 2026-10-29: the maintainer or a tester on a phone (Android or iOS) runs the checklist before release. Not blocking while Bedrock is experimental.) Who has a Bedrock client for the human checklist, and on what device?
 
 ## Goal 9: performance against Paper
 
@@ -493,9 +493,9 @@ Measured with the gameplay benchmark (`/srv/pex/gameplay-bench`; reports in `ben
 
 ### Decisions
 
-- **Q9.1** Which hardware? pve runs production next to the benchmark, which adds noise; a dedicated box or a cloud VM is cleaner. Earlier runs used a Pelican node with 4 cores per server.
-- **Q9.2** What is the bar: beat Paper on p95 and network, or only get within some margin? Which player counts and duration?
-- **Q9.3** Should the gameplay benchmark move into this repository (it has its own license file today)?
+- **Q9.1** (answered 2026-10-29: a dedicated cloud VM with 4 cores, like the earlier Pelican nodes, for the numbers that go in release notes. pve is fine for development comparisons when PEX and Paper run back to back.) Which hardware? pve runs production next to the benchmark, which adds noise; a dedicated box or a cloud VM is cleaner. Earlier runs used a Pelican node with 4 cores per server.
+- **Q9.2** (answered 2026-10-29: PEX uses less RAM than Paper and stays within 10% of Paper's p95 MSPT, at 10, 25 and 50 bots for 30 minutes each.) What is the bar: beat Paper on p95 and network, or only get within some margin? Which player counts and duration?
+- **Q9.3** (answered 2026-10-29: yes, under `tools/`, if its license can match the repository's.) Should the gameplay benchmark move into this repository (it has its own license file today)?
 
 ## Goal 10: reproducible release builds in CI, ARM64 and Windows on real hardware
 
@@ -531,12 +531,12 @@ Measured with the gameplay benchmark (`/srv/pex/gameplay-bench`; reports in `ben
 
 ### Decisions
 
-- **Q10.1** Which ARM64 and Windows machines can be used for the real hardware runs?
-- **Q10.2** Windows signing: set up SignPath (or another certificate) for the fork, or ship unsigned Windows builds?
-- **Q10.3** Which targets must be bit-for-bit reproducible: only x86_64 Linux, or every target? Windows and macOS are much harder.
-- **Q10.4** Should releases keep the musl build that can't load plugins (see goal 2)?
+- **Q10.1** (answered 2026-10-29: GitHub-hosted ARM64 and Windows runners once Actions is back, plus one real run each: an ARM64 VM or board, and a Windows PC.) Which ARM64 and Windows machines can be used for the real hardware runs?
+- **Q10.2** (answered 2026-10-29: ship unsigned for 2.0 with a SmartScreen note, and apply for SignPath's free open source signing afterwards.) Windows signing: set up SignPath (or another certificate) for the fork, or ship unsigned Windows builds?
+- **Q10.3** (answered 2026-10-29: x86_64 Linux only (glibc and musl).) Which targets must be bit-for-bit reproducible: only x86_64 Linux, or every target? Windows and macOS are much harder.
+- **Q10.4** (answered 2026-10-29: keep it, and build only `-p pumpkin` for musl in `release.yml`. A workspace musl build fails on the plugin `cdylib`s (found building 1.2.1).) Should releases keep the musl build that can't load plugins (see goal 2)?
 - **Q10.5** Actions is disabled by GitHub, not by a setting in the repository. The owner (Conman1533) has to look at the Actions tab and settings while logged in, check for a GitHub email from around 2026-10-14 and the billing page, and open a support ticket if needed. Nothing in the repository can fix it.
-- **Q10.6** Which workflows should run on the fork at all: nightly releases (and should they ever be Latest), the upstream reviewer bot, the Docker image, the WIT mirror?
+- **Q10.6** (answered 2026-10-29: nightly as a pre-release, never Latest; the Docker image yes; the upstream reviewer bot and the WIT mirror no.) Which workflows should run on the fork at all: nightly releases (and should they ever be Latest), the upstream reviewer bot, the Docker image, the WIT mirror?
 
 ## Order across goals
 
@@ -561,77 +561,79 @@ Cross-goal dependencies to keep in mind:
 
 ## All decisions
 
+On 2026-10-29 the maintainer asked Claude to answer every open decision except Q10.5 with its own recommendation. Those answers are marked "answered 2026-10-29" here and in each goal's Decisions list. Q10.5 still needs the owner.
+
 | ID | Question |
 | :-- | :-- |
-| Q1.1 | Must the 21 vanilla Brain mobs run on PEX's Brain framework, or are goal-based ports with matching behaviour acceptable? |
-| Q1.2 | Per-mob tests here only, or also offered upstream? |
-| Q1.3 | Are villagers (three sessions) in scope for 2.0? |
-| Q1.4 | Are mock players with a closed client acceptable in GameTests? |
-| Q2.1 | Versioned native plugin ABI, or explicitly unstable (same release only)? |
-| Q2.2 | When v0.1 goes: finish WASM v0.2, or drop WASM plugins entirely? |
-| Q2.3 | Are third-party native plugins a 2.0 goal? |
-| Q2.4 | Is a build id that can't see dependency features acceptable? |
-| Q3.1 | Invalid config value: refuse to start, or use that key's default and warn? |
-| Q3.2 | Migrate `pumpkin.toml` in place with a backup, or write the result beside it? |
-| Q3.3 | Keep comments in `pumpkin.toml` at the cost of a `toml_edit` dependency? |
-| Q3.4 | Newer `config_version` than the server knows: warn and start, or refuse? |
-| Q3.5 | One log line per filled-in key, or one summary line? |
-| Q3.6 | Telemetry on or off by default? |
+| Q1.1 | Must the 21 vanilla Brain mobs run on PEX's Brain framework, or are goal-based ports with matching behaviour acceptable? **Answered 2026-10-29:** goal-based ports are acceptable when the observable behaviour matches vanilla and a GameTest proves it. Use the Brain framework where it already covers a mob; PEX doesn't upstream, so upstream's Brain-only rule doesn't apply. |
+| Q1.2 | Per-mob tests here only, or also offered upstream? **Answered 2026-10-29:** here only. PEX doesn't upstream. |
+| Q1.3 | Are villagers (three sessions) in scope for 2.0? **Answered 2026-10-29:** yes. Trading halls and villager farms are among the first things SMP players notice, so 1.26 to 1.28 are in scope. |
+| Q1.4 | Are mock players with a closed client acceptable in GameTests? **Answered 2026-10-29:** yes, for PEX. |
+| Q2.1 | Versioned native plugin ABI, or explicitly unstable (same release only)? **Answered 2026-10-29:** explicitly unstable: plugins only load into the build they came from (2.1). No ABI promise across releases. |
+| Q2.2 | When v0.1 goes: finish WASM v0.2, or drop WASM plugins entirely? **Answered 2026-10-29:** keep WASM by following upstream: take upstream's v0.2 host as upstream finishes it and remove v0.1 when upstream does. PEX spends no pieces of its own on WASM, which also keeps those crates close to upstream for merges. |
+| Q2.3 | Are third-party native plugins a 2.0 goal? **Answered 2026-10-29:** no. 2.0 covers the three bundled plugins; `PORTING_GUIDE.md` stays, without a compatibility promise. |
+| Q2.4 | Is a build id that can't see dependency features acceptable? **Answered 2026-10-29:** acceptable. Releases build everything in one invocation. |
+| Q3.1 | Invalid config value: refuse to start, or use that key's default and warn? **Answered 2026-10-29:** use that key's default and log a warning naming the key, value and default. A TOML syntax error (nothing can be read) refuses to start with the line and column, since starting on all defaults could silently open a whitelisted or online-mode server. |
+| Q3.2 | Migrate `pumpkin.toml` in place with a backup, or write the result beside it? **Answered 2026-10-29:** in place with a backup, as 3.1 does. |
+| Q3.3 | Keep comments in `pumpkin.toml` at the cost of a `toml_edit` dependency? **Answered 2026-10-29:** yes, keep `toml_edit`. |
+| Q3.4 | Newer `config_version` than the server knows: warn and start, or refuse? **Answered 2026-10-29:** warn and start, as 3.1 does. |
+| Q3.5 | One log line per filled-in key, or one summary line? **Answered 2026-10-29:** one summary line that lists the filled-in keys. |
+| Q3.6 | Telemetry on or off by default? **Answered 2026-10-29:** off by default. Admins can turn it on. |
 | Q4.1 | Answered: automatic on first start, with a backup |
-| Q4.2 | Keep old UUIDs for one release behind proxies that forward none? |
+| Q4.2 | Keep old UUIDs for one release behind proxies that forward none? **Answered 2026-10-29:** vanilla UUIDs for setups that forward none, like vanilla. |
 | Q4.3 | Answered: marker in `pumpkin.toml` (3.1's `config_version`) |
-| Q4.4 | Which live servers run in offline mode? |
-| Q4.6 | Refuse to start when the UUID migration fails? |
-| Q4.7 | Rerun the migration by setting `config_version = 1`? |
-| Q4.8 | PEXGuard: also move members the mapping can't name? |
-| Q4.9 | PEXGuard: keep the applied-mapping record? |
-| Q4.10 | PEXGuard: load with old UUIDs on a failed migration? |
-| Q4.11 | Rewrite UUIDs inside text (command blocks, signs, books) too? |
-| Q4.12 | Region and player-file backups next to each file, or in one folder? |
-| Q4.13 | Kick a player whose login migration fails, and retry at the next login? |
-| Q4.15 | One full world read on worlds from unreleased builds (4.8's missing record)? |
-| Q4.16 | Players moved at login: fix loaded entities at the next restart, or a live pass? |
-| Q4.17 | 4.8's record file name and place? |
+| Q4.4 | Which live servers run in offline mode? **Answered 2026-10-29:** assume servers 30, 34 and the free tier all run offline mode, and run the upgrade on a copy of each world before 2.0 goes live there. |
+| Q4.6 | Refuse to start when the UUID migration fails? **Answered 2026-10-29:** agree, as 4.2 does. |
+| Q4.7 | Rerun the migration by setting `config_version = 1`? **Answered 2026-10-29:** acceptable while later config steps stay safe to run twice; each new config step must keep that true. |
+| Q4.8 | PEXGuard: also move members the mapping can't name? **Answered 2026-10-29:** keep. |
+| Q4.9 | PEXGuard: keep the applied-mapping record? **Answered 2026-10-29:** keep the record. The release notes say to delete it when restoring the backup. |
+| Q4.10 | PEXGuard: load with old UUIDs on a failed migration? **Answered 2026-10-29:** yes, load with old UUIDs and keep every region protected. |
+| Q4.11 | Rewrite UUIDs inside text (command blocks, signs, books) too? **Answered 2026-10-29:** no, whole values only. Free text is left alone. |
+| Q4.12 | Region and player-file backups next to each file, or in one folder? **Answered 2026-10-29:** keep the backups next to each file. Vanilla ignores them, and the release notes say they can be deleted once the upgrade is confirmed. |
+| Q4.13 | Kick a player whose login migration fails, and retry at the next login? **Answered 2026-10-29:** agree. |
+| Q4.15 | One full world read on worlds from unreleased builds (4.8's missing record)? **Answered 2026-10-29:** acceptable. |
+| Q4.16 | Players moved at login: fix loaded entities at the next restart, or a live pass? **Answered 2026-10-29:** wait one restart and document it. Login migrations are rare. |
+| Q4.17 | 4.8's record file name and place? **Answered 2026-10-29:** acceptable. |
 | Q4.18 | Login names: vanilla check plus opt-out (answered) |
-| Q4.19 | Error-context panic: 4.6's fix or upstream #4000? |
-| Q4.14 | Warn on every login for a player with files under both UUIDs? |
-| Q4.5 | Merge open upstream PR #4172 for 4.1, or cherry-pick or rewrite? |
-| Q5.1 | Default redstone only, or experimental redstone too? |
-| Q5.2 | Is locational (position-dependent) behaviour required? |
-| Q6.1 | Proof of survival parity: staged bot, unassisted bot, human, or a mix? |
-| Q6.2 | Which deviations are accepted? |
-| Q6.3 | Settle block entity loss on unload before the survival stages? |
-| Q6.4 | Fixed seed for terrain-dependent survival stages: shared tester server or one server per stage? |
-| Q6.7 | Keep vanilla's teleport resend for very slow clients? |
-| Q6.8 | Bump `PLUGIN_API_VERSION` for 6.11's public field change? |
-| Q6.9 | Keep 6.16's Bedrock reach check before a Bedrock client test? |
-| Q6.10 | Creative reach: keep it hardcoded or apply vanilla's attribute modifiers? |
-| Q6.11 | Merge 6.12 before 6.21 fixes the sculk warnings? |
-| Q6.12 | 6.12's branch or upstream #3859? |
-| Q6.13 | `pvp.enabled = false`: players only, like vanilla? |
-| Q6.14 | Remove the pre-26.1 Attack path in `interact.rs`? |
-| Q6.5 | Delayed destroy timing: Paper's fix (6.10's choice) or vanilla 26.3's bug? |
-| Q6.6 | No lag compensation for dig timing: acceptable? |
-| Q7.1 | Default chunk format for 2.0: Pump or Anvil? |
-| Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? |
-| Q7.3 | On conversion: keep, back up, or delete source region files? |
-| Q7.4 | Player files and `level.dat` 0600 like vanilla, or keep 0644? |
-| Q7.5 | Refuse to start on a broken ban list, like vanilla? |
-| Q7.6 | Broken list files: keep and skip saves, or move aside? |
-| Q7.7 | `save-all` reports success when only player files failed, like vanilla? |
-| Q7.8 | Replace the root-only `level.dat` rename test with 7.11's root-safe test (settles 0.3)? |
-| Q8.1 | Bedrock: 2.0 requirement or experimental? |
-| Q8.2 | Which Bedrock features first? |
-| Q8.3 | Who runs the real Bedrock client checklist, on what device? |
-| Q9.1 | Benchmark hardware? |
-| Q9.2 | The performance bar against Paper: player counts, duration, which numbers? |
-| Q9.3 | Move the gameplay benchmark into this repository? |
-| Q10.1 | Which ARM64 and Windows machines for real hardware runs? |
-| Q10.2 | Sign Windows builds, or ship unsigned? |
-| Q10.3 | Which targets must be bit-for-bit reproducible? |
-| Q10.4 | Keep the musl build that can't load plugins? |
+| Q4.19 | Error-context panic: 4.6's fix or upstream #4000? **Answered 2026-10-29:** 4.6's fix (`319d2df91`). The same change shipped in PEX 1.2.1. |
+| Q4.14 | Warn on every login for a player with files under both UUIDs? **Answered 2026-10-29:** acceptable. |
+| Q4.5 | Merge open upstream PR #4172 for 4.1, or cherry-pick or rewrite? **Answered 2026-10-29:** acceptable, as done. |
+| Q5.1 | Default redstone only, or experimental redstone too? **Answered 2026-10-29:** default redstone only for 2.0. Experimental redstone can come later. |
+| Q5.2 | Is locational (position-dependent) behaviour required? **Answered 2026-10-29:** not required for 2.0. Same results for contraptions that don't depend on position are enough; 5.2 is optional. |
+| Q6.1 | Proof of survival parity: staged bot, unassisted bot, human, or a mix? **Answered 2026-10-29:** a mix: the staged bot is the proof for every stage, and one human playthrough with a real client before the 2.0 release. |
+| Q6.2 | Which deviations are accepted? **Answered 2026-10-29:** client-authoritative movement, no anti-cheat, and the Paper-style fixes chosen in Q6.5. Any other deviation must be listed in the PR that adds it and in a deviations list next to the survival stages. |
+| Q6.3 | Settle block entity loss on unload before the survival stages? **Answered 2026-10-29:** yes. Settle the block entity loss on unload before the survival stages. |
+| Q6.4 | Fixed seed for terrain-dependent survival stages: shared tester server or one server per stage? **Answered 2026-10-29:** a fixed seed on the shared tester server, since the host is short on RAM. Use a separate server only for a stage that conflicts with the others. |
+| Q6.7 | Keep vanilla's teleport resend for very slow clients? **Answered 2026-10-29:** keep vanilla's behaviour. |
+| Q6.8 | Bump `PLUGIN_API_VERSION` for 6.11's public field change? **Answered 2026-10-29:** yes, bump it. |
+| Q6.9 | Keep 6.16's Bedrock reach check before a Bedrock client test? **Answered 2026-10-29:** keep it. |
+| Q6.10 | Creative reach: keep it hardcoded or apply vanilla's attribute modifiers? **Answered 2026-10-29:** apply vanilla's attribute modifiers, as a separate, low-priority piece. |
+| Q6.11 | Merge 6.12 before 6.21 fixes the sculk warnings? **Answered 2026-10-29:** merge 6.12 first. It fixes a crash, and the warnings are harmless. |
+| Q6.12 | 6.12's branch or upstream #3859? **Answered 2026-10-29:** 6.12's branch. It also covers the unloaded-chunk case. |
+| Q6.13 | `pvp.enabled = false`: players only, like vanilla? **Answered 2026-10-29:** limit it to player victims, like vanilla, and keep the config doc as it is. |
+| Q6.14 | Remove the pre-26.1 Attack path in `interact.rs`? **Answered 2026-10-29:** remove it. No bundled plugin uses it. |
+| Q6.5 | Delayed destroy timing: Paper's fix (6.10's choice) or vanilla 26.3's bug? **Answered 2026-10-29:** keep Paper's fix. |
+| Q6.6 | No lag compensation for dig timing: acceptable? **Answered 2026-10-29:** acceptable for 2.0. Goal 9 keeps TPS at 20; revisit if players report flicker. |
+| Q7.1 | Default chunk format for 2.0: Pump or Anvil? **Answered 2026-10-29:** Anvil for new configs, so worlds open in vanilla and in map and backup tools. Existing configs keep the format they already name and aren't converted, and Pump stays available as an opt-in. |
+| Q7.2 | Commit a fixture world of a few MB, or keep it outside the repo? **Answered 2026-10-29:** keep it out of the repository. A script regenerates it, or it is a release asset. |
+| Q7.3 | On conversion: keep, back up, or delete source region files? **Answered 2026-10-29:** move the source files to a backup folder. Never delete them. |
+| Q7.4 | Player files and `level.dat` 0600 like vanilla, or keep 0644? **Answered 2026-10-29:** 0600 like vanilla, with a release note. |
+| Q7.5 | Refuse to start on a broken ban list, like vanilla? **Answered 2026-10-29:** refuse to start on a broken ban list (players or IPs), like vanilla, because starting would let banned players in. Other broken lists keep 7.10's behaviour. |
+| Q7.6 | Broken list files: keep and skip saves, or move aside? **Answered 2026-10-29:** keep the file and skip saves to it, as 7.10 does. |
+| Q7.7 | `save-all` reports success when only player files failed, like vanilla? **Answered 2026-10-29:** keep vanilla's "Saved the game" and add a second line saying how many player files failed, pointing to the log. |
+| Q7.8 | Replace the root-only `level.dat` rename test with 7.11's root-safe test (settles 0.3)? **Answered 2026-10-29:** acceptable. |
+| Q8.1 | Bedrock: 2.0 requirement or experimental? **Answered 2026-10-29:** experimental in 2.0, with the coverage table as the list of gaps. |
+| Q8.2 | Which Bedrock features first? **Answered 2026-10-29:** survival basics first (join, move, build, inventory, combat), then cross-play chat, then forms. |
+| Q8.3 | Who runs the real Bedrock client checklist, on what device? **Answered 2026-10-29:** the maintainer or a tester on a phone (Android or iOS) runs the checklist before release. Not blocking while Bedrock is experimental. |
+| Q9.1 | Benchmark hardware? **Answered 2026-10-29:** a dedicated cloud VM with 4 cores, like the earlier Pelican nodes, for the numbers that go in release notes. pve is fine for development comparisons when PEX and Paper run back to back. |
+| Q9.2 | The performance bar against Paper: player counts, duration, which numbers? **Answered 2026-10-29:** PEX uses less RAM than Paper and stays within 10% of Paper's p95 MSPT, at 10, 25 and 50 bots for 30 minutes each. |
+| Q9.3 | Move the gameplay benchmark into this repository? **Answered 2026-10-29:** yes, under `tools/`, if its license can match the repository's. |
+| Q10.1 | Which ARM64 and Windows machines for real hardware runs? **Answered 2026-10-29:** GitHub-hosted ARM64 and Windows runners once Actions is back, plus one real run each: an ARM64 VM or board, and a Windows PC. |
+| Q10.2 | Sign Windows builds, or ship unsigned? **Answered 2026-10-29:** ship unsigned for 2.0 with a SmartScreen note, and apply for SignPath's free open source signing afterwards. |
+| Q10.3 | Which targets must be bit-for-bit reproducible? **Answered 2026-10-29:** x86_64 Linux only (glibc and musl). |
+| Q10.4 | Keep the musl build that can't load plugins? **Answered 2026-10-29:** keep it, and build only `-p pumpkin` for musl in `release.yml`. A workspace musl build fails on the plugin `cdylib`s (found building 1.2.1). |
 | Q10.5 | Actions is disabled by GitHub: will the owner check the account and contact support? |
-| Q10.6 | Which workflows should run on the fork (nightly as Latest, reviewer bot, Docker image, WIT mirror)? |
+| Q10.6 | Which workflows should run on the fork (nightly as Latest, reviewer bot, Docker image, WIT mirror)? **Answered 2026-10-29:** nightly as a pre-release, never Latest; the Docker image yes; the upstream reviewer bot and the WIT mirror no. |
 
 ## Piece status
 
