@@ -38,6 +38,7 @@ This version of it, PEX (Pumpkin Experimental) is an experimental merged version
 What PEX adds on top of upstream Pumpkin. Each item was tested on a server before it went in.
 
 ### Gameplay fixes
+- **Commands with non-ASCII text can't crash the server.** A typo in a command like `/tp "玩家一号" 玩家一号` used to panic the whole server while it built the error message; the error now shows the last ten characters before the mistake, like vanilla.
 - **Hoes, shovels and axes work again**: tilling farmland, making dirt paths, stripping logs and scraping or waxing copper. A codegen bug had dropped every block transform rule.
 - **Projectiles can hit players**: arrows, tridents, snowballs, eggs, fishing bobbers and evoker fangs used to fly straight through players.
 - **Items merge into a matching off-hand stack** when picked up. Before, they stayed on the ground.
