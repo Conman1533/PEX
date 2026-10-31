@@ -217,6 +217,31 @@ async fn build_peer(
     ))
 }
 
+/// A session whose peer never connects, for unit tests.
+#[cfg(test)]
+pub async fn test_session() -> Arc<NetherNetSession> {
+    struct NoEvents;
+    #[async_trait]
+    impl PeerConnectionEventHandler for NoEvents {}
+
+    let peer = Box::pin(
+        PeerConnectionBuilder::new()
+            .with_configuration(rtc_configuration(&[]))
+            .with_handler(Arc::new(NoEvents))
+            .with_udp_addrs(vec![SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0))])
+            .build(),
+    )
+    .await
+    .expect("peer connection");
+    let (incoming, _) = mpsc::channel(1);
+    Arc::new(NetherNetSession::new(
+        Arc::new(peer),
+        None,
+        SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 19132)),
+        incoming,
+    ))
+}
+
 fn rtc_configuration(stun_servers: &[String]) -> RTCConfiguration {
     if stun_servers.is_empty() {
         RTCConfigurationBuilder::default().build()

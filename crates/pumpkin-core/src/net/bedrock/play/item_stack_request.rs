@@ -94,6 +94,16 @@ impl BedrockClient {
                             source,
                             destination,
                         } => {
+                            if !slot_exists(&*screen_handler, &source, created_item.as_ref())
+                                || !slot_exists(
+                                    &*screen_handler,
+                                    &destination,
+                                    created_item.as_ref(),
+                                )
+                            {
+                                result = 1;
+                                break;
+                            }
                             let mut source_stack =
                                 get_slot_stack(&*screen_handler, &source, created_item.as_ref());
                             if source_stack.is_empty() && created_item.is_none() {
@@ -258,6 +268,12 @@ impl BedrockClient {
                             }
                         }
                         ItemStackRequestAction::Swap { slot1, slot2 } => {
+                            if !slot_exists(&*screen_handler, &slot1, created_item.as_ref())
+                                || !slot_exists(&*screen_handler, &slot2, created_item.as_ref())
+                            {
+                                result = 1;
+                                break;
+                            }
                             if get_output_screen_slot(&*screen_handler, &slot1).is_some()
                                 || get_output_screen_slot(&*screen_handler, &slot2).is_some()
                             {
@@ -291,6 +307,10 @@ impl BedrockClient {
                             source,
                             randomly: _,
                         } => {
+                            if !slot_exists(&*screen_handler, &source, created_item.as_ref()) {
+                                result = 1;
+                                break;
+                            }
                             let mut source_stack =
                                 get_slot_stack(&*screen_handler, &source, created_item.as_ref());
                             if source_stack.is_empty() {
@@ -341,6 +361,10 @@ impl BedrockClient {
                         }
                         ItemStackRequestAction::Destroy { count, source }
                         | ItemStackRequestAction::Consume { count, source } => {
+                            if !slot_exists(&*screen_handler, &source, created_item.as_ref()) {
+                                result = 1;
+                                break;
+                            }
                             if screen_handler.window_type()
                                 == Some(pumpkin_data::screen::WindowType::Merchant)
                                 && matches!(
@@ -910,9 +934,11 @@ pub(crate) fn map_bedrock_container_slot(
         .len()
         .saturating_sub(PlayerInventory::MAIN_SIZE);
 
-    match container_name {
+    let screen_slot = match container_name {
         ContainerName::HotBar => {
-            if is_player_screen {
+            if !PlayerInventory::is_valid_hotbar_index(slot_id as usize) {
+                None
+            } else if is_player_screen {
                 Some(36 + slot_id as usize)
             } else {
                 Some(container_slots + 27 + slot_id as usize)
@@ -935,8 +961,9 @@ pub(crate) fn map_bedrock_container_slot(
                 None
             }
         }
-        ContainerName::Armor => (slot_id < 4).then(|| 5 + slot_id as usize),
-        ContainerName::Offhand => (slot_id == 0).then_some(45),
+        // Only the player screen has armor and offhand slots.
+        ContainerName::Armor => (is_player_screen && slot_id < 4).then(|| 5 + slot_id as usize),
+        ContainerName::Offhand => (is_player_screen && slot_id == 0).then_some(45),
         ContainerName::Cursor => None,
         ContainerName::CraftingInput => {
             if is_player_screen {
@@ -1153,6 +1180,24 @@ pub(crate) fn map_bedrock_container_slot(
         )
         .then_some(2),
         _ => ((slot_id as usize) < container_slots).then_some(slot_id as usize),
+    };
+    // The client picks the slot id, so never return an index past the open screen.
+    screen_slot.filter(|&slot| slot < screen_handler.get_behaviour().slots.len())
+}
+
+/// Whether a request slot names something the open screen has: the cursor, the item a craft just
+/// created, or a slot `map_bedrock_container_slot` can place.
+fn slot_exists(
+    screen_handler: &dyn ScreenHandler,
+    slot_info: &ItemStackRequestSlotInfo,
+    created_item: Option<&ItemStack>,
+) -> bool {
+    match slot_info.container_name.container_name {
+        ContainerName::Cursor => true,
+        ContainerName::CreatedOutput if created_item.is_some() => true,
+        container_name => {
+            map_bedrock_container_slot(screen_handler, container_name, slot_info.slot_id).is_some()
+        }
     }
 }
 
@@ -1214,10 +1259,8 @@ fn get_slot_stack(
         slot_info.container_name.container_name,
         slot_info.slot_id,
     )
-    .map_or_else(
-        || ItemStack::EMPTY.clone(),
-        |screen_slot| screen_handler.get_behaviour().slots[screen_slot].get_cloned_stack(),
-    )
+    .and_then(|screen_slot| screen_handler.get_behaviour().slots.get(screen_slot))
+    .map_or_else(|| ItemStack::EMPTY.clone(), |slot| slot.get_cloned_stack())
 }
 
 #[allow(clippy::unreachable)]
@@ -1240,11 +1283,15 @@ fn update_slot_stack(
         screen_handler,
         slot_info.container_name.container_name,
         slot_info.slot_id,
-    ) {
+    ) && let Some(slot) = screen_handler
+        .get_behaviour()
+        .slots
+        .get(screen_slot)
+        .cloned()
+    {
         let is_player_screen = screen_handler.window_type().is_none();
         if is_player_screen {
-            let current_stack =
-                screen_handler.get_behaviour().slots[screen_slot].get_cloned_stack();
+            let current_stack = slot.get_cloned_stack();
             if !current_stack.are_items_and_components_equal(&new_stack) {
                 if (5..9).contains(&screen_slot) {
                     player.enqueue_equipment_change(
@@ -1267,7 +1314,7 @@ fn update_slot_stack(
             }
         }
 
-        screen_handler.get_behaviour().slots[screen_slot].set_stack(new_stack.clone());
+        slot.set_stack(new_stack.clone());
         screen_handler.set_received_stack(screen_slot, new_stack);
     }
 }
@@ -1628,13 +1675,20 @@ fn refresh_specialized_screen_results(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::net::{ClientPlatform, PacketRateLimiter};
     use pumpkin_data::item::Item;
     use pumpkin_inventory::{
         SimpleInventory, build_equipment_slots,
         crafting::crafting_screen_handler::CraftingTableScreenHandler,
-        entity_equipment::EntityEquipment,
+        entity_equipment::EntityEquipment, generic_container_screen_handler::create_generic_9x3,
+        player::player_screen_handler::PlayerScreenHandler,
     };
-    use std::sync::Mutex;
+    use pumpkin_protocol::bedrock::{
+        client::item_stack_response::{CItemStackResponse, ItemStackResponseInfo},
+        server::item_stack_request::{ItemStackRequest, ItemStackRequestAction, SItemStackRequest},
+    };
+    use pumpkin_util::math::vector3::Vector3;
+    use std::{collections::HashMap, net::SocketAddr, sync::Mutex};
 
     #[tokio::test]
     async fn crafting_table_maps_bedrock_player_inventory_after_its_ten_slots() {
@@ -1660,6 +1714,101 @@ mod tests {
             map_bedrock_container_slot(&handler, ContainerName::CraftingInput, 40),
             Some(9)
         );
+    }
+
+    #[tokio::test]
+    async fn hotbar_slot_out_of_range_maps_to_none() {
+        let world = crate::world::test_world();
+        let player = crate::world::test_player(&world, Vector3::new(0.0, 64.0, 0.0));
+        let player_screen = PlayerScreenHandler::new(player.inventory(), None, 0, None);
+        let chest_screen = create_generic_9x3(
+            1,
+            player.inventory(),
+            Arc::new(SimpleInventory::new(27)),
+            &*player,
+        );
+
+        for screen in [&player_screen as &dyn ScreenHandler, &chest_screen] {
+            assert!(map_bedrock_container_slot(screen, ContainerName::HotBar, 8).is_some());
+            for slot_id in 9..=u8::MAX {
+                assert_eq!(
+                    map_bedrock_container_slot(screen, ContainerName::HotBar, slot_id),
+                    None,
+                    "hotbar slot {slot_id} on {:?}",
+                    screen.window_type()
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn request_naming_a_missing_slot_gets_an_error_response() {
+        let world = crate::world::test_world();
+        let client = Arc::new(BedrockClient::new(
+            crate::net::bedrock::nethernet::test_session().await,
+            SocketAddr::from(([127, 0, 0, 1], 19132)),
+            Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            PacketRateLimiter::from_config(&pumpkin_config::PacketLimiterConfig::default()),
+        ));
+        let profile = crate::net::GameProfile {
+            id: uuid::Uuid::new_v4(),
+            name: "BedrockPlayer".to_string(),
+            properties: arc_swap::ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        };
+        let player = Arc::new(Player::new(
+            Arc::new(ClientPlatform::Bedrock(client.clone())),
+            profile,
+            crate::net::PlayerConfig::default(),
+            &world,
+            pumpkin_util::GameMode::Survival,
+        ));
+        player
+            .inventory()
+            .set_stack(0, ItemStack::new(5, &Item::STONE));
+        let hotbar = |slot_id| ItemStackRequestSlotInfo {
+            container_name: FullContainerName {
+                container_name: ContainerName::HotBar,
+                dynamic_id: None,
+            },
+            slot_id,
+            stack_id: 0,
+        };
+
+        // Hotbar slot 20 would be player screen slot 56, past its 46 slots.
+        client.handle_item_stack_request(
+            &player,
+            SItemStackRequest {
+                requests: vec![ItemStackRequest {
+                    request_id: VarInt(-3),
+                    actions: vec![ItemStackRequestAction::Place {
+                        count: 5,
+                        source: hotbar(0),
+                        destination: hotbar(20),
+                    }],
+                    filter_strings: Vec::new(),
+                    filter_cause: 0,
+                }],
+            },
+        );
+
+        let sent = client
+            .outgoing_packet_queue_recv
+            .lock()
+            .await
+            .as_mut()
+            .expect("outgoing queue")
+            .try_recv()
+            .expect("an item stack response");
+        let error_response = CItemStackResponse {
+            responses: vec![ItemStackResponseInfo {
+                result: 1,
+                client_request_id: VarInt(-3),
+                containers: Vec::new(),
+            }],
+        };
+        assert_eq!(sent.data, client.serialize_packet(&error_response).unwrap());
+        assert_eq!(player.inventory().get_stack(0).item_count, 5);
     }
 
     #[test]
