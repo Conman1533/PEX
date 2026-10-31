@@ -231,3 +231,25 @@ async fn join(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_reports_the_current_bedrock_version() {
+        let status = NetherNetStatus {
+            name: "Pumpkin",
+            protocol: CURRENT_BEDROCK_MC_PROTOCOL,
+            version: CURRENT_BEDROCK_MC_VERSION,
+            level: "world",
+            players: 2,
+            max_players: 20,
+            game_type: 1,
+        };
+        assert_eq!(
+            serde_json::to_string(&status).unwrap(),
+            r#"{"name":"Pumpkin","protocol":2225,"version":"1.26.60","level":"world","players":2,"maxPlayers":20,"gameType":1}"#
+        );
+    }
+}
