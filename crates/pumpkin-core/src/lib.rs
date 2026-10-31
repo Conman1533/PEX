@@ -14,8 +14,7 @@ use crate::logging::{
 };
 use crate::net::bedrock::{
     BedrockClient,
-    nethernet::{NetherNetListener, load_or_create_identity_key},
-    status::{IceSocket, StatusResponder},
+    nethernet::{IceSocket, NetherNetListener, load_or_create_identity_key},
 };
 use crate::net::java::JavaClient;
 use crate::net::java::pending::PendingConnection;
@@ -240,7 +239,6 @@ fn resolve_some<T: Future, D, F: FnOnce(D) -> T>(
 pub struct PumpkinServer {
     pub server: Arc<Server>,
     pub tcp_listener: Option<TcpListener>,
-    pub bedrock_status: Option<StatusResponder>,
     pub nethernet_listener: Option<NetherNetListener>,
 }
 
@@ -344,16 +342,12 @@ impl PumpkinServer {
             }
         };
 
-        let (bedrock_status, ice_socket) = match Self::bind_bedrock_status(&server).await {
-            Some((status, ice)) => (Some(status), Some(ice)),
-            None => (None, None),
-        };
+        let ice_socket = Self::bind_bedrock_ice(&server).await;
         let nethernet_listener = Self::bind_nethernet(&server, ice_socket).await;
 
         Ok(Self {
             server,
             tcp_listener,
-            bedrock_status,
             nethernet_listener,
         })
     }
@@ -388,20 +382,18 @@ impl PumpkinServer {
         }
     }
 
-    /// Binds the UDP port used by Bedrock status and `NetherNet`'s ICE agent.
-    async fn bind_bedrock_status(server: &Arc<Server>) -> Option<(StatusResponder, IceSocket)> {
+    /// Binds the UDP port used by Bedrock's `NetherNet` ICE agent.
+    async fn bind_bedrock_ice(server: &Arc<Server>) -> Option<IceSocket> {
         let config = &server.advanced_config.networking.bedrock;
         if !config.enabled || !config.nethernet.enabled {
             return None;
         }
-        match StatusResponder::bind(config.nethernet.address).await {
-            Ok((status, ice)) => {
-                if let Ok((ipv4, ipv6)) = status.local_addrs() {
-                    info!(
-                        "Bedrock server-list status is listening on {ipv4} (IPv4) and {ipv6} (IPv6)"
-                    );
+        match IceSocket::bind(config.nethernet.address).await {
+            Ok(ice) => {
+                if let Ok(addr) = ice.local_addr() {
+                    info!("Bedrock NetherNet ICE is listening on {addr}");
                 }
-                Some((status, ice))
+                Some(ice)
             }
             Err(err) => {
                 error!(
@@ -409,7 +401,7 @@ impl PumpkinServer {
                     config.nethernet.address
                 );
                 error!(
-                    "Bedrock status and NetherNet ICE use this UDP port; make sure nothing else \
+                    "Bedrock NetherNet ICE uses this UDP port; make sure nothing else \
                      is using it and start the server again"
                 );
                 std::process::exit(1);
@@ -646,16 +638,6 @@ impl PumpkinServer {
                         error!("Failed to accept Java client connection: {e}");
                         sleep(Duration::from_millis(50)).await;
                     }
-                }
-            },
-
-            // Branch for Bedrock status and NetherNet ICE packets.
-            status_result = resolve_some(
-                self.bedrock_status.as_ref(),
-                |status: &StatusResponder| status.receive(&self.server),
-            ) => {
-                if let Err(error) = status_result {
-                    debug!("Bedrock status packet failed: {error}");
                 }
             },
 
