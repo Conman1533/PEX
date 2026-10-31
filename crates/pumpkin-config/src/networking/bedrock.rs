@@ -1,4 +1,5 @@
-use crate::{CompressionConfig, PacketLimiterConfig};
+use crate::PacketLimiterConfig;
+use crate::networking::compression::CompressionInfo;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, SocketAddr};
 use std::num::NonZero;
@@ -126,7 +127,7 @@ pub struct BedrockConfig {
     /// The maximum simulated view distance.
     pub simulation_distance: NonZero<u8>,
     /// Bedrock Edition packet compression settings.
-    pub compression: CompressionConfig,
+    pub compression: CompressionInfo,
     /// Message of the Day; the server's description displayed on the status screen.
     pub motd: String,
     /// Prefix prepended to Bedrock Edition player names, so they cannot collide with
@@ -155,7 +156,7 @@ impl Default for BedrockConfig {
             max_players: 1000,
             view_distance,
             simulation_distance,
-            compression: CompressionConfig::default(),
+            compression: CompressionInfo::default(),
             motd: "PEX, an experimental fork of Pumpkin".to_string(),
             username_prefix: String::new(),
             replace_username_spaces: true,

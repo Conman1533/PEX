@@ -14,8 +14,6 @@ pub struct PVPConfig {
     pub protect_creative: bool,
     /// Whether knockback from attacks is applied.
     pub knockback: bool,
-    /// Whether players swing their hand when attacking.
-    pub swing: bool,
 }
 
 impl Default for PVPConfig {
@@ -25,7 +23,6 @@ impl Default for PVPConfig {
             hurt_animation: true,
             protect_creative: true,
             knockback: true,
-            swing: true,
         }
     }
 }

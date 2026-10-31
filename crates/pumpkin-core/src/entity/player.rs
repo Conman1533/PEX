@@ -1661,8 +1661,6 @@ impl Player {
         // `causeFoodExhaustion(0.1F)`. Only landed hits exhaust; the miss/no-damage
         // case returned early above.
         self.add_exhaustion(0.1);
-
-        if config.swing {}
     }
 
     /// Returns the durability cost for using the held item as a weapon in combat.

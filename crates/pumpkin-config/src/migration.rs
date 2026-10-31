@@ -117,6 +117,39 @@ pub(crate) fn add_missing_keys(
     changes
 }
 
+/// Removes the keys at `paths`, whether in a table, an inline table or dotted keys, and a table
+/// that has nothing left after that. Returns one line per removed key.
+#[must_use]
+pub(crate) fn remove_keys(document: &mut DocumentMut, paths: &[&str]) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|path| remove_key(document.as_table_mut(), path))
+        .map(|path| format!("removed {path}, which had no effect"))
+        .collect()
+}
+
+fn remove_key(table: &mut dyn TableLike, path: &str) -> bool {
+    let Some((key, rest)) = path.split_once('.') else {
+        return table.remove(path).is_some();
+    };
+    let Some(item) = table.get_mut(key) else {
+        return false;
+    };
+    let Some(inner) = item.as_table_like_mut() else {
+        return false;
+    };
+    if !remove_key(inner, rest) {
+        return false;
+    }
+    if inner.is_empty() {
+        table.remove(key);
+    } else if let Some(inline) = item.as_inline_table_mut() {
+        // `{ ... }` keeps the spacing around the removed key, so respace it.
+        inline.fmt();
+    }
+    true
+}
+
 /// Whether `key` in the table at `path` is another name for a key of that table.
 pub(crate) fn is_alias(aliases: &[(&str, &str)], path: &str, key: &str) -> bool {
     aliases.iter().any(|&(main, alias)| {

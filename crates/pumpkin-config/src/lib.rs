@@ -99,11 +99,34 @@ pub struct PumpkinConfig {
 /// instead of the ones PEX 1.x gave them. The server moves their files before it saves this version.
 pub const OFFLINE_UUID_VERSION: u32 = 2;
 
+/// Keys that changed nothing, which `config_version` 3 removes. Upstream dropped
+/// `write_in_place` from `AnvilChunkConfig`; nothing ever read the others.
+const DEAD_KEYS: &[&str] = &[
+    "world.chunk.write_in_place",
+    "networking.java.authentication.enabled",
+    "networking.java.authentication.textures.enabled",
+    "networking.java.authentication.textures.types.skin",
+    "networking.java.authentication.textures.types.cape",
+    "networking.java.authentication.textures.types.elytra",
+    "networking.bedrock.compression.enabled",
+    "pvp.swing",
+];
+
+fn remove_dead_keys(document: &mut DocumentMut) -> Vec<String> {
+    migration::remove_keys(document, DEAD_KEYS)
+}
+
 impl LoadConfiguration for PumpkinConfig {
-    const MIGRATIONS: &'static [Migration] = &[Migration {
-        version: OFFLINE_UUID_VERSION,
-        step: Step::ServerFiles,
-    }];
+    const MIGRATIONS: &'static [Migration] = &[
+        Migration {
+            version: OFFLINE_UUID_VERSION,
+            step: Step::ServerFiles,
+        },
+        Migration {
+            version: 3,
+            step: Step::Config(remove_dead_keys),
+        },
+    ];
 
     const ALIASES: &'static [(&'static str, &'static str)] = &[
         ("accepts_transfers", "accepts-transfers"),
