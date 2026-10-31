@@ -9,20 +9,18 @@ This is a fresh skeleton on branch `roadmap-2.0-v2`. The earlier roadmap is stil
 A piece can start once every piece in its "Depends on" line is on `alpha` and its decisions are answered. Among the pieces that can start, take them in this order.
 
 1. Answer the open decisions that hold the most work. The table below has all of them.
-   - D0-1: CI. G0-01 waits on it, and through G0-01 the dual-run job, most proof runs and D10-5.
-   - D1-3 (10 Goal 1 pieces) and the open part of D1-2 (the form of every mob test).
-   - D3-2: G3-03, the first config migration. Every later migration step queues behind it.
-   - The open part of D6-1, and D6-3 (8 stages each).
-   - The open part of D7-6 (G7-10, which G6-06 and G6-22 wait on), then D7-1 (5 pieces) and D7-4 (6).
+   - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
+   - D7-4 (6 pieces) and D7-1 (5).
+   - D5-1, D6-4, D8-3 and the open part of D10-2 (2 pieces each).
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
    - G3-01: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world. D3-1 is answered except its two-key sub-question.
-   - G7-10, once D7-6 picks a method: block entity changes are lost when their chunk unloads.
+   - G7-10: block entity changes are lost when their chunk unloads. D7-6 picked the existing flush branch.
    - G8-02, then G8-03: alpha accepts only Bedrock protocol 2193, so current Bedrock clients most likely can't join.
    - G6-04: `fix/attack-packet-parity` is finished and only needs landing.
 3. Groundwork other goals build on. These can run in parallel.
    - G0-04, then G0-03: the benchmark baseline.
-   - G0-01 once D0-1 is answered, then G0-02: CI and the dual-run job.
+   - G0-05 now, for Linux CI in CT 117. G0-01 once GitHub runs Actions again, then G0-02: hosted CI and the dual-run job.
    - G1-01: the mob GameTest helpers most of Goal 1 uses.
    - G3-02, then G3-03: the first `Step::Config` migration. After it, each migration step takes the next free `config_version` when it lands, never a number another open branch already uses: G2-10, G7-22, G7-26, G9-08, and G3-08, G5-14 and G8-19 if they need one. G4-01 lands before or after G3-03, not alongside it.
    - G7-01, G7-02, G7-03, G7-04: the fixture world, the tree diff and the two round trips that every Goal 7 field piece proves itself with.
@@ -39,18 +37,18 @@ A piece can start once every piece in its "Depends on" line is on `alpha` and it
 
 ## Decisions for Neon
 
-Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. That leaves 11 answered, 2 answered except a sub-question, 8 partly answered and 24 open.
+Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. Neon answered D0-1, D1-2, D1-3, D3-2, D6-1, D6-3 and D7-6 the same day. That leaves 18 answered, 2 answered except a sub-question, 4 partly answered and 21 open.
 
 | ID | Question | Status | Pieces waiting |
 | :-- | :-- | :-- | :-- |
-| D0-1 | How does CI come back? | Open (Q10.5 asked the same and was never answered) | G0-01, G10-08 |
+| D0-1 | How does CI come back? | Answered: a GitHub support ticket, and G0-05's timer in CT 117 until Actions is back | G0-01, G10-08 |
 | D1-1 | Must the 21 vanilla Brain mobs run on the PEX Brain, or may they stay goal ports? | Answered: b) goal ports with Brain-layout NBT, the Brain where it already covers a mob (Q1.1) | G1-04, G1-05, G1-28, G1-29, G1-30, G1-31, G1-32, G1-33, G1-34, G1-35, G1-36, G1-37, G1-38, G1-39, G1-40, G1-41, G1-42, G1-43, G1-44 |
-| D1-2 | What form must each mob's test take? | Partly (Q1.4): mock players are fine. Open: a, b or c | G1-03 |
-| D1-3 | How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled? | Partly (Q1.2): PEX doesn't upstream. Open: a, b or c | G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38 |
+| D1-2 | What form must each mob's test take? | Answered: b) function GameTest plus a dual-run copy when no player is needed | G1-03 |
+| D1-3 | How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled? | Answered: a) per piece, cherry-picking each PR; #3630 as a reference only | G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38 |
 | D2-1 | Should native plugins get a versioned ABI that keeps them loading across releases, or stay explicitly unstable, loading only into the build they came from? | Answered: explicitly unstable (Q2.1). G2-06 dropped | G2-05, G2-06 |
 | D2-2 | When v0.1 goes, what do Wasm plugin authors get? | Answered: follow upstream, v0.1 stays until upstream drops it (Q2.2). G2-07 to G2-10 not started | G2-07, G2-08, G2-09, G2-10 |
 | D3-1 | What happens when a config value is bad? | Answered: per-key default and a warning, a syntax error refuses to start (Q3.1). Open: the two-key sub-question | G3-01, G3-09 |
-| D3-2 | Remove or wire the keys that nothing reads? | Open | G3-03 |
+| D3-2 | Remove or wire the keys that nothing reads? | Answered: remove them all in G3-03 | G3-03 |
 | D3-3 | What should `default_difficulty` do? | Open | G3-07 |
 | D3-4 | Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? | Open | G3-06 |
 | D3-5 | What should happen to the defaults that point at upstream Pumpkin? | Partly (Q3.6): telemetry off by default. Open: (a) or (b), and `bug_report` | G3-08 |
@@ -62,9 +60,9 @@ Every decision, one row each; the options, their costs and the details are in th
 | D5-2 | Is the chained neighbour update limit configurable? | Open | G5-14 |
 | D5-3 | Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? | Answered: out, default redstone only for 2.0 (Q5.1) | none (scope only) |
 | D5-4 | What does the proof compare? | Partly (Q5.2): position-dependent behaviour not required. Open: pass or fail, or a per-tick trace | G5-16 |
-| D6-1 | What may a stage set up with commands? | Partly (Q6.1): the staged bot plus one human playthrough. Open: which setup | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
+| D6-1 | What may a stage set up with commands? | Answered: `give` and `locate` per stage; only G6-22 chains without `give` | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
 | D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Answered: the shared tester server, fixed seed, both dimensions on (Q6.4) | G6-01 |
-| D6-3 | Which stages run in CI's `gametest` job? | Open | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
+| D6-3 | Which stages run in CI's `gametest` job? | Answered: short stages in CI, the long ones nightly and before releases | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
 | D6-4 | Where do the 12 pearls come from? | Open | G6-12, G6-13 |
 | D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Open | G6-20 |
 | D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
@@ -73,7 +71,7 @@ Every decision, one row each; the options, their costs and the details are in th
 | D7-3 | How much of a structure start should PEX save for chunks it generates? | Open | G7-07 |
 | D7-4 | Which `data/` files must round-trip for 2.0? | Open | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
-| D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Partly (Q6.3): settled before the survival stages. Open: which method | G7-10 |
+| D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
 | D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
 | D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Open | G8-21 |
 | D8-3 | Which client does the Bedrock test bot use? | Open | G8-11, G8-12 |
@@ -154,14 +152,14 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 | GameTest harness | In the repo. Framework `crates/pumpkin-gametest` (`GameTestRunner`). Builtin tests in `crates/pumpkin-core/src/server/builtin_game_tests/` (33 test files plus `mod.rs`) and `server_test_manager.rs`. Datapacks in `assets/tests/datapacks/`. Runner `tools/pumpkin-tester/src/gametests.rs`, run by `cargo run -p pumpkin-tester` in the `gametest` job of `.github/workflows/rust.yml`. Vanilla comparison: `tools/dual-run/dual_run.py` (5 redstone structures). | Exists. Dual-run is manual: no workflow runs it (`grep -rn dual .github/` finds nothing). See G0-02. |
 | survbot | Python: CT 117 `/srv/pex/tools/survbot.py`, outside the repo (protocol 777, roles builder, miner, afk, explorer; built on `walkbot.py`, fleets via `botfleet.py`). Rust, in the repo: `HeadlessBot` in `tools/pumpkin-tester/src/bot.rs` (`connect_and_join`, `move_to`, `send_command`, `use_block`, `interact_entity`, `attack_entity`, `start_digging`/`finish_digging`, `click_slot`, `close_container`) and the one survival stage `tools/pumpkin-tester/src/survival/wood_to_stone_pickaxe.rs`, run in CI with the GameTests. Azalea: `native-plugins/tools/testbot` (nightly Rust, protocol patch). | Exists. Serverbound play packets used anywhere in `tools/pumpkin-tester/src/`: `SPlayerPosition`, `SPlayerPositionRotation`, `SConfirmTeleport`, `SChatCommand`, `SPlayerCommand`, `SSetHeldItem`, `SUseItemOn`, `SInteract`, `SAttack`, `SPlayerAction`, `SClickSlot`, `SCloseContainer`, `SChunkBatch`, `SPlayerLoaded`, `SKeepAlive`, `SPlayPingRequest`. No `SUseItem` (use item in air) and no arm swing. What survival needs beyond that belongs to Goal 6. |
 | Benchmark harness against Paper | Outside the repo. CT 117 `/srv/pex/gameplay-bench`, a clone of `github.com/Conman1533/mc-gameplay-bench`: 8 bots on a seeded schedule; samples CPU and threads, memory, disk, network bytes and tick P50/P95/P99 every 10 s; `report.py` writes an HTML report. Its world is `world/base-world-262.tgz` (built on 26.2). Paper: CT 117 `/srv/pex/bins/paper/paper.jar`, Paper `26.3-169-main@46d4834` (from its `out.log`), started by `/srv/pex/tools/paper_run.sh`. Other scripts: `/srv/pex/tools/bench.sh`, `localbench.sh`, `c2bench.sh`. In the repo there are only criterion benches: `pumpkin-world` (chunk, chunk_io, chunk_gen, chunk_gen_concurrent, jigsaw, noise_router, template_pool), `pumpkin-nbt` (nbt), `pumpkin-util` (perlin), `pumpkin-data` (has_random_ticks). None compares against Paper. | Exists outside the repo. No run for the assessed commit: `find /srv/pex -newer /srv/pex/tools/local-ci.sh -name '*.html'` outside `repo/`, `wt/` and `target/` finds no report. It can't run in CT 117 as it is: `sampler.py` `cgroup()` finds each server through `docker inspect` and `/sys/fs/cgroup/system.slice/docker-<id>.scope`, and CT 117 has neither Docker nor Podman (`command -v docker podman`). `whitelist.py` `offline_uuid` kind `pumpkin` is the SHA-256 scheme PEX dropped in Goal 4's work, so PEX now needs kind `vanilla`. See G0-04 and G0-03. |
-| CI | `.github/workflows/`: `rust.yml` (push to `master` and `alpha`, PRs, dispatch; jobs format, machete, clippy, clippy_release, check_wit, test, gametest, test_android, build_pull_request, build_android_pull_request, build_release, build_release_musl, build_android_release, draft_canary_release), `nightly.yml` (03:00 cron), `release.yml` (tags), `docker.yml`, `nix.yml`, `typos.yml`, `sync-wit.yml`, `reviewers.yml`. Stand-in: CT 117 `/srv/pex/tools/local-ci.sh`, outside the repo, runs the Linux jobs of `rust.yml` plus `typos` and writes `/srv/pex/ci/<branch>/<time>/summary.txt`. | Not running. `gh api repos/Conman1533/PEX/actions/permissions` says `"enabled": true`, but the newest entry in `gh run list -R Conman1533/PEX` is from 2026-10-14 (a `master` push), and `rust.yml` triggers on `alpha` pushes while `alpha` was last pushed with a 2026-10-29 commit. No Windows, macOS, ARM64 or Android job runs anywhere now. See G0-01. |
+| CI | `.github/workflows/`: `rust.yml` (push to `master` and `alpha`, PRs, dispatch; jobs format, machete, clippy, clippy_release, check_wit, test, gametest, test_android, build_pull_request, build_android_pull_request, build_release, build_release_musl, build_android_release, draft_canary_release), `nightly.yml` (03:00 cron), `release.yml` (tags), `docker.yml`, `nix.yml`, `typos.yml`, `sync-wit.yml`, `reviewers.yml`. Stand-in: CT 117 `/srv/pex/tools/local-ci.sh`, outside the repo, runs the Linux jobs of `rust.yml` plus `typos` and writes `/srv/pex/ci/<branch>/<time>/summary.txt`. | Not running. `gh api repos/Conman1533/PEX/actions/permissions` says `"enabled": true`, but the newest entry in `gh run list -R Conman1533/PEX` is from 2026-10-14 (a `master` push), and `rust.yml` triggers on `alpha` pushes while `alpha` was last pushed with a 2026-10-29 commit. Checked again on 2026-10-31: all eight workflows report `active` (`gh api repos/Conman1533/PEX/actions/workflows`), and the repository is a public fork with 45 runs in total. No Windows, macOS, ARM64 or Android job runs anywhere now. See G0-01. |
 | Real-client play-test rig (not asked for, in use) | CT 117 `/srv/pex/playtest/` (`README.md`): vanilla 26.3 client on Xvfb with Mesa software rendering, driven by `xdotool` and console commands, recorded with ffmpeg. | Exists. |
 
 ### Pieces
 
 #### G0-01 CI runs on every alpha push again
 
-- Scope: in: `rust.yml` and `typos.yml` start on pushes to `alpha` (hosted Actions or a runner, per D0-1), and the format, machete, clippy, test and gametest jobs pass on the first such run. In: `reviewers.yml` gets a repository guard so the upstream reviewer bot doesn't run on the fork (neither it nor `sync-wit.yml` checks `github.repository`; `sync-wit.yml` goes in G2-04). Out: release reproducibility and the Windows/ARM64 hardware runs (Goal 10), new jobs (G0-02), fixing failures in tests that a goal piece owns.
+- Scope: in: `rust.yml` and `typos.yml` start on pushes to `alpha` (hosted Actions, once GitHub runs them again for this repository; D0-1), and the format, machete, clippy, test and gametest jobs pass on the first such run. In: `reviewers.yml` gets a repository guard so the upstream reviewer bot doesn't run on the fork (neither it nor `sync-wit.yml` checks `github.repository`; `sync-wit.yml` goes in G2-04). Out: release reproducibility and the Windows/ARM64 hardware runs (Goal 10), new jobs (G0-02), fixing failures in tests that a goal piece owns.
 - Depends on: none
 - Branch: ci/run-on-alpha
 - Needs decision: D0-1
@@ -195,14 +193,25 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 - Done when: a 5-minute run with 8 bots against PEX and Paper in CT 117 writes a report with CPU, memory, network and tick P50/P95/P99 for both servers, and every builder and miner bot has confirmed placements or breaks above zero.
 - Needed by: G0-03.
 
+#### G0-05 Interim CI timer in CT 117
+
+- Scope: in: a systemd timer in CT 117 that checks `origin/alpha` every 15 minutes and runs `/srv/pex/tools/local-ci.sh --full` on each new commit in a worktree of its own, keeps each `summary.txt` under `/srv/pex/ci/alpha/`, and has a nightly slot for the long survival stages D6-3 keeps out of CI. Out: posting results to GitHub (commit statuses need a token that can write to the repository, which Neon decides on separately), Windows and ARM64 jobs, replacing G0-01.
+- Depends on: none
+- Branch: none (CT 117 tooling under `/srv/pex/tools`, outside the repository)
+- Needs decision: none
+- Done when: a push to `alpha` has a finished `summary.txt` for that commit within 60 minutes (a run took about 17 minutes on 2026-10-27), a second timer run on the same commit starts nothing, and the timer survives a reboot of CT 117.
+- Needed by: the Linux CI jobs until G0-01 lands, and the nightly survival stages (D6-3).
+
 ### Decisions
 
 - D0-1: How does CI come back? Options:
   - Ask GitHub support why Actions does not start on Conman1533/PEX. Costs nothing but the owner's time and an unknown wait. Keeps hosted Linux, Windows, macOS and ARM64 runners.
-  - Self-hosted runner in CT 117. No wait on GitHub, Linux x86_64 only, and runs PR code on the home network unless restricted to pushes from the repo. Windows and ARM64 jobs still have no runner.
+  - Self-hosted runner in CT 117. Dropped on 2026-10-31: a runner only gets the jobs GitHub schedules, so it can't help while GitHub has Actions disabled for the repository.
+  - A timer in CT 117 that runs `local-ci.sh --full` on each new `alpha` commit (G0-05). No wait on GitHub and no cost, Linux x86_64 only, and the results stay in CT 117.
   - Keep `local-ci.sh` run by hand before each merge. No cost, no automatic runs, and no Windows, ARM64 or Android coverage.
   - The earlier roadmap asked the same question as Q10.5, and it was never answered.
   - Waits on it: G0-01 and G10-08, and through G0-01 everything listed under it.
+  - Answered 2026-10-31 (Neon): both. Neon checks the repository's Actions settings and the account's billing page, then opens a GitHub support ticket; hosted Actions are the only route to the Windows, ARM64 and macOS runners that D10-1, D10-5 and G10-08 need. Until Actions runs again, G0-05 runs the Linux jobs in CT 117 on every new `alpha` commit.
 
 ## How to fill in a goal
 
@@ -719,6 +728,7 @@ D1-2: What form must each mob's test take?
 - c) Dual-run for every mob test, with a bot on vanilla standing in for the player. Cost: largest; every mob piece waits on G1-03 plus a vanilla bot harness.
 - Waiting: G1-03 and the Done when of G1-04 to G1-44.
 - Partly answered 2026-10-31 (Neon accepted Q1.4): mock players with a closed client are fine in function GameTests. Still open: a, b or c.
+- Answered 2026-10-31 (Neon): b) a function GameTest for every mob, plus a block-based copy run on vanilla through dual-run when the scenario needs no player. G1-03 first shows that mob structures behave under dual-run (freezing ticks while they are built is untested), and until G0-02 runs the job in CI, the vanilla copies run by hand with `tools/dual-run/dual_run.py`.
 
 D1-3: How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled?
 - a) Merge them onto alpha as one batch, as was done for the ten PRs merged on 2026-10-23, then audit. Cost: #3630 conflicts and is +5113/-1277; merge work up front, less code written.
@@ -726,6 +736,7 @@ D1-3: How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #436
 - c) Wait for upstream to merge them and take them in the next sync. Cost: pieces wait on upstream; #3630 has been idle since 2026-10-06.
 - Waiting: G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38.
 - Partly answered 2026-10-31 (Neon accepted Q1.2): PEX doesn't upstream, so nothing from these pieces is offered back. Still open: a, b or c.
+- Answered 2026-10-31 (Neon): a), per piece instead of one batch. Each piece starts by cherry-picking its PR's own commits, resolves the conflicts, audits the result against vanilla and adds the mob's test. On 2026-10-31, `git merge-tree --merge-base` of each PR's own changes onto `300621c3e` merged #4393 and #4389 cleanly, #4387, #4287, #4368, #4392 and #4115 conflicted in 2 to 4 files, and #4304 in 8. #3630 (about 46 conflicting files, older file layout, idle since 2026-10-06) is a reference only, since D1-1 keeps piglins as goal ports.
 
 Carried over from 2026-10-29 and not asked again: villagers are in scope, tests stay in this repo, mock players are acceptable.
 
@@ -1330,6 +1341,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
     - Each wired key needs its own test, and each keeps a setting vanilla doesn't have.
   - Keep them and document that they do nothing. No work, and admins go on editing keys that change nothing.
   - Waits on it: G3-03.
+  - Answered 2026-10-31 (Neon): remove them all with G3-03's step, one log line per key. G3-05 already drops the egg description's `write_in_place` advice.
 - D3-3: What should `default_difficulty` do? Options:
   - Apply it at every start, as vanilla `DedicatedServer.forceDifficulty` does. This matches vanilla. On a server where `/difficulty` changed `level.dat`, the difficulty goes back to the file's value at the next restart. Generated files say `Normal`, so admins will notice this once.
   - Remove the key, keeping `level.dat` as the only source, and have the management API report the world's difficulty. Existing servers see no change, but this differs from vanilla, where `server.properties` wins.
@@ -1954,6 +1966,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
   - `give` and teleports everywhere, the full run included. Cheapest, and nothing proves the run works in one world.
   - Waits on it: G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22.
   - Partly answered 2026-10-31 (Neon accepted Q6.1): the staged bot is the proof for every stage, plus one human playthrough with a real client before the 2.0 release. Still open: which of the three setups a stage may use.
+  - Answered 2026-10-31 (Neon): the first option. Each stage starts from `give` of the earlier stages' outputs and may teleport to a structure `locate` reports; only G6-22 chains without `give`.
 - D6-2: Where do the stages that need the Nether, the End and the fixed seed run? The earlier answer chose the shared tester server with a fixed seed; it didn't cover turning on both dimensions there. Options:
   - Shared server, both dimensions on: one startup, but every tester run loads three dimensions (G6-01 measures the cost).
   - A second server in the same tester process for those stages: the bot tests and GameTests keep today's server; more harness code and more RAM while it runs.
@@ -1964,6 +1977,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
   - The short ones (iron, food, portal) in CI; blaze rods, pearls, stronghold, dragon and the full run in `nightly.yml` or by hand.
   - Only stage 1 in CI; the rest by hand before a release.
   - Waits on it: G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22.
+  - Answered 2026-10-31 (Neon): the short stages (G6-06 iron, G6-07 food, G6-08 portal) run in CI's `gametest` job. Blaze rods, pearls, stronghold, the dragon and the full run (G6-11, G6-13, G6-15, G6-20, G6-22) run nightly, in G0-05's slot until Actions is back, and before every release.
 - D6-4: Where do the 12 pearls come from? Options:
   - Bartering: needs G6-12 and Goal 1's piglin work; at the table's weight (10 of 459, 2 to 4 pearls) about 180 gold ingots.
   - Endermen: needs Goal 1's enderman work; 0 or 1 pearl per kill without Looting, about 24 kills.
@@ -2100,7 +2114,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 
 - Scope: in: what D7-6 picks. For the flush option, rebase `fix/flush-block-entities-before-unload` (`870f8ce5c`, a `before_chunk_unload` hook from the chunk scheduler); `git merge-tree` shows conflicts with alpha in `core/world/mod.rs` and `pw/chunk_system/schedule.rs`. Out: per-type NBT keys (G7-25).
 - Depends on: none
-- Branch: fix/flush-block-entities-before-unload (exists; no new branch). If D7-6 picks writing on change: fix/block-entity-write-on-change
+- Branch: fix/flush-block-entities-before-unload (exists; no new branch)
 - Needs decision: D7-6
 - Done when: the branch's `unloading_a_chunk_writes_its_live_block_entities_into_it` passes on alpha, and a bot test (hopper line into a chest, bot leaves, chunk unloads, `stop`) finds the items in the saved chest. G6-06 and G6-22 wait on this.
 
@@ -2311,6 +2325,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Hold the chunk with a ticket until the World has saved its block entities. Simple; delays unloading by up to one cleanup cycle.
   - Waits on it: G7-10, and through it G6-06 and G6-22.
   - Partly answered 2026-10-31 (Neon accepted Q6.3): the block entity loss is settled before the survival stages, so G7-10 comes early. Still open: which of the three methods.
+  - Answered 2026-10-31 (Neon): flush before unload, by rebasing `fix/flush-block-entities-before-unload` (`870f8ce5c`). The observable result matches vanilla, which saves a block entity's state with its chunk.
 
 ## Goal 8: Bedrock polish
 
