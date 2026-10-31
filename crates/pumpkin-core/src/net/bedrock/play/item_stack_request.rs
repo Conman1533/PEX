@@ -794,6 +794,7 @@ impl BedrockClient {
                             }
                         }
                         ItemStackRequestAction::CraftResultsDeprecated { .. }
+                        | ItemStackRequestAction::CraftReserved { .. }
                         | ItemStackRequestAction::Create { .. }
                         | ItemStackRequestAction::LabTableCombine
                         | ItemStackRequestAction::CraftNonImplemented => {
