@@ -1,7 +1,9 @@
 use management::ManagementServerConfig;
 use proxy::ProxyConfig;
 use query::QueryConfig;
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, Unexpected};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::num::NonZero;
 
 use crate::LANBroadcastConfig;
 use bedrock::BedrockConfig;
@@ -27,6 +29,21 @@ pub mod query;
 /// Packet limiter configuration.
 pub mod packet_limiter;
 pub use packet_limiter::PacketLimiterConfig;
+
+/// Reads a view distance, which must be from 2 to 64.
+fn deserialize_view_distance<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<NonZero<u8>, D::Error> {
+    let distance = u8::deserialize(deserializer)?;
+    NonZero::new(distance)
+        .filter(|distance| (2..=64).contains(&distance.get()))
+        .ok_or_else(|| {
+            D::Error::invalid_value(
+                Unexpected::Unsigned(distance.into()),
+                &"a view distance from 2 to 64",
+            )
+        })
+}
 
 /// Configuration for server networking features.
 ///

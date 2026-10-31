@@ -121,7 +121,8 @@ pub struct BedrockConfig {
     pub online_mode: bool,
     /// The maximum number of players allowed on the server. Specifying `0` disables the limit.
     pub max_players: u32,
-    /// The maximum view distance for players.
+    /// The maximum view distance for players, from 2 to 64.
+    #[serde(deserialize_with = "super::deserialize_view_distance")]
     pub view_distance: NonZero<u8>,
     /// The maximum simulated view distance.
     pub simulation_distance: NonZero<u8>,
