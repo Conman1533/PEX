@@ -8,17 +8,16 @@ This is a fresh skeleton on branch `roadmap-2.0-v2`. The earlier roadmap is stil
 
 A piece can start once every piece in its "Depends on" line is on `alpha` and its decisions are answered. Among the pieces that can start, take them in this order.
 
-1. Answer the decisions that hold the most work. Many have an earlier answer in the table below, so a confirmation may be enough.
-   - D0-1: CI. G0-01 waits on it, and through G0-01 the dual-run job and most proof runs.
-   - D1-1 (19 Goal 1 pieces) and D1-3 (10).
+1. Answer the open decisions that hold the most work. The table below has all of them.
+   - D0-1: CI. G0-01 waits on it, and through G0-01 the dual-run job, most proof runs and D10-5.
+   - D1-3 (10 Goal 1 pieces) and the open part of D1-2 (the form of every mob test).
    - D3-2: G3-03, the first config migration. Every later migration step queues behind it.
-   - D6-2: G6-01, the tester server every survival stage runs on. Then D6-1 and D6-3 (8 stages each).
-   - D7-6: G7-10, block entity loss on unload, which G6-06 and G6-22 wait on. Then D7-1 (5 pieces) and D7-4 (6).
-   - D3-1 (G3-01) and D8-1 (8 Bedrock pieces).
+   - The open part of D6-1, and D6-3 (8 stages each).
+   - The open part of D7-6 (G7-10, which G6-06 and G6-22 wait on), then D7-1 (5 pieces) and D7-4 (6).
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
-   - G3-01, after D3-1: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world.
-   - G7-10, after D7-6: block entity changes are lost when their chunk unloads.
+   - G3-01: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world. D3-1 is answered except its two-key sub-question.
+   - G7-10, once D7-6 picks a method: block entity changes are lost when their chunk unloads.
    - G8-02, then G8-03: alpha accepts only Bedrock protocol 2193, so current Bedrock clients most likely can't join.
    - G6-04: `fix/attack-packet-parity` is finished and only needs landing.
 3. Groundwork other goals build on. These can run in parallel.
@@ -34,59 +33,61 @@ A piece can start once every piece in its "Depends on" line is on `alpha` and it
    - for Goal 6's stages: G1-10, G1-12, G1-27 and G1-30 from Goal 1, G7-07 and G7-10 from Goal 7;
    - G1-42 before G7-24, G5-04 before G7-09, G6-19 and G6-22 before G7-31;
    - Goal 9's fixes after G9-01 and G9-03 have measured, and Goal 10's release pieces after G0-01.
+   - Goal 8 stops at G8-12 for 2.0 (D8-1); G8-13 to G8-19 and G8-22 come after the release.
+   - Goal 2 has no Wasm pieces of its own (D2-2): G2-07 to G2-10 wait on upstream, and G2-06 is dropped (D2-1).
 5. Last, the end-to-end proofs: G6-22 (the full chained run), G7-31 (the long-play round trip), G1-44 (villager life), G9-14 (published benchmarks), G10-09 and G10-10 (real hardware).
 
 ## Decisions for Neon
 
-Every open decision, one row each; the options, their costs and the details are in the goal's own Decisions list. The "Earlier answer" column shows where the earlier roadmap (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions") already answered a matching question. Those answers were Claude's recommendations, recorded on 2026-10-29 when Neon asked for every open decision except Q10.5 to be answered that way, so a word from Neon confirms or replaces each one.
+Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. That leaves 11 answered, 2 answered except a sub-question, 8 partly answered and 24 open.
 
-| ID | Question | Earlier answer (2026-10-29) | Pieces waiting |
+| ID | Question | Status | Pieces waiting |
 | :-- | :-- | :-- | :-- |
-| D0-1 | How does CI come back? | Q10.5, never answered | G0-01, G10-08 |
-| D1-1 | Must the 21 vanilla Brain mobs run on the PEX Brain, or may they stay goal ports? | Q1.1: goal ports are fine when behaviour matches vanilla and a GameTest proves it (asked again because Goal 7 needs Brain memories) | G1-04, G1-05, G1-28, G1-29, G1-30, G1-31, G1-32, G1-33, G1-34, G1-35, G1-36, G1-37, G1-38, G1-39, G1-40, G1-41, G1-42, G1-43, G1-44 |
-| D1-2 | What form must each mob's test take? | Q1.4: mock players with a closed client are fine | G1-03 |
-| D1-3 | How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled? | Q1.2 (related): PEX doesn't upstream | G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38 |
-| D2-1 | Should native plugins get a versioned ABI that keeps them loading across releases, or stay explicitly unstable, loading only into the build they came from? | Q2.1: explicitly unstable, plugins load only into the build they came from | G2-05, G2-06 |
-| D2-2 | When v0.1 goes, what do Wasm plugin authors get? | Q2.2: follow upstream's v0.2 and remove v0.1 when upstream does | G2-07, G2-08, G2-09, G2-10 |
-| D3-1 | What happens when a config value is bad? | Q3.1: use that key's default and warn; a TOML syntax error refuses to start | G3-01, G3-09 |
-| D3-2 | Remove or wire the keys that nothing reads? |  | G3-03 |
-| D3-3 | What should `default_difficulty` do? |  | G3-07 |
-| D3-4 | Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? |  | G3-06 |
-| D3-5 | What should happen to the defaults that point at upstream Pumpkin? | Q3.6: telemetry off by default | G3-08 |
-| D3-6 | How should the egg set the port? |  | G3-05 |
-| D4-1 | In offline mode, which UUID should `op`, `whitelist add`, `ban`, `pardon` and `fetchprofile` use for a name the server hasn't seen? |  | G4-03 |
-| D4-2 | Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? |  | G4-06 |
-| D4-3 | Should plugins get the old-to-new UUID mapping through the plugin API? |  | G4-04 |
-| D5-1 | How do scheduled block and fluid ticks and block entities run? |  | G5-05, G5-15 |
-| D5-2 | Is the chained neighbour update limit configurable? |  | G5-14 |
-| D5-3 | Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? | Q5.1: default redstone only for 2.0 | none (scope only) |
-| D5-4 | What does the proof compare? | Q5.2 (related): position-dependent behaviour not required for 2.0 | G5-16 |
-| D6-1 | What may a stage set up with commands? | Q6.1 (partly): the staged bot for every stage, plus one human playthrough | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
-| D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Q6.4 (partly): a fixed seed on the shared tester server | G6-01 |
-| D6-3 | Which stages run in CI's `gametest` job? |  | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
-| D6-4 | Where do the 12 pearls come from? |  | G6-12, G6-13 |
-| D6-5 | Does the dragon stage wait for Goal 1's dragon phases? |  | G6-20 |
-| D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? |  | none (scope only) |
-| D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? |  | G7-06, G7-21, G7-23, G7-24, G7-25 |
-| D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? |  | G7-28 |
-| D7-3 | How much of a structure start should PEX save for chunks it generates? |  | G7-07 |
-| D7-4 | Which `data/` files must round-trip for 2.0? |  | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
-| D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? |  | G7-29 |
-| D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Q6.3 (related): settle block entity loss before the survival stages | G7-10 |
-| D8-1 | What does "Bedrock polish" mean for 2.0? | Q8.1: experimental, with the coverage table as the list of gaps | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
-| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? |  | G8-21 |
-| D8-3 | Which client does the Bedrock test bot use? |  | G8-11, G8-12 |
-| D8-4 | Which UUID should a Bedrock player get? |  | G8-20 |
-| D9-1 | What is the bar against Paper, and at which sizes? | Q9.2: less RAM than Paper and p95 MSPT within 10% of Paper at 10, 25 and 50 bots, 30 minutes each | G9-12, G9-14 |
-| D9-2 | Where does the benchmark live? | Q9.3: under `tools/` in this repository if the license fits | G9-11 |
-| D9-3 | Where are benchmark results published? |  | G9-14 |
-| D9-4 | Which default Java compression level? |  | G9-08 |
-| D9-5 | Which hardware produces the published numbers? | Q9.1: a dedicated 4-core cloud VM for published numbers, pve for development | G9-14 |
-| D10-1 | Which ARM64 and Windows machines run G10-09 and G10-10? | Q10.1: GitHub-hosted ARM64 and Windows runners, plus one real run each | G10-09, G10-10 |
-| D10-2 | Which release assets must be bit-for-bit reproducible, and where can a rebuild happen? | Q10.3: x86_64 Linux only, glibc and musl | G10-03, G10-04 |
-| D10-3 | Are Windows releases signed? | Q10.2: unsigned for 2.0 with a SmartScreen note, SignPath later | G10-05 |
-| D10-4 | What does CI publish on the fork besides `v*` releases? | Q10.6: nightly as a pre-release, never Latest; Docker image yes; reviewer bot and WIT mirror no | G10-06 |
-| D10-5 | Which targets does a 2.0 release ship, and what builds them? | Q10.4 (partly): keep musl, build only `-p pumpkin` for it | G10-05 |
+| D0-1 | How does CI come back? | Open (Q10.5 asked the same and was never answered) | G0-01, G10-08 |
+| D1-1 | Must the 21 vanilla Brain mobs run on the PEX Brain, or may they stay goal ports? | Answered: b) goal ports with Brain-layout NBT, the Brain where it already covers a mob (Q1.1) | G1-04, G1-05, G1-28, G1-29, G1-30, G1-31, G1-32, G1-33, G1-34, G1-35, G1-36, G1-37, G1-38, G1-39, G1-40, G1-41, G1-42, G1-43, G1-44 |
+| D1-2 | What form must each mob's test take? | Partly (Q1.4): mock players are fine. Open: a, b or c | G1-03 |
+| D1-3 | How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled? | Partly (Q1.2): PEX doesn't upstream. Open: a, b or c | G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38 |
+| D2-1 | Should native plugins get a versioned ABI that keeps them loading across releases, or stay explicitly unstable, loading only into the build they came from? | Answered: explicitly unstable (Q2.1). G2-06 dropped | G2-05, G2-06 |
+| D2-2 | When v0.1 goes, what do Wasm plugin authors get? | Answered: follow upstream, v0.1 stays until upstream drops it (Q2.2). G2-07 to G2-10 not started | G2-07, G2-08, G2-09, G2-10 |
+| D3-1 | What happens when a config value is bad? | Answered: per-key default and a warning, a syntax error refuses to start (Q3.1). Open: the two-key sub-question | G3-01, G3-09 |
+| D3-2 | Remove or wire the keys that nothing reads? | Open | G3-03 |
+| D3-3 | What should `default_difficulty` do? | Open | G3-07 |
+| D3-4 | Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? | Open | G3-06 |
+| D3-5 | What should happen to the defaults that point at upstream Pumpkin? | Partly (Q3.6): telemetry off by default. Open: (a) or (b), and `bug_report` | G3-08 |
+| D3-6 | How should the egg set the port? | Open | G3-05 |
+| D4-1 | In offline mode, which UUID should `op`, `whitelist add`, `ban`, `pardon` and `fetchprofile` use for a name the server hasn't seen? | Open | G4-03 |
+| D4-2 | Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? | Open | G4-06 |
+| D4-3 | Should plugins get the old-to-new UUID mapping through the plugin API? | Open | G4-04 |
+| D5-1 | How do scheduled block and fluid ticks and block entities run? | Open | G5-05, G5-15 |
+| D5-2 | Is the chained neighbour update limit configurable? | Open | G5-14 |
+| D5-3 | Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? | Answered: out, default redstone only for 2.0 (Q5.1) | none (scope only) |
+| D5-4 | What does the proof compare? | Partly (Q5.2): position-dependent behaviour not required. Open: pass or fail, or a per-tick trace | G5-16 |
+| D6-1 | What may a stage set up with commands? | Partly (Q6.1): the staged bot plus one human playthrough. Open: which setup | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
+| D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Answered: the shared tester server, fixed seed, both dimensions on (Q6.4) | G6-01 |
+| D6-3 | Which stages run in CI's `gametest` job? | Open | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
+| D6-4 | Where do the 12 pearls come from? | Open | G6-12, G6-13 |
+| D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Open | G6-20 |
+| D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
+| D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Open | G7-06, G7-21, G7-23, G7-24, G7-25 |
+| D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Open | G7-28 |
+| D7-3 | How much of a structure start should PEX save for chunks it generates? | Open | G7-07 |
+| D7-4 | Which `data/` files must round-trip for 2.0? | Open | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
+| D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
+| D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Partly (Q6.3): settled before the survival stages. Open: which method | G7-10 |
+| D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
+| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Open | G8-21 |
+| D8-3 | Which client does the Bedrock test bot use? | Open | G8-11, G8-12 |
+| D8-4 | Which UUID should a Bedrock player get? | Open | G8-20 |
+| D9-1 | What is the bar against Paper, and at which sizes? | Answered: less RAM than Paper, P95 within 10% at 10, 25 and 50 bots (Q9.2) | G9-12, G9-14 |
+| D9-2 | Where does the benchmark live? | Answered: move it to `tools/gameplay-bench` (Q9.3) | G9-11 |
+| D9-3 | Where are benchmark results published? | Open | G9-14 |
+| D9-4 | Which default Java compression level? | Open | G9-08 |
+| D9-5 | Which hardware produces the published numbers? | Answered: a dedicated 4-core cloud VM, pve for development (Q9.1) | G9-14 |
+| D10-1 | Which ARM64 and Windows machines run G10-09 and G10-10? | Answered: hosted runners plus one real run each (Q10.1) | G10-09, G10-10 |
+| D10-2 | Which release assets must be bit-for-bit reproducible, and where can a rebuild happen? | Partly (Q10.3): x86_64 Linux only. Open: a pinned container or one host | G10-03, G10-04 |
+| D10-3 | Are Windows releases signed? | Answered: unsigned for 2.0, SignPath after (Q10.2) | G10-05 |
+| D10-4 | What does CI publish on the fork besides `v*` releases? | Answered: a nightly pre-release, never Latest, and Docker images (Q10.6). Open: `master` or `alpha` | G10-06 |
+| D10-5 | Which targets does a 2.0 release ship, and what builds them? | Partly (Q10.4): keep musl, server only. Open: the target list, after D0-1 | G10-05 |
 
 ## Repo map
 
@@ -710,18 +711,21 @@ D1-1: Must the 21 vanilla Brain mobs run on the PEX Brain, or may they stay goal
 - b) Goal ports for all, with saved state written by hand in vanilla's "Brain" layout as `piglin.rs` does. Cost: hand-written NBT per mob, timing drift from vanilla, and schedules (villager) are awkward as goals.
 - c) Brain for villager, piglin, piglin brute, warden and the shared animal behaviours; goal ports with Brain-layout NBT for the rest. Cost: two code shapes to maintain.
 - Waiting: G1-04, G1-05, G1-28 to G1-44.
+- Answered 2026-10-31 (Neon accepted Q1.1): b) goal ports are fine when the observable behaviour matches vanilla and a GameTest proves it, with saved state in vanilla's Brain layout so G7-24 round-trips. A mob the PEX Brain already covers stays on the Brain.
 
 D1-2: What form must each mob's test take?
 - a) Function GameTest only. Cost: cheapest; checks PEX against our reading of vanilla, never against vanilla.
 - b) Function GameTest, plus a block-based copy run on vanilla through dual-run when the scenario needs no player. Cost: each such scenario is written twice; player-facing behaviour stays function-only.
 - c) Dual-run for every mob test, with a bot on vanilla standing in for the player. Cost: largest; every mob piece waits on G1-03 plus a vanilla bot harness.
 - Waiting: G1-03 and the Done when of G1-04 to G1-44.
+- Partly answered 2026-10-31 (Neon accepted Q1.4): mock players with a closed client are fine in function GameTests. Still open: a, b or c.
 
 D1-3: How are the open upstream mob PRs (#3630, #4393, #4392, #4389, #4387, #4368, #4304, #4287, #4115) handled?
 - a) Merge them onto alpha as one batch, as was done for the ten PRs merged on 2026-10-23, then audit. Cost: #3630 conflicts and is +5113/-1277; merge work up front, less code written.
 - b) Use them as references and write each piece fresh. Cost: duplicated work and drift from upstream.
 - c) Wait for upstream to merge them and take them in the next sync. Cost: pieces wait on upstream; #3630 has been idle since 2026-10-06.
 - Waiting: G1-08, G1-09, G1-11, G1-13, G1-18, G1-25, G1-29, G1-30, G1-31, G1-38.
+- Partly answered 2026-10-31 (Neon accepted Q1.2): PEX doesn't upstream, so nothing from these pieces is offered back. Still open: a, b or c.
 
 Carried over from 2026-10-29 and not asked again: villagers are in scope, tests stay in this repo, mock players are acceptable.
 
@@ -865,11 +869,13 @@ Start from: what native-plugins/ exposes and how plugins load; everything WASM v
   - Versioned through `abi_stable` or `stabby`: the same narrowing with Rust-shaped stable types and less hand-written `unsafe`, plus a new dependency tree. `PluginFuture` (a boxed `dyn Future`) and `Arc<Context>` need stable wrappers. About as many sessions as the C ABI.
   - Native stays unstable, and the Wasm v0.2 API is the stable option for third parties. Needs D2-2 to keep v0.2, and costs G2-05 plus G2-07. The promise is then upstream's, and upstream is still breaking v0.2 (#4405); its draft #2828 explores running WIT plugins as native cdylibs, which could later give native speed on the same API.
   - Waits on it: G2-05 (unstable) or G2-06 (versioned). G2-01 to G2-04 and G2-07 to G2-10 don't wait on it.
+  - Answered 2026-10-31 (Neon accepted Q2.1): explicitly unstable. Plugins load only into the build they came from, with no ABI promise across releases. G2-05 goes ahead and G2-06 is dropped.
 - D2-2: When v0.1 goes, what do Wasm plugin authors get? Options:
   - v0.2 becomes the only Wasm API now (G2-07, then G2-08). Two sessions, plus taking upstream's open #3962 (+11,341 lines). PEX plugin authors then build against an ABI upstream is still breaking (#4405) and that is stubbed in places (`gametest.rs`), and every upstream commit to the v0.1 host becomes a modify/delete conflict at merge time.
   - Drop Wasm plugins (G2-09, then G2-10). Two sessions, mostly deletion: about 100,800 lines of Rust, 32,700 lines of WIT and 75 external crate versions. No sandboxed plugin option is left, and every upstream merge that touches those crates conflicts. Nothing in the repo uses Wasm today.
   - Keep v0.1 until upstream drops it (the earlier roadmap's 2026-10-29 answer). Nothing to do now, but this goal's "drop WASM v0.1" stays open with no date: upstream master still defaults to v0.1 on 2026-10-31. v0.1 keeps needing edits with core changes (24 commits since 2026-10-01).
   - Waits on it: G2-07 and G2-08 (first option) or G2-09 and G2-10 (second). G2-04 doesn't wait on it.
+  - Answered 2026-10-31 (Neon accepted Q2.2): keep v0.1 until upstream drops it, take upstream's v0.2 host as upstream finishes it, and spend no PEX pieces on Wasm. G2-07 to G2-10 are not started. v0.1 leaves with the upstream merge that removes it, so this goal's "drop WASM v0.1" has no date.
 
 ## Goal 3: Config cleanup
 
@@ -1271,7 +1277,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - In: `pex_common::load_config` behaves like `pumpkin.toml` loading: `config_version`, ordered migrations per plugin, and missing keys added after a `.v<old>.bak` backup. It reuses `pumpkin_config::migration`, which `pexguard` already uses, plus G3-01's per-key fallback and G3-02's unknown-key warnings.
   - In: `worldpumpkin` and `template` keep calling it. They need no migration step yet: `git log v1.2.0..300621c3e -- native-plugins/worldpumpkin/src/config.rs native-plugins/template/src/lib.rs native-plugins/common/src/lib.rs` shows only `4ccd66fca` (build id), which changed no config keys.
   - Out: plugin data files such as `pexguard`'s `regions.toml`, Wasm plugin configs.
-- Depends on: G3-01, G3-02, and G2-06 only if D2-1 picks a versioned ABI (its design decides whether native plugins keep loading their own config through `pex_common`)
+- Depends on: G3-01, G3-02 (D2-1 keeps the native ABI unstable, so plugin config stays in `pex_common`)
 - Branch: feat/plugin-config-version
 - Needs decision: D3-1
 - Done when:
@@ -1314,6 +1320,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - Keep alpha's behaviour: all defaults, no message. No work, and the silent reset stays.
   - Sub-question on rules that involve two keys. `allow_chat_reports` without `online_mode` would count as off, as in vanilla `enforceSecureProfile`. `online_mode` without `encryption` has no vanilla equivalent: refuse to start, or turn encryption on with a warning?
   - Waits on it: G3-01, G3-09.
+  - Answered 2026-10-31 (Neon accepted Q3.1): the first option. A bad value gets its key's default and a warning naming the key, the value and the default; a TOML syntax error stops the server with the line and column. Still open: the sub-question on rules that involve two keys.
 - D3-2: Remove or wire the keys that nothing reads? `world.chunk.write_in_place` goes either way. The others are `networking.java.authentication.enabled`, `networking.java.authentication.textures.enabled`, `textures.types.skin`, `.cape` and `.elytra`, `networking.bedrock.compression.enabled`, and `pvp.swing`. Options:
   - Remove them all with G3-03's step, one log line each. Vanilla has none of them, and `authentication.enabled` duplicates `online_mode`. Admins lose nothing, since none of them has an effect today.
   - Wire some of them:
@@ -1338,6 +1345,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - (b) Also a migration that turns telemetry off in existing files. A generated `true` can't be told apart from one an admin chose, so the migration logs a line saying how to turn it back on.
   - The same question applies to `server_links.bug_report`, which points at Pumpkin's issue tracker. Keep it, point it at `https://github.com/Conman1533/PEX/issues`, or leave it empty?
   - Waits on it: G3-08.
+  - Partly answered 2026-10-31 (Neon accepted Q3.6): telemetry is off by default and admins can turn it on. Still open: (a) or (b) for existing files, and what `server_links.bug_report` points at.
 - D3-6: How should the egg set the port? Options:
   - Keep the `file` parser on the default line. No server change. But it also rewrites `networking.query.address`, and it stops matching once the line holds a port. Whether Wings copes with a changed allocation was not checked.
   - A Wings parser that edits `networking.java.address` by key, if Wings has one that writes TOML. That was not checked in this session. Only the egg changes.
@@ -1689,10 +1697,12 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
   - Out. No pieces. A world with the pack enabled runs the default evaluator and differs from vanilla with the pack.
   - In. Port `ExperimentalRedstoneWireEvaluator`, `ExperimentalRedstoneUtils` and `Orientation`, which vanilla threads through every neighbour update (`CollectingNeighborUpdater.MultiNeighborUpdate.runNext`). At least three pieces, after G5-10.
   - Waits on it: no piece if out.
+  - Answered 2026-10-31 (Neon accepted Q5.1): out. Default redstone only for 2.0; experimental redstone can come later. No pieces.
 - D5-4: What does the proof compare? Options:
   - Pass or fail of block-based tests, which `dual_run.py` does today. An order difference that doesn't change ACCEPT or FAIL goes unseen, so every structure has to be built as a race.
   - Also a per-tick trace: both servers record the block states of each test area every tick and the traces must match. Catches order and timing directly; needs a recorder on vanilla (a datapack function or a mod, outside the repo) and one tooling piece.
   - Waits on it: G5-16 and the Proof.
+  - Partly answered 2026-10-31 (Neon accepted Q5.2): position-dependent behaviour isn't required for 2.0; contraptions that don't depend on position must give the same results. Still open: pass or fail only, or also a per-tick trace.
 
 ## Goal 6: Survival parity end to end
 
@@ -1943,10 +1953,12 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
   - No `give`: each stage replays the earlier ones in its own area. Strongest per stage, but stage N costs stages 1 to N and one failure fails everything after it.
   - `give` and teleports everywhere, the full run included. Cheapest, and nothing proves the run works in one world.
   - Waits on it: G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22.
+  - Partly answered 2026-10-31 (Neon accepted Q6.1): the staged bot is the proof for every stage, plus one human playthrough with a real client before the 2.0 release. Still open: which of the three setups a stage may use.
 - D6-2: Where do the stages that need the Nether, the End and the fixed seed run? The earlier answer chose the shared tester server with a fixed seed; it didn't cover turning on both dimensions there. Options:
   - Shared server, both dimensions on: one startup, but every tester run loads three dimensions (G6-01 measures the cost).
   - A second server in the same tester process for those stages: the bot tests and GameTests keep today's server; more harness code and more RAM while it runs.
   - Waits on it: G6-01, and through it every stage from G6-08 on.
+  - Answered 2026-10-31 (Neon accepted Q6.4): the shared tester server with a fixed seed and both dimensions on, and a separate server only for a stage that conflicts with the others. G6-01 measures what loading three dimensions costs.
 - D6-3: Which stages run in CI's `gametest` job? Stage 1 alone takes 9 to 86 s. Options:
   - All stages: a regression shows on the push that caused it; the job grows by minutes on whatever runner D0-1 picks.
   - The short ones (iron, food, portal) in CI; blaze rods, pearls, stronghold, dragon and the full run in `nightly.yml` or by hand.
@@ -2298,6 +2310,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Write on change. Closest to vanilla; the issue counts 18 of 54 block entity types with `is_dirty`, so most need dirty tracking.
   - Hold the chunk with a ticket until the World has saved its block entities. Simple; delays unloading by up to one cleanup cycle.
   - Waits on it: G7-10, and through it G6-06 and G6-22.
+  - Partly answered 2026-10-31 (Neon accepted Q6.3): the block entity loss is settled before the survival stages, so G7-10 comes early. Still open: which of the three methods.
 
 ## Goal 8: Bedrock polish
 
@@ -2582,6 +2595,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
   - (c) Experimental with honest gaps: done means the current client joins, there's no client-triggerable crash or unbounded memory, bans and the whitelist apply and chat works both ways (G8-01 to G8-12), and `docs/BEDROCK.md` lists everything else as known gaps. Cost: least; G8-13 to G8-19 and G8-22 onward move after 2.0.
   - The earlier roadmap recorded an answer on 2026-10-29: experimental in 2.0 with the coverage table as the list of gaps; survival basics first, then cross-play chat, then forms; a phone checklist before release that doesn't block. That is (c), with (a)'s list in that order for anything done beyond it.
   - Waits on it: G8-13 to G8-19, G8-22 onward, Proof item 5.
+  - Answered 2026-10-31 (Neon accepted Q8.1 to Q8.3): (c), experimental in 2.0 with the coverage table as the list of gaps. Anything done beyond that follows (a)'s list in this order: survival basics, then cross-play chat, then forms. A phone checklist runs before the release but doesn't block it. G8-13 to G8-19 and G8-22 move after 2.0, and Proof item 5 doesn't apply.
 - D8-2: Which Bedrock versions does PEX support, and how does it keep up? Options:
   - (a) One version, taken from upstream through regular full upstream merges, as on 2026-10-19 and 2026-10-23. Cost: Bedrock can't be joined from a client release until upstream bumps and PEX merges; each full merge touches every goal's code.
   - (b) One version, with upstream's Bedrock commits cherry-picked between merges, as G8-02 and G8-03 do. Cost: conflicts to resolve on each pick, and the next full merge meets the same changes again.
@@ -2783,10 +2797,12 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
   - 8 and 24 bots with the same bar. Needs G9-12 and about 2 more run-hours per server per comparison.
   - The earlier roadmap's answer (Q9.2, 2026-10-29): less RAM than Paper and within 10% of Paper's P95 at 10, 25 and 50 bots for 30 minutes each. It sets no network bar, and 50 bots needs about six times the stations of today's fleet.
   - Waits on it: G9-12, G9-14, Proof.
+  - Answered 2026-10-31 (Neon accepted Q9.2): the third option. PEX uses less RAM than Paper and stays within 10% of Paper's P95 at 10, 25 and 50 bots for 30 minutes each, so G9-12 is needed. The bar sets no network number; the traffic pieces keep their own targets.
 - D9-2: Where does the benchmark live? Options:
   - Move it to `tools/gameplay-bench`, which the earlier roadmap's answer chose (Q9.3, 2026-10-29: under `tools/`, if the license can match). MIT code can ship in the GPL-3.0 repository if its notice stays. Costs: the 6 MB world tarball goes into git or becomes a checksummed download, and `AGENTS.md` ("Keep investigation tools out of the repo") needs a line that names it as kept tooling.
   - Keep it in `Conman1533/mc-gameplay-bench` and pin a commit in the benchmark page. Costs: two repositories to update on every protocol bump, and no PR can change server and harness together.
   - Waits on it: G9-11, and which repository G9-01 and G9-12 land in.
+  - Answered 2026-10-31 (Neon accepted Q9.3): move it to `tools/gameplay-bench`, keeping its MIT notice. G9-11 goes ahead. G9-01 and G9-12 land in this repository once G9-11 has moved it, and in `mc-gameplay-bench` before that.
 - D9-3: Where are benchmark results published? Options:
   - `docs/BENCHMARKS.md` in PEX, with the HTML reports and CSVs attached to the GitHub release they measure. No new infrastructure; assets are uploaded by hand until Goal 10's release jobs run.
   - A GitHub Pages site from the repository. Costs a Pages workflow, which needs Actions running (G0-01).
@@ -2802,6 +2818,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
   - CT 117 on pve. Free, but it shares the host with production (Pelican CT 109) and has no Docker, which `sampler.py` needs.
   - A Pelican node like the 2026-10-14 runs. Real hosting conditions, but the runs compete with players' servers.
   - Waits on it: G9-14. G0-03 and the development reruns in G9-01 to G9-10 can run on any host if PEX and Paper run there back to back.
+  - Answered 2026-10-31 (Neon accepted Q9.1): a dedicated 4-core cloud VM for the published numbers. CT 117 or pve is fine for development comparisons that run PEX and Paper back to back.
 
 ## Goal 10: Reproducible release builds in CI, ARM64/Windows on real hardware
 
@@ -2895,7 +2912,7 @@ Hardware:
 #### G10-05 Release workflow for the fork
 
 - Scope: in: `release.yml` triggers on `v*` tags only; `fail-fast: false`; every build job runs G10-03's script on its native runner, so each target that loads plugins ships its own plugin zip; `SHA256SUMS` replaces `checksums.sha256`; G10-04 runs as a called workflow and gates publishing; `sign_windows_release` follows D10-3; a `dry_run` dispatch input builds everything and publishes nothing; the target list and runners follow D10-5. Out: nightly and Docker (G10-06), smoke tests (G10-07).
-- Depends on: G10-03, G10-04, G0-01, G2-05 or G2-06, whichever D2-1 picks (whether plugins stay tied to one exact build, which is why every target ships its own plugin zip)
+- Depends on: G10-03, G10-04, G0-01, G2-05 (D2-1 keeps plugins tied to one exact build, which is why every target ships its own plugin zip)
 - Branch: ci/fork-release-workflow
 - Needs decision: D10-3, D10-5
 - Done when: a `dry_run` dispatch at alpha builds every asset on the D10-5 list plus `SHA256SUMS` and creates no tag or release (`gh release list` unchanged); with D10-2's container option, its x86_64 Linux lines equal a G10-03 rebuild outside GitHub; `actionlint` passes.
@@ -2959,25 +2976,30 @@ Hardware:
   - A volunteer runs G10-07's script and the benchmark on their own Windows or ARM64 machine. No cost; needs a written recipe and trust in the reported numbers. Owned Windows ARM64 hardware otherwise means buying a Snapdragon laptop (several hundred dollars).
   - The earlier roadmap recorded an answer on 2026-10-29 (Claude's recommendation at the maintainer's request): hosted runners plus one real run each, on an ARM64 VM or board and a Windows PC.
   - Waits on it: G10-09, G10-10.
+  - Answered 2026-10-31 (Neon accepted Q10.1): GitHub-hosted ARM64 and Windows runners once Actions is back (D0-1), plus one real run each, on an ARM64 VM or board and on a Windows PC. Which VM or board and which PC gets picked when G10-09 and G10-10 start.
 - D10-2: Which release assets must be bit-for-bit reproducible, and where can a rebuild happen? Options:
   - `pumpkin-X64-Linux`, `pumpkin-X64-Linux-musl` and `pumpkin-plugins-X64-Linux.zip`, built inside a container image pinned by digest, in CI and for any rebuild. Anyone with Docker or Podman can check a release; CT 117 has neither, so one gets installed there or checks happen in CI only. The image also pins the C start-up objects, linker and musl that end up in the binaries.
   - The same assets, reproducible on one host only (CI twice, or CT 117 twice), no container. Proves there are no timestamps or path leaks, but nobody can check a CI binary against a rebuild elsewhere.
   - Every target. Windows and macOS byte identity was not assessed here; the MSVC linker, signing (D10-3) and Apple's toolchain each add inputs, and the work happens on runners nobody here owns.
   - The earlier roadmap recorded x86_64 Linux only (glibc and musl).
   - Waits on it: G10-03, G10-04, G10-05.
+  - Partly answered 2026-10-31 (Neon accepted Q10.3): x86_64 Linux only, glibc and musl. Still open: a container pinned by digest (the first option) or one host without one (the second).
 - D10-3: Are Windows releases signed? Options:
   - Ship unsigned, with a SmartScreen note in the release text. No cost; the `.exe` compares with a rebuild as is; `sign_windows_release` is removed.
   - SignPath's free open-source program, which `sign_windows_release` already calls. Costs an application and an approval wait, and the repository owner has to add the four `SIGNPATH_*` secrets. A signed `.exe` differs from a rebuild, so checking it means stripping the signature first.
   - A bought code-signing certificate: a yearly fee of a few hundred dollars, the key on a hardware token or cloud HSM, and the same checking caveat.
   - The earlier roadmap recorded unsigned for 2.0, then an application to SignPath.
   - Waits on it: G10-05.
+  - Answered 2026-10-31 (Neon accepted Q10.2): unsigned for 2.0 with a SmartScreen note, then an application to SignPath's free open-source program after 2.0.
 - D10-4: What does CI publish on the fork besides `v*` releases? Options:
   - A nightly pre-release that is never Latest, built from `master` (the default branch, where schedules run) or from `alpha` (needs an explicit ref), plus Docker images for tagged releases and the nightly. The earlier roadmap recorded nightly as a pre-release and Docker yes.
   - No nightly: only `v*` releases and their Docker images. Least runner time and nothing stale; testers build `alpha` themselves.
   - `nightly.yml` as it is: its first run makes the nightly Latest over v1.2.1, without plugin zips or checksums.
   - Waits on it: G10-06.
+  - Answered 2026-10-31 (Neon accepted Q10.6): the first option, a nightly pre-release that is never Latest, plus Docker images. The upstream reviewer bot and the WIT mirror don't run on the fork (G0-01, G2-04). Still open: whether the nightly builds `master` or `alpha`.
 - D10-5: Which targets does a 2.0 release ship, and what builds them? This follows D0-1. Options:
   - Everything `release.yml` lists (X64 and ARM64 Linux, glibc and musl; X64 and ARM64 Windows; ARM64 macOS; Android) on hosted runners. Needs D0-1's hosted option; no runner bill on a public repository.
   - X64 Linux, ARM64 Linux and Windows x64, cross-compiled in CT 117 as v1.2.0 was on pve: aarch64 through `cargo-zigbuild` (installed, target not added yet), Windows through `x86_64-pc-windows-gnu` (mingw not installed). No Windows ARM64, macOS or Android. The GNU Windows build has a different target than the MSVC build `release.yml` makes on `windows-latest`, so their build ids differ and their plugin zips never mix.
   - X64 Linux only, as v1.2.1. Least work, but the ARM64 and Windows half of this goal has nothing to test until hosted runners return.
   - Waits on it: G10-05, G10-07, G10-09, G10-10.
+  - Partly answered 2026-10-31 (Neon accepted Q10.4): keep the musl build and build only `-p pumpkin` for it, which alpha `300621c3e` already does. Still open: the target list and how it is built, after D0-1.
