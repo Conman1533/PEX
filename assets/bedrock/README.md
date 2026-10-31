@@ -3,7 +3,7 @@
 This directory contains a number of different data files used to help support connecting via Bedrock Edition clients (including Java => Bedrock remapping).
 
 - `block_states.nbt`
-    - converted from [CloudburstMC/Data's 26.60 dump](https://github.com/CloudburstMC/Data) `block_palette.nbt` into concatenated Bedrock network NBT; the same dump supplies `runtime_item_states.json`, `item_components.nbt`, and `creative_items.json`.
+    - converted from [CloudburstMC/Data's 26.60 dump](https://github.com/CloudburstMC/Data/tree/293c848098cc636a2758937fb6610b8bed1f12c5) `block_palette.nbt` into concatenated Bedrock network NBT; the same dump supplies `runtime_item_states.json`, `item_components.nbt`, and `creative_items.json`.
     - Provides a listing of all blocks and block states that exist in Bedrock. Used to build a mapping from Java block states to Bedrock ones by matching (string) identifiers and data components.
 - `blocks.nbt`
     - downloaded from [GeyserMC/mappings for Java 26.3 and Bedrock 26.60](https://github.com/GeyserMC/mappings/blob/b4cec82d49fe75f222e1ad6dc0fd2a23ee89626c/blocks.nbt)
