@@ -3053,29 +3053,7 @@ impl Player {
                 );
                 if finished && matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     p.stop_mining();
-
-                    let block = Block::from_state_id(state.id);
-                    let can_harvest = p.can_harvest(state, block);
-                    let flags = if can_harvest {
-                        pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    } else {
-                        pumpkin_world::world::BlockFlags::SKIP_DROPS
-                            | pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    };
-                    if world.break_block(&pos, Some(&p), flags).is_some() {
-                        if let Some(server) = server_clone {
-                            server
-                                .block_registry
-                                .broken(&world, block, &p, &pos, &server, state);
-                        }
-                        p.apply_tool_damage_for_block_break(state);
-                        if can_harvest {
-                            p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                        }
-                        let item_id = p.inventory().held_item().item.id;
-                        p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                        p.increment_stat(StatisticCategory::Mined, state.id.as_u16() as i32, 1);
-                    }
+                    p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
                 }
             }
         }
@@ -3148,6 +3126,39 @@ impl Player {
                     ),
                 );
             }
+        }
+    }
+
+    /// Breaks the block a Bedrock player finished digging, with its drops, tool damage,
+    /// exhaustion and stats.
+    fn break_bedrock_dug_block(
+        self: &Arc<Self>,
+        world: &Arc<World>,
+        server: Option<&Server>,
+        pos: BlockPos,
+        state: &BlockState,
+    ) {
+        let block = Block::from_state_id(state.id);
+        let can_harvest = self.can_harvest(state, block);
+        let flags = if can_harvest {
+            pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        } else {
+            pumpkin_world::world::BlockFlags::SKIP_DROPS
+                | pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        };
+        if world.break_block(&pos, Some(self), flags).is_some() {
+            if let Some(server) = server {
+                server
+                    .block_registry
+                    .broken(world, block, self, &pos, server, state);
+            }
+            self.apply_tool_damage_for_block_break(state);
+            if can_harvest {
+                self.add_exhaustion(MINE_BLOCK_EXHAUSTION);
+            }
+            let item_id = self.inventory().held_item().item.id;
+            self.increment_stat(StatisticCategory::Used, item_id as i32, 1);
+            self.increment_stat(StatisticCategory::Mined, block.id.as_u16() as i32, 1);
         }
     }
 
@@ -8441,7 +8452,10 @@ mod tests {
 
     use super::{Player, bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
     use crate::world::{BlockFlags, World, test_player, test_world};
-    use pumpkin_data::{Block, attributes::Attributes, effect::StatusEffect, potion::Effect};
+    use pumpkin_data::{
+        Block, attributes::Attributes, effect::StatusEffect, potion::Effect,
+        statistic::StatisticCategory,
+    };
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
     use pumpkin_world::chunk::ChunkData;
@@ -8637,6 +8651,24 @@ mod tests {
         assert!(!player.stop_destroy_block(&world, BlockPos::new(3, 64, 0)));
         assert_eq!(player.delayed_destroy.load(), None);
         assert!(player.mining.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn bedrock_dug_block_counts_as_mined_by_block_id() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        let pos = BlockPos::new(2, 64, 0);
+        world.set_block_state(&pos, Block::DIRT.default_state.id, BlockFlags::empty());
+
+        player.break_bedrock_dug_block(&world, None, pos, world.get_block_state(&pos));
+
+        assert!(world.get_block_state(&pos).is_air());
+        let stats = player.stats.lock().unwrap();
+        // Vanilla `Block.playerDestroy` awards `Stats.BLOCK_MINED` for the block. Dirt is block 9,
+        // its default state is 10.
+        let mined = |id: u16| stats.get(StatisticCategory::Mined, i32::from(id));
+        assert_eq!(mined(Block::DIRT.id.as_u16()), 1);
+        assert_eq!(mined(Block::DIRT.default_state.id.as_u16()), 0);
     }
 
     #[tokio::test]
