@@ -8,11 +8,19 @@ use crate::chunk::io::{FileIO, LoadedData, log_save_failure, run_blocking};
 use crate::level::Level;
 use pumpkin_config::lighting::LightingEngineConfig;
 use pumpkin_data::chunk::ChunkStatus;
+use pumpkin_util::background_event;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, warn};
+
+/// Chunks for the IO write task to save.
+pub struct WriteBatch {
+    pub chunks: Vec<(ChunkPos, Chunk)>,
+    /// Whether this is the periodic autosave, which logs an `autosave_end` event once written.
+    pub autosave: bool,
+}
 
 pub enum RecvChunk {
     IO(Chunk),
@@ -182,7 +190,7 @@ pub async fn io_read_work(
 const REGION_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
 
 pub async fn io_write_work(
-    mut recv: tokio::sync::mpsc::Receiver<Vec<(ChunkPos, Chunk)>>,
+    mut recv: tokio::sync::mpsc::Receiver<WriteBatch>,
     level: Arc<Level>,
     lock: IOLock,
 ) {
@@ -194,11 +202,17 @@ pub async fn io_write_work(
             level.flush_due_regions().await;
             last_flush = Instant::now();
         }
-        let data = match received {
-            Ok(Some(data)) => data,
+        let WriteBatch {
+            chunks: data,
+            autosave,
+        } = match received {
+            Ok(Some(batch)) => batch,
             Ok(None) => break,
             Err(_) => continue,
         };
+        let batch_at = std::time::SystemTime::now();
+        let batch_start = Instant::now();
+        let batch_len = data.len();
         // debug!("io write thread receive chunks size {}", data.len());
         let positions = data.iter().map(|(pos, _)| *pos).collect::<Vec<_>>();
         let level_for_upgrade = level.clone();
@@ -260,6 +274,16 @@ pub async fn io_write_work(
             }
         }
         lock.1.notify_waiters();
+        if autosave {
+            let elapsed = batch_start.elapsed();
+            background_event::emit("autosave_end", batch_at, || {
+                format!(
+                    "dim={} chunks={batch_len} ms={:.2}",
+                    level.level_folder.dim_folder.display(),
+                    elapsed.as_secs_f64() * 1000.0
+                )
+            });
+        }
 
         if upgrade_failed {
             error!("Failed to upgrade chunks for saving");

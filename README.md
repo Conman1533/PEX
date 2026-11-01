@@ -80,8 +80,9 @@ What PEX adds on top of upstream Pumpkin. Each item was tested on a server befor
 
 ### Performance and operations
 - **Tick metrics** in `metrics/`:
-  - `slow-ticks.log` breaks down every slow tick by world and phase (chunks, players, entities, entity tracking, block entities), with counts and memory use.
-  - `summary.csv` records tick times, counts and memory once a minute.
+  - `slow-ticks.log` breaks down every slow tick into the server phases (datapack tick functions, plugins, scheduled functions, player data, block update flush, game tests, plugin tick events) and each world phase (block updates, environment, raids, chunks, players, entity island planning, entities, entity tracking, block entities and more), with counts, memory use, the tick start time and `unattributed`, the tick time no phase covers.
+  - `summary.csv` records tick times (average, P50, P95, P99, maximum), counts and memory once a minute.
+  - `events.log` records background work with timestamps, to match against slow ticks: chunk autosave start and end, region read batches, `malloc_trim`, and the player data snapshot and save.
   - The `[metrics]` section of `pumpkin.toml` has `enabled` to turn them off and `slow_tick_ms` to change the slow tick threshold (default 100).
 - **Player names at login follow vanilla**: a Java player whose name has a character other than ASCII `!` to `~` (CJK, accented letters, emoji) is refused with "Invalid characters in username", as on vanilla. Servers with such players can set `validate_player_names = false` under `[networking.java]` in `pumpkin.toml` to let them in, as PEX 1.x did (up to 16 bytes, no spaces or control characters); commands reach them with the name in quotes, such as `/give "玩家一号" torch`. Bedrock names aren't checked.
 - **Chunks unload when players leave**: the server no longer keeps the last player's view-distance chunks loaded forever after they disconnect.

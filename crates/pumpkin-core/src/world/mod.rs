@@ -1596,8 +1596,14 @@ impl World {
 
         self.flush_block_updates();
         self.flush_synced_block_events();
+        let block_update_elapsed = start.elapsed();
+        let t_phase = std::time::Instant::now();
         self.update_active_chunks();
+        let active_chunks_elapsed = t_phase.elapsed();
+        let t_phase = std::time::Instant::now();
         self.tick_environment();
+        let environment_elapsed = t_phase.elapsed();
+        let t_raids = std::time::Instant::now();
         let mut raids = {
             let mut guard = self
                 .raids
@@ -1617,6 +1623,7 @@ impl World {
             raids.next_id = raids.next_id.max(guard.next_id);
             *guard = raids;
         };
+        let raids_elapsed = t_raids.elapsed();
 
         let t_chunks = std::time::Instant::now();
         self.tick_chunks(server);
@@ -1633,10 +1640,11 @@ impl World {
             let _guard = player_handle.enter();
             player.tick(server);
         });
-        let player_elapsed = t_players.elapsed();
         // After movement so pickup uses this-tick player boxes
         let player_touches: Vec<_> = players.par_iter().filter_map(PlayerTouch::new).collect();
+        let player_elapsed = t_players.elapsed();
 
+        let t_entities = std::time::Instant::now();
         let entities_to_tick = self.entities.load();
         let entity_count = entities_to_tick.len();
         let active_chunks = self
@@ -1647,7 +1655,6 @@ impl World {
         let level_for_entities = self.level.clone();
         let entity_handle = handle.clone();
 
-        let t_entities = std::time::Instant::now();
         let tickable: Vec<_> = entities_to_tick
             .par_iter()
             .filter_map(|entity| {
@@ -1664,6 +1671,8 @@ impl World {
 
         // Entities that can affect each other tick in list order; separate islands run in
         // parallel.
+        let entity_select_elapsed = t_entities.elapsed();
+        let t_islands = std::time::Instant::now();
         let islands_config = &server.advanced_config.world.entity_islands;
         let plan_islands = self
             .island_schedule
@@ -1723,6 +1732,8 @@ impl World {
         } else {
             None
         };
+        let island_elapsed = t_islands.elapsed();
+        let t_entities = std::time::Instant::now();
         let first_order = self.level.reserve_entity_tick_orders(tickable.len());
 
         let server_ref = server.as_ref();
@@ -1758,12 +1769,13 @@ impl World {
             order::set_entity_order(None);
         }
         self.order_tick_spawns();
-        let entity_elapsed = t_entities.elapsed();
+        let entity_elapsed = entity_select_elapsed + t_entities.elapsed();
 
         let t_tracker = std::time::Instant::now();
         self.entity_tracker.update_all(self, &handle);
         let tracker_elapsed = t_tracker.elapsed();
 
+        let t_be = std::time::Instant::now();
         let mut block_entities: Vec<Arc<dyn BlockEntity>> = Vec::new();
         if self.block_entities.len() < active_chunks.len() {
             for chunk_block_entities in &self.block_entities {
@@ -1780,7 +1792,6 @@ impl World {
         }
         let block_entity_count = block_entities.len();
 
-        let t_be = std::time::Instant::now();
         let be_handle = handle;
         block_entities.par_chunks(16).for_each(|batch| {
             let _guard = be_handle.enter();
@@ -1794,15 +1805,19 @@ impl World {
         drop(guard);
         let block_entity_elapsed = t_be.elapsed();
 
+        let t_phase = std::time::Instant::now();
         self.level
             .chunk_loading
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .send_change();
+        let chunk_tickets_elapsed = t_phase.elapsed();
 
+        let t_phase = std::time::Instant::now();
         if let Some(ref fight_mutex) = self.dragon_fight {
             dragon_fight::DragonFight::tick(fight_mutex, self);
         }
+        let dragon_fight_elapsed = t_phase.elapsed();
 
         let total_elapsed = start.elapsed();
         if total_elapsed.as_millis() > 50 {
@@ -1821,15 +1836,23 @@ impl World {
 
         WorldTickReport {
             world: self.dimension.minecraft_name,
+            queued: std::time::Duration::ZERO,
             total: total_elapsed,
+            block_updates: block_update_elapsed,
+            active_chunks: active_chunks_elapsed,
+            environment: environment_elapsed,
+            raids: raids_elapsed,
             chunks: chunk_elapsed,
             players: player_elapsed,
             player_count,
+            islands: island_elapsed,
             entities: entity_elapsed,
             entity_count,
             tracker: tracker_elapsed,
             block_entities: block_entity_elapsed,
             block_entity_count,
+            chunk_tickets: chunk_tickets_elapsed,
+            dragon_fight: dragon_fight_elapsed,
             loaded_chunks: self.level.loaded_chunk_count(),
         }
     }

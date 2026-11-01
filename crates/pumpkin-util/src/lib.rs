@@ -14,6 +14,7 @@ pub use permission::PermissionLvl;
 
 use crate::{math::vector3::Axis, random::RandomImpl};
 
+pub mod background_event;
 pub mod biome;
 pub mod difficulty;
 pub mod gamemode;

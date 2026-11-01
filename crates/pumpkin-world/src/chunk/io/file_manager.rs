@@ -1,13 +1,14 @@
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use futures::future::join_all;
+use pumpkin_util::background_event;
 use pumpkin_util::math::vector2::Vector2;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
@@ -31,6 +32,18 @@ use super::{FileIO, LoadedData, RegionFile, region_chunk_index, region_of, run_b
 
 /// A region nobody touched for this long is closed, once its staged chunks are written.
 const REGION_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Logs one region read batch: waiting for the region's save lock, reading from disk,
+/// decoding on Rayon, and the whole batch.
+fn emit_region_read(at: SystemTime, path: &Path, chunks: usize, phases: [Duration; 4]) {
+    background_event::emit("region_read", at, || {
+        let [lock, read, decode, total] = phases.map(|d| d.as_secs_f64() * 1000.0);
+        format!(
+            "file={} chunks={chunks} lock_ms={lock:.2} read_ms={read:.2} decode_ms={decode:.2} ms={total:.2}",
+            path.display()
+        )
+    });
+}
 
 pub(crate) trait PathFromLevelFolder {
     fn file_path(folder: &LevelFolder, file_name: &str) -> PathBuf;
@@ -394,9 +407,12 @@ where
         let region_tasks = regions_chunks.into_iter().map(|(region, chunks)| {
             let stream = stream.clone();
             async move {
+                let at = SystemTime::now();
+                let start = Instant::now();
                 let path = D::file_path(folder, &R::file_name(region));
                 let entry = self.entry(region, path.clone());
                 let save = entry.save_lock.lock().await;
+                let lock_elapsed = start.elapsed();
                 let mut disk_chunks = chunks;
                 for loaded in entry.read_pending(&mut disk_chunks).await {
                     if stream.send(loaded).await.is_err() {
@@ -420,6 +436,7 @@ where
                 }
 
                 let read_entry = entry.clone();
+                let t_read = Instant::now();
                 let Ok(raw_chunks) = run_blocking(move || {
                     let Some(state) = read_entry.state() else {
                         return Vec::new();
@@ -438,7 +455,10 @@ where
                     return;
                 };
                 drop(save);
+                let read_elapsed = t_read.elapsed();
+                let disk_count = raw_chunks.len();
 
+                let t_decode = Instant::now();
                 let (tx, mut rx) = mpsc::channel(raw_chunks.len().max(1));
                 rayon::spawn(move || {
                     raw_chunks.into_par_iter().for_each(|(pos, nbt)| {
@@ -471,6 +491,13 @@ where
                         return;
                     }
                 }
+                let phases = [
+                    lock_elapsed,
+                    read_elapsed,
+                    t_decode.elapsed(),
+                    start.elapsed(),
+                ];
+                emit_region_read(at, &path, disk_count, phases);
             }
         });
 

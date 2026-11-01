@@ -3,7 +3,7 @@ use super::chunk_holder::ChunkHolder;
 use super::chunk_state::{Chunk, StagedChunkEnum};
 use super::dag::{DAG, EdgeKey, Node, NodeKey};
 use super::generation_cache::{Cache, SurfaceBiomeNeighborhood};
-use super::worker_logic::{RecvChunk, io_read_work, io_write_work};
+use super::worker_logic::{RecvChunk, WriteBatch, io_read_work, io_write_work};
 use super::{
     ChunkLevel, ChunkListener, ChunkLoading, ChunkPos, HashMapType, HashSetType, IOLock,
     LevelChannel,
@@ -12,6 +12,7 @@ use crate::chunk::io::Dirtiable;
 use crate::level::{Level, LoadedChunkChange, SyncChunk};
 use dashmap::DashMap;
 use pumpkin_config::lighting::LightingEngineConfig;
+use pumpkin_util::background_event;
 use pumpkin_util::math::vector2::Vector2;
 use slotmap::Key;
 use std::cmp::{Ordering, max};
@@ -71,7 +72,7 @@ pub struct GenerationSchedule {
     queue_dirty: bool,
     recv_chunk: crossbeam::channel::Receiver<(ChunkPos, RecvChunk)>,
     io_read: tokio::sync::mpsc::Sender<Vec<ChunkPos>>,
-    io_write: tokio::sync::mpsc::Sender<Vec<(ChunkPos, Chunk)>>,
+    io_write: tokio::sync::mpsc::Sender<WriteBatch>,
     send_chunk: crossbeam::channel::Sender<(ChunkPos, RecvChunk)>,
     listener: Arc<ChunkListener>,
     lighting_config: LightingEngineConfig,
@@ -923,7 +924,11 @@ impl GenerationSchedule {
             *data.entry(*pos).or_insert(0) += 1;
         }
         drop(data);
-        if let Err(e) = self.io_write.blocking_send(chunks) {
+        let batch = WriteBatch {
+            chunks,
+            autosave: false,
+        };
+        if let Err(e) = self.io_write.blocking_send(batch) {
             error!(
                 "Failed to send chunks to io write thread during save (may have shut down): {:?}",
                 e
@@ -931,7 +936,10 @@ impl GenerationSchedule {
         }
     }
 
-    fn save_all_chunk(&mut self, save_proto_chunk: bool) {
+    /// Sends every dirty chunk to the IO write task and returns how many it sent. Only the
+    /// periodic autosave leaves proto chunks out, so `save_proto_chunk == false` marks the batch
+    /// as an autosave.
+    fn save_all_chunk(&mut self, save_proto_chunk: bool) -> usize {
         let mut chunks = Vec::with_capacity(self.chunk_map.len());
 
         for (pos, holder) in &mut self.chunk_map {
@@ -959,7 +967,7 @@ impl GenerationSchedule {
         }
 
         if chunks.is_empty() {
-            return;
+            return 0;
         }
 
         info!(
@@ -978,9 +986,15 @@ impl GenerationSchedule {
         }
         drop(data);
 
-        if let Err(e) = self.io_write.blocking_send(chunks) {
+        let count = chunks.len();
+        let batch = WriteBatch {
+            chunks,
+            autosave: !save_proto_chunk,
+        };
+        if let Err(e) = self.io_write.blocking_send(batch) {
             error!("Failed to send chunks to io write thread: {:?}", e);
         }
+        count
     }
 
     fn drop_node(&mut self, node: NodeKey) {
@@ -1275,7 +1289,18 @@ impl GenerationSchedule {
                 self.process_unload_queue();
             }
             if level.should_save.swap(false, Relaxed) {
-                self.save_all_chunk(false);
+                let at = std::time::SystemTime::now();
+                let start = std::time::Instant::now();
+                let chunks = self.save_all_chunk(false);
+                let elapsed = start.elapsed();
+                // An autosave that found nothing to write sends no batch, so it has no end event.
+                background_event::emit("autosave_start", at, || {
+                    format!(
+                        "dim={} chunks={chunks} collect_ms={:.2}",
+                        level.level_folder.dim_folder.display(),
+                        elapsed.as_secs_f64() * 1000.0
+                    )
+                });
             }
             if level.shut_down_chunk_system.load(Relaxed) {
                 info!("Saving chunks before shutdown...");
