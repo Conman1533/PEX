@@ -253,7 +253,7 @@ impl ClientPacket for CSpawnEntity {
 mod tests {
     use super::CSpawnEntity;
     use crate::{ClientPacket, VarInt, codec::lp_vector_3d::encode_legacy_velocity_component};
-    use pumpkin_util::version::JavaMinecraftVersion;
+    use pumpkin_util::{math::vector3::Vector3, version::JavaMinecraftVersion};
 
     fn legacy_tail(velocity: pumpkin_util::math::vector3::Vector3<f64>) -> [u8; 6] {
         let x = encode_legacy_velocity_component(velocity.x);
@@ -281,6 +281,33 @@ mod tests {
         let mut out = Vec::new();
         packet.write_packet_data(&mut out, &version)?;
         Ok(out)
+    }
+
+    #[test]
+    fn reads_vanilla_spawn_with_zero_velocity() -> Result<(), Box<dyn std::error::Error>> {
+        // Vanilla 26.3 `ClientboundAddEntityPacket.write` for a pig (type 101), id 42, at
+        // (1.5, 64, -2.5), no movement, x rot 45, y rot and head rot 90, data 0.
+        let bytes = [
+            0x2a, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76,
+            0x54, 0x32, 0x10, 0x65, 0x3f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x50,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x20, 0x40, 0x40, 0x00,
+        ];
+        let mut read: &[u8] = &bytes;
+        let spawn = CSpawnEntity::read_packet_data(&mut read, &JavaMinecraftVersion::V_26_3)?;
+
+        assert!(read.is_empty());
+        assert_eq!(spawn.entity_id, VarInt(42));
+        assert_eq!(
+            spawn.entity_uuid,
+            uuid::Uuid::from_u128(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
+        );
+        assert_eq!(spawn.r#type, VarInt(101));
+        assert_eq!(spawn.position, Vector3::new(1.5, 64.0, -2.5));
+        assert_eq!(spawn.velocity.0, Vector3::new(0.0, 0.0, 0.0));
+        assert_eq!((spawn.pitch, spawn.yaw, spawn.head_yaw), (0x20, 0x40, 0x40));
+        assert_eq!(spawn.data, VarInt(0));
+        Ok(())
     }
 
     #[test]

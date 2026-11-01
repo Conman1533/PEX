@@ -61,12 +61,17 @@ impl LpVector3d {
     pub fn read<R: std::io::Read>(reader: &mut R) -> Result<Self, ReadingError> {
         let mut low_16 = [0u8; 2];
         reader
-            .read_exact(&mut low_16)
+            .read_exact(&mut low_16[..1])
             .map_err(|e| ReadingError::Message(e.to_string()))?;
 
-        if low_16[0] == 0 && low_16[1] == 0 {
+        // A zero vector is the single byte 0, as vanilla `LpVec3.read` expects.
+        if low_16[0] == 0 {
             return Ok(Self(Vector3::new(0.0, 0.0, 0.0)));
         }
+
+        reader
+            .read_exact(&mut low_16[1..])
+            .map_err(|e| ReadingError::Message(e.to_string()))?;
 
         let mut mid_32 = [0u8; 4];
         reader
@@ -149,6 +154,7 @@ fn from_long(quantized: i64, scale: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{LpVector3d, encode_legacy_velocity_component};
+    use crate::ser::NetworkReadExt;
     use pumpkin_util::math::vector3::Vector3;
 
     #[test]
@@ -157,6 +163,18 @@ mod tests {
         assert_eq!(encode_legacy_velocity_component(-0.5), -4000);
         assert_eq!(encode_legacy_velocity_component(4.0), 31200);
         assert_eq!(encode_legacy_velocity_component(-4.0), -31200);
+    }
+
+    #[test]
+    fn reads_vanilla_zero_vector_and_next_field() -> Result<(), Box<dyn std::error::Error>> {
+        // Vanilla 26.3 `LpVec3.write(Vec3.ZERO)` then `writeBoolean(true)`, as
+        // `ServerboundInteractPacket` ends.
+        let mut read: &[u8] = &[0x00, 0x01];
+        let vector = LpVector3d::read(&mut read)?;
+        assert_eq!(vector, LpVector3d(Vector3::new(0.0, 0.0, 0.0)));
+        assert!(read.get_bool()?);
+        assert!(read.is_empty());
+        Ok(())
     }
 
     #[test]
