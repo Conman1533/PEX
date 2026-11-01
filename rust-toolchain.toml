@@ -1,4 +1,4 @@
 [toolchain]
-# Anything in the latest stable version of Rust is fine to use.
-channel = "stable"
+# Pinned so every build, local and in CI, uses the same compiler. A bump is its own PR.
+channel = "1.99.1"
 components = ["rust-analyzer", "rust-src"]

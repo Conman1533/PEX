@@ -33,14 +33,12 @@ jobs:
             windows-11-arm,
             macos-latest,
           ]
-        toolchain:
-          - stable
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
 
       - name: Install musl-tools (Linux only)
@@ -52,7 +50,7 @@ jobs:
       - name: Build Release
         shell: bash
         run: |
-          cargo build --verbose --release
+          cargo build --locked --verbose --release
           if [ "${{ runner.os }}" == "Linux" ]; then
             if [ "${{ runner.arch }}" == "X64" ]; then
               TARGET="x86_64-unknown-linux-musl"
@@ -61,7 +59,7 @@ jobs:
             fi
             rustup target add "$TARGET"
             # musl can't build the native plugins' cdylibs, and the musl server can't load them anyway.
-            cargo build --verbose --release -p pumpkin --target "$TARGET"
+            cargo build --locked --verbose --release -p pumpkin --target "$TARGET"
           fi
 
       - name: Prepare artifacts
@@ -173,16 +171,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
+      - run: rustup toolchain install
+      - run: rustup target add aarch64-linux-android
       - uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk
+        run: cargo install cargo-ndk --locked --version 4.1.2
       - uses: Swatinem/rust-cache@v2
-      - name: Build Release with cargo ndk
+      - name: Build Release with cargo-ndk
         env:
           CARGO_NDK_PLATFORM: 24
         run: cargo ndk -t arm64-v8a build --release --locked
