@@ -1,8 +1,16 @@
+use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 
+use sha1::{Digest, Sha1};
+
 const MC_VERSION: &str = "26.3";
+/// SHA-1 of Mojang's `server.jar` download for `MC_VERSION` (the bundler jar, which holds
+/// `server-<version>.jar`), as listed in the version package and pinned in `flake.nix`.
+const SERVER_JAR_SHA1: &str = "33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c";
+/// Written into `assets/datapack/` after extraction; names the jar the files came from.
+const MARKER_FILE: &str = ".vanilla-jar";
 const MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,22 +24,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let assets_dir = repo_root.join("assets");
     let datapack_dir = assets_dir.join("datapack");
     let mc_data_dir = datapack_dir.join("data").join("minecraft");
+    let marker_path = datapack_dir.join(MARKER_FILE);
 
     println!("cargo:rerun-if-changed={}", mc_data_dir.display());
+    println!("cargo:rerun-if-changed={}", marker_path.display());
     println!(
         "cargo:rerun-if-changed={}",
         assets_dir.join("conventional_tags").display()
     );
 
-    if mc_data_dir.is_dir() {
+    let expected_marker = marker_contents();
+    let marker = fs::read_to_string(&marker_path).ok();
+    if mc_data_dir.is_dir() && marker.as_deref() == Some(expected_marker.as_str()) {
         copy_conventional_tags(&assets_dir, &datapack_dir);
         return Ok(());
     }
 
-    println!(
-        "cargo:warning=Vanilla datapack missing at {}. Downloading Minecraft {MC_VERSION} server jar...",
-        mc_data_dir.display()
-    );
+    if mc_data_dir.is_dir() {
+        let found = marker.map_or_else(
+            || "no marker".to_string(),
+            |m| m.split_whitespace().collect::<Vec<_>>().join(" "),
+        );
+        println!(
+            "cargo:warning=Vanilla datapack at {} is not from the Minecraft {MC_VERSION} server jar ({found}). Extracting it again...",
+            datapack_dir.display()
+        );
+        fs::remove_dir_all(datapack_dir.join("data"))?;
+    } else {
+        println!(
+            "cargo:warning=Vanilla datapack missing at {}. Downloading Minecraft {MC_VERSION} server jar...",
+            mc_data_dir.display()
+        );
+    }
 
     if let Err(e) = ensure_datapack(&assets_dir, MC_VERSION) {
         return Err(format!(
@@ -44,6 +68,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn marker_contents() -> String {
+    format!("version={MC_VERSION}\nsha1={SERVER_JAR_SHA1}\n")
+}
+
+fn sha1_hex(bytes: &[u8]) -> String {
+    Sha1::digest(bytes)
+        .iter()
+        .fold(String::new(), |mut hex, b| {
+            let _ = write!(hex, "{b:02x}");
+            hex
+        })
 }
 
 fn copy_conventional_tags(assets_dir: &Path, datapack_dir: &Path) {
@@ -88,9 +125,18 @@ fn ensure_datapack(assets_dir: &Path, version: &str) -> Result<(), Box<dyn std::
         download_server_jar(version)?
     };
 
+    let actual = sha1_hex(&jar_bytes);
+    if actual != SERVER_JAR_SHA1 {
+        return Err(format!(
+            "Minecraft {version} server jar has SHA-1 {actual}, expected {SERVER_JAR_SHA1}"
+        )
+        .into());
+    }
+
     println!("cargo:warning=Extracting datapack from server jar...");
     extract_datapack(&jar_bytes, version, &datapack_dir)?;
     copy_conventional_tags(assets_dir, &datapack_dir);
+    fs::write(datapack_dir.join(MARKER_FILE), marker_contents())?;
     println!("cargo:warning=Datapack extraction complete.");
     Ok(())
 }
@@ -119,6 +165,14 @@ fn download_server_jar(version: &str) -> Result<Vec<u8>, Box<dyn std::error::Err
     let server_url = pkg["downloads"]["server"]["url"]
         .as_str()
         .ok_or("Package metadata missing server download url")?;
+    let listed_sha1 = pkg["downloads"]["server"]["sha1"].as_str();
+    if listed_sha1 != Some(SERVER_JAR_SHA1) {
+        return Err(format!(
+            "Version package lists server jar SHA-1 {}, expected {SERVER_JAR_SHA1}",
+            listed_sha1.unwrap_or("(none)")
+        )
+        .into());
+    }
 
     println!("cargo:warning=Downloading server jar from {server_url}...");
     let resp = client.get(server_url).send()?;
