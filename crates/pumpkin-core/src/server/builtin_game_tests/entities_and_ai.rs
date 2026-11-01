@@ -1,5 +1,7 @@
 use pumpkin_data::Block;
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
+use pumpkin_nbt::tag::NbtTag;
+use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 
 use super::build_stone_floor;
@@ -68,5 +70,55 @@ pub(super) async fn test_zombie_pathfinds_to_villager(
             )
             .await
     })?;
+    Ok(())
+}
+
+/// Vanilla `Zombie.addBehaviourGoals`: `NearestAttackableTargetGoal<Player>` (priority 2) picks a
+/// survival player the zombie can see.
+pub(super) async fn test_zombie_targets_survival_mock_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 3).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:iron_sword", Vector3::new(7.5, 1.0, 1.5))
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:zombie", Vector3::new(1.5, 1.0, 1.5))
+        .await?;
+
+    let floor_min = BlockPos::new(0, 1, 0);
+    let floor_max = BlockPos::new(9, 3, 3);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .assert_entity_is_holding(
+                    "minecraft:player",
+                    floor_min,
+                    floor_max,
+                    "minecraft:iron_sword",
+                )
+                .await?;
+            helper
+                .assert_entity_nbt(
+                    "minecraft:player",
+                    floor_min,
+                    floor_max,
+                    "playerGameType",
+                    &NbtTag::Int(GameMode::Survival as i32),
+                )
+                .await
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_target(
+                    "minecraft:zombie",
+                    floor_min,
+                    floor_max,
+                    Some("minecraft:player"),
+                )
+                .await
+        })
+        .then_succeed();
     Ok(())
 }

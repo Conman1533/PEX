@@ -11,9 +11,11 @@ use pumpkin_gametest::{
     TestType,
 };
 pub use pumpkin_gametest::{GameTestBatchReport, GameTestRetryOptions};
-use pumpkin_nbt::NbtCompound;
+use pumpkin_nbt::{NbtCompound, tag::NbtTag};
 use pumpkin_util::GameMode;
-use pumpkin_util::math::{position::BlockPos, vector2::Vector2};
+use pumpkin_util::math::{
+    boundingbox::BoundingBox, position::BlockPos, vector2::Vector2, vector3::Vector3,
+};
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::{chunk::ChunkHeightmapType, world::BlockFlags};
 use tokio::sync::Mutex;
@@ -24,7 +26,12 @@ use crate::{
         BlockEntity, block_entity_from_nbt, test_block::TestBlockBlockEntity,
         test_instance_block::TestInstanceBlockBlockEntity,
     },
-    entity::player::Player,
+    command::{
+        CommandSource,
+        argument_types::{argument_type::ArgumentType, nbt_path::NbtPathArgumentType},
+        string_reader::StringReader,
+    },
+    entity::{EntityBase, player::Player},
     net::{ClientPlatform, GameProfile, PlayerConfig, java::JavaClient},
     server::Server,
     world::World,
@@ -274,6 +281,37 @@ impl ServerGameTestWorld {
                 .cloned()
                 .collect::<Vec<_>>()
         });
+    }
+
+    /// Vanilla `getEntities(type, box, Entity::isAlive)`. Players live outside
+    /// `World::entities`, so they are searched too.
+    fn living_entities_in_box(
+        &self,
+        entity_name: &str,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+    ) -> Vec<Arc<dyn EntityBase>> {
+        let normalized = entity_name
+            .strip_prefix("minecraft:")
+            .unwrap_or(entity_name);
+        let box_bounds = BoundingBox::new(min, max);
+        let players = self.world.players.load();
+        let entities = self.world.entities.load();
+        entities
+            .iter()
+            .cloned()
+            .chain(
+                players
+                    .iter()
+                    .map(|player| player.clone() as Arc<dyn EntityBase>),
+            )
+            .filter(|entity| {
+                let base = entity.get_entity();
+                base.entity_type.resource_name == normalized
+                    && entity.is_alive()
+                    && base.bounding_box.load().intersects(&box_bounds)
+            })
+            .collect()
     }
 
     fn test_block_entity(&self, position: &BlockPos) -> GameTestResult<Arc<TestBlockBlockEntity>> {
@@ -707,6 +745,7 @@ impl GameTestWorld for ServerGameTestWorld {
     async fn spawn_mock_player(
         &self,
         name: &str,
+        game_mode: GameMode,
         held_item: &str,
         position: pumpkin_util::math::vector3::Vector3<f64>,
     ) -> GameTestResult<()> {
@@ -730,7 +769,7 @@ impl GameTestWorld for ServerGameTestWorld {
             profile,
             PlayerConfig::default(),
             &self.world,
-            GameMode::Creative,
+            game_mode,
         ));
         player.living_entity.entity.set_pos(position);
         player
@@ -759,21 +798,7 @@ impl GameTestWorld for ServerGameTestWorld {
         min: pumpkin_util::math::vector3::Vector3<f64>,
         max: pumpkin_util::math::vector3::Vector3<f64>,
     ) -> GameTestResult<usize> {
-        let normalized = entity_name
-            .strip_prefix("minecraft:")
-            .unwrap_or(entity_name);
-        let box_bounds = pumpkin_util::math::boundingbox::BoundingBox::new(min, max);
-        let entities = self.world.entities.load_full();
-        let count = entities
-            .iter()
-            .filter(|entity| {
-                let base = entity.get_entity();
-                !base.is_removed()
-                    && base.entity_type.resource_name == normalized
-                    && base.bounding_box.load().intersects(&box_bounds)
-            })
-            .count();
-        Ok(count)
+        Ok(self.living_entities_in_box(entity_name, min, max).len())
     }
 
     async fn item_count_in_box(
@@ -804,6 +829,73 @@ impl GameTestWorld for ServerGameTestWorld {
             }
         }
         Ok(total)
+    }
+
+    async fn mob_targets_in_box(
+        &self,
+        entity_name: &str,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+    ) -> GameTestResult<Vec<Option<String>>> {
+        Ok(self
+            .living_entities_in_box(entity_name, min, max)
+            .iter()
+            .map(|entity| {
+                let target = entity.get_mob()?.get_mob_entity().get_target()?;
+                Some(format!(
+                    "minecraft:{}",
+                    target.get_entity().entity_type.resource_name
+                ))
+            })
+            .collect())
+    }
+
+    async fn held_items_in_box(
+        &self,
+        entity_name: &str,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+    ) -> GameTestResult<Vec<[String; 2]>> {
+        Ok(self
+            .living_entities_in_box(entity_name, min, max)
+            .iter()
+            .filter_map(|entity| {
+                let living = entity.get_living_entity()?;
+                let item_id = |stack: pumpkin_data::item_stack::ItemStack| {
+                    format!("minecraft:{}", stack.get_item().registry_key)
+                };
+                Some([
+                    item_id(living.held_item(entity.as_ref())),
+                    item_id(living.off_hand_item(entity.as_ref())),
+                ])
+            })
+            .collect())
+    }
+
+    async fn entity_nbt_at_path(
+        &self,
+        entity_name: &str,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+        path: &str,
+    ) -> GameTestResult<Vec<Vec<NbtTag>>> {
+        let mut reader = StringReader::new(path);
+        let parsed = <NbtPathArgumentType as ArgumentType<CommandSource>>::parse(
+            &NbtPathArgumentType,
+            &mut reader,
+        )
+        .ok()
+        .filter(|_| !reader.can_read_char())
+        .ok_or_else(|| GameTestError::World(format!("Invalid NBT path '{path}'")))?;
+        Ok(self
+            .living_entities_in_box(entity_name, min, max)
+            .iter()
+            .map(|entity| {
+                let mut nbt = NbtCompound::new();
+                entity.write_nbt(&mut nbt);
+                parsed.get(&NbtTag::Compound(nbt)).unwrap_or_default()
+            })
+            .collect())
     }
 
     async fn container_item_count(

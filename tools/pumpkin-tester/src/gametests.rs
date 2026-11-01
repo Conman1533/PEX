@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use pumpkin_core::{
     server::{
         Server,
-        builtin_game_tests::{builtin_game_test_ids, mock_player_game_test_ids},
+        builtin_game_tests::{builtin_game_test_ids, mob_game_test_ids, mock_player_game_test_ids},
         server_test_manager::{
             GameTestBatchReport, GameTestQueueEntry, GameTestRetryOptions,
             prepare_test_run_with_reporter,
@@ -27,6 +27,23 @@ const TEST_BASE_Y: i32 = 80;
 const TEST_BASE_Z: i32 = 66;
 const CREEPER_TEST_X: i32 = -64;
 const CREEPER_TEST_Z: i32 = -64;
+/// Mob and mock-player tests sit this far apart, so the gap between two of them is wider than
+/// the zombie's 35-block follow range, the longest of the mobs they spawn.
+const MOB_TEST_GRID_SPACING: i32 = 56;
+/// Mob tests fill the cells around the creeper test, in units of `MOB_TEST_GRID_SPACING`, the
+/// nearest first. The creeper comes from a structure, so it has no persistence and despawns when
+/// the nearest mock player is more than 128 blocks away (`Mob.checkDespawn`); these cells keep
+/// every mock player within that. More cells need the creeper made persistent or moved.
+const MOB_TEST_CELLS: [(i32, i32); 8] = [
+    (0, -1),
+    (-1, 0),
+    (1, 0),
+    (0, 1),
+    (-1, -1),
+    (1, -1),
+    (-1, 1),
+    (1, 1),
+];
 const MAX_GAMETEST_TICKS: usize = 500;
 
 #[derive(Default)]
@@ -79,26 +96,7 @@ pub async fn run_gametests(
         }
     }
 
-    // Every batch runs even if an earlier one fails, so one report covers every test.
-    let first_summary_line = summary_lines.len();
-    let mut failures = Vec::new();
-    if let Err(err) = run_batch(server, &world, runner, &all_tests, summary_lines).await {
-        failures.push(err);
-    }
-    // One at a time: a mob tempted or targeted by a player 16 blocks away in the next test
-    // would walk off to it.
-    for &test_id in mock_player_game_test_ids() {
-        if let Err(err) = run_batch(server, &world, runner, &[test_id], summary_lines).await {
-            failures.push(err);
-        }
-    }
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        // Only the error is printed on failure, so it carries the passing batches' results too.
-        failures.extend(summary_lines.drain(first_summary_line..));
-        Err(failures.join("\n"))
-    }
+    run_batch(server, &world, runner, &all_tests, summary_lines).await
 }
 
 async fn run_batch(
@@ -116,7 +114,12 @@ async fn run_batch(
     ));
 
     let mut grid_slot = 0i32;
+    let mut mob_cells = MOB_TEST_CELLS.iter();
     for &test_id in test_ids {
+        let is_mob_test = mob_game_test_ids()
+            .iter()
+            .chain(mock_player_game_test_ids())
+            .any(|&id| id == test_id);
         let entry = if test_id == "pumpkin:creeper_should_run_from_cat" {
             prepare_flat_test_surroundings(world, CREEPER_TEST_X, CREEPER_TEST_Z).await;
             GameTestQueueEntry::new(
@@ -128,6 +131,20 @@ async fn run_batch(
                 GameTestRetryOptions::no_retries(),
                 report.clone(),
             )
+        } else if is_mob_test {
+            let &(column, row) = mob_cells
+                .next()
+                .ok_or_else(|| format!("No mob test cell left for GameTest '{test_id}'"))?;
+            GameTestQueueEntry::new(
+                test_id,
+                world.clone(),
+                CREEPER_TEST_X + column * MOB_TEST_GRID_SPACING,
+                CREEPER_TEST_Z + row * MOB_TEST_GRID_SPACING,
+                0,
+                GameTestRetryOptions::no_retries(),
+                report.clone(),
+            )
+            .with_y(TEST_BASE_Y)
         } else {
             let slots_per_layer = TESTS_PER_ROW * TEST_ROWS_PER_LAYER;
             let layer = grid_slot / slots_per_layer;
@@ -193,8 +210,8 @@ async fn run_batch(
     Ok(())
 }
 
-/// The builtin tests plus every test embedded from `assets/tests/datapacks`, such as
-/// the pumpkin-dual-run tests that are checked against vanilla.
+/// The builtin, mob and mock-player tests plus every test embedded from
+/// `assets/tests/datapacks`, such as the pumpkin-dual-run tests that are checked against vanilla.
 fn all_test_ids() -> Vec<&'static str> {
     let mut all_tests = vec![
         "minecraft:always_pass",
@@ -202,6 +219,8 @@ fn all_test_ids() -> Vec<&'static str> {
         "pumpkin:creeper_should_run_from_cat",
     ];
     all_tests.extend_from_slice(builtin_game_test_ids());
+    all_tests.extend_from_slice(mob_game_test_ids());
+    all_tests.extend_from_slice(mock_player_game_test_ids());
     for &test_id in pumpkin_data::test_instance::all_test_instance_names() {
         if !all_tests.contains(&test_id) {
             all_tests.push(test_id);

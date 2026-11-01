@@ -78,7 +78,6 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:iron_golem_pattern_spawns",
     "pumpkin:wither_pattern_spawns",
     "pumpkin:item_entities_merge",
-    "pumpkin:zombie_pathfinds_to_villager",
     // redstone_wire_and_power (14)
     "pumpkin:redstone_wire_attenuation_1_to_4",
     "pumpkin:redstone_wire_attenuation_5_to_8",
@@ -253,17 +252,26 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:item_entities_stack_up_to_combined_count",
 ];
 
-/// Tests that add a mock player. The tester runs each of them on its own: a player anywhere in
-/// the world makes mobs without persistence despawn more than 128 blocks away from it (like the
-/// creeper summoned by `creeper_should_run_from_cat`), and mobs follow players into other tests.
+/// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
+/// tests, so a mob doesn't target or follow anything in the next test.
+const MOB_TEST_IDS: &[&str] = &["pumpkin:zombie_pathfinds_to_villager"];
+
+/// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
+/// `MOB_TEST_IDS`, since mobs in other tests can see the player.
 const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
     "pumpkin:quoted_non_ascii_player_name_in_commands",
+    "pumpkin:zombie_targets_survival_mock_player",
 ];
 
 #[must_use]
 pub const fn builtin_game_test_ids() -> &'static [&'static str] {
     BUILTIN_TEST_IDS
+}
+
+#[must_use]
+pub const fn mob_game_test_ids() -> &'static [&'static str] {
+    MOB_TEST_IDS
 }
 
 #[must_use]
@@ -544,6 +552,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_quoted_non_ascii_player_name,
+        );
+        register_function_test(
+            "pumpkin:zombie_targets_survival_mock_player",
+            "pumpkin:empty_9x4x3",
+            100,
+            0,
+            entities_and_ai::test_zombie_targets_survival_mock_player,
         );
 
         // redstone_wire_and_power (14)
