@@ -9,14 +9,14 @@ use std::{
 use pumpkin_core::{
     entity::{
         Entity, EntityBase,
-        mob::Mob,
         passive::{pig::PigEntity, tamable::TamableAnimal, wolf::WolfEntity},
         player::Player,
     },
     plugin::{
         BoxFuture, EventHandler,
         api::events::{
-            EventPriority, player::player_interact_entity_event::PlayerInteractEntityEvent,
+            EventPriority, entity::entity_damage_by_entity::EntityDamageByEntityEvent,
+            player::player_interact_entity_event::PlayerInteractEntityEvent,
         },
     },
     server::Server,
@@ -28,6 +28,10 @@ use crate::bot::{HeadlessBot, MAX_POLL_TICKS};
 
 /// Where the bot's right-click hits the target, relative to the target's position.
 const CLICK_LOCATION: Vector3<f64> = Vector3::new(0.0, 0.5, 0.0);
+
+/// Items this close to the bot's hitbox are removed before the test, well past the 1 block it
+/// picks items up from.
+const ITEM_CLEAR_RADIUS: f64 = 4.0;
 
 /// A target this many blocks east of the bot, in this game mode, is in reach or not. The eyes are
 /// 1.62 above the feet, so a wolf 4.5 blocks away is 4.27 from them: past the 3 block
@@ -67,6 +71,26 @@ impl EventHandler<PlayerInteractEntityEvent> for InteractEvents {
     }
 }
 
+/// Counts the `EntityDamageByEntityEvent`s one entity causes. Suffocation has no damager.
+struct DamageEvents {
+    damager: i32,
+    count: AtomicUsize,
+}
+
+impl EventHandler<EntityDamageByEntityEvent> for DamageEvents {
+    fn handle_blocking<'a>(
+        &'a self,
+        _server: &'a Arc<Server>,
+        event: &'a mut EntityDamageByEntityEvent,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if event.damager_id == self.damager {
+                self.count.fetch_add(1, Ordering::Relaxed);
+            }
+        })
+    }
+}
+
 /// Vanilla `handleInteract` and `handleAttack` do nothing when the target is out of reach or its
 /// block is outside the world border. A bot used to toggle a wolf from 20 blocks away.
 pub async fn run_entity_interaction_range_tests(
@@ -82,6 +106,19 @@ pub async fn run_entity_interaction_range_tests(
     player
         .inventory()
         .set_stack_in_hand(Hand::Right, ItemStack::EMPTY.clone());
+    // Earlier tests leave items on the ground by the bot, such as the lead the allay test's unleash
+    // drops. One picked up mid-test can land in the emptied hand, and a right-click holding a lead
+    // leashes the wolf instead of toggling it.
+    let area = player
+        .get_entity()
+        .bounding_box
+        .load()
+        .expand_all(ITEM_CLEAR_RADIUS);
+    for entity in player.world().get_entities_at_box(&area) {
+        if entity.get_entity().entity_type == &EntityType::ITEM {
+            entity.get_entity().remove();
+        }
+    }
 
     let mut result = interactions(server, bot, &player)
         .await
@@ -196,13 +233,21 @@ async fn check_interact(
     Ok(())
 }
 
-/// Punches a fresh pig per case; only an accepted attack hurts it.
+/// Punches a fresh pig per case; only an accepted attack damages it. The world's seed is random, so
+/// the pig can spawn inside terrain and suffocate: count the bot's hits, not the pig's health.
 async fn attacks(
     server: &Arc<Server>,
     bot: &mut HeadlessBot,
     player: &Arc<Player>,
 ) -> Result<(), String> {
     let world = player.world();
+    let events = Arc::new(DamageEvents {
+        damager: player.entity_id(),
+        count: AtomicUsize::new(0),
+    });
+    server
+        .plugin_manager
+        .register::<EntityDamageByEntityEvent, _>(events.clone(), EventPriority::Normal, true);
     for (mode, distance, accepted) in ATTACK_CASES {
         player.set_gamemode(mode);
         let pig = PigEntity::new(Entity::new(
@@ -215,16 +260,16 @@ async fn attacks(
         if !world.spawn_entity(pig.clone()) {
             return Err("could not spawn the pig".to_string());
         }
-        let living = &pig.get_mob_entity().living_entity;
-        let health = living.health.load();
+        let hits_before = events.count.load(Ordering::Relaxed);
         bot.attack_entity(pig.get_entity().entity_id).await?;
         let synced = sync(server, bot, player).await;
-        let hurt = living.health.load() < health;
+        let hits = events.count.load(Ordering::Relaxed) - hits_before;
         pig.get_entity().remove();
         synced?;
-        if hurt != accepted {
+        if hits != usize::from(accepted) {
             return Err(format!(
-                "{mode:?} attack on a pig {distance} blocks away hurt it: {hurt}, expected {accepted}"
+                "{mode:?} attack on a pig {distance} blocks away damaged it {hits} times, expected {}",
+                usize::from(accepted)
             ));
         }
     }
