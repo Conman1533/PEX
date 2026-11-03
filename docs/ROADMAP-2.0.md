@@ -183,6 +183,16 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 - Needs decision: none
 - Done when: this section has a PEX row and a Paper row, each from at least 2 runs of 60 minutes, with run-to-run spread on tick P95 under 10% (more runs if not).
 - Needed by: G1-44, G5-05, G5-15, G6-10, G9-01, G9-03, G9-14, G10-09, G10-10, and the Proofs of Goals 1, 5, 9 and 10.
+- Result (2026-11-03): branch `docs/bench-baseline` at `d1cedafd8` adds `docs/benchmarks/baseline-26.3.md`, which has every run, the setup and how each number is made. Seven 60-minute runs in CT 117, one server at a time on CPUs 22, 23, 24 and 27 (four physical cores) with `MemoryMax=8G`, 8 bots on the fleet's seeded schedule, view and simulation distance 10, a fresh copy of `/srv/pex/bins/base-world-262` per run, and the other two build slots free throughout. Reports: `/srv/pex/scratch/bench-baseline/<run>/report.html` in CT 117. Each value is the mean over the runs, except peak memory (the highest); P95 spread is the highest run P95 minus the lowest, over the mean.
+
+  | Server | Runs | Tick P50 | Tick P95 | Tick P99 | CPU (cores) | Peak memory | Sent per bot-hour | P95 spread |
+  | :-- | --: | --: | --: | --: | --: | --: | --: | --: |
+  | PEX `300621c3e` | 3 | 12.05 ms | 22.95 ms | 39.54 ms | 0.40 | 361 MiB | 72.4 MiB | 5.7% |
+  | Paper 26.3-169 (runs 1, 3, 4) | 3 | 11.64 ms | 16.31 ms | 23.68 ms | 0.38 | 1,721 MiB | 52.4 MiB | 1.6% |
+  | Paper 26.3-169 (all 4 runs) | 4 | 11.45 ms | 15.88 ms | 22.90 ms | 0.38 | 1,721 MiB | 52.1 MiB | 11.8% |
+
+  - Open for Neon: the three-run Paper row leaves out Paper run 2, whose P95 (14.57 ms) was about 10% below the other three, while the machine was as quiet as in the other runs. With it the spread is 11.8%, over this piece's 10% bar. The likely cause is the explorer bot: `survbot.py` picks its heading with an unseeded `random`, so it walks into different, newly generated terrain each run (in Paper run 2 it went 644 blocks toward +Z, where no other run went). Either keep the three-run row, or seed the explorer in mc-gameplay-bench and rerun Paper.
+  - What stands out, for Goal 9: PEX's P95 is about 23 ms in every 100-tick window against Paper's 16.3 ms while the P50s match, so the tail is steady rather than a few spikes. PEX has ticks of 100 to 300 ms exactly every 6,000 ticks (the 5-minute autosave and player save), with almost none of that time inside the world tick. PEX sends about 1.4 times Paper's bytes per bot-hour, and peaks at about a fifth of Paper's memory. Network bytes vary between runs (PEX 409 to 494 MiB, Paper 309 to 346 MiB), for the same explorer reason.
 
 #### G0-04 Gameplay benchmark runs in CT 117
 
@@ -2638,7 +2648,7 @@ Start from: where the extra traffic comes from (packets/bytes per scenario vs Pa
 
 Paths under `crates/pumpkin-core/src/` are written `core/`, as in the repo map. Vanilla paths are under `/srv/pex/vanilla-26.3/src/net/minecraft/`.
 
-**Results on record.** None is for `300621c3e`, and no raw data survives: `find / -xdev -name samples.csv` in CT 117 finds nothing.
+**Results on record.** G0-03's baseline (2026-11-03) is the first for `300621c3e`, and its raw samples, bot logs and load logs are kept in CT 117: see G0-03's Result. For the older results below no raw data survives (`find / -xdev -name samples.csv` in CT 117 found nothing before G0-03).
 
 - `/srv/pex/gameplay-bench/README.md`, "Results (2026-10-14, one Pelican node, 4 CPU cores and 8 GB per server)", 8 bots for 2 hours. Network sent: PEX `bbc4cd07e` 959 MiB, Paper 26.3 #186 642 MiB (1.49x); in the second table PEX 923 MiB, Paper 614 MiB (1.50x). Average MSPT: PEX 8.4 and 7.1 ms, Paper 15.9 and 13.7 ms. Neither table has a P95.
 - `/srv/pex/pr-drafts/comments-on-alpha-fix-report.md` (2026-10-15), item 15: PEX 1.0 (`74d1a6ad4`) against Paper 26.3, 2 h at 8 bots then 1 h at 24. Network sent 2,831 MiB against 1,959 MiB (1.45x); mean tick 6.3 against 12.4 ms (8 bots) and 12.0 against 20.5 ms (24 bots). Its list of new issues says PEX's 95th-percentile tick is about level with Paper's, with no number. The full report it links (claude.ai artifact `J6pegsAznB8U14Y72SmSpe`) could not be opened from this session. The same item says the 24-bot phase was lighter on PEX, because the harness could not build stations in unloaded chunks there.
