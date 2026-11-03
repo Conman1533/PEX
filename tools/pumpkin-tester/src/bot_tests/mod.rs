@@ -4,6 +4,7 @@ mod commands_and_gamemode;
 mod entity_interaction_range;
 mod login_and_movement;
 mod loot_tables;
+mod mob_head_rot_interval;
 mod player_actions;
 mod sheep_shearing;
 mod status_ping;
@@ -51,6 +52,8 @@ pub async fn run_bot_tests(
 
     entity_interaction_range::run_entity_interaction_range_tests(server, &mut bot1, summary_lines)
         .await?;
+
+    mob_head_rot_interval::run_mob_head_rot_interval_test(server, &mut bot1, summary_lines).await?;
 
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)
         .await?;

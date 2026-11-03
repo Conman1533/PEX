@@ -19,11 +19,12 @@ use pumpkin_protocol::{
             config::{CFinishConfig, CKnownPacks},
             login::CLoginSuccess,
             play::{
-                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CKeepAlive,
-                CLogin, COpenScreen, CPingResponse, CPlayerPosition, CRemoveEntities,
-                CSetContainerContent, CSetContainerSlot, CSetCursorItem, CSetPlayerInventory,
-                CSetSelectedSlot, CSpawnEntity, CUnloadChunk, CUpdateEntityPos,
-                CUpdateEntityPosRot,
+                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync,
+                CEntityVelocity, CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse,
+                CPlayerPosition, CRemoveEntities, CSetContainerContent, CSetContainerSlot,
+                CSetCursorItem, CSetEntityMetadata, CSetPlayerInventory, CSetSelectedSlot,
+                CSpawnEntity, CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot,
+                CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -86,6 +87,8 @@ pub struct HeadlessBot {
     pub chunks: HashSet<(i32, i32)>,
     /// While set, teleports are kept here instead of being confirmed, like a client that lags.
     pub held_teleports: Option<Vec<CPlayerPosition>>,
+    /// How many of each [`is_counted_entity_packet`] packet arrived, by entity id and packet id.
+    pub entity_packets: HashMap<(i32, i32), usize>,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -158,7 +161,31 @@ fn read_entity_delta(payload: &mut &[u8]) -> Result<Vector3<f64>, ReadingError> 
     ) * (1.0 / ENTITY_DELTA_SCALE))
 }
 
+/// Spawn, movement, rotation, head rotation, metadata and velocity: the packets the entity
+/// tracker sends. Each starts with the entity id.
+fn is_counted_entity_packet(id: i32) -> bool {
+    [
+        CSpawnEntity::to_id(CURRENT_MC_VERSION),
+        CUpdateEntityPos::to_id(CURRENT_MC_VERSION),
+        CUpdateEntityPosRot::to_id(CURRENT_MC_VERSION),
+        CUpdateEntityRot::to_id(CURRENT_MC_VERSION),
+        CEntityPositionSync::to_id(CURRENT_MC_VERSION),
+        CHeadRot::to_id(CURRENT_MC_VERSION),
+        CSetEntityMetadata::to_id(CURRENT_MC_VERSION),
+        CEntityVelocity::to_id(CURRENT_MC_VERSION),
+    ]
+    .contains(&id)
+}
+
 impl HeadlessBot {
+    /// How many `P` packets about `entity_id` arrived since [`Self::entity_packets`] was cleared.
+    pub fn entity_packet_count<P: MultiVersionJavaPacket>(&self, entity_id: i32) -> usize {
+        self.entity_packets
+            .get(&(entity_id, P::to_id(CURRENT_MC_VERSION)))
+            .copied()
+            .unwrap_or(0)
+    }
+
     pub async fn send_packet<P: ClientPacket + MultiVersionJavaPacket>(
         &mut self,
         packet: &P,
@@ -196,6 +223,7 @@ impl HeadlessBot {
             item_entities: HashMap::new(),
             chunks: HashSet::new(),
             held_teleports: None,
+            entity_packets: HashMap::new(),
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -376,6 +404,11 @@ impl HeadlessBot {
     }
 
     fn handle_entity_packet(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), ReadingError> {
+        if is_counted_entity_packet(id) {
+            let mut peek = *payload;
+            let entity_id = peek.get_var_int()?.0;
+            *self.entity_packets.entry((entity_id, id)).or_default() += 1;
+        }
         if id == CSpawnEntity::to_id(CURRENT_MC_VERSION) {
             // Only the fields up to the position: `LpVector3d::read` misreads a zero velocity.
             let entity_id = payload.get_var_int()?.0;
