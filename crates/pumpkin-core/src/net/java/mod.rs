@@ -384,7 +384,7 @@ impl JavaClient {
         }
 
         let (tx, rx) = oneshot::channel();
-        rayon::spawn(move || {
+        pumpkin_world::background_pool().spawn(move || {
             let mut serialized = Vec::with_capacity(valid_chunks.len());
             for chunk in valid_chunks {
                 let mut buf = Vec::with_capacity(32 * 1024);

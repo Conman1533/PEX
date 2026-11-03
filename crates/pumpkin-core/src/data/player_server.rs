@@ -87,7 +87,7 @@ impl ServerPlayerData {
             }
 
             let storage = self.storage.clone();
-            rayon::spawn(move || {
+            pumpkin_world::background_pool().spawn(move || {
                 for (uuid, nbt) in snapshots {
                     if let Err(e) = storage.save_player_data(&uuid, nbt) {
                         error!("Failed to save player data for {uuid}: {e}");

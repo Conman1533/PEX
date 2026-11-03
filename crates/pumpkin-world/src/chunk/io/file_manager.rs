@@ -151,21 +151,23 @@ impl<R: RegionFile, D: SingleChunkDataSerializer> RegionEntry<R, D> {
         }
         let positions: Vec<_> = pending_chunks.iter().map(|(pos, _)| *pos).collect();
         run_blocking(move || {
-            pending_chunks
-                .into_par_iter()
-                .map(|(pos, chunk)| {
-                    // Loading consumes entity and block-entity NBT; keep the retry source intact.
-                    let loaded = R::serialize_chunk(&*chunk)
-                        .map_err(|err| {
-                            ChunkReadingError::IoError(std::io::Error::other(err.to_string()))
-                        })
-                        .and_then(|nbt| D::from_bytes(&nbt, pos));
-                    match loaded {
-                        Ok(chunk) => LoadedData::Loaded(Arc::new(chunk)),
-                        Err(err) => LoadedData::Error((pos, err)),
-                    }
-                })
-                .collect()
+            crate::background_pool().install(|| {
+                pending_chunks
+                    .into_par_iter()
+                    .map(|(pos, chunk)| {
+                        // Loading consumes entity and block-entity NBT; keep the retry source intact.
+                        let loaded = R::serialize_chunk(&*chunk)
+                            .map_err(|err| {
+                                ChunkReadingError::IoError(std::io::Error::other(err.to_string()))
+                            })
+                            .and_then(|nbt| D::from_bytes(&nbt, pos));
+                        match loaded {
+                            Ok(chunk) => LoadedData::Loaded(Arc::new(chunk)),
+                            Err(err) => LoadedData::Error((pos, err)),
+                        }
+                    })
+                    .collect()
+            })
         })
         .await
         .unwrap_or_else(|err| {
@@ -204,20 +206,23 @@ impl<R: RegionFile, D: SingleChunkDataSerializer> RegionEntry<R, D> {
         let retry = chunks.clone();
         let entry = self.clone();
         let result = run_blocking(move || {
-            let encoded: Vec<_> = chunks
-                .into_par_iter()
-                .map(|(index, chunk)| {
-                    // A mutation during serialization must mark the chunk dirty again.
-                    chunk.mark_dirty(false);
-                    let nbt = R::serialize_chunk(&*chunk)
-                        .map_err(|err| ChunkWritingError::ChunkSerializingError(err.to_string()))?;
-                    let hash = xxh64(&nbt, 0);
-                    if entry.hashes[index].load(Ordering::Relaxed) == hash {
-                        return Ok(None);
-                    }
-                    R::encode_chunk(nbt, &config).map(|chunk| Some((index, hash, chunk)))
-                })
-                .collect();
+            let encoded: Vec<_> = crate::background_pool().install(|| {
+                chunks
+                    .into_par_iter()
+                    .map(|(index, chunk)| {
+                        // A mutation during serialization must mark the chunk dirty again.
+                        chunk.mark_dirty(false);
+                        let nbt = R::serialize_chunk(&*chunk).map_err(|err| {
+                            ChunkWritingError::ChunkSerializingError(err.to_string())
+                        })?;
+                        let hash = xxh64(&nbt, 0);
+                        if entry.hashes[index].load(Ordering::Relaxed) == hash {
+                            return Ok(None);
+                        }
+                        R::encode_chunk(nbt, &config).map(|chunk| Some((index, hash, chunk)))
+                    })
+                    .collect()
+            });
             let Some(state) = entry.state() else {
                 return Ok(());
             };
@@ -440,7 +445,7 @@ where
                 drop(save);
 
                 let (tx, mut rx) = mpsc::channel(raw_chunks.len().max(1));
-                rayon::spawn(move || {
+                crate::background_pool().spawn(move || {
                     raw_chunks.into_par_iter().for_each(|(pos, nbt)| {
                         let loaded = match nbt {
                             Ok(None) => LoadedData::Missing(pos),
@@ -682,6 +687,72 @@ mod tests {
         let reopened = AnvilRegion::open(&entities.join("r.0.0.mca"), Vector2::new(0, 0)).unwrap();
         let nbt = AnvilRegion::decode_chunk(reopened.read_chunk(0).unwrap().unwrap()).unwrap();
         let chunk = ChunkEntityData::from_bytes(&nbt, Vector2::new(0, 0)).unwrap();
+        assert_eq!(*chunk.data.lock().unwrap(), vec![entity]);
+    }
+
+    /// Holds every worker of the global Rayon pool, the tick's pool, until dropped.
+    struct BusyTickPool(Arc<(Mutex<bool>, std::sync::Condvar)>);
+
+    impl BusyTickPool {
+        fn occupy() -> Self {
+            let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+            let started = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let workers = rayon::current_num_threads();
+            for _ in 0..workers {
+                let gate = gate.clone();
+                let started = started.clone();
+                rayon::spawn(move || {
+                    started.fetch_add(1, Ordering::SeqCst);
+                    let (open, wake) = &*gate;
+                    let mut open = open.lock().unwrap();
+                    while !*open {
+                        open = wake.wait(open).unwrap();
+                    }
+                });
+            }
+            while started.load(Ordering::SeqCst) < workers {
+                std::thread::yield_now();
+            }
+            Self(gate)
+        }
+    }
+
+    impl Drop for BusyTickPool {
+        fn drop(&mut self) {
+            *self.0.0.lock().unwrap() = true;
+            self.0.1.notify_all();
+        }
+    }
+
+    #[tokio::test]
+    async fn region_io_does_not_queue_behind_the_tick_pool() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let folder = folder(dir.path());
+        let manager =
+            ChunkFileManager::<AnvilRegion, ChunkEntityData>::new(AnvilChunkConfig::default());
+        let chunk = Arc::new(entity_chunk(0));
+        let mut entity = pumpkin_nbt::compound::NbtCompound::new();
+        entity.put_string("id", "minecraft:item".into());
+        chunk.data.lock().unwrap().push(entity.clone());
+
+        let busy = BusyTickPool::occupy();
+        let loaded = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            manager
+                .save_chunks(&folder, vec![(Vector2::new(0, 0), chunk)])
+                .await
+                .unwrap();
+            let (tx, mut rx) = mpsc::channel(1);
+            manager
+                .fetch_chunks(&folder, &[Vector2::new(0, 0)], tx)
+                .await;
+            rx.recv().await
+        })
+        .await;
+        drop(busy);
+
+        let Ok(Some(LoadedData::Loaded(chunk))) = loaded else {
+            panic!("region write and read waited for the tick's pool");
+        };
         assert_eq!(*chunk.data.lock().unwrap(), vec![entity]);
     }
 

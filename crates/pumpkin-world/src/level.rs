@@ -344,7 +344,7 @@ impl Level {
 
     pub fn spawn_entity_generation(self: &Arc<Self>, pos: Vector2<i32>) {
         let level = self.clone();
-        rayon::spawn(move || {
+        crate::background_pool().spawn(move || {
             let arc_chunk = Arc::new(ChunkEntityData {
                 x: pos.x,
                 z: pos.y,
