@@ -9,6 +9,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 pub mod arrow;
+pub mod dragon_fireball;
 pub mod egg;
 pub mod ender_pearl;
 pub mod evoker_fangs;
@@ -298,6 +299,14 @@ impl ThrownItemEntity {
 
         // Projectiles should pass through lingering clouds
         if *other_ent.entity_type == EntityType::AREA_EFFECT_CLOUD {
+            return true;
+        }
+
+        // Vanilla `AbstractHurtingProjectile.canHitEntity` skips no-physics entities, so the
+        // dragon never hits itself with its fireball.
+        if *self_ent.entity_type == EntityType::DRAGON_FIREBALL
+            && other_ent.no_physics.load(Ordering::Relaxed)
+        {
             return true;
         }
 
