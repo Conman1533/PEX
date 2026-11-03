@@ -1126,6 +1126,93 @@ impl Player {
         self.client.spawn_task(task)
     }
 
+    /// Sends the next chunk batch whose packets are ready, then pairs the entities in it.
+    ///
+    /// Java chunk packets come from the world's shared cache; chunks without a current packet
+    /// stay pending and are encoded on the background pool for a later tick. Returns how many
+    /// chunks the client holds.
+    fn tick_chunk_sending(&self) -> usize {
+        let world = self.world();
+        let player_chunk = self.get_entity().chunk_pos.load();
+        let epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
+        let version = match self.client.as_ref() {
+            ClientPlatform::Java(java_client) => java_client.version.load(),
+            ClientPlatform::Bedrock(_) => JavaMinecraftVersion::V_1_20_2,
+        };
+
+        let view_distance = self.watched_section.load().view_distance;
+        let prepared_batch = self.chunk_sender.try_lock().ok().and_then(|mut sender| {
+            sender.prepare_batch(&world.level, player_chunk, view_distance, epoch, version)
+        });
+
+        let total_sent_chunks = prepared_batch.map_or_else(
+            || {
+                self.chunk_sender
+                    .try_lock()
+                    .map_or(0, |s| s.sent_chunks_count())
+            },
+            |batch| match self.client.as_ref() {
+                ClientPlatform::Java(_) => {
+                    let encoded = world.chunk_packets.ready(&batch.chunks);
+                    let current_epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
+                    let (sent, total_sent_chunks) = self.chunk_sender.try_lock().map_or_else(
+                        |_| (Vec::new(), 0),
+                        |mut sender| {
+                            let sent =
+                                sender.commit_batch(&batch, &encoded, &self.client, current_epoch);
+                            (sent, sender.sent_chunks_count())
+                        },
+                    );
+                    self.pair_entities_in_chunks(&world, &sent);
+                    total_sent_chunks
+                }
+                ClientPlatform::Bedrock(_) => {
+                    let current_epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
+                    let (chunks, total_sent_chunks) = self.chunk_sender.try_lock().map_or_else(
+                        |_| (Vec::new(), 0),
+                        |mut sender| {
+                            let chunks = sender.commit_bedrock_batch(&batch, current_epoch);
+                            let total_sent_chunks = sender.sent_chunks_count();
+                            (chunks, total_sent_chunks)
+                        },
+                    );
+                    if !chunks.is_empty() {
+                        let client = self.client.clone();
+                        let world = world.clone();
+                        let uuid = self.gameprofile.id;
+                        self.spawn_task(async move {
+                            let (deliveries, chunks): (Vec<_>, Vec<_>) = chunks
+                                .into_iter()
+                                .map(|c| ((c.position, c.delivery_token), c.chunk))
+                                .unzip();
+                            client.send_chunks(&chunks).await;
+                            if let Some(player) = world.get_player_by_uuid(uuid) {
+                                // dispatcher sets a reset or a re-enqueue since then holds a newer token.
+                                let delivered = player
+                                    .chunk_sender
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                    .mark_delivered(&deliveries);
+                                player.pair_entities_in_chunks(&world, &delivered);
+                            }
+                        });
+                    }
+                    total_sent_chunks
+                }
+            },
+        );
+
+        if let ClientPlatform::Java(_) = self.client.as_ref() {
+            let upcoming = self.chunk_sender.try_lock().map_or_else(
+                |_| Vec::new(),
+                |sender| sender.upcoming_chunks(&world.level, player_chunk, view_distance),
+            );
+            world.chunk_packets.request(upcoming);
+        }
+
+        total_sent_chunks
+    }
+
     /// Pairs tracked entities in chunks that were just queued for a player.
     fn pair_entities_in_chunks(
         &self,
@@ -2882,77 +2969,7 @@ impl Player {
             }
         }
 
-        let world = self.world();
-        let player_chunk = self.get_entity().chunk_pos.load();
-        let epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
-        let version = match self.client.as_ref() {
-            ClientPlatform::Java(java_client) => java_client.version.load(),
-            ClientPlatform::Bedrock(_) => JavaMinecraftVersion::V_1_20_2,
-        };
-
-        let view_distance = self.watched_section.load().view_distance;
-        let prepared_batch = self.chunk_sender.try_lock().ok().and_then(|mut sender| {
-            sender.prepare_batch(&world.level, player_chunk, view_distance, epoch, version)
-        });
-
-        let total_sent_chunks = prepared_batch.map_or_else(
-            || {
-                self.chunk_sender
-                    .try_lock()
-                    .map_or(0, |s| s.sent_chunks_count())
-            },
-            |batch| match self.client.as_ref() {
-                ClientPlatform::Java(_) => {
-                    let mut per_player_cache = rustc_hash::FxHashMap::default();
-                    let encoded =
-                        crate::net::ChunkSender::encode_batch(&batch, &mut per_player_cache);
-                    let current_epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
-                    let (sent, total_sent_chunks) = self.chunk_sender.try_lock().map_or_else(
-                        |_| (Vec::new(), 0),
-                        |mut sender| {
-                            let sent =
-                                sender.commit_batch(&batch, &encoded, &self.client, current_epoch);
-                            (sent, sender.sent_chunks_count())
-                        },
-                    );
-                    self.pair_entities_in_chunks(&world, &sent);
-                    total_sent_chunks
-                }
-                ClientPlatform::Bedrock(_) => {
-                    let current_epoch = self.chunk_send_epoch.load(Ordering::Relaxed);
-                    let (chunks, total_sent_chunks) = self.chunk_sender.try_lock().map_or_else(
-                        |_| (Vec::new(), 0),
-                        |mut sender| {
-                            let chunks = sender.commit_bedrock_batch(&batch, current_epoch);
-                            let total_sent_chunks = sender.sent_chunks_count();
-                            (chunks, total_sent_chunks)
-                        },
-                    );
-                    if !chunks.is_empty() {
-                        let client = self.client.clone();
-                        let world = world.clone();
-                        let uuid = self.gameprofile.id;
-                        self.spawn_task(async move {
-                            let (deliveries, chunks): (Vec<_>, Vec<_>) = chunks
-                                .into_iter()
-                                .map(|c| ((c.position, c.delivery_token), c.chunk))
-                                .unzip();
-                            client.send_chunks(&chunks).await;
-                            if let Some(player) = world.get_player_by_uuid(uuid) {
-                                // dispatcher sets a reset or a re-enqueue since then holds a newer token.
-                                let delivered = player
-                                    .chunk_sender
-                                    .lock()
-                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                    .mark_delivered(&deliveries);
-                                player.pair_entities_in_chunks(&world, &delivered);
-                            }
-                        });
-                    }
-                    total_sent_chunks
-                }
-            },
-        );
+        let total_sent_chunks = self.tick_chunk_sending();
 
         if let ClientPlatform::Bedrock(bedrock_client) = self.client.as_ref()
             && !self.bedrock_spawned.load(Ordering::Relaxed)
@@ -8347,7 +8364,7 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use super::{Player, bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
-    use crate::world::{BlockFlags, World, test_player, test_world};
+    use crate::world::{BlockFlags, World, test_player, test_player_with_client, test_world};
     use pumpkin_data::{Block, attributes::Attributes, effect::StatusEffect, potion::Effect};
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
@@ -8375,6 +8392,76 @@ mod tests {
             .on_ground
             .store(true, Ordering::Relaxed);
         player
+    }
+
+    #[tokio::test]
+    async fn chunk_batch_reaches_the_client_before_its_entities() {
+        use crate::entity::EntityBase;
+        use crate::net::chunk_sender::PreparedChunk;
+        use crate::net::java::JavaClient;
+        use crate::net::java::chunk_data::CChunkData;
+        use pumpkin_data::packet::CURRENT_MC_VERSION;
+        use pumpkin_protocol::MultiVersionJavaPacket;
+        use pumpkin_protocol::java::client::play::{
+            CChunkBatchEnd, CChunkBatchStart, CSpawnEntity,
+        };
+
+        let world = test_world();
+        let position = Vector2::new(0, 0);
+        let chunk = ChunkData::empty_sync(position.x, position.y);
+        world.level.loaded_chunks.insert(position, chunk.clone());
+
+        let mut client = JavaClient::new_for_test(crate::net::GameProfile {
+            id: Uuid::new_v4(),
+            name: "Watcher".to_string(),
+            properties: arc_swap::ArcSwap::from_pointee(Vec::new()),
+            profile_actions: None,
+        });
+        client.version.store(CURRENT_MC_VERSION);
+        let mut queue = client.take_outgoing_queue().expect("outgoing queue");
+        let watcher = test_player_with_client(&world, Vector3::new(0.5, 64.0, 0.5), client);
+        // What `chunker::update_position` sets on join; the initial view holds no chunks.
+        watcher
+            .watched_section
+            .store(pumpkin_world::cylindrical_chunk_iterator::Cylindrical::new(
+                position,
+                std::num::NonZero::new(2).unwrap(),
+            ));
+        let other = test_player(&world, Vector3::new(4.5, 64.0, 4.5));
+        world
+            .entity_tracker
+            .add_entity(&(other as Arc<dyn EntityBase>), &world);
+        watcher.chunk_sender.lock().unwrap().enqueue_chunk(position);
+
+        // Nothing is encoded yet: the tick queues the encoding and sends nothing.
+        watcher.tick_chunk_sending();
+        assert!(JavaClient::queued_packet_ids(&mut queue).is_empty());
+
+        let candidate = [PreparedChunk { position, chunk }];
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while world.chunk_packets.ready(&candidate).is_empty() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "chunk was never encoded"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+
+        watcher.tick_chunk_sending();
+        let ids = JavaClient::queued_packet_ids(&mut queue);
+        assert_eq!(
+            ids[..3],
+            [
+                CChunkBatchStart::to_id(CURRENT_MC_VERSION),
+                CChunkData::to_id(CURRENT_MC_VERSION),
+                CChunkBatchEnd::to_id(CURRENT_MC_VERSION),
+            ],
+            "sent {ids:?}"
+        );
+        assert!(
+            ids[3..].contains(&CSpawnEntity::to_id(CURRENT_MC_VERSION)),
+            "entities in the chunk were not paired after it: {ids:?}"
+        );
     }
 
     fn assert_speed(player: &Player, expected: f32) {

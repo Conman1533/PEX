@@ -287,6 +287,7 @@ impl Chunk {
                 status: ChunkStatus::Empty,
                 blending_data: None,
                 dirty: AtomicBool::new(false),
+                change_count: std::sync::atomic::AtomicU64::new(0),
                 inhabited_time: AtomicU64::new(0),
                 custom_data: Mutex::new(NbtCompound::new()),
             })),
@@ -335,6 +336,7 @@ impl Chunk {
             pending_block_entities: Mutex::new(pending_block_entities),
             status: proto_chunk.stage.into(),
             blending_data: proto_chunk.blending_data,
+            change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(0),
             custom_data: Mutex::new(NbtCompound::new()),
         };

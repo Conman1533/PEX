@@ -67,6 +67,9 @@ impl Dirtiable for ChunkData {
     #[inline]
     fn mark_dirty(&self, flag: bool) {
         self.dirty.store(flag, Ordering::Relaxed);
+        if flag {
+            self.mark_changed();
+        }
     }
 
     #[inline]
@@ -487,6 +490,7 @@ impl ChunkData {
             light_populated: AtomicBool::new(light_correct),
             status,
             blending_data: None,
+            change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(root_tag.get_long("InhabitedTime").unwrap_or(0) as u64),
             custom_data: std::sync::Mutex::new(custom_data),
         })
@@ -1145,6 +1149,7 @@ impl ChunkData {
             light_populated: AtomicBool::new(light_correct),
             status,
             blending_data: None,
+            change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(inhabited_time),
             custom_data: std::sync::Mutex::new(custom_data),
         })

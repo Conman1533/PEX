@@ -80,11 +80,26 @@ pub struct ChunkData {
     pub status: ChunkStatus,
     pub blending_data: Option<crate::generation::blender::blending_data::BlendingData>,
     pub dirty: AtomicBool,
+    /// Counts edits to what the chunk packet carries (blocks, biomes, heightmaps, block
+    /// entities, light), so an encoded packet is reused only while it is current.
+    pub change_count: AtomicU64,
     pub inhabited_time: AtomicU64,
     pub custom_data: std::sync::Mutex<NbtCompound>,
 }
 
 impl ChunkData {
+    /// Call after the edit, so an encoder that read the old count encodes again.
+    pub fn mark_changed(&self) {
+        self.change_count
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Read before encoding: a later edit makes the encoded copy stale.
+    #[must_use]
+    pub fn change_count(&self) -> u64 {
+        self.change_count.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     /// Positions of every block whose state has a block entity type. Sections whose palette has
     /// no such state are skipped.
     #[must_use]
@@ -687,6 +702,7 @@ impl ChunkData {
             status: ChunkStatus::Full,
             blending_data: None,
             dirty: std::sync::atomic::AtomicBool::new(false),
+            change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: std::sync::atomic::AtomicU64::new(0),
             custom_data: std::sync::Mutex::new(NbtCompound::new()),
         }
@@ -736,6 +752,7 @@ impl ChunkData {
         if old != block_state_id {
             let state = BlockState::from_id(block_state_id);
             self.update_heightmap(relative_x, relative_y, relative_z, state);
+            self.mark_changed();
         }
         Some(old)
     }
@@ -846,6 +863,9 @@ impl ChunkData {
             for (x, z) in changed_columns {
                 self.populate_heightmaps(&mut heightmap, highest_non_empty_subchunk, x, z);
             }
+        }
+        if modified {
+            self.mark_changed();
         }
 
         results
