@@ -1398,6 +1398,15 @@ impl LightContainer {
         }
     }
 
+    /// Whether every position holds `level`.
+    #[must_use]
+    pub fn is_uniform(&self, level: u8) -> bool {
+        match self {
+            Self::Empty(value) => *value == level,
+            Self::Full(data) => data.iter().all(|&byte| byte == level << 4 | level),
+        }
+    }
+
     #[must_use]
     pub fn new_filled(default: u8) -> Self {
         assert!(default <= 15, "Default value must be between 0 and 15");
