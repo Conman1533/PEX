@@ -280,6 +280,8 @@ pub struct World {
     pub custom_block_entity_data: DashMap<BlockPos, NbtCompound>,
     /// Entity tracker responsible for tracking entity visibility and sending delta/status packets to watchers.
     pub entity_tracker: entity_tracker::EntityTracker,
+    /// Java chunk data packets, shared by every player in this world.
+    pub chunk_packets: Arc<crate::net::chunk_sender::ChunkPacketCache>,
 }
 
 #[derive(Clone, Copy)]
@@ -428,6 +430,7 @@ impl World {
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
             entity_tracker: entity_tracker::EntityTracker::new(),
+            chunk_packets: Arc::default(),
         }
     }
 
@@ -2060,6 +2063,8 @@ impl World {
             // Auto-save logic
             if level_time.world_age % 100 == 0 {
                 self.level.should_unload.store(true, Relaxed);
+                let chunk_packets = self.chunk_packets.clone();
+                pumpkin_world::background_pool().spawn(move || chunk_packets.sweep());
                 let cleaned_chunks = self.level.clean_memory();
                 if !cleaned_chunks.is_empty() {
                     let world_clone = self.clone();
@@ -7801,9 +7806,21 @@ pub(crate) fn test_player(world: &Arc<World>, pos: Vector3<f64>) -> Arc<Player> 
         properties: ArcSwap::from_pointee(Vec::new()),
         profile_actions: None,
     };
-    let client = Arc::new(crate::net::ClientPlatform::Java(
-        crate::net::java::JavaClient::new_for_test(profile.clone()),
-    ));
+    test_player_with_client(
+        world,
+        pos,
+        crate::net::java::JavaClient::new_for_test(profile),
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn test_player_with_client(
+    world: &Arc<World>,
+    pos: Vector3<f64>,
+    client: crate::net::java::JavaClient,
+) -> Arc<Player> {
+    let profile = client.gameprofile.clone();
+    let client = Arc::new(crate::net::ClientPlatform::Java(client));
     let player = Arc::new(Player::new(
         client,
         profile,

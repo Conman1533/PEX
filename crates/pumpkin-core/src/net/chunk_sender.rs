@@ -1,8 +1,11 @@
 use bytes::Bytes;
+use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::num::NonZero;
 use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant};
 
 use crate::net::java::chunk_data::CChunkData;
 use pumpkin_data::packet::CURRENT_MC_VERSION;
@@ -22,6 +25,9 @@ const MIN_CHUNKS_PER_TICK: f32 = 0.1;
 const MAX_CHUNKS_PER_TICK: f32 = 500.0;
 const INITIAL_CHUNKS_PER_TICK: f32 = 9.0;
 const MAX_CONCURRENT_BATCHES: u16 = 10;
+/// How long an encoded chunk packet stays shared after it was encoded. Players in one area
+/// ask for the same chunks within a few ticks of each other.
+const ENCODED_CHUNK_TTL: Duration = Duration::from_secs(5);
 
 pub struct PreparedChunk {
     pub position: Vector2<i32>,
@@ -47,16 +53,134 @@ pub struct EncodedChunk {
     pub position: Vector2<i32>,
     pub payload: Bytes,
     pub chunk_ref: Weak<ChunkData>,
+    /// The chunk's `change_count` read before encoding.
+    pub change_count: u64,
+    encoded_at: Instant,
 }
 
 impl EncodedChunk {
+    /// Encodes the chunk data packet, id included.
+    #[must_use]
+    pub fn encode(candidate: &PreparedChunk) -> Option<Self> {
+        let chunk = &candidate.chunk;
+        let change_count = chunk.change_count();
+        let mut chunk_buf = Vec::with_capacity(32 * 1024);
+        chunk_buf
+            .write_var_int(&VarInt(CChunkData::to_id(CURRENT_MC_VERSION)))
+            .ok()?;
+        CChunkData(chunk)
+            .write_packet_data(&mut chunk_buf, &CURRENT_MC_VERSION)
+            .ok()?;
+        Some(Self {
+            position: candidate.position,
+            payload: Bytes::from(chunk_buf),
+            chunk_ref: Arc::downgrade(chunk),
+            change_count,
+            encoded_at: Instant::now(),
+        })
+    }
+
     #[must_use]
     pub fn is_fresh_for(&self, candidate: &PreparedChunk) -> bool {
         let Some(held) = self.chunk_ref.upgrade() else {
             return false;
         };
 
-        self.position == candidate.position && Arc::ptr_eq(&held, &candidate.chunk)
+        self.position == candidate.position
+            && Arc::ptr_eq(&held, &candidate.chunk)
+            && held.change_count() == self.change_count
+    }
+}
+
+/// Chunk data packets of one world, encoded once per change on the background pool and
+/// shared by every player, so the tick only queues payloads that are ready.
+#[derive(Default)]
+pub struct ChunkPacketCache {
+    encoded: DashMap<Vector2<i32>, EncodedChunk>,
+    /// Positions with an encode job queued, by the change count they were requested at.
+    encoding: DashMap<Vector2<i32>, u64>,
+}
+
+impl ChunkPacketCache {
+    /// The current packet of each candidate that has one, in candidate order.
+    #[must_use]
+    pub fn ready(&self, candidates: &[PreparedChunk]) -> Vec<EncodedChunk> {
+        candidates
+            .iter()
+            .filter_map(|candidate| {
+                self.encoded
+                    .get(&candidate.position)
+                    .filter(|encoded| encoded.is_fresh_for(candidate))
+                    .map(|encoded| encoded.value().clone())
+            })
+            .collect()
+    }
+
+    /// Encodes, on the background pool, every candidate without a current packet that
+    /// isn't already queued.
+    pub fn request(self: &Arc<Self>, candidates: Vec<PreparedChunk>) {
+        let missing: Vec<(PreparedChunk, u64)> = candidates
+            .into_iter()
+            .filter_map(|candidate| {
+                if self
+                    .encoded
+                    .get(&candidate.position)
+                    .is_some_and(|encoded| encoded.is_fresh_for(&candidate))
+                {
+                    return None;
+                }
+                let change_count = candidate.chunk.change_count();
+                match self.encoding.entry(candidate.position) {
+                    Entry::Occupied(queued) if *queued.get() == change_count => None,
+                    Entry::Occupied(mut queued) => {
+                        queued.insert(change_count);
+                        Some((candidate, change_count))
+                    }
+                    Entry::Vacant(slot) => {
+                        slot.insert(change_count);
+                        Some((candidate, change_count))
+                    }
+                }
+            })
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+
+        let cache = self.clone();
+        pumpkin_world::background_pool().spawn(move || {
+            missing.into_par_iter().for_each(|(candidate, requested)| {
+                if let Some(encoded) = EncodedChunk::encode(&candidate) {
+                    cache.insert(encoded);
+                }
+                cache
+                    .encoding
+                    .remove_if(&candidate.position, |_, queued| *queued == requested);
+            });
+        });
+    }
+
+    fn insert(&self, encoded: EncodedChunk) {
+        match self.encoded.entry(encoded.position) {
+            // Jobs can finish out of order: keep the newer encoding of the same chunk.
+            Entry::Occupied(mut held)
+                if !Weak::ptr_eq(&held.get().chunk_ref, &encoded.chunk_ref)
+                    || held.get().change_count <= encoded.change_count =>
+            {
+                held.insert(encoded);
+            }
+            Entry::Occupied(_) => {}
+            Entry::Vacant(slot) => {
+                slot.insert(encoded);
+            }
+        }
+    }
+
+    /// Drops packets of unloaded chunks and packets older than [`ENCODED_CHUNK_TTL`].
+    pub fn sweep(&self) {
+        self.encoded.retain(|_, encoded| {
+            encoded.chunk_ref.strong_count() > 0 && encoded.encoded_at.elapsed() < ENCODED_CHUNK_TTL
+        });
     }
 }
 
@@ -176,8 +300,8 @@ impl ChunkSender {
         level: &Level,
         center: Vector2<i32>,
         view_distance: NonZero<u8>,
+        quota_limit: usize,
     ) -> Vec<PreparedChunk> {
-        let quota_limit = self.send_quota.floor() as usize;
         let mut ready = Vec::with_capacity(quota_limit);
 
         // If pending_chunks is small, sorting it directly avoids scanning offsets.
@@ -259,7 +383,12 @@ impl ChunkSender {
             return None;
         }
 
-        let candidates = self.collect_sorted_candidates(level, player_chunk, view_distance);
+        let candidates = self.collect_sorted_candidates(
+            level,
+            player_chunk,
+            view_distance,
+            self.send_quota.floor() as usize,
+        );
         if candidates.is_empty() {
             return None;
         }
@@ -271,53 +400,19 @@ impl ChunkSender {
         })
     }
 
-    pub fn encode_batch(
-        batch: &PreparedBatch,
-        cache: &mut FxHashMap<Vector2<i32>, EncodedChunk>,
-    ) -> Vec<EncodedChunk> {
-        let cached_map = &*cache;
-
-        let encoded_results: Vec<Option<EncodedChunk>> = batch
-            .chunks
-            .par_iter()
-            .map(|candidate| {
-                let pos = candidate.position;
-                if let Some(cached) = cached_map.get(&pos)
-                    && cached.is_fresh_for(candidate)
-                {
-                    return Some(cached.clone());
-                }
-
-                let chunk = &candidate.chunk;
-                let mut chunk_buf = Vec::with_capacity(32 * 1024);
-                if chunk_buf
-                    .write_var_int(&VarInt(CChunkData::to_id(CURRENT_MC_VERSION)))
-                    .is_err()
-                {
-                    return None;
-                }
-                if CChunkData(chunk)
-                    .write_packet_data(&mut chunk_buf, &CURRENT_MC_VERSION)
-                    .is_err()
-                {
-                    return None;
-                }
-
-                Some(EncodedChunk {
-                    position: pos,
-                    payload: Bytes::from(chunk_buf),
-                    chunk_ref: Arc::downgrade(chunk),
-                })
-            })
-            .collect();
-
-        let mut output = Vec::with_capacity(encoded_results.len());
-        for encoded in encoded_results.into_iter().flatten() {
-            cache.insert(encoded.position, encoded.clone());
-            output.push(encoded);
+    /// The pending chunks the next batch takes, nearest first, to encode ahead of it.
+    #[must_use]
+    pub fn upcoming_chunks(
+        &self,
+        level: &Level,
+        player_chunk: Vector2<i32>,
+        view_distance: NonZero<u8>,
+    ) -> Vec<PreparedChunk> {
+        if self.pending_chunks.is_empty() {
+            return Vec::new();
         }
-
-        output
+        let next_batch = self.desired_rate.max(1.0).ceil() as usize;
+        self.collect_sorted_candidates(level, player_chunk, view_distance, next_batch)
     }
 
     pub fn commit_batch(
@@ -547,6 +642,35 @@ mod tests {
         let delivered = sender.mark_delivered(&[(position, second[0].delivery_token)]);
         assert_eq!(delivered, vec![position]);
         assert!(sender.is_chunk_ready(&position));
+    }
+
+    #[test]
+    fn shared_packet_is_reused_only_until_the_chunk_changes() {
+        let position = Vector2::new(2, -1);
+        let chunk = ChunkData::empty_sync(position.x, position.y);
+        let candidates = [PreparedChunk {
+            position,
+            chunk: chunk.clone(),
+        }];
+        let cache = ChunkPacketCache::default();
+        let before = EncodedChunk::encode(&candidates[0]).unwrap();
+        cache.insert(before.clone());
+        assert_eq!(cache.ready(&candidates).len(), 1);
+
+        chunk.set_block_absolute_y(1, 64, 1, pumpkin_data::Block::STONE.default_state.id);
+        assert!(
+            cache.ready(&candidates).is_empty(),
+            "a block edit left the old packet current"
+        );
+
+        let after = EncodedChunk::encode(&candidates[0]).unwrap();
+        assert_ne!(after.payload, before.payload);
+        cache.insert(after.clone());
+        // A job that read the older count and finishes last doesn't replace the newer packet.
+        cache.insert(before);
+        let ready = cache.ready(&candidates);
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].payload, after.payload);
     }
 
     fn batch_for(position: Vector2<i32>, epoch_snapshot: u32) -> PreparedBatch {
