@@ -567,6 +567,7 @@ impl DynamicLightEngine {
                     light_level,
                 );
             };
+            chunk.mark_changed();
             // Mark chunk as dirty so lighting changes are saved to disk
             if !chunk.is_dirty() {
                 chunk.mark_dirty(true);
@@ -626,6 +627,7 @@ impl DynamicLightEngine {
                     light_level,
                 );
             };
+            chunk.mark_changed();
             // Mark chunk as dirty so lighting changes are saved to disk
             if !chunk.is_dirty() {
                 chunk.mark_dirty(true);
