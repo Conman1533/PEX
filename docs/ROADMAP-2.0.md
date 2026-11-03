@@ -591,6 +591,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/ender-dragon-phases`
 - Needs decision: none.
 - Done when: unit tests `dragon_phase_round_trips_through_nbt` and `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass.
+- Result (2026-11-03): branch `fix/ender-dragon-phases` at `db3c10c9f`, pushed, PR draft in CT 117 `/srv/pex/pr-drafts/fix-ender-dragon-phases.md`. Vanilla phase ids, `SittingScanning`, `DATA_PHASE` synced and saved, a `DRAGON_FIREBALL` entity with its breath cloud, crystal breaks reported to the dragon. Tests `dragon_phase_round_trips_through_nbt`, `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass; local CI clean except the known scaffolding GameTest. Not done: the cloud has no owner (kill credit goes to the cloud). The play test in the End is Neon's.
 - Needed by: G6-19 and G6-20 (an End fight that plays like vanilla).
 
 #### G1-28 Hoglin
@@ -801,6 +802,7 @@ Start from: what native-plugins/ exposes and how plugins load; everything WASM v
 - Branch: fix/plugin-event-priority
 - Needs decision: none
 - Done when: a new unit test in `plugin/mod.rs` (for example `handlers_run_in_priority_order`) registers blocking and non-blocking handlers at all five priorities out of order, through both paths, and sees them called Lowest to Highest with blocking first; a testbot run (PORTING_GUIDE §8.4) with PEXGuard and PEXProtect loaded shows a non-member's block break inside a region refused, and `/co` inspect on that block still shows its history.
+- Result (2026-11-03): branch `fix/plugin-event-priority` at `34e032fc4`, pushed, PR draft `/srv/pex/pr-drafts/fix-plugin-event-priority.md`. `handlers_run_in_priority_order` fails on alpha and passes on the branch; the testbot run with PEXGuard and PEXProtect refused Bob's break in a region and `/co inspect` still showed the history. GameTest stopped at the `bot:entity_interaction_range` flake twice, so the GameTests after it didn't run on this branch.
 
 #### G2-02 Automated native plugin load test
 
@@ -2296,6 +2298,14 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Needs decision: none
 - Done when: vanilla shows that state with no new error line, and PEX's reload of vanilla's save compares equal to PEX's own (G7-02).
 
+#### G7-32 Missing sky light above the stored layers loads as full
+
+- Scope: in: `ChunkData::from_bytes` loads a section without `SkyLight` above the chunk's highest stored sky light layer as `LightContainer::Empty(15)`, as vanilla's `SkyLightSectionStorage.getLightValue` reads it, instead of `Empty(0)`. Vanilla and Paper leave `SkyLight` out of fully lit sections at the top, and since such chunks say `isLightOn` PEX doesn't relight them, so today those sections hold sky light 0: they go to clients as empty layers and PEX's own spawn and light checks read 0 above the ground. Sections below the highest layer keep `Empty(0)`. Out: relighting, the chunk packet (G9-07).
+- Depends on: none
+- Branch: fix/missing-sky-light-load
+- Needs decision: none
+- Done when: a unit test loads a vanilla-saved chunk from the base world (`/srv/pex/bins/base-world-262`, which has 117 such chunks in `r.0.0`) and reads sky light 15 in its top sections and the vanilla values below; the chunk packet for it carries no empty sky layers above the terrain. Found in G9-07 (2026-11-03): at 229 of 599 positions in the G9-01 count run alpha marked those sky layers empty where Paper sent none.
+
 ### Proof
 
 - G7-03 passes in CI (G0-01) on G7-01's world with no diff outside the ignore list, and every ignore entry has a reason.
@@ -2725,6 +2735,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/player-move-tracking
 - Needs decision: none
 - Done when: a new tester bot test `bot:player_move_broadcast_interval` has bot A send one position packet per server tick for 40 ticks while bot B watches, and B receives 19 to 21 movement packets for A and no `CHeadRot` while A's yaw is fixed (40 and 40 before the fix). A G9-01 rerun shows movement packets per bot-hour within 10% of Paper's. A human checks with two real clients that other players still move smoothly.
+- Result (2026-11-03): branch `fix/player-move-tracking` at `7fa4deb50`, stacked on G9-05, pushed, PR draft `/srv/pex/pr-drafts/fix-player-move-tracking.md`. `bot:player_move_broadcast_interval`: 21 movement packets and no `CHeadRot` in 40 ticks with the fix, 40 and 40 with alpha's server code. Local CI clean except the known scaffolding GameTest (two clippy lints fixed after the run, clippy rerun clean). Not measured: movement packets per bot-hour against Paper (needs G9-01). The two-client check is Neon's.
 
 #### G9-05 Mob head rotation on the update interval
 
@@ -2733,6 +2744,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/head-rot-interval
 - Needs decision: none
 - Done when: a new tester bot test `bot:mob_head_rot_interval` keeps a pig with AI next to a bot for 300 ticks and the bot receives at most 100 `CHeadRot` for it, plus one per `CSetEntityMetadata` or `CEntityVelocity` it also received (the test fails before the fix), and a G9-01 rerun shows `rotate_head` bytes per bot-hour within 10% of Paper's.
+- Result (2026-11-03): branch `fix/head-rot-interval` at `dec4f1d12`, pushed, PR draft `/srv/pex/pr-drafts/fix-head-rot-interval.md`. `bot:mob_head_rot_interval` (pig turning without walking, 301 ticks): 86 `CHeadRot` with 3 velocity packets on the branch; 147 with 18 velocity packets on alpha, over its limit of 119. Not measured: `rotate_head` bytes per bot-hour against Paper (needs G9-01).
 
 #### G9-06 Held chunks are not sent again on republish
 
@@ -2741,6 +2753,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/held-chunk-resend
 - Needs decision: none
 - Done when: a regression test in `crates/pumpkin-world/src/chunk_system/tests.rs` or the tester reproduces the republish and fails before the fix, and a G9-01 rerun counts the same re-sent chunks per bot-hour on PEX as on Paper.
+- Result (2026-11-03): no code. Measured on alpha `300621c3e` with 8 seeded bots for 12.8 minutes, each bot logging chunk packets for positions it already held: 2 of 5,194 chunk packets (0.04%), both chunk 0,0 during login within 0.1 s of the first chunk. That is as close to none as matters for traffic, so the piece meets its drop condition; Neon decides. Note in CT 117 `/srv/pex/scratch/held-chunk-resend/RESULT.md`.
 
 #### G9-07 Chunk packet size matches Paper per chunk
 
@@ -2749,6 +2762,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/chunk-packet-size
 - Needs decision: none
 - Done when: the median decompressed bytes per position are within 5% of Paper's, or the PR explains the rest; the new bench shows encode time no worse; a human checks lighting on those chunks with a real client.
+- Result (2026-11-03): branch `perf/chunk-packet-size`. The fully lit sky arrays at the top of a column are left out of both light encoders (the chunk packet writes its light in `v1_18.rs`, not through `light.rs`). On a region PEX saved, the chunk packet bench gives 45,109,884 bytes against alpha's 63,579,378 (-29.0%, median 44,307 against 64,830 per chunk), with encode time no worse (85.5 and 78.7 ms against 87.8 and 88.4 ms). Applied to alpha's G9-01 packets the rule gives a median of 0.946 of Paper's bytes per position. Waiting on a human lighting check. Found G7-32.
 
 #### G9-08 Default network compression level
 
@@ -2765,6 +2779,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/chunk-encode-off-tick
 - Needs decision: none
 - Done when: a unit test shows that an edit to a cached chunk changes its encoded payload; a G9-03 rerun shows the players phase's share of slow ticks at least halved, with mean tick and P95 no worse over 2 runs; a human joins with a real client and sees no missing chunks or entities.
+- Result (2026-11-03): branch `perf/chunk-encode-off-tick`, stacked on G9-10. Chunk packets are encoded once per chunk change on the background pool and shared between players; the unit test is in. Not met: the players phase's share of slow time stays at 3.2% (alpha 3.3%), because in the G9-03 workload that phase is 0.5 ms a tick to begin with. Mean tick and P95 no worse than G9-10 alone (14.00 against 14.05 ms, 23.55 against 23.61 ms). Neon decides whether the shared cache is worth keeping without a tick gain.
 
 #### G9-10 Background work off the tick's Rayon pool
 
@@ -2773,6 +2788,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/tick-rayon-pool
 - Needs decision: none
 - Done when: a G9-03 rerun shows the matching cause under 10% of slow ticks, mean tick and P95 are no worse over 2 runs, and the `chunk_io` bench in `pumpkin-world` moves less than 5%.
+- Result (2026-11-03): branch `perf/tick-rayon-pool`. Autosave ticks no longer wait for region writes in the global pool: 0.03 to 1.35 ms queued against 177 to 241 ms on alpha, max tick 69 to 86 ms against 213 to 257 ms. Region reads overlap 3.5 to 4.1% of slow ticks (alpha 4.5%). Mean tick and P95 within noise in the one clean pair (14.05 against 13.96 ms, 23.61 against 23.33 ms); the other B run was contended by CI builds. The `chunk_io` bench doesn't use either pool; its single runs moved up to 24% (faster), which the branch can't cause.
 
 #### G9-11 Gameplay benchmark in the repository
 
