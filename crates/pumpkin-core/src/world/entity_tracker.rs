@@ -185,12 +185,17 @@ impl TrackedEntity {
         self.seen_by.read().contains(uuid)
     }
 
-    /// Vanilla `ServerEntity.sendChanges`. Non-player entities only.
+    /// Vanilla `ServerEntity.sendChanges`. For a player only the Java watchers are served here:
+    /// Bedrock watchers get the player's movement from its own movement packets, and the
+    /// player's velocity goes out through `flush_velocity`, which also reaches its own client.
     pub fn send_changes(&self, world: &World) {
         let entity = self.entity.get_entity();
-        self.send_bedrock_move(entity, world);
+        let is_player = self.entity.get_player().is_some();
+        if !is_player {
+            self.send_bedrock_move(entity, world);
+        }
         let tick = self.tick_count.fetch_add(1, Relaxed);
-        let needs_sync = entity.velocity_dirty.swap(false, Ordering::SeqCst);
+        let needs_sync = !is_player && entity.velocity_dirty.swap(false, Ordering::SeqCst);
         if tick.is_multiple_of(self.update_interval.max(1))
             || needs_sync
             || entity.synched_data.is_dirty()
@@ -300,6 +305,13 @@ impl TrackedEntity {
         let diff = (velocity - entity.last_sent_velocity.load()).length_squared();
         if diff > 1.0e-7 || (diff > 0.0 && velocity.length_squared() == 0.0) {
             entity.last_sent_velocity.store(velocity);
+            if self.entity.get_player().is_some() {
+                self.send_to_tracking_players(
+                    &CEntityVelocity::new(VarInt(self.entity_id), velocity),
+                    world,
+                );
+                return;
+            }
             self.send_to_tracking_players_editioned(
                 &CEntityVelocity::new(VarInt(self.entity_id), velocity),
                 &CSetActorMotion {
@@ -1042,11 +1054,7 @@ impl EntityTracker {
 
         tracked.par_iter().for_each(|tracked| {
             let _guard = handle.enter();
-            if tracked.entity.get_player().is_none() {
-                tracked.send_changes(world);
-            } else if tracked.entity.get_entity().synched_data.is_dirty() {
-                tracked.entity.get_entity().send_dirty_entity_data();
-            }
+            tracked.send_changes(world);
         });
     }
 }

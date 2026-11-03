@@ -14,9 +14,9 @@ impl JavaClient {
         pos.clamp(-2.0E7, 2.0E7)
     }
 
-    /// Returns whether syncing the position was needed
+    /// Returns whether syncing the position was needed. Bedrock watchers only: Java watchers get
+    /// a player's movement from the entity tracker (`TrackedEntity::send_changes`).
     fn sync_position(
-        player: &Arc<Player>,
         world: &World,
         entity: &Entity,
         pos: Vector3<f64>,
@@ -24,23 +24,13 @@ impl JavaClient {
         on_ground: bool,
     ) -> bool {
         let delta = Vector3::new(pos.x - last_pos.x, pos.y - last_pos.y, pos.z - last_pos.z);
-        let entity_id = player.entity_id();
 
         // Teleport when more than 8 blocks (-8..=7.999755859375)
         if delta.length_squared() < 64.0 {
             return false;
         }
-        // Sync position with tracking players only.
-        world.send_to_tracking_players_editioned(
+        world.send_to_tracking_players_bedrock(
             entity,
-            &CEntityPositionSync::new(
-                entity_id.into(),
-                pos,
-                Vector3::new(0.0, 0.0, 0.0),
-                entity.yaw.load(),
-                entity.pitch.load(),
-                on_ground,
-            ),
             &bedrock_move_player_packet(entity, pos, CMovePlayer::MODE_TELEPORT, on_ground),
         );
         // Bedrock ignores head yaw on teleport -> follow-up normal move re-asserts.
@@ -51,7 +41,6 @@ impl JavaClient {
         true
     }
 
-    #[expect(clippy::too_many_lines)]
     pub fn handle_position(
         &self,
         player: &Arc<Player>,
@@ -130,19 +119,10 @@ impl JavaClient {
                 let world = &player.world();
 
                 // TODO: Warn when player moves to quickly
-                if !Self::sync_position(player, world, entity, pos, last_pos, packet.collision & FLAG_ON_GROUND != 0) {
-                    // Send the new position to tracking players only.
-                    world.send_to_tracking_players_editioned(
+                if !Self::sync_position(world, entity, pos, last_pos, packet.collision & FLAG_ON_GROUND != 0) {
+                    // Bedrock watchers only; the entity tracker sends Java watchers the move.
+                    world.send_to_tracking_players_bedrock(
                         entity,
-                        &CUpdateEntityPos::new(
-                            player.entity_id().into(),
-                            Vector3::new(
-                                pos.x.mul_add(4096.0, -(last_pos.x * 4096.0)) as i16,
-                                pos.y.mul_add(4096.0, -(last_pos.y * 4096.0)) as i16,
-                                pos.z.mul_add(4096.0, -(last_pos.z * 4096.0)) as i16,
-                            ),
-                            packet.collision & FLAG_ON_GROUND != 0,
-                        ),
                         &bedrock_move_player_packet(
                             entity,
                             pos,
@@ -277,36 +257,19 @@ impl JavaClient {
 
                 entity.set_rotation(wrap_degrees(packet.yaw) % 360.0, wrap_degrees(packet.pitch));
 
-                let entity_id = entity.entity_id;
-
-                // TODO: use `pumpkin_util::math::pack_degrees`.
-                let yaw = (entity.yaw.load() * 256.0 / 360.0).rem_euclid(256.0);
-                let pitch = (entity.pitch.load() * 256.0 / 360.0).rem_euclid(256.0);
                 let world = entity.world.load_full();
 
                 // TODO: Warn when player moves to quickly
                 if !Self::sync_position(
-                    player,
                     &world,
                     entity,
                     pos,
                     last_pos,
                     (packet.collision & FLAG_ON_GROUND) != 0,
                 ) {
-                    // Send the new position to tracking players only.
-                    world.send_to_tracking_players_editioned(
+                    // Bedrock watchers only; the entity tracker sends Java watchers the move.
+                    world.send_to_tracking_players_bedrock(
                         entity,
-                        &CUpdateEntityPosRot::new(
-                            entity_id.into(),
-                            Vector3::new(
-                                pos.x.mul_add(4096.0, -(last_pos.x * 4096.0)) as i16,
-                                pos.y.mul_add(4096.0, -(last_pos.y * 4096.0)) as i16,
-                                pos.z.mul_add(4096.0, -(last_pos.z * 4096.0)) as i16,
-                            ),
-                            yaw as u8,
-                            pitch as u8,
-                            (packet.collision & FLAG_ON_GROUND) != 0,
-                        ),
                         &bedrock_move_player_packet(
                             entity,
                             pos,
@@ -316,7 +279,6 @@ impl JavaClient {
                     );
                 }
 
-                world.send_to_tracking_players(entity, &CHeadRot::new(entity_id.into(), yaw as u8));
                 // Only process fall damage if player is alive
                 if !player.abilities.lock().unwrap_or_else(std::sync::PoisonError::into_inner).flying
                     && player.living_entity.health.load() > 0.0

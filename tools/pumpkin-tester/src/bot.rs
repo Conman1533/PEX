@@ -19,12 +19,11 @@ use pumpkin_protocol::{
             config::{CFinishConfig, CKnownPacks},
             login::CLoginSuccess,
             play::{
-                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync,
-                CEntityVelocity, CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse,
-                CPlayerPosition, CRemoveEntities, CSetContainerContent, CSetContainerSlot,
-                CSetCursorItem, CSetEntityMetadata, CSetPlayerInventory, CSetSelectedSlot,
-                CSpawnEntity, CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot,
-                CUpdateEntityRot,
+                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CEntityVelocity,
+                CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse, CPlayerPosition,
+                CRemoveEntities, CSetContainerContent, CSetContainerSlot, CSetCursorItem,
+                CSetEntityMetadata, CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity,
+                CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -500,6 +499,23 @@ impl HeadlessBot {
         self.position = position;
         self.send_packet(&SPlayerPosition {
             position,
+            collision: u8::from(on_ground),
+        })
+        .await
+    }
+
+    pub async fn move_and_look(
+        &mut self,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+        on_ground: bool,
+    ) -> Result<(), String> {
+        self.position = position;
+        self.send_packet(&SPlayerPositionRotation {
+            position,
+            yaw,
+            pitch,
             collision: u8::from(on_ground),
         })
         .await

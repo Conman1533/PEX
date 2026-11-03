@@ -6,6 +6,7 @@ mod login_and_movement;
 mod loot_tables;
 mod mob_head_rot_interval;
 mod player_actions;
+mod player_move_broadcast_interval;
 mod sheep_shearing;
 mod status_ping;
 mod teleport_confirm;
@@ -24,8 +25,17 @@ pub async fn run_bot_tests(
 ) -> Result<(), String> {
     status_ping::run_bot_status_ping_test(addr, summary_lines).await?;
 
-    let (mut bot1, bot2) =
+    let (mut bot1, mut bot2) =
         login_and_movement::run_login_and_movement_tests(server, addr, summary_lines).await?;
+
+    // Both bots are still at spawn here, so the second one tracks the first.
+    player_move_broadcast_interval::run_player_move_broadcast_interval_test(
+        server,
+        &mut bot1,
+        &mut bot2,
+        summary_lines,
+    )
+    .await?;
 
     teleport_confirm::run_teleport_confirm_tests(server, &mut bot1, summary_lines).await?;
 
