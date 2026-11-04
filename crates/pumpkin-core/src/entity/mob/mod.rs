@@ -764,12 +764,17 @@ impl MobEntity {
         state.is_side_solid(BlockDirection::Up)
     }
 
-    pub fn check_monster_spawn_rules(world: &World, pos: &BlockPos, is_thundering: bool) -> bool {
+    pub fn check_monster_spawn_rules(
+        world: &World,
+        pos: &BlockPos,
+        is_thundering: bool,
+        ignores_light: bool,
+    ) -> bool {
         if world.level_info.load().difficulty == Difficulty::Peaceful {
             return false;
         }
 
-        if !Self::is_dark_enough_to_spawn(world, pos, is_thundering) {
+        if !ignores_light && !Self::is_dark_enough_to_spawn(world, pos, is_thundering) {
             return false;
         }
 
@@ -788,8 +793,10 @@ impl MobEntity {
         world: &World,
         pos: &BlockPos,
         is_thundering: bool,
+        from_spawner: bool,
     ) -> bool {
-        Self::check_monster_spawn_rules(world, pos, is_thundering) && world.can_see_sky(pos)
+        Self::check_monster_spawn_rules(world, pos, is_thundering, from_spawner)
+            && (from_spawner || world.can_see_sky(pos))
     }
 
     pub fn check_animal_spawn_rules(world: &World, pos: &BlockPos) -> bool {

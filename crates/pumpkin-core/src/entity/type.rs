@@ -361,12 +361,24 @@ pub fn from_type(
     mob
 }
 
-#[expect(clippy::too_many_lines)]
 pub fn check_spawn_rules(
     entity_type: &'static EntityType,
     world: &World,
     pos: &BlockPos,
     is_thundering: bool,
+) -> bool {
+    check_spawn_rules_for(entity_type, world, pos, is_thundering, false)
+}
+
+/// Vanilla `SpawnPlacements.checkSpawnRules`. `from_spawner` is the spawner reason, for which
+/// monsters ignore light (`EntitySpawnReason.ignoresLightRequirements`) and the sky checks.
+#[expect(clippy::too_many_lines)]
+pub fn check_spawn_rules_for(
+    entity_type: &'static EntityType,
+    world: &World,
+    pos: &BlockPos,
+    is_thundering: bool,
+    from_spawner: bool,
 ) -> bool {
     let id = entity_type.id;
 
@@ -392,7 +404,7 @@ pub fn check_spawn_rules(
         || id == EntityType::VINDICATOR.id
         || id == EntityType::WARDEN.id
     {
-        return mob::MobEntity::check_monster_spawn_rules(world, pos, is_thundering);
+        return mob::MobEntity::check_monster_spawn_rules(world, pos, is_thundering, from_spawner);
     }
 
     // Any-light monsters (Blaze, Breeze, Zoglin)
@@ -403,13 +415,21 @@ pub fn check_spawn_rules(
     // Surface monsters (Husk, Parched, Camel Husk)
     if id == EntityType::HUSK.id || id == EntityType::PARCHED.id || id == EntityType::CAMEL_HUSK.id
     {
-        return mob::MobEntity::check_surface_monsters_spawn_rules(world, pos, is_thundering);
+        return mob::MobEntity::check_surface_monsters_spawn_rules(
+            world,
+            pos,
+            is_thundering,
+            from_spawner,
+        );
     }
 
     // Stray
     if id == EntityType::STRAY.id {
-        if !mob::MobEntity::check_monster_spawn_rules(world, pos, is_thundering) {
+        if !mob::MobEntity::check_monster_spawn_rules(world, pos, is_thundering, from_spawner) {
             return false;
+        }
+        if from_spawner {
+            return true;
         }
         let mut check_sky_pos = *pos;
         while world.get_block(&check_sky_pos) == &pumpkin_data::Block::POWDER_SNOW {
