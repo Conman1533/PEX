@@ -46,6 +46,7 @@ impl ClientPacket for CChunkData<'_> {
 mod tests {
     use super::*;
     use pumpkin_world::chunk::ChunkData;
+    use pumpkin_world::chunk::format::LightContainer;
 
     #[test]
     fn chunk_data_all_versions() {
@@ -105,5 +106,42 @@ mod tests {
                 "Serialized buffer must not be empty for version {version:?}"
             );
         }
+    }
+
+    /// The chunk packet's light block is the light data `CLightUpdate` would send, so the light
+    /// tests in `light.rs` hold for chunk packets too.
+    #[test]
+    fn chunk_packet_light_matches_light_update_data() {
+        let chunk = ChunkData::empty(0, 0);
+        let mut light = chunk.light_engine.lock().unwrap();
+        let sections = light.sky_light.len();
+        light.sky_light = (0..sections)
+            .map(|index| match index {
+                0..3 => LightContainer::Empty(0),
+                3 | 5 => LightContainer::Full(vec![0x9C; LightContainer::ARRAY_SIZE].into()),
+                _ => LightContainer::Empty(15),
+            })
+            .collect();
+        drop(light);
+        let version = JavaMinecraftVersion::V_26_3;
+        let mut packet = Vec::new();
+        CChunkData(&chunk)
+            .write_packet_data(&mut packet, &version)
+            .unwrap();
+        let mut light = Vec::new();
+        light::light_data_from_chunk(&chunk, version)
+            .unwrap()
+            .write(&mut light, &version)
+            .unwrap();
+
+        assert!(
+            light.len() < 6 * LightContainer::ARRAY_SIZE,
+            "the fully lit top sections were sent: {} bytes of light",
+            light.len()
+        );
+        assert!(
+            packet.ends_with(&light),
+            "the chunk packet's light differs from the light update's"
+        );
     }
 }
