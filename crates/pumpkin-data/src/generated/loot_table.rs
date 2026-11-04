@@ -42886,56 +42886,84 @@ pub static CHESTS_ABANDONED_CAMP_SECRET_CHEST: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:healing"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:leaping"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:night_vision"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:swiftness"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
             ],
             rolls: LootNumberProvider::Constant(2f64),
@@ -43173,7 +43201,13 @@ pub static CHESTS_ABANDONED_MINESHAFT: LootTable = LootTable {
                     weight: 10i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:iron_pickaxe"),
@@ -43643,7 +43677,13 @@ pub static CHESTS_ANCIENT_CITY: LootTable = LootTable {
                     weight: 3i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("minecraft:swift_sneak"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:sculk"),
@@ -43793,24 +43833,37 @@ pub static CHESTS_ANCIENT_CITY: LootTable = LootTable {
                     weight: 5i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Uniform {
-                                min: 1f64,
-                                max: 3f64,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Uniform {
+                                    min: 1f64,
+                                    max: 3f64,
+                                },
+                                add: false,
                             },
-                            add: false,
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:strong_regeneration"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:book"),
                     weight: 5i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:book"),
@@ -44049,7 +44102,13 @@ pub static CHESTS_BASTION_BRIDGE: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:spectral_arrow"),
@@ -44169,70 +44228,115 @@ pub static CHESTS_BASTION_BRIDGE: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_helmet"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_leggings"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_boots"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_axe"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
             ],
             rolls: LootNumberProvider::Uniform {
@@ -44395,21 +44499,36 @@ pub static CHESTS_BASTION_HOGLIN_STABLE: LootTable = LootTable {
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_pickaxe"),
                     weight: 12i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:netherite_scrap"),
@@ -44528,14 +44647,23 @@ pub static CHESTS_BASTION_HOGLIN_STABLE: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:crying_obsidian"),
@@ -44823,14 +44951,23 @@ pub static CHESTS_BASTION_OTHER: LootTable = LootTable {
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_shovel"),
@@ -44851,7 +44988,13 @@ pub static CHESTS_BASTION_OTHER: LootTable = LootTable {
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:ancient_debris"),
@@ -44962,7 +45105,13 @@ pub static CHESTS_BASTION_OTHER: LootTable = LootTable {
                     weight: 10i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("minecraft:soul_speed"),
+                        condition: LootCondition::None,
+                    }],
                 },
             ],
             rolls: LootNumberProvider::Constant(1f64),
@@ -44977,14 +45126,23 @@ pub static CHESTS_BASTION_OTHER: LootTable = LootTable {
                     weight: 2i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:iron_block"),
@@ -45005,28 +45163,46 @@ pub static CHESTS_BASTION_OTHER: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("minecraft:soul_speed"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_axe"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::EnchantRandomly {
+                                only_compatible: true,
+                            },
+                            enchantment: Some("#minecraft:on_random_loot"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:gold_block"),
@@ -45473,42 +45649,78 @@ pub static CHESTS_BASTION_TREASURE: LootTable = LootTable {
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_spear"),
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_chestplate"),
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_helmet"),
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_leggings"),
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_boots"),
                     weight: 6i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:diamond_sword"),
@@ -46018,7 +46230,11 @@ pub static CHESTS_BURIED_TREASURE: LootTable = LootTable {
             },
             bonus_rolls: LootNumberProvider::Constant(0f64),
             condition: LootCondition::None,
-            functions: &[],
+            functions: &[LootFunction {
+                kind: LootFunctionKind::SetPotion,
+                enchantment: Some("minecraft:water_breathing"),
+                condition: LootCondition::None,
+            }],
         },
         LootPool {
             entries: &[
@@ -46267,7 +46483,13 @@ pub static CHESTS_DESERT_PYRAMID: LootTable = LootTable {
                     weight: 20i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_apple"),
@@ -47417,7 +47639,13 @@ pub static CHESTS_PILLAGER_OUTPOST: LootTable = LootTable {
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
             ],
             rolls: LootNumberProvider::Uniform {
@@ -47574,63 +47802,117 @@ pub static CHESTS_RUINED_PORTAL: LootTable = LootTable {
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_axe"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_hoe"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_shovel"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_pickaxe"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_boots"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_chestplate"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_helmet"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:golden_leggings"),
                     weight: 15i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:glistering_melon_slice"),
@@ -48197,28 +48479,52 @@ pub static CHESTS_SHIPWRECK_SUPPLY: LootTable = LootTable {
                     weight: 3i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:leather_chestplate"),
                     weight: 3i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:leather_leggings"),
                     weight: 3i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:leather_boots"),
                     weight: 3i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
             ],
             rolls: LootNumberProvider::Uniform {
@@ -48671,7 +48977,13 @@ pub static CHESTS_SIMPLE_DUNGEON: LootTable = LootTable {
                     weight: 10i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
             ],
             rolls: LootNumberProvider::Uniform {
@@ -49668,14 +49980,23 @@ pub static CHESTS_TRIAL_CHAMBERS_CORRIDOR: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:honeycomb"),
@@ -50077,14 +50398,23 @@ pub static CHESTS_TRIAL_CHAMBERS_INTERSECTION_BARREL: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:diamond_pickaxe"),
@@ -50302,17 +50632,24 @@ pub static CHESTS_TRIAL_CHAMBERS_REWARD_COMMON: LootTable = LootTable {
                 weight: 4i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 8f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 8f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:emerald"),
@@ -50540,17 +50877,24 @@ pub static CHESTS_TRIAL_CHAMBERS_REWARD_OMINOUS_COMMON: LootTable = LootTable {
                 weight: 3i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 4f64,
-                            max: 12f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 4f64,
+                                max: 12f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:strong_slowness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:diamond"),
@@ -50641,14 +50985,28 @@ pub static CHESTS_TRIAL_CHAMBERS_REWARD_OMINOUS_RARE: LootTable = LootTable {
                 weight: 2i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some(
+                        "minecraft:knockback,minecraft:punch,minecraft:smite,minecraft:looting,minecraft:multishot",
+                    ),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:book"),
                 weight: 2i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some("minecraft:breach,minecraft:density"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:book"),
@@ -50795,14 +51153,30 @@ pub static CHESTS_TRIAL_CHAMBERS_REWARD_RARE: LootTable = LootTable {
                 weight: 2i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some(
+                        "minecraft:sharpness,minecraft:bane_of_arthropods,minecraft:efficiency,minecraft:fortune,minecraft:silk_touch,minecraft:feather_falling",
+                    ),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:book"),
                 weight: 2i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some(
+                        "minecraft:riptide,minecraft:loyalty,minecraft:channeling,minecraft:impaling,minecraft:mending",
+                    ),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:diamond_chestplate"),
@@ -50897,34 +51271,48 @@ pub static CHESTS_TRIAL_CHAMBERS_SUPPLY: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 4f64,
-                            max: 8f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 4f64,
+                                max: 8f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 4f64,
-                            max: 8f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 4f64,
+                                max: 8f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:slowness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:baked_potato"),
@@ -51050,28 +51438,42 @@ pub static CHESTS_TRIAL_CHAMBERS_SUPPLY: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(2f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(2f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:regeneration"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(2f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(2f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:strength"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:stone_pickaxe"),
@@ -51204,7 +51606,13 @@ pub static CHESTS_UNDERWATER_RUIN_BIG: LootTable = LootTable {
                     weight: 5i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:leather_chestplate"),
@@ -51225,7 +51633,13 @@ pub static CHESTS_UNDERWATER_RUIN_BIG: LootTable = LootTable {
                     weight: 5i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:buried_treasure_map"),
@@ -51410,7 +51824,13 @@ pub static CHESTS_UNDERWATER_RUIN_SMALL: LootTable = LootTable {
                     weight: 5i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:buried_treasure_map"),
@@ -53818,7 +54238,13 @@ pub static CHESTS_WOODLAND_MANSION: LootTable = LootTable {
                     weight: 10i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[],
+                    functions: &[LootFunction {
+                        kind: LootFunctionKind::EnchantRandomly {
+                            only_compatible: true,
+                        },
+                        enchantment: Some("#minecraft:on_random_loot"),
+                        condition: LootCondition::None,
+                    }],
                 },
             ],
             rolls: LootNumberProvider::Uniform {
@@ -54198,119 +54624,168 @@ pub static DISPENSERS_TRIAL_CHAMBERS_CHAMBER: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:slowness"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:splash_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:splash_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:weakness"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:lingering_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:slowness"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:lingering_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:lingering_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:weakness"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:lingering_potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 2f64,
-                            max: 5f64,
-                        },
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:healing"),
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 2f64,
+                                max: 5f64,
+                            },
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
+                    },
+                ],
             },
         ],
         rolls: LootNumberProvider::Constant(1f64),
@@ -54533,6 +55008,11 @@ pub static ENTITIES_BOGGED: LootTable = LootTable {
                             limit: 1i32,
                         },
                         enchantment: Some("minecraft:looting"),
+                        condition: LootCondition::None,
+                    },
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
                         condition: LootCondition::None,
                     },
                 ],
@@ -56467,6 +56947,11 @@ pub static ENTITIES_PARCHED: LootTable = LootTable {
                         enchantment: Some("minecraft:looting"),
                         condition: LootCondition::None,
                     },
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:weakness"),
+                        condition: LootCondition::None,
+                    },
                 ],
             }],
             rolls: LootNumberProvider::Constant(1f64),
@@ -57860,6 +58345,11 @@ pub static ENTITIES_STRAY: LootTable = LootTable {
                             limit: 1i32,
                         },
                         enchantment: Some("minecraft:looting"),
+                        condition: LootCondition::None,
+                    },
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:slowness"),
                         condition: LootCondition::None,
                     },
                 ],
@@ -59357,7 +59847,11 @@ pub static GAMEPLAY_FISHING_JUNK: LootTable = LootTable {
                 weight: 10i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::SetPotion,
+                    enchantment: Some("minecraft:water"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:string"),
@@ -59709,221 +60203,312 @@ pub static GAMEPLAY_HERO_OF_THE_VILLAGE_FLETCHER_GIFT: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:swiftness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:slowness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:strength"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:healing"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:harming"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:leaping"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:regeneration"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:fire_resistance"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:water_breathing"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:invisibility"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:night_vision"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:weakness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:tipped_arrow"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Uniform {
-                            min: 0f64,
-                            max: 1f64,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Uniform {
+                                min: 0f64,
+                                max: 1f64,
+                            },
+                            add: false,
                         },
-                        add: false,
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:poison"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
         ],
         rolls: LootNumberProvider::Constant(1f64),
@@ -60224,35 +60809,59 @@ pub static GAMEPLAY_PIGLIN_BARTERING: LootTable = LootTable {
                 weight: 5i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some("minecraft:soul_speed"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:iron_boots"),
                 weight: 8i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::EnchantRandomly {
+                        only_compatible: true,
+                    },
+                    enchantment: Some("minecraft:soul_speed"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:potion"),
                 weight: 8i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::SetPotion,
+                    enchantment: Some("minecraft:fire_resistance"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:splash_potion"),
                 weight: 8i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::SetPotion,
+                    enchantment: Some("minecraft:fire_resistance"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:potion"),
                 weight: 10i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[],
+                functions: &[LootFunction {
+                    kind: LootFunctionKind::SetPotion,
+                    enchantment: Some("minecraft:water"),
+                    condition: LootCondition::None,
+                }],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:iron_nugget"),
@@ -61397,28 +62006,42 @@ pub static SPAWNERS_OMINOUS_TRIAL_CHAMBER_CONSUMABLES: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:regeneration"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:strength"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
         ],
         rolls: LootNumberProvider::Constant(1f64),
@@ -61500,28 +62123,42 @@ pub static SPAWNERS_TRIAL_CHAMBER_CONSUMABLES: LootTable = LootTable {
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:regeneration"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
             LootEntry {
                 kind: LootEntryKind::Item("minecraft:potion"),
                 weight: 1i32,
                 quality: 0i32,
                 condition: LootCondition::None,
-                functions: &[LootFunction {
-                    kind: LootFunctionKind::SetCount {
-                        count: LootNumberProvider::Constant(1f64),
-                        add: false,
+                functions: &[
+                    LootFunction {
+                        kind: LootFunctionKind::SetCount {
+                            count: LootNumberProvider::Constant(1f64),
+                            add: false,
+                        },
+                        enchantment: None,
+                        condition: LootCondition::None,
                     },
-                    enchantment: None,
-                    condition: LootCondition::None,
-                }],
+                    LootFunction {
+                        kind: LootFunctionKind::SetPotion,
+                        enchantment: Some("minecraft:swiftness"),
+                        condition: LootCondition::None,
+                    },
+                ],
             },
         ],
         rolls: LootNumberProvider::Constant(1f64),
@@ -61540,98 +62177,147 @@ pub static SPAWNERS_TRIAL_CHAMBER_ITEMS_TO_DROP_WHEN_OMINOUS: LootTable = LootTa
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:wind_charged"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:oozing"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:weaving"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:infested"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:strength"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:swiftness"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:lingering_potion"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:slow_falling"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
             ],
             rolls: LootNumberProvider::Constant(1f64),
@@ -61660,28 +62346,42 @@ pub static SPAWNERS_TRIAL_CHAMBER_ITEMS_TO_DROP_WHEN_OMINOUS: LootTable = LootTa
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:poison"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:arrow"),
                     weight: 1i32,
                     quality: 0i32,
                     condition: LootCondition::None,
-                    functions: &[LootFunction {
-                        kind: LootFunctionKind::SetCount {
-                            count: LootNumberProvider::Constant(1f64),
-                            add: false,
+                    functions: &[
+                        LootFunction {
+                            kind: LootFunctionKind::SetCount {
+                                count: LootNumberProvider::Constant(1f64),
+                                add: false,
+                            },
+                            enchantment: None,
+                            condition: LootCondition::None,
                         },
-                        enchantment: None,
-                        condition: LootCondition::None,
-                    }],
+                        LootFunction {
+                            kind: LootFunctionKind::SetPotion,
+                            enchantment: Some("minecraft:strong_slowness"),
+                            condition: LootCondition::None,
+                        },
+                    ],
                 },
                 LootEntry {
                     kind: LootEntryKind::Item("minecraft:fire_charge"),

@@ -23,6 +23,33 @@ pub fn parse_loot_table_with_predicates(
     Parser { predicates }.table(&serde_json::from_str::<Value>(json).ok()?)
 }
 
+/// The string a function reads: its enchantment, the `enchant_randomly` options (joined with
+/// `,`) or the `set_potion` id.
+fn function_argument(kind: LootFunctionKind, function: &Value) -> Option<String> {
+    match kind {
+        LootFunctionKind::EnchantRandomly { .. } => function.get("options").map(|options| {
+            many(options)
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(",")
+        }),
+        LootFunctionKind::SetPotion => function
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        _ => function
+            .get("enchantment")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    }
+    .or_else(|| match kind {
+        LootFunctionKind::ApplyBonus(_) => Some("minecraft:fortune".to_owned()),
+        LootFunctionKind::EnchantedCountIncrease { .. } => Some("minecraft:looting".to_owned()),
+        _ => None,
+    })
+}
+
 struct Parser<'a, R> {
     predicates: &'a R,
 }
@@ -449,19 +476,16 @@ impl<R: Fn(&str) -> Option<Value>> Parser<'_, R> {
                         LootFunctionKind::LimitCount { min, max }
                     }
                     "explosion_decay" => LootFunctionKind::ExplosionDecay,
+                    "enchant_randomly" => LootFunctionKind::EnchantRandomly {
+                        only_compatible: function
+                            .get("only_compatible")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                    },
+                    "set_potion" => LootFunctionKind::SetPotion,
                     _ => return None,
                 };
-                let enchantment = function
-                    .get("enchantment")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                    .or_else(|| match kind {
-                        LootFunctionKind::ApplyBonus(_) => Some("minecraft:fortune".to_owned()),
-                        LootFunctionKind::EnchantedCountIncrease { .. } => {
-                            Some("minecraft:looting".to_owned())
-                        }
-                        _ => None,
-                    });
+                let enchantment = function_argument(kind, function);
                 Some(Function {
                     kind,
                     enchantment,
