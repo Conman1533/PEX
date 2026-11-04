@@ -24,8 +24,8 @@ use crate::world_info::{
         minecraft_data_dir, read_game_rules, read_wandering_trader, read_weather,
         read_world_clocks, read_world_gen_settings, write_custom_boss_events_stub,
         write_game_rules, write_random_sequences_stub, write_scheduled_events_stub,
-        write_scoreboard_stub, write_stopwatches_stub, write_wandering_trader, write_weather,
-        write_world_clocks, write_world_gen_settings,
+        write_stopwatches_stub, write_wandering_trader, write_weather, write_world_clocks,
+        write_world_gen_settings,
     },
     default_data_packs,
 };
@@ -289,6 +289,9 @@ fn level_data_from_nbt(data: &NbtCompound, seed: i64) -> LevelData {
     if let Some(day_time) = data.get_long("DayTime") {
         level_data.day_time = day_time;
     }
+    if let Some(game_time) = data.get_long("Time") {
+        level_data.game_time = game_time;
+    }
     if let Some(clear_weather_time) = data.get_int("clearWeatherTime") {
         level_data.clear_weather_time = clear_weather_time;
     }
@@ -326,6 +329,7 @@ fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
     data.put_byte("Difficulty", info.difficulty as i8);
     data.put_bool("DifficultyLocked", info.difficulty_locked);
     data.put_long("LastPlayed", info.last_played);
+    data.put_long("Time", info.game_time);
     data.put_string("LevelName", info.level_name.clone());
 
     // 26.2 spawn
@@ -456,6 +460,10 @@ impl WorldInfoReader for AnvilLevelInfo {
         {
             let weather = read_weather(level_folder);
             level_data.clear_weather_time = weather.clear_weather_time;
+            level_data.rain_time = weather.rain_time;
+            level_data.raining = weather.raining;
+            level_data.thunder_time = weather.thunder_time;
+            level_data.thundering = weather.thundering;
         }
 
         Ok(level_data)
@@ -534,9 +542,14 @@ impl WorldInfoWriter for AnvilLevelInfo {
         }
 
         // weather.dat
-        let mut weather = read_weather(level_folder);
-        weather.clear_weather_time = info.clear_weather_time;
-        weather.data_version = data_version;
+        let weather = crate::world_info::data_files::WeatherData {
+            clear_weather_time: info.clear_weather_time,
+            rain_time: info.rain_time,
+            raining: info.raining,
+            thunder_time: info.thunder_time,
+            thundering: info.thundering,
+            data_version,
+        };
         if let Err(e) = write_weather(level_folder, &weather) {
             error!("Failed to write weather.dat: {e}");
         }
@@ -564,9 +577,6 @@ impl WorldInfoWriter for AnvilLevelInfo {
         }
 
         // scoreboard.dat
-        if let Err(e) = write_scoreboard_stub(level_folder, data_version) {
-            error!("Failed to write scoreboard.dat: {e}");
-        }
 
         // stopwatches.dat
         if let Err(e) = write_stopwatches_stub(level_folder, data_version) {
@@ -957,6 +967,11 @@ mod test {
             },
             data_version: 4189,
             day_time: 1727,
+            game_time: 1727,
+            rain_time: 0,
+            raining: false,
+            thunder_time: 0,
+            thundering: false,
             difficulty: Difficulty::Normal,
             difficulty_locked: false,
             game_rules: GameRuleRegistry {
@@ -1109,6 +1124,34 @@ mod test {
     }
 
     #[test]
+    fn time_and_weather_survive_a_save() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut level_data = LEVEL_DAT.data.clone();
+        level_data.world_gen_settings = WorldGenSettings::new(Seed(9999));
+        level_data.game_time = 987_654;
+        level_data.day_time = 18_000;
+        level_data.clear_weather_time = 0;
+        level_data.raining = true;
+        level_data.rain_time = 1200;
+        level_data.thundering = true;
+        level_data.thunder_time = 600;
+
+        AnvilLevelInfo
+            .write_world_info(&level_data, temp_dir.path())
+            .unwrap();
+        let root = read_level_dat(temp_dir.path());
+        assert_eq!(
+            root.get_compound("Data").unwrap().get_long("Time"),
+            Some(987_654)
+        );
+        let loaded = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+
+        assert_eq!((loaded.game_time, loaded.day_time), (987_654, 18_000));
+        assert!(loaded.raining && loaded.thundering);
+        assert_eq!((loaded.rain_time, loaded.thunder_time), (1200, 600));
+    }
+
+    #[test]
     fn all_26_3_minecraft_data_files_written_and_read() {
         let temp_dir = TempDir::new().unwrap();
         let mut level_data = LEVEL_DAT.data.clone();
@@ -1125,7 +1168,6 @@ mod test {
         let expected_files = [
             "game_rules.dat",
             "random_sequences.dat",
-            "scoreboard.dat",
             "stopwatches.dat",
             "wandering_trader.dat",
             "world_clocks.dat",
