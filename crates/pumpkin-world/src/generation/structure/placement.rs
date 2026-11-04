@@ -374,15 +374,18 @@ impl GlobalStructureCache {
             return self.get_stronghold_chunks();
         }
         // A panic here leaves the cell empty, so the next caller retries instead of waiting.
+        // Sequential: the caller is usually a chunk worker, and a Rayon worker waiting in a join
+        // runs other queued jobs, so a parallel search could run another chunk's job on this
+        // thread, which would then wait on this same `get_or_init` forever.
         self.stronghold_chunks.get_or_init(|| {
             Some(multi_noise.map_or_else(
                 || {
                     let random_config = crate::GlobalRandomConfig::new(seed as u64, false);
                     let base = pumpkin_data::noise_router::BaseNoiseRouters::from_dimension(&pumpkin_data::dimension::Dimension::OVERWORLD);
                     let base_router = crate::generation::noise::router::proto_noise_router::ProtoNoiseRouters::generate(base, &random_config);
-                    Self::calculate_strongholds(seed, placement, &base_router.multi_noise)
+                    Self::calculate_strongholds_sequential(seed, placement, &base_router.multi_noise)
                 },
-                |multi_noise| Self::calculate_strongholds(seed, placement, multi_noise),
+                |multi_noise| Self::calculate_strongholds_sequential(seed, placement, multi_noise),
             ))
         }).as_deref().unwrap_or_default()
     }
@@ -552,8 +555,13 @@ fn is_start_chunk_random_spread(
 }
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, mpsc};
+    use std::thread;
+    use std::time::Duration;
+
     use pumpkin_data::structures::{
-        RandomSpreadStructurePlacement, StructurePlacementCalculator, StructureSet,
+        RandomSpreadStructurePlacement, StructurePlacementCalculator, StructurePlacementType,
+        StructureSet,
     };
     use pumpkin_util::random::{
         RandomGenerator, RandomImpl, get_region_seed, legacy_rand::LegacyRand,
@@ -581,6 +589,39 @@ mod tests {
         let (x, z) = get_start_chunk_random_spread(&random, 123, 1, 1, 14357620);
         assert_eq!(x, 5);
         assert_eq!(z, 4);
+    }
+
+    #[test]
+    fn stronghold_rings_without_a_job_do_not_deadlock_chunk_workers() {
+        // The Nether and the End have no background ring job, so the first chunk worker that
+        // checks the stronghold placement computes the rings itself. The other workers' chunk
+        // jobs queue up behind it, as they do when a player first enters the End.
+        let StructurePlacementType::ConcentricRings(rings) =
+            &StructureSet::STRONGHOLDS.placement.placement_type
+        else {
+            unreachable!()
+        };
+        let cache = Arc::new(GlobalStructureCache::new());
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap();
+        let (done_tx, done_rx) = mpsc::channel();
+        for _ in 0..64 {
+            let cache = cache.clone();
+            let done_tx = done_tx.clone();
+            pool.spawn(move || {
+                let positions = cache.get_or_calculate_strongholds(0, rings, None);
+                done_tx.send(positions.len()).unwrap();
+            });
+            thread::sleep(Duration::from_millis(5));
+        }
+        for _ in 0..64 {
+            let count = done_rx
+                .recv_timeout(Duration::from_secs(120))
+                .expect("a chunk worker is stuck waiting for the stronghold rings");
+            assert_eq!(count, usize::try_from(rings.count).unwrap());
+        }
     }
 
     #[test]
