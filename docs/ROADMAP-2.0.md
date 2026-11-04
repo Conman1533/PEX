@@ -591,7 +591,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/ender-dragon-phases`
 - Needs decision: none.
 - Done when: unit tests `dragon_phase_round_trips_through_nbt` and `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass.
-- Result (2026-11-03): branch `fix/ender-dragon-phases` at `db3c10c9f`, pushed, PR draft in CT 117 `/srv/pex/pr-drafts/fix-ender-dragon-phases.md`. Vanilla phase ids, `SittingScanning`, `DATA_PHASE` synced and saved, a `DRAGON_FIREBALL` entity with its breath cloud, crystal breaks reported to the dragon. Tests `dragon_phase_round_trips_through_nbt`, `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass; local CI clean except the known scaffolding GameTest. Not done: the cloud has no owner (kill credit goes to the cloud). The play test in the End is Neon's.
+- Result (2026-11-03): branch `fix/ender-dragon-phases` at `db3c10c9f`, pushed, PR draft in CT 117 `/srv/pex/pr-drafts/fix-ender-dragon-phases.md`. Vanilla phase ids, `SittingScanning`, `DATA_PHASE` synced and saved, a `DRAGON_FIREBALL` entity with its breath cloud, crystal breaks reported to the dragon. Tests `dragon_phase_round_trips_through_nbt`, `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass; local CI clean except the known scaffolding GameTest. Not done: the cloud has no owner (kill credit goes to the cloud). The play test in the End is Neon's. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): the dragon ran vanilla's cycle (holding pattern, landing approach, landing, sitting scanning on the exit portal, takeoff), strafed and shot a Dragon Fireball that left breath clouds. It also found G1-45 (the dragon despawned about 40 s after each spawn; alpha's bug, shown up by the new flight paths) and G6-24. Not checked: a crystal break making the dragon strafe.
 - Needed by: G6-19 and G6-20 (an End fight that plays like vanilla).
 
 #### G1-28 Hoglin
@@ -714,6 +714,14 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/villager-life`
 - Needs decision: D1-1.
 - Done when: `pumpkin:panicking_villagers_summon_iron_golem` passes, and the G0-03 benchmark with 50 villagers shows tick P95 within 10% of the G0-03 PEX baseline.
+
+#### G1-45 The ender dragon never despawns
+- Scope: in: the `Mob` tick skips `MobEntity::check_despawn` for the dragon, as vanilla `EnderDragon.checkDespawn()` is empty. Out: the dragon's parts (G6-16), the fight's saved data (G6-19).
+- Depends on: none.
+- Branch: `fix/ender-dragon-never-despawns`
+- Needs decision: none.
+- Done when: in the End with a survival player 30 to 60 blocks from the dragon for 5 minutes, the dragon keeps its UUID and the fight spawns no second dragon.
+- Result (2026-11-04): found in the G1-27 play test: the dragon vanished about 40 s after each spawn, with no death or log, and the fight spawned a new one 1200 ticks later. The cause is the generic random despawn (a `MONSTER` with no non-spectator player within 32 blocks); alpha has it too but its dragon circles close to the portal. Branch at `3875ccfd7`, pushed, PR draft `/srv/pex/pr-drafts/fix-ender-dragon-never-despawns.md`: a `Mob::checks_despawn` hook, false for the dragon. Play test on the integration build: one dragon for 5 minutes, 30 polls. No automated test (needs a survival player in the End).
 
 ### Proof
 
@@ -1602,6 +1610,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/tick-scheduler-order
 - Needs decision: none
 - Done when: new unit tests `loaded_ticks_keep_saved_order`, `overdue_ticks_run_first` and `ticks_over_cap_run_next_tick` pass, and each fails on alpha.
+- Result (2026-11-04): branch `fix/tick-scheduler-order` at `766add8b0`, pushed, PR draft `/srv/pex/pr-drafts/fix-tick-scheduler-order.md`. Loaded ticks are numbered from `-n` like `LevelChunkTicks.unpack` and saved in sub-tick order, overdue ticks sort first (`OrderedTick::overdue`, vanilla's trigger tick), and block and fluid ticks stop at 65536 a game tick with the rest carried over. `loaded_ticks_keep_saved_order`, `overdue_ticks_run_first` and `saved_order_round_trips` fail on alpha's scheduler and pass; `ticks_over_cap_run_next_tick` passes (alpha has no cap to test). Local CI clean except the known scaffolding GameTest.
 
 #### G5-05 Block and fluid ticks run in vanilla order
 
@@ -1817,6 +1826,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/attack-packet-parity (exists; no new branch)
 - Needs decision: none
 - Done when: its bot tests (commit `f85846200`) pass in `pumpkin-tester` on alpha, including an attack on an entity that just died not kicking the bot.
+- Result (2026-11-04): rebased onto alpha as `fix/attack-packet-parity-v2` at `40fe41bc7` (a new branch, because force-pushing the old one was refused), pushed, PR draft `/srv/pex/pr-drafts/fix-attack-packet-parity-v2.md`. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): a survival player hit the perched dragon 8 times: no kick, and no damage, as expected until G6-16.
 
 #### G6-05 Attack cooldown from the attack_speed attribute
 
@@ -1961,6 +1971,41 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: test/survival-full-run
 - Needs decision: D6-1, D6-3
 - Done when: three runs in a row reach the credits and respawn at the bed with no kick, panic or new `ERROR` log line, and the PR has the per-stage tick and time table.
+
+#### G6-23 Entering the End can hang chunk generation
+
+- Scope: in: `GlobalStructureCache::get_or_calculate_strongholds` without a background job (the Nether and the End) searches the stronghold rings on the calling thread, so a `ChunkGen` worker waiting in the search can't run another chunk's job that waits on the same `OnceLock`. Out: skipping the search where the biome source has no stronghold biomes, as vanilla does.
+- Depends on: none
+- Branch: fix/stronghold-rings-deadlock
+- Needs decision: none
+- Done when: `stronghold_rings_without_a_job_do_not_deadlock_chunk_workers` passes, and a real client teleported into the End on a fresh world sees the island within seconds.
+- Result (2026-11-04): found in the wave 3 play test: on alpha `da26d84ef` the client stayed on "Loading terrain..." in the End and `stop` hung; a backtrace showed every End `ChunkGen` worker waiting in `OnceLock::initialize` and one of them running the initializer's `par_iter`, which had picked up another chunk's job. Branch at `0d9894d4f`, pushed, PR draft `/srv/pex/pr-drafts/fix-stronghold-rings-deadlock.md`. The test hung in 2 of 3 runs with the fix reverted and passes with it; the End loads in the real client.
+
+#### G6-24 The dragon's boss bar stays after leaving the End
+
+- Scope: in: `DragonFight` sends `remove_bossbar` to boss bar viewers who left the arena wherever they are now (`Server::get_player_by_uuid`), like `ServerBossEvent.removePlayer`, also when the dragon dies. Out: other boss bars.
+- Depends on: none
+- Branch: fix/dragon-bossbar-after-leaving-end
+- Needs decision: none
+- Done when: a real client that teleports from the End to the overworld loses the "Ender Dragon" bar within a second and gets it back on return.
+- Result (2026-11-04): found in the wave 3 play test, on alpha too. Branch at `8846177dd`, pushed, PR draft `/srv/pex/pr-drafts/fix-dragon-bossbar-after-leaving-end.md`. Play test on the integration build: gone in the overworld within 4 s, back in the End.
+
+#### G6-25 Blocks in the open air render unlit
+
+- Scope: in: find and fix why some blocks render black on a 26.3 client: blocks placed by `/fill` or `/setblock` above the terrain (a grass platform at y 150, stone and leaf pillars toward the build limit) and chunk-aligned patches of freshly generated terrain that stay black for at least 45 s. Out: vanilla-saved chunks missing `SkyLight` (G7-32), the chunk packet's size (G9-07).
+- Depends on: none
+- Branch: fix/open-air-sky-light
+- Needs decision: none
+- Done when: a unit test places a block into an empty section above the terrain and reads sky light 15 on its top face and the vanilla values around it, the patches don't appear at spawn on the play-test seed, and a real client shows the platform and pillars lit.
+- Result (2026-11-04): seen in the wave 3 play test on alpha `da26d84ef` and on the integration build alike, in a world PEX generated, so it is not G7-32; F3 read sky 0 on top of the platform under open sky. Two causes: the pump writer saved light only for `Full` containers, so the `Empty(15)` sections above the terrain came back from disk as `Empty(0)` (every chunk that unloads and loads again, pump being the default format); and `propagate_sky_light_decrease` neither darkened nor relit a neighbor exactly as bright as the removed light, so the column under a new block stayed at 8 instead of vanilla's 14. Branch `fix/open-air-sky-light` at `c88859e7d`: the pump writer uses `to_array` like the Anvil one, and the decrease relights from every neighbor it doesn't darken (`SkyLightEngine.propagateDecrease`). Tests `uniform_light_survives_a_pump_save` and `sky_light_refills_under_a_block_in_open_air` fail with either fix reverted and pass. Chunks already saved without those arrays stay dark until G7-32's rule (a missing sky array above the topmost stored one loads as 15) also covers the pump loader. Real client: the black patches after leaving and coming back, and the black platform filled after a reload, are gone on the branch (both reproduced on alpha). Local CI running; not pushed yet. The shadow under a single block is G6-26.
+
+#### G6-26 A block in the open air casts a black shadow on the client
+
+- Scope: in: find why, right after a block is placed in the open air, the 26.3 client's own light engine darkens the column under it to 0 (vanilla: 14), on alpha and with G6-25; and why after reconnecting the server's light data reads 15 straight under the block where vanilla has 14 and G6-25's unit test gets 14. Likely suspects: which sky sections the chunk and light packets mark as present or empty (the client finds sky sources from them), and whether the light changes reach the encoded chunk packet. Out: the pump save (G6-25).
+- Depends on: G6-25
+- Branch: fix/client-sky-shadow
+- Needs decision: none
+- Done when: a real client reads sky 14 under a stone placed 10 blocks above the ground, both right after placing it and after reconnecting, as on vanilla.
 
 ### Proof
 
@@ -2129,6 +2174,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/flush-block-entities-before-unload (exists; no new branch)
 - Needs decision: D7-6
 - Done when: the branch's `unloading_a_chunk_writes_its_live_block_entities_into_it` passes on alpha, and a bot test (hopper line into a chest, bot leaves, chunk unloads, `stop`) finds the items in the saved chest. G6-06 and G6-22 wait on this.
+- Result (2026-11-04): rebased onto alpha as `fix/flush-block-entities-before-unload-v2` at `6f813bb60`, keeping endercreepern64's commit `d92366d60` (the old branch's tip is theirs, so it is left as it is), pushed, PR draft `/srv/pex/pr-drafts/fix-flush-block-entities-before-unload-v2.md`. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): a chest of 64 items by a hopper kept all 64 across three unload and reload trips. Alpha didn't lose items in that scenario either, so the unit tests remain the evidence for the bug.
 
 #### G7-11 POI files in vanilla's format
 
@@ -2300,7 +2346,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 
 #### G7-32 Missing sky light above the stored layers loads as full
 
-- Scope: in: `ChunkData::from_bytes` loads a section without `SkyLight` above the chunk's highest stored sky light layer as `LightContainer::Empty(15)`, as vanilla's `SkyLightSectionStorage.getLightValue` reads it, instead of `Empty(0)`. Vanilla and Paper leave `SkyLight` out of fully lit sections at the top, and since such chunks say `isLightOn` PEX doesn't relight them, so today those sections hold sky light 0: they go to clients as empty layers and PEX's own spawn and light checks read 0 above the ground. Sections below the highest layer keep `Empty(0)`. Out: relighting, the chunk packet (G9-07).
+- Scope: in: `ChunkData::from_bytes`, and `internal_from_pump_bytes` for pump chunks a PEX server saved before G6-25, load a section without `SkyLight` above the chunk's highest stored sky light layer as `LightContainer::Empty(15)`, as vanilla's `SkyLightSectionStorage.getLightValue` reads it, instead of `Empty(0)`. Vanilla and Paper leave `SkyLight` out of fully lit sections at the top, and since such chunks say `isLightOn` PEX doesn't relight them, so today those sections hold sky light 0: they go to clients as empty layers and PEX's own spawn and light checks read 0 above the ground. Sections below the highest layer keep `Empty(0)`. Out: relighting, the chunk packet (G9-07).
 - Depends on: none
 - Branch: fix/missing-sky-light-load
 - Needs decision: none
@@ -2735,7 +2781,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/player-move-tracking
 - Needs decision: none
 - Done when: a new tester bot test `bot:player_move_broadcast_interval` has bot A send one position packet per server tick for 40 ticks while bot B watches, and B receives 19 to 21 movement packets for A and no `CHeadRot` while A's yaw is fixed (40 and 40 before the fix). A G9-01 rerun shows movement packets per bot-hour within 10% of Paper's. A human checks with two real clients that other players still move smoothly.
-- Result (2026-11-03): branch `fix/player-move-tracking` at `7fa4deb50`, stacked on G9-05, pushed, PR draft `/srv/pex/pr-drafts/fix-player-move-tracking.md`. `bot:player_move_broadcast_interval`: 21 movement packets and no `CHeadRot` in 40 ticks with the fix, 40 and 40 with alpha's server code. Local CI clean except the known scaffolding GameTest (two clippy lints fixed after the run, clippy rerun clean). Not measured: movement packets per bot-hour against Paper (needs G9-01). The two-client check is Neon's.
+- Result (2026-11-03): branch `fix/player-move-tracking` at `7fa4deb50`, stacked on G9-05, pushed, PR draft `/srv/pex/pr-drafts/fix-player-move-tracking.md`. `bot:player_move_broadcast_interval`: 21 movement packets and no `CHeadRot` in 40 ticks with the fix, 40 and 40 with alpha's server code. Local CI clean except the known scaffolding GameTest (two clippy lints fixed after the run, clippy rerun clean). Not measured: movement packets per bot-hour against Paper (needs G9-01). The two-client check is Neon's. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): cows on a platform followed a moving, turning, jumping, sneaking and teleporting player and turned their heads to follow on the other client. Early runs where the walking player died falling through a just-filled platform were the test script; alpha does the same.
 
 #### G9-05 Mob head rotation on the update interval
 
@@ -2744,7 +2790,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/head-rot-interval
 - Needs decision: none
 - Done when: a new tester bot test `bot:mob_head_rot_interval` keeps a pig with AI next to a bot for 300 ticks and the bot receives at most 100 `CHeadRot` for it, plus one per `CSetEntityMetadata` or `CEntityVelocity` it also received (the test fails before the fix), and a G9-01 rerun shows `rotate_head` bytes per bot-hour within 10% of Paper's.
-- Result (2026-11-03): branch `fix/head-rot-interval` at `dec4f1d12`, pushed, PR draft `/srv/pex/pr-drafts/fix-head-rot-interval.md`. `bot:mob_head_rot_interval` (pig turning without walking, 301 ticks): 86 `CHeadRot` with 3 velocity packets on the branch; 147 with 18 velocity packets on alpha, over its limit of 119. Not measured: `rotate_head` bytes per bot-hour against Paper (needs G9-01).
+- Result (2026-11-03): branch `fix/head-rot-interval` at `dec4f1d12`, pushed, PR draft `/srv/pex/pr-drafts/fix-head-rot-interval.md`. `bot:mob_head_rot_interval` (pig turning without walking, 301 ticks): 86 `CHeadRot` with 3 velocity packets on the branch; 147 with 18 velocity packets on alpha, over its limit of 119. Not measured: `rotate_head` bytes per bot-hour against Paper (needs G9-01). Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): cows on a platform followed a moving, turning, jumping, sneaking and teleporting player and turned their heads to follow on the other client. Early runs where the walking player died falling through a just-filled platform were the test script; alpha does the same.
 
 #### G9-06 Held chunks are not sent again on republish
 
@@ -2753,7 +2799,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: fix/held-chunk-resend
 - Needs decision: none
 - Done when: a regression test in `crates/pumpkin-world/src/chunk_system/tests.rs` or the tester reproduces the republish and fails before the fix, and a G9-01 rerun counts the same re-sent chunks per bot-hour on PEX as on Paper.
-- Result (2026-11-03): no code. Measured on alpha `300621c3e` with 8 seeded bots for 12.8 minutes, each bot logging chunk packets for positions it already held: 2 of 5,194 chunk packets (0.04%), both chunk 0,0 during login within 0.1 s of the first chunk. That is as close to none as matters for traffic, so the piece meets its drop condition; Neon decides. Note in CT 117 `/srv/pex/scratch/held-chunk-resend/RESULT.md`.
+- Result (2026-11-03): no code. Measured on alpha `300621c3e` with 8 seeded bots for 12.8 minutes, each bot logging chunk packets for positions it already held: 2 of 5,194 chunk packets (0.04%), both chunk 0,0 during login within 0.1 s of the first chunk. That is as close to none as matters for traffic, so the piece meets its drop condition; Neon decides. Note in CT 117 `/srv/pex/scratch/held-chunk-resend/RESULT.md`. Dropped on 2026-11-04: Neon left the remaining calls to the agent, and 2 re-sent packets in 5,194 aren't worth a scheduler change.
 
 #### G9-07 Chunk packet size matches Paper per chunk
 
@@ -2762,7 +2808,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/chunk-packet-size
 - Needs decision: none
 - Done when: the median decompressed bytes per position are within 5% of Paper's, or the PR explains the rest; the new bench shows encode time no worse; a human checks lighting on those chunks with a real client.
-- Result (2026-11-03): branch `perf/chunk-packet-size`. The fully lit sky arrays at the top of a column are left out of both light encoders (the chunk packet writes its light in `v1_18.rs`, not through `light.rs`). On a region PEX saved, the chunk packet bench gives 45,109,884 bytes against alpha's 63,579,378 (-29.0%, median 44,307 against 64,830 per chunk), with encode time no worse (85.5 and 78.7 ms against 87.8 and 88.4 ms). Applied to alpha's G9-01 packets the rule gives a median of 0.946 of Paper's bytes per position. Waiting on a human lighting check. Found G7-32.
+- Result (2026-11-03): branch `perf/chunk-packet-size`. The fully lit sky arrays at the top of a column are left out of both light encoders (the chunk packet writes its light in `v1_18.rs`, not through `light.rs`). On a region PEX saved, the chunk packet bench gives 45,109,884 bytes against alpha's 63,579,378 (-29.0%, median 44,307 against 64,830 per chunk), with encode time no worse (85.5 and 78.7 ms against 87.8 and 88.4 ms). Applied to alpha's G9-01 packets the rule gives a median of 0.946 of Paper's bytes per position. Waiting on a human lighting check. Found G7-32. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): lighting looked the same as alpha at six viewpoints. Black, unlit spots seen on both builds (blocks placed in the open air, chunk-aligned patches of new terrain) are G6-25, not this branch.
 
 #### G9-08 Default network compression level
 
@@ -2779,7 +2825,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/chunk-encode-off-tick
 - Needs decision: none
 - Done when: a unit test shows that an edit to a cached chunk changes its encoded payload; a G9-03 rerun shows the players phase's share of slow ticks at least halved, with mean tick and P95 no worse over 2 runs; a human joins with a real client and sees no missing chunks or entities.
-- Result (2026-11-03): branch `perf/chunk-encode-off-tick`, stacked on G9-10. Chunk packets are encoded once per chunk change on the background pool and shared between players; the unit test is in. Not met: the players phase's share of slow time stays at 3.2% (alpha 3.3%), because in the G9-03 workload that phase is 0.5 ms a tick to begin with. Mean tick and P95 no worse than G9-10 alone (14.00 against 14.05 ms, 23.55 against 23.61 ms). Neon decides whether the shared cache is worth keeping without a tick gain.
+- Result (2026-11-03): branch `perf/chunk-encode-off-tick`, stacked on G9-10. Chunk packets are encoded once per chunk change on the background pool and shared between players; the unit test is in. Not met: the players phase's share of slow time stays at 3.2% (alpha 3.3%), because in the G9-03 workload that phase is 0.5 ms a tick to begin with. Mean tick and P95 no worse than G9-10 alone (14.00 against 14.05 ms, 23.55 against 23.61 ms). Neon decides whether the shared cache is worth keeping without a tick gain. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): six 300-block teleports into new terrain and back, and a second player relogging, showed full terrain within 6 s every time, no missing chunks, no WARN or ERROR.
 
 #### G9-10 Background work off the tick's Rayon pool
 
@@ -2788,7 +2834,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: perf/tick-rayon-pool
 - Needs decision: none
 - Done when: a G9-03 rerun shows the matching cause under 10% of slow ticks, mean tick and P95 are no worse over 2 runs, and the `chunk_io` bench in `pumpkin-world` moves less than 5%.
-- Result (2026-11-03): branch `perf/tick-rayon-pool`. Autosave ticks no longer wait for region writes in the global pool: 0.03 to 1.35 ms queued against 177 to 241 ms on alpha, max tick 69 to 86 ms against 213 to 257 ms. Region reads overlap 3.5 to 4.1% of slow ticks (alpha 4.5%). Mean tick and P95 within noise in the one clean pair (14.05 against 13.96 ms, 23.61 against 23.33 ms); the other B run was contended by CI builds. The `chunk_io` bench doesn't use either pool; its single runs moved up to 24% (faster), which the branch can't cause.
+- Result (2026-11-03): branch `perf/tick-rayon-pool`. Autosave ticks no longer wait for region writes in the global pool: 0.03 to 1.35 ms queued against 177 to 241 ms on alpha, max tick 69 to 86 ms against 213 to 257 ms. Region reads overlap 3.5 to 4.1% of slow ticks (alpha 4.5%). Mean tick and P95 within noise in the one clean pair (14.05 against 13.96 ms, 23.61 against 23.33 ms); the other B run was contended by CI builds. The `chunk_io` bench doesn't use either pool; its single runs moved up to 24% (faster), which the branch can't cause. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): six 300-block teleports into new terrain and back, and a second player relogging, showed full terrain within 6 s every time, no missing chunks, no WARN or ERROR.
 
 #### G9-11 Gameplay benchmark in the repository
 
