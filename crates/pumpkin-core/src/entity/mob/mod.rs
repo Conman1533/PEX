@@ -1171,6 +1171,12 @@ pub trait Mob: EntityBase + Send + Sync {
         true
     }
 
+    /// Whether `MobEntity::check_despawn` runs for this mob. Vanilla `EnderDragon` overrides
+    /// `checkDespawn` to do nothing.
+    fn checks_despawn(&self) -> bool {
+        true
+    }
+
     /// Vanilla `Mob.removeWhenFarAway`, which `Animal` overrides to `false`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         self.as_animal().is_none()
@@ -1950,7 +1956,9 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             }
         }
 
-        mob_entity.check_despawn(self);
+        if self.checks_despawn() {
+            mob_entity.check_despawn(self);
+        }
         if mob_entity.living_entity.entity.is_removed() {
             return;
         }
