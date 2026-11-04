@@ -9,6 +9,7 @@ pub mod blaze_attack;
 pub mod bow_attack;
 pub mod break_door;
 pub mod breed;
+pub mod charge_attack;
 pub mod chase_player;
 pub mod climb_on_top_of_powder_snow;
 pub mod creeper_ignite;
