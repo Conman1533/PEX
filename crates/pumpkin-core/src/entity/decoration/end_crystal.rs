@@ -114,6 +114,11 @@ impl EntityBase for EndCrystalEntity {
         true
     }
 
+    /// Vanilla `EndCrystal.isPickable`.
+    fn can_hit(&self) -> bool {
+        true
+    }
+
     fn cast_any(&self) -> &dyn std::any::Any {
         self
     }

@@ -232,7 +232,11 @@ async fn attacks(
 }
 
 /// Ticks until the server has handled everything the bot sent so far.
-async fn sync(server: &Arc<Server>, bot: &mut HeadlessBot, player: &Player) -> Result<(), String> {
+pub(super) async fn sync(
+    server: &Arc<Server>,
+    bot: &mut HeadlessBot,
+    player: &Player,
+) -> Result<(), String> {
     let ping = bot.send_ping().await?;
     for _ in 0..MAX_POLL_TICKS {
         server.tick();
