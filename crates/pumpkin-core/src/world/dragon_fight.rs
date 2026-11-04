@@ -1062,12 +1062,21 @@ impl DragonFight {
     }
 
     fn remove_all_bossbar(&mut self, world: &Arc<World>) {
-        for player in world.players.load().iter() {
-            if self.bossbar_players.contains(&player.gameprofile.id) {
-                player.remove_bossbar(self.bossbar_uuid);
-            }
+        for uid in std::mem::take(&mut self.bossbar_players) {
+            self.remove_bossbar_from(world, uid);
         }
-        self.bossbar_players.clear();
+    }
+
+    /// Vanilla `ServerBossEvent.removePlayer`: the player may have left the End by now, so look
+    /// them up on the whole server, not only in this world.
+    fn remove_bossbar_from(&self, world: &Arc<World>, uid: Uuid) {
+        if let Some(player) = world
+            .server
+            .upgrade()
+            .and_then(|server| server.get_player_by_uuid(uid))
+        {
+            player.remove_bossbar(self.bossbar_uuid);
+        }
     }
 
     fn update_players(&mut self, world: &Arc<World>) {
@@ -1109,9 +1118,7 @@ impl DragonFight {
             .collect();
 
         for uid in &to_remove {
-            if let Some(player) = players.iter().find(|player| &player.gameprofile.id == uid) {
-                player.remove_bossbar(self.bossbar_uuid);
-            }
+            self.remove_bossbar_from(world, *uid);
             self.bossbar_players.retain(|u| u != uid);
         }
     }
