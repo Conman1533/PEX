@@ -70,3 +70,39 @@ pub(super) async fn test_zombie_pathfinds_to_villager(
     })?;
     Ok(())
 }
+
+/// Vanilla `DragonFireball.onHit`: the fireball leaves a cloud of dragon's breath, moved onto a
+/// living entity within 4 blocks of the impact.
+pub(super) async fn test_dragon_fireball_leaves_breath_cloud(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 10, 3).await?;
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 1),
+            "summon minecraft:pig ~ ~ ~ {NoAI:1b}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(3, 1, 1),
+            "summon minecraft:dragon_fireball ~ ~2.5 ~ {Motion:[0.0d,-0.5d,0.0d]}",
+        )
+        .await?;
+
+    helper.succeed_when(|helper| async move {
+        helper
+            .assert_entity_not_present("minecraft:dragon_fireball")
+            .await?;
+        // The cloud is 6 blocks wide, so only one centred on the pig reaches x 8..9; one left at
+        // the impact (x 3.5) would stop at x 6.5.
+        helper
+            .assert_entity_present_in_box(
+                "minecraft:area_effect_cloud",
+                BlockPos::new(8, 1, 1),
+                BlockPos::new(9, 2, 2),
+            )
+            .await
+    })?;
+    Ok(())
+}

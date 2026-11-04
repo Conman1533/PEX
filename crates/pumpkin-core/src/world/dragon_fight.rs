@@ -19,6 +19,7 @@ use super::{
     World,
     bossbar::{Bossbar, BossbarColor, BossbarDivisions, BossbarFlags},
 };
+use crate::entity::boss::ender_dragon::phase::EnderDragonPhase;
 use crate::entity::{Entity, EntityBase, decoration::end_crystal::EndCrystalEntity};
 
 // ── Constants (match vanilla exactly) ────────────────────────────────────────
@@ -440,6 +441,7 @@ impl DragonFight {
             .downcast_ref::<crate::entity::boss::ender_dragon::EnderDragonEntity>(
         ) {
             dragon_entity.set_fight_origin(self.exit_portal_location.unwrap_or(self.origin));
+            dragon_entity.set_phase(EnderDragonPhase::HoldingPattern);
         }
 
         world.spawn_entity_non_save(dragon);
@@ -548,11 +550,14 @@ impl DragonFight {
 
     // ── Crystal destruction ───────────────────────────────────────────────────
 
-    pub fn on_crystal_destroyed(&mut self, world: &Arc<World>, crystal_uuid: Uuid) {
+    /// Returns the dragon to tell about it, like vanilla's `actuallyDragon.onCrystalDestroyed`.
+    pub fn on_crystal_destroyed(&mut self, world: &Arc<World>, crystal_uuid: Uuid) -> Option<Uuid> {
         if self.respawn_stage.is_some() && self.respawn_crystals.contains(&crystal_uuid) {
             self.abort_respawn_sequence(world);
+            None
         } else {
             self.update_crystal_count(world);
+            self.dragon_uuid
         }
     }
 

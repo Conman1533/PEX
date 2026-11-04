@@ -52,6 +52,8 @@ pub struct AreaEffectCloudEntity {
     pub duration_on_use: Mutex<i32>,
     /// ticks to wait before the cloud becomes active and applies effects (grace period)
     pub wait_time: Mutex<i32>,
+    /// Vanilla `customParticle`, shown instead of the potion colour.
+    custom_particle: Option<ParticleMeta>,
 }
 
 impl AreaEffectCloudEntity {
@@ -73,6 +75,7 @@ impl AreaEffectCloudEntity {
             radius_on_use: Mutex::new(0.0),
             duration_on_use: Mutex::new(0),
             wait_time: Mutex::new(20),
+            custom_particle: None,
         };
 
         Arc::new(cloud)
@@ -106,9 +109,45 @@ impl AreaEffectCloudEntity {
             radius_on_use: Mutex::new(radius_on_use_in),
             duration_on_use: Mutex::new(duration_on_use_in),
             wait_time: Mutex::new(wait_time_in),
+            custom_particle: None,
         };
 
         Arc::new(cloud)
+    }
+
+    /// A cloud of dragon's breath, as the dragon fireball and the perched dragon make it:
+    /// vanilla's defaults with `setCustomParticle(PowerParticleOption.create(DRAGON_BREATH, 1.0F))`.
+    pub fn dragon_breath(
+        entity: Entity,
+        effect: EffectEntry,
+        duration: i32,
+        radius: f32,
+        radius_per_tick: f32,
+    ) -> Arc<Self> {
+        entity
+            .no_physics
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        Arc::new(Self {
+            entity,
+            item_stack: Mutex::new(ItemStack::EMPTY.clone()),
+            effects: Mutex::new(vec![effect]),
+            radius: Mutex::new(radius),
+            duration: Mutex::new(duration),
+            age: Mutex::new(0),
+            reapplication_delay: Mutex::new(20),
+            reapplication_map: Mutex::new(HashMap::new()),
+            radius_on_tick: Mutex::new(radius_per_tick),
+            radius_on_use: Mutex::new(0.0),
+            duration_on_use: Mutex::new(0),
+            wait_time: Mutex::new(20),
+            custom_particle: Some(ParticleMeta {
+                particle_id: pumpkin_protocol::codec::var_int::VarInt(
+                    pumpkin_data::particle::Particle::DragonBreath as i32,
+                ),
+                // `PowerParticleOption` power.
+                data: Box::new(1.0f32.to_be_bytes()),
+            }),
+        })
     }
 }
 
@@ -176,12 +215,15 @@ impl EntityBase for AreaEffectCloudEntity {
         // Build raw particle option bytes for ENTITY_EFFECT
         let data_bytes = color.to_be_bytes();
 
-        let meta = ParticleMeta {
-            particle_id: pumpkin_protocol::codec::var_int::VarInt(
-                pumpkin_data::particle::Particle::EntityEffect as i32,
-            ),
-            data: Box::new(data_bytes),
-        };
+        let meta = self
+            .custom_particle
+            .clone()
+            .unwrap_or_else(|| ParticleMeta {
+                particle_id: pumpkin_protocol::codec::var_int::VarInt(
+                    pumpkin_data::particle::Particle::EntityEffect as i32,
+                ),
+                data: Box::new(data_bytes),
+            });
 
         self.entity.set_synced_data(
             pumpkin_data::tracked_data::area_effect_cloud::PARTICLE,
