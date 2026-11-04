@@ -1227,6 +1227,28 @@ mod tests {
         world.level.shutdown().await;
     }
 
+    #[tokio::test]
+    async fn projectiles_find_the_parts_not_the_dragon() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        let everywhere = pumpkin_util::math::boundingbox::BoundingBox::new(
+            Vector3::new(-64.0, 0.0, -64.0),
+            Vector3::new(64.0, 200.0, 64.0),
+        );
+        let dragon_id = fighting.get_entity().entity_id;
+        let found =
+            crate::entity::projectile::with_dragon_parts(vec![fighting.clone()], &everywhere, true);
+        assert_eq!(found.len(), fighting.parts.len());
+        assert!(found.iter().all(|e| e.get_entity().entity_id != dragon_id));
+        // The dragon's own fireballs pass through it.
+        assert!(
+            crate::entity::projectile::with_dragon_parts(vec![fighting], &everywhere, false)
+                .is_empty()
+        );
+        world.level.shutdown().await;
+    }
+
     #[test]
     fn body_parts_take_a_quarter_plus_one() {
         assert!((super::reduce_body_damage(8.0) - 3.0).abs() < f32::EPSILON);
