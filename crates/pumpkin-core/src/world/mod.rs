@@ -5066,6 +5066,19 @@ impl World {
             self.add_entity_silent(rider.clone());
             vehicle.get_entity().add_passenger(vehicle.clone(), rider);
         }
+        // The mob itself spawns riding: it boards first, so it is the one steering.
+        if let Some(pending) = mob.get_mob_entity().take_pending_vehicle() {
+            let ride = pending.vehicle;
+            ride.init_data_tracker();
+            self.add_entity_silent(ride.clone());
+            ride.get_entity()
+                .add_passenger(ride.clone(), vehicle.clone());
+            for rider in pending.other_riders {
+                rider.init_data_tracker();
+                self.add_entity_silent(rider.clone());
+                ride.get_entity().add_passenger(ride.clone(), rider);
+            }
+        }
     }
 
     /// Returns `false` when a plugin cancels the [`EntitySpawnEvent`].
