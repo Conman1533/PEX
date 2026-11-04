@@ -6,18 +6,24 @@ mod survival;
 
 use std::{net::SocketAddr, process::ExitCode, sync::Arc, time::Instant};
 
+use bot_tests::block_entity_unload::{self, UnloadedChests};
 use pumpkin_core::server::Server;
 use pumpkin_gametest::GameTestRunner;
 use tokio::net::TcpListener;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-async fn run_all_suites(server: &Arc<Server>, addr: SocketAddr) -> Result<Vec<String>, String> {
+async fn run_all_suites(
+    server: &Arc<Server>,
+    addr: SocketAddr,
+    unloaded_chests: &mut Option<UnloadedChests>,
+) -> Result<Vec<String>, String> {
     let mut summary_lines = Vec::new();
     let mut runner = GameTestRunner::new();
 
     // Survival stages go first so they start from the freshly generated world.
     survival::run_survival_stages(server, addr, &mut summary_lines).await?;
-    bot_tests::run_bot_tests(server, addr, &mut runner, &mut summary_lines).await?;
+    *unloaded_chests =
+        Some(bot_tests::run_bot_tests(server, addr, &mut runner, &mut summary_lines).await?);
     gametests::run_gametests(server, &mut runner, &mut summary_lines).await?;
 
     Ok(summary_lines)
@@ -73,7 +79,8 @@ async fn main() -> ExitCode {
     let tasks = TaskTracker::new();
     harness::spawn_java_listener(listener, server.clone(), cancel.clone(), &tasks);
 
-    let result = run_all_suites(&server, local_addr).await;
+    let mut unloaded_chests = None;
+    let mut result = run_all_suites(&server, local_addr, &mut unloaded_chests).await;
 
     cancel.cancel();
     for player in server.get_all_players() {
@@ -83,6 +90,25 @@ async fn main() -> ExitCode {
     tasks.close();
     tasks.wait().await;
     server.shutdown().await;
+    // `stop` saves the worlds with the same `Server::shutdown`. Checked even when a later suite
+    // failed, so that failure can't hide this one.
+    if let Some(unloaded_chests) = unloaded_chests {
+        result = match (
+            result,
+            block_entity_unload::check_saved_chests(&unloaded_chests),
+        ) {
+            (Ok(mut lines), Ok(line)) => {
+                lines.push(line);
+                Ok(lines)
+            }
+            (Err(err), Ok(line)) => {
+                println!("{line}");
+                Err(err)
+            }
+            (Ok(_), Err(err)) => Err(err),
+            (Err(err), Err(saved_err)) => Err(format!("{err}\n{saved_err}")),
+        };
+    }
 
     match result {
         Ok(lines) => {

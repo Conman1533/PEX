@@ -1,3 +1,4 @@
+use crate::chunk::ChunkData;
 use crate::generation::proto_chunk::GenerationCache;
 use bitflags::bitflags;
 use pumpkin_data::{Block, BlockState, BlockStateId, Mirror, Rotation, chunk::Biome};
@@ -83,6 +84,11 @@ pub trait WorldPortalExt: Send + Sync {
     );
 
     fn spawn_structure_entities(&self, _entities: Vec<NbtCompound>) {}
+
+    /// Called on the chunk scheduler thread right before a full chunk is unloaded and handed to
+    /// the save queue. State kept outside the chunk while it is loaded (block entities) has to be
+    /// written back into `chunk` here, or it is lost: the chunk is no longer reachable afterwards.
+    fn before_chunk_unload(&self, _chunk: &ChunkData) {}
 }
 
 pub trait BlockAccessor: Send + Sync {
