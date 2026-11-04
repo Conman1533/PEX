@@ -60,7 +60,16 @@ impl ItemBehaviour for EnderEyeItem {
         props.eye = true;
         let new_state_id = props.to_state_id(block);
 
+        // Vanilla `EnderEyeItem.useOn`: the eye makes the frame taller, so lift whoever
+        // stands on it, and comparators reading the frame see the eye at once.
+        crate::block::push_entities_up(
+            &world,
+            pumpkin_data::BlockState::from_id(state_id),
+            pumpkin_data::BlockState::from_id(new_state_id),
+            &location,
+        );
         world.set_block_state(&location, new_state_id, BlockFlags::NOTIFY_LISTENERS);
+        world.update_neighbour_for_output_signal(&location, block);
         // Consume one item.
         item.decrement_unless_creative(player.gamemode.load(), 1);
         world.sync_world_event(WorldEvent::EndPortalFrameFill, location, 0);
