@@ -797,18 +797,19 @@ impl ChunkData {
             block_lock[i].write_pump_binary(&mut out);
             biome_lock[i].write_pump_binary(&mut out);
 
-            let bl = match light_lock.block_light.get(i) {
-                Some(LightContainer::Full(data)) if data.len() == LightContainer::ARRAY_SIZE => {
-                    Some(data.as_ref())
-                }
-                _ => None,
-            };
-            let sl = match light_lock.sky_light.get(i) {
-                Some(LightContainer::Full(data)) if data.len() == LightContainer::ARRAY_SIZE => {
-                    Some(data.as_ref())
-                }
-                _ => None,
-            };
+            // A section with one level everywhere is kept as `Empty(level)`, which is most sky
+            // light (15 above the terrain), so write it out as a full array too. Only a dark
+            // section has no array, as the loader reads it.
+            let bl = light_lock
+                .block_light
+                .get(i)
+                .and_then(LightContainer::to_array)
+                .filter(|data| data.len() == LightContainer::ARRAY_SIZE);
+            let sl = light_lock
+                .sky_light
+                .get(i)
+                .and_then(LightContainer::to_array)
+                .filter(|data| data.len() == LightContainer::ARRAY_SIZE);
             let mut light_flags = 0u8;
             if bl.is_some() {
                 light_flags |= 1;
@@ -817,10 +818,10 @@ impl ChunkData {
                 light_flags |= 2;
             }
             out.put_u8(light_flags);
-            if let Some(data) = bl {
+            if let Some(data) = &bl {
                 out.extend_from_slice(data);
             }
-            if let Some(data) = sl {
+            if let Some(data) = &sl {
                 out.extend_from_slice(data);
             }
         }
@@ -974,7 +975,7 @@ impl ChunkData {
                 }
                 let data: Box<[u8]> = buf[..LightContainer::ARRAY_SIZE].into();
                 buf.advance(LightContainer::ARRAY_SIZE);
-                LightContainer::Full(data)
+                LightContainer::from_array(data)
             } else {
                 LightContainer::Empty(0)
             };
@@ -986,7 +987,7 @@ impl ChunkData {
                 }
                 let data: Box<[u8]> = buf[..LightContainer::ARRAY_SIZE].into();
                 buf.advance(LightContainer::ARRAY_SIZE);
-                LightContainer::Full(data)
+                LightContainer::from_array(data)
             } else {
                 LightContainer::Empty(0)
             };
@@ -1570,6 +1571,30 @@ mod tests {
         let light = reloaded.light_engine.lock().unwrap();
         let section_index = (0 - reloaded.section.min_y) as usize / 16;
         assert_eq!(light.sky_light[section_index].get(3, 7, 11), 15);
+    }
+
+    #[test]
+    fn uniform_light_survives_a_pump_save() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        // Generation keeps open sky as `Empty(15)`; the pump format wrote only full arrays, so
+        // the sky above the terrain came back as `Empty(0)`, dark.
+        let chunk = ChunkData::empty(0, 0);
+        let mut light = chunk.light_engine.lock().unwrap();
+        light.sky_light = vec![LightContainer::Empty(15); 24].into_boxed_slice();
+        light.block_light = vec![LightContainer::Empty(0); 24].into_boxed_slice();
+        light.block_light[3] = LightContainer::Empty(7);
+        drop(light);
+        let bytes = chunk.internal_to_pump_bytes();
+        let reloaded =
+            ChunkData::internal_from_pump_bytes(&bytes, Vector2::new(0, 0)).expect("chunk reloads");
+
+        let light = reloaded.light_engine.lock().unwrap();
+        assert!(matches!(light.sky_light[20], LightContainer::Empty(15)));
+        assert_eq!(light.sky_light[0].get(3, 7, 11), 15);
+        assert!(matches!(light.block_light[3], LightContainer::Empty(7)));
+        assert!(matches!(light.block_light[4], LightContainer::Empty(0)));
     }
 
     #[test]
