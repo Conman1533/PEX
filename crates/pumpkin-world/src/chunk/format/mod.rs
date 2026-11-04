@@ -289,6 +289,7 @@ impl ChunkData {
             (i32::from(max_y_section) - i32::from(min_y_section) + 1).max(0) as usize;
         let mut block_lights = vec![LightContainer::Empty(0); section_count];
         let mut sky_lights = vec![LightContainer::Empty(0); section_count];
+        let mut sky_stored = vec![false; section_count];
         let mut block_palettes = vec![BlockPalette::default(); section_count];
         let mut biome_palettes = vec![BiomePalette::default(); section_count];
 
@@ -335,9 +336,11 @@ impl ChunkData {
                     block_lights[index] = block_light
                         .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
                         .map_or(LightContainer::Empty(0), LightContainer::from_array);
-                    sky_lights[index] = sky_light
-                        .filter(|data| data.len() == LightContainer::ARRAY_SIZE)
-                        .map_or(LightContainer::Empty(0), LightContainer::from_array);
+                    let sky_light =
+                        sky_light.filter(|data| data.len() == LightContainer::ARRAY_SIZE);
+                    sky_stored[index] = sky_light.is_some();
+                    sky_lights[index] =
+                        sky_light.map_or(LightContainer::Empty(0), LightContainer::from_array);
 
                     if let Some(bs_compound) = section_compound.get_compound("block_states") {
                         let data = bs_compound
@@ -371,6 +374,8 @@ impl ChunkData {
                 }
             }
         }
+
+        fill_sky_above_top(&mut sky_lights, &sky_stored);
 
         // Assemble the LightEngine
         let light_engine = ChunkLight {
@@ -956,6 +961,7 @@ impl ChunkData {
         let mut biome_palettes = Vec::with_capacity(section_count);
         let mut block_lights = Vec::with_capacity(section_count);
         let mut sky_lights = Vec::with_capacity(section_count);
+        let mut sky_stored = Vec::with_capacity(section_count);
 
         for _ in 0..section_count {
             block_palettes.push(BlockPalette::read_pump_binary(&mut buf)?);
@@ -993,7 +999,10 @@ impl ChunkData {
             };
             block_lights.push(block_light);
             sky_lights.push(sky_light);
+            sky_stored.push((light_flags & 2) != 0);
         }
+        // Before the pump writer kept `Empty(15)`, it left open sky out like vanilla does.
+        fill_sky_above_top(&mut sky_lights, &sky_stored);
 
         let (random_tick_sections, randomly_ticking_mask) =
             ChunkSections::build_random_tick_sections_cache(&block_palettes);
@@ -1341,6 +1350,17 @@ pub struct ChunkSectionBlockStates {
     pub(crate) palette: Box<[BlockStateId]>,
 }
 
+/// Vanilla saves no `SkyLight` for the fully lit sections above the highest one it stores, and
+/// `SkyLightSectionStorage.getLightValue` reads them as 15. A chunk with no stored sky layer at
+/// all (a dimension without sky) stays dark, as do missing sections below the highest one.
+fn fill_sky_above_top(sky_lights: &mut [LightContainer], stored: &[bool]) {
+    if let Some(top) = stored.iter().rposition(|&stored| stored) {
+        for light in &mut sky_lights[top + 1..] {
+            *light = LightContainer::Empty(15);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum LightContainer {
     Empty(u8),
@@ -1595,6 +1615,132 @@ mod tests {
         assert_eq!(light.sky_light[0].get(3, 7, 11), 15);
         assert!(matches!(light.block_light[3], LightContainer::Empty(7)));
         assert!(matches!(light.block_light[4], LightContainer::Empty(0)));
+    }
+
+    #[test]
+    fn missing_sky_light_above_the_top_layer_loads_as_full() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+        use std::io::Read;
+
+        // Chunk 6,12 of a world vanilla saved: `SkyLight` is stored up to section 6 and left
+        // out of sections 7 to 19, which vanilla reads as open sky, and out of the dark
+        // sections at the bottom, which stay dark.
+        let mut raw = Vec::new();
+        flate2::read::GzDecoder::new(&include_bytes!("testdata/vanilla-sky-above-top.nbt.gz")[..])
+            .read_to_end(&mut raw)
+            .expect("fixture decompresses");
+        let chunk =
+            ChunkData::internal_from_bytes(&raw, Vector2::new(6, 12)).expect("chunk parses");
+
+        let mut cursor = std::io::Cursor::new(&raw[..]);
+        let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
+        let nbt = if has_named_root(&raw) {
+            pumpkin_nbt::Nbt::read(&mut reader)
+        } else {
+            pumpkin_nbt::Nbt::read_unnamed(&mut reader)
+        }
+        .expect("fixture is NBT");
+
+        let light = chunk.light_engine.lock().unwrap();
+        let min_section = chunk.section.min_y >> 4;
+        let mut stored_sections = 0;
+        for section in nbt
+            .root_tag
+            .get_list("sections")
+            .expect("fixture has sections")
+        {
+            let NbtTag::Compound(section) = section else {
+                continue;
+            };
+            let y = section_y(section);
+            // Vanilla also saves the light-only sections just outside the build height.
+            let Ok(index) = usize::try_from(y - min_section) else {
+                continue;
+            };
+            if index >= light.sky_light.len() {
+                continue;
+            }
+            let Some(stored) = section
+                .get("SkyLight")
+                .and_then(|tag| tag.extract_byte_array())
+            else {
+                if y > 6 {
+                    assert!(matches!(light.sky_light[index], LightContainer::Empty(15)));
+                    // The chunk packet marks a section empty only when this is `None`.
+                    assert!(light.sky_light[index].to_array().is_some());
+                } else {
+                    assert!(matches!(light.sky_light[index], LightContainer::Empty(0)));
+                }
+                continue;
+            };
+            stored_sections += 1;
+            for i in 0..LightContainer::DIM * LightContainer::DIM * LightContainer::DIM {
+                let expected = (stored[i >> 1].cast_unsigned() >> (4 * (i & 1))) & 0x0F;
+                assert_eq!(
+                    light.sky_light[index].get(i & 15, i >> 8, (i >> 4) & 15),
+                    expected,
+                    "section {y}, index {i}"
+                );
+            }
+        }
+        assert!(stored_sections > 0);
+        let top = usize::try_from(19 - min_section).unwrap();
+        assert_eq!(light.sky_light[top].get(0, 15, 0), 15);
+    }
+
+    #[test]
+    fn pump_chunk_without_open_sky_layers_loads_them_as_full() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        // What the pump writer saved before it kept `Empty(15)`: arrays up to the terrain and
+        // nothing above it.
+        let chunk = ChunkData::empty(0, 0);
+        let mut light = chunk.light_engine.lock().unwrap();
+        let mut ground = vec![0u8; LightContainer::ARRAY_SIZE];
+        ground[LightContainer::ARRAY_SIZE - 1] = 0xFF;
+        light.sky_light = vec![LightContainer::Empty(0); 24].into_boxed_slice();
+        light.sky_light[5] = LightContainer::new(ground.into());
+        drop(light);
+        let bytes = chunk.internal_to_pump_bytes();
+        let reloaded =
+            ChunkData::internal_from_pump_bytes(&bytes, Vector2::new(0, 0)).expect("chunk reloads");
+
+        let light = reloaded.light_engine.lock().unwrap();
+        assert!(
+            light.sky_light[..5]
+                .iter()
+                .all(|l| matches!(l, LightContainer::Empty(0)))
+        );
+        assert_eq!(light.sky_light[5].get(15, 15, 15), 15);
+        assert_eq!(light.sky_light[5].get(0, 0, 0), 0);
+        assert!(
+            light.sky_light[6..]
+                .iter()
+                .all(|l| matches!(l, LightContainer::Empty(15)))
+        );
+    }
+
+    #[test]
+    fn chunk_without_any_sky_layer_stays_dark() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        // A dimension without sky stores no `SkyLight`, so nothing is filled in.
+        let bytes = test_chunk(vec![
+            test_section(-4, "minecraft:stone", true),
+            test_section(0, "minecraft:air", true),
+        ])
+        .write();
+        let chunk = ChunkData::from_bytes(&bytes, Vector2::new(0, 0)).expect("chunk parses");
+        let light = chunk.light_engine.lock().unwrap();
+        assert!(
+            light
+                .sky_light
+                .iter()
+                .all(|l| matches!(l, LightContainer::Empty(0)))
+        );
     }
 
     #[test]
