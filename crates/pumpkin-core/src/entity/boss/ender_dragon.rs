@@ -866,6 +866,10 @@ impl Mob for EnderDragonEntity {
     fn get_mob_gravity(&self) -> f64 {
         0.0
     }
+
+    fn checks_despawn(&self) -> bool {
+        false
+    }
 }
 
 pub trait Vector3Ext {
