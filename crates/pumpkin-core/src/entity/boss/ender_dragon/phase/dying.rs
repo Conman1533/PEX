@@ -1,7 +1,7 @@
 use crate::entity::boss::ender_dragon::{DEATH_TIMER_MAX, EnderDragonEntity, Vector3Ext};
 use crate::entity::experience_orb::ExperienceOrbEntity;
 use pumpkin_data::particle::Particle;
-use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::world::WorldEvent;
 use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
 use std::sync::Mutex;
 
@@ -80,9 +80,9 @@ impl super::Phase for DyingPhase {
             }
         }
 
-        // 3. Play death sound at tick 1
-        if death_time == 1 {
-            world.play_sound(Sound::EntityEnderDragonDeath, SoundCategory::Hostile, &pos);
+        // 3. Vanilla's global level event 1028: every player hears the death.
+        if death_time == 1 && !entity.is_silent() {
+            world.sync_global_world_event(WorldEvent::SoundDragonDeath, entity.block_pos.load(), 0);
         }
 
         // 4. Explosion particles matching doClientTick (every 10 ticks and during final ticks)
@@ -115,7 +115,8 @@ impl super::Phase for DyingPhase {
             500
         };
 
-        if death_time > 150 && death_time % 5 == 0 {
+        let mob_drops = world.level_info.load().game_rules.mob_drops;
+        if death_time > 150 && death_time % 5 == 0 && mob_drops {
             ExperienceOrbEntity::spawn(&world, pos, (xp_count as f32 * 0.08) as u32);
         }
 
@@ -123,7 +124,9 @@ impl super::Phase for DyingPhase {
 
         // 6. Complete death sequence at DEATH_TIMER_MAX
         if death_time >= DEATH_TIMER_MAX {
-            ExperienceOrbEntity::spawn(&world, pos, (xp_count as f32 * 0.2) as u32);
+            if mob_drops {
+                ExperienceOrbEntity::spawn(&world, pos, (xp_count as f32 * 0.2) as u32);
+            }
 
             if let Some(ref fight_mutex) = world.dragon_fight {
                 fight_mutex

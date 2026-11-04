@@ -108,7 +108,7 @@ impl EntityBase for EndCrystalEntity {
         if let Some(dragon) = dragon_uuid.and_then(|uuid| world.get_entity_by_uuid(uuid))
             && let Some(dragon) = dragon.cast_any().downcast_ref::<EnderDragonEntity>()
         {
-            dragon.on_crystal_destroyed(self.entity.pos.load(), source);
+            dragon.on_crystal_destroyed(self.entity.entity_uuid, self.entity.pos.load(), source);
         }
 
         true

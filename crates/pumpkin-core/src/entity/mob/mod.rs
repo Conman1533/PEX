@@ -1412,6 +1412,12 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn on_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) {}
 
+    /// Replaces the generic `kill` (lethal `GENERIC_KILL` damage) when it returns `true`, like
+    /// vanilla `EnderDragon.kill`.
+    fn mob_kill(&self) -> bool {
+        false
+    }
+
     fn on_attack(&self, _target: &dyn EntityBase) {}
 
     // getArrow in vanilla, lets skeletons change the arrow before it's shot
@@ -1873,6 +1879,12 @@ pub trait Mob: EntityBase + Send + Sync {
 impl<T: Mob + Send + 'static> EntityBase for T {
     fn is_pushed_by_fluids(&self) -> bool {
         self.mob_is_pushed_by_fluids()
+    }
+
+    fn kill(&self, caller: &dyn EntityBase) {
+        if !self.mob_kill() {
+            caller.damage(caller, f32::MAX, DamageType::GENERIC_KILL);
+        }
     }
 
     fn get_mob(&self) -> Option<&dyn Mob> {

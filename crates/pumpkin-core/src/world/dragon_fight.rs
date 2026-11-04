@@ -4,16 +4,21 @@
 //! Matches vanilla `net.minecraft.world.level.dimension.end.EnderDragonFight` behaviour
 //! and `DragonRespawnStage`.
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use pumpkin_data::{Block, entity::EntityType, world::WorldEvent};
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::nbt_compress::{read_gzip_compound_tag, write_gzip_compound_tag};
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::{
     math::{position::BlockPos, vector2::Vector2, vector3::Vector3},
     text::TextComponent,
 };
 use pumpkin_world::world::BlockFlags;
+use pumpkin_world::world_info::{MAXIMUM_SUPPORTED_WORLD_DATA_VERSION, data_files};
 
 use super::{
     World,
@@ -50,6 +55,38 @@ pub enum DragonRespawnStage {
     SummoningPillars,
     SummoningDragon,
     End,
+}
+
+const FIGHT_FILE: &str = "ender_dragon_fight.dat";
+
+impl DragonRespawnStage {
+    const NAMES: [(Self, &'static str); 5] = [
+        (Self::Start, "start"),
+        (
+            Self::PreparingToSummonPillars,
+            "preparing_to_summon_pillars",
+        ),
+        (Self::SummoningPillars, "summoning_pillars"),
+        (Self::SummoningDragon, "summoning_dragon"),
+        (Self::End, "end"),
+    ];
+
+    /// Vanilla `DragonRespawnStage.getSerializedName`.
+    #[must_use]
+    pub fn serialized_name(self) -> &'static str {
+        Self::NAMES
+            .iter()
+            .find(|(stage, _)| *stage == self)
+            .map_or("start", |(_, name)| name)
+    }
+
+    #[must_use]
+    pub fn from_serialized_name(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .find(|(_, stage_name)| *stage_name == name)
+            .map(|(stage, _)| *stage)
+    }
 }
 
 // ── DragonFight ───────────────────────────────────────────────────────────────
@@ -138,6 +175,120 @@ impl DragonFight {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
             new_gateways.shuffle(&mut rng);
             self.gateways = new_gateways;
+        }
+    }
+
+    /// Vanilla's `ender_dragon_fight` saved data, in the End's `data/minecraft/`.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        data.put_bool("needs_state_scanning", self.needs_state_scanning);
+        data.put_bool("dragon_killed", self.dragon_killed);
+        data.put_bool("previously_killed", self.previously_killed);
+        if let Some(stage) = self.respawn_stage {
+            data.put_string("respawn_stage", stage.serialized_name().to_string());
+        }
+        data.put_int("respawn_time", self.respawn_time);
+        if let Some(uuid) = self.dragon_uuid {
+            data.put_uuid("dragon_uuid", uuid);
+        }
+        if let Some(pos) = self.exit_portal_location {
+            data.put(
+                "exit_portal_location",
+                NbtTag::IntArray(vec![pos.0.x, pos.0.y, pos.0.z]),
+            );
+        }
+        data.put("gateways", NbtTag::IntArray(self.gateways.clone()));
+        data.put_list(
+            "respawn_crystals",
+            self.respawn_crystals
+                .iter()
+                .map(|uuid| NbtTag::from_uuid(*uuid))
+                .collect(),
+        );
+        data
+    }
+
+    /// Reads what `to_nbt` wrote, keeping this fight's value for any field that is missing,
+    /// as vanilla's codec defaults do.
+    pub fn read_nbt(&mut self, data: &NbtCompound) {
+        if let Some(value) = data.get_bool("needs_state_scanning") {
+            self.needs_state_scanning = value;
+        }
+        if let Some(value) = data.get_bool("dragon_killed") {
+            self.dragon_killed = value;
+        }
+        if let Some(value) = data.get_bool("previously_killed") {
+            self.previously_killed = value;
+        }
+        self.respawn_stage = data
+            .get_string("respawn_stage")
+            .and_then(DragonRespawnStage::from_serialized_name);
+        self.respawn_time = data.get_int("respawn_time").unwrap_or(0);
+        self.dragon_uuid = data.get_uuid("dragon_uuid");
+        self.exit_portal_location = match data.get("exit_portal_location") {
+            Some(NbtTag::IntArray(pos)) if pos.len() == 3 => {
+                Some(BlockPos::new(pos[0], pos[1], pos[2]))
+            }
+            _ => None,
+        };
+        let gateways = match data.get("gateways") {
+            Some(NbtTag::IntArray(gateways)) => gateways.clone(),
+            Some(NbtTag::List(gateways)) => gateways
+                .iter()
+                .filter_map(|tag| match tag {
+                    NbtTag::Int(gateway) => Some(*gateway),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        // An empty list keeps the shuffled gateways this fight started with.
+        if !gateways.is_empty() {
+            self.gateways = gateways;
+        }
+        self.respawn_crystals = data
+            .get_list("respawn_crystals")
+            .map(|crystals| crystals.iter().filter_map(NbtTag::extract_uuid).collect())
+            .unwrap_or_default();
+    }
+
+    /// Loads the fight saved in `dim_folder`, or a new one when there is none.
+    #[must_use]
+    pub fn load(dim_folder: &Path) -> Self {
+        let mut fight = Self::new();
+        let path = data_files::minecraft_data_dir(dim_folder).join(FIGHT_FILE);
+        if !path.exists() {
+            return fight;
+        }
+        match std::fs::File::open(&path).map(read_gzip_compound_tag) {
+            Ok(Ok(root)) => {
+                if let Some(data) = root.get_compound("data") {
+                    fight.read_nbt(data);
+                }
+            }
+            Ok(Err(e)) => warn!("Failed to read {}: {e}", path.display()),
+            Err(e) => warn!("Failed to open {}: {e}", path.display()),
+        }
+        fight
+    }
+
+    pub fn save(&self, dim_folder: &Path) {
+        let result = data_files::ensure_minecraft_data_dir(dim_folder)
+            .map_err(|e| e.to_string())
+            .and_then(|dir| {
+                let path = dir.join(FIGHT_FILE);
+                let tmp = dir.join(format!("{FIGHT_FILE}.tmp"));
+                let mut root = NbtCompound::new();
+                root.put_int("DataVersion", MAXIMUM_SUPPORTED_WORLD_DATA_VERSION);
+                root.put_compound("data", self.to_nbt());
+                let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+                write_gzip_compound_tag(root, std::io::BufWriter::new(file))
+                    .map_err(|e| e.to_string())?;
+                std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+            });
+        if let Err(e) = result {
+            warn!("Failed to save the dragon fight: {e}");
         }
     }
 
@@ -1148,5 +1299,57 @@ impl DragonFight {
     #[must_use]
     pub const fn dragon_uuid(&self) -> Option<Uuid> {
         self.dragon_uuid
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::{DragonFight, DragonRespawnStage};
+    use pumpkin_util::math::position::BlockPos;
+    use uuid::Uuid;
+
+    #[test]
+    fn fight_round_trips_through_its_saved_data_file() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut fight = DragonFight::new();
+        fight.needs_state_scanning = false;
+        fight.dragon_killed = true;
+        fight.previously_killed = true;
+        fight.respawn_stage = Some(DragonRespawnStage::SummoningPillars);
+        fight.respawn_time = 42;
+        fight.dragon_uuid = Some(Uuid::from_u128(7));
+        fight.exit_portal_location = Some(BlockPos::new(0, 63, 0));
+        fight.gateways = vec![3, 1, 2];
+        fight.respawn_crystals = vec![Uuid::from_u128(1), Uuid::from_u128(2)];
+        fight.save(folder.path());
+
+        assert!(
+            folder
+                .path()
+                .join("data/minecraft/ender_dragon_fight.dat")
+                .exists()
+        );
+        let loaded = DragonFight::load(folder.path());
+        assert!(!loaded.needs_state_scanning);
+        assert!(loaded.dragon_killed);
+        assert!(loaded.previously_killed);
+        assert_eq!(
+            loaded.respawn_stage,
+            Some(DragonRespawnStage::SummoningPillars)
+        );
+        assert_eq!(loaded.respawn_time, 42);
+        assert_eq!(loaded.dragon_uuid, Some(Uuid::from_u128(7)));
+        assert_eq!(loaded.exit_portal_location, Some(BlockPos::new(0, 63, 0)));
+        assert_eq!(loaded.gateways, vec![3, 1, 2]);
+        assert_eq!(loaded.respawn_crystals, fight.respawn_crystals);
+    }
+
+    #[test]
+    fn missing_fight_file_starts_a_new_fight() {
+        let folder = tempfile::tempdir().unwrap();
+        let fight = DragonFight::load(folder.path());
+        assert!(fight.needs_state_scanning);
+        assert!(!fight.previously_killed);
+        assert_eq!(fight.gateways.len(), 20);
     }
 }

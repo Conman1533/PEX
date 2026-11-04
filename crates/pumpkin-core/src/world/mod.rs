@@ -368,8 +368,12 @@ impl World {
 
         // Load portal POI from disk (PoiStorage::new automatically loads from disk if files exist)
         let portal_poi = portal::PortalPoiStorage::new(level.level_folder.poi_folder.clone());
-        let dragon_fight = (dimension.minecraft_name == Dimension::THE_END.minecraft_name)
-            .then(|| std::sync::Mutex::new(dragon_fight::DragonFight::new()));
+        let dragon_fight =
+            (dimension.minecraft_name == Dimension::THE_END.minecraft_name).then(|| {
+                std::sync::Mutex::new(dragon_fight::DragonFight::load(
+                    &level.level_folder.dim_folder,
+                ))
+            });
 
         let custom_data_path = level
             .level_folder
@@ -622,6 +626,7 @@ impl World {
             .await;
 
         self.save_all_block_entities();
+        self.save_dragon_fight();
 
         // Save portal POI to disk
         let save_result = self
@@ -4295,13 +4300,21 @@ impl World {
             )
             .await;
 
-        player.living_entity.reset_state();
+        // An alive respawn (after the credits) keeps everything, like vanilla
+        // `restoreFrom(oldPlayer, true)`.
+        if alive {
+            player.get_entity().reset_state();
+        } else {
+            player.living_entity.reset_state();
+        }
 
         player.send_permission_lvl_update();
 
-        player.hunger_manager.restart();
+        if !alive {
+            player.hunger_manager.restart();
+        }
 
-        if !keep_inventory {
+        if !keep_inventory && !alive {
             player.set_experience(0, 0.0, 0);
             player.inventory.clear();
         }
@@ -4503,6 +4516,24 @@ impl World {
             }
         }
         None
+    }
+
+    /// Vanilla `ServerLevel.getEntityOrPart`: an entity by id, or one of an ender dragon's parts,
+    /// which clients hit-test and attack by their own ids.
+    pub fn get_entity_or_part(&self, id: i32) -> Option<Arc<dyn EntityBase>> {
+        self.get_entity_by_id(id).or_else(|| {
+            self.entities.load().iter().find_map(|entity| {
+                let dragon = entity
+                    .cast_any()
+                    .downcast_ref::<crate::entity::boss::ender_dragon::EnderDragonEntity>(
+                )?;
+                dragon
+                    .parts
+                    .iter()
+                    .find(|part| part.entity.entity_id == id)
+                    .map(|part| Arc::clone(part) as Arc<dyn EntityBase>)
+            })
+        })
     }
 
     /// Gets a `Player` by a username
@@ -7290,12 +7321,22 @@ impl World {
         }
     }
 
+    fn save_dragon_fight(&self) {
+        if let Some(ref fight_mutex) = self.dragon_fight {
+            fight_mutex
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .save(&self.level.level_folder.dim_folder);
+        }
+    }
+
     pub async fn save(&self) {
         let entities = self.entities.load_full();
         self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions())
             .await;
 
         self.save_all_block_entities();
+        self.save_dragon_fight();
 
         if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
             let _ = portal_poi.save_all();
