@@ -23,6 +23,17 @@ pub enum SpawnGroupData {
         variant: crate::entity::passive::fox::FoxVariant,
         group_size: u32,
     },
+    /// Vanilla `Husk.HuskGroupData`: whether a husk of the group tried the camel husk jockey.
+    Husk {
+        tried_camel_husk: bool,
+    },
+}
+
+/// A vehicle a mob spawns riding (vanilla `startRiding` in `finalizeSpawn`), and the riders
+/// that board it after the mob.
+pub struct PendingVehicle {
+    pub vehicle: Arc<dyn EntityBase>,
+    pub other_riders: Vec<Arc<dyn EntityBase>>,
 }
 
 impl MobEntity {
@@ -58,6 +69,28 @@ impl MobEntity {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(rider);
+    }
+
+    /// The mob spawns riding `vehicle`, followed by `other_riders`; the world adds them all.
+    pub fn set_pending_vehicle(
+        &self,
+        vehicle: Arc<dyn EntityBase>,
+        other_riders: Vec<Arc<dyn EntityBase>>,
+    ) {
+        *self
+            .pending_vehicle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(PendingVehicle {
+            vehicle,
+            other_riders,
+        });
+    }
+
+    pub(crate) fn take_pending_vehicle(&self) -> Option<PendingVehicle> {
+        self.pending_vehicle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
     }
 
     pub(crate) fn take_pending_riders(&self) -> Vec<Arc<dyn EntityBase>> {

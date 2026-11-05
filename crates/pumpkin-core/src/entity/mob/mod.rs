@@ -148,6 +148,10 @@ pub struct MobEntity {
     pub ambient_sound_time: AtomicI32,
     pub persistence_required: AtomicBool,
     pending_riders: std::sync::Mutex<Vec<Arc<dyn EntityBase>>>,
+    /// A vehicle this mob spawns riding, with the other riders it carries.
+    pending_vehicle: std::sync::Mutex<Option<spawn::PendingVehicle>>,
+    /// Set by the natural spawner before `finalize_spawn` (vanilla `EntitySpawnReason.NATURAL`).
+    pub natural_spawn: AtomicBool,
     mob_flags: AtomicU8,
 }
 impl MobEntity {
@@ -276,6 +280,8 @@ impl MobEntity {
             breeder: AtomicCell::new(None),
             persistence_required: AtomicBool::new(false),
             pending_riders: std::sync::Mutex::new(Vec::new()),
+            pending_vehicle: std::sync::Mutex::new(None),
+            natural_spawn: AtomicBool::new(false),
             mob_flags: AtomicU8::new(0),
         }
     }
