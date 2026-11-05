@@ -5,7 +5,8 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use async_trait::async_trait;
 use pumpkin_data::{Block, BlockStateId};
-use pumpkin_nbt::NbtCompound;
+use pumpkin_nbt::{NbtCompound, tag::NbtTag};
+use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 use pumpkin_world::world::BlockFlags;
 
@@ -548,20 +549,32 @@ impl GameTestHelper {
         held_item: &str,
         relative: Vector3<f64>,
     ) -> GameTestResult<()> {
-        self.spawn_named_mock_player_at(MOCK_PLAYER_NAME, held_item, relative)
+        self.spawn_named_mock_player_at(MOCK_PLAYER_NAME, GameMode::Creative, held_item, relative)
             .await
     }
 
-    /// Like [`Self::spawn_mock_player_at`], for a player called `name`.
+    /// Like [`Self::spawn_mock_player_at`], in survival mode (vanilla
+    /// `makeMockServerPlayer(GameType.SURVIVAL)`), so hostile mobs can target it.
+    pub async fn spawn_survival_mock_player_at(
+        &self,
+        held_item: &str,
+        relative: Vector3<f64>,
+    ) -> GameTestResult<()> {
+        self.spawn_named_mock_player_at(MOCK_PLAYER_NAME, GameMode::Survival, held_item, relative)
+            .await
+    }
+
+    /// Like [`Self::spawn_mock_player_at`], for a player called `name` in `game_mode`.
     pub async fn spawn_named_mock_player_at(
         &self,
         name: &str,
+        game_mode: GameMode,
         held_item: &str,
         relative: Vector3<f64>,
     ) -> GameTestResult<()> {
         let position = self.absolute_vec(relative);
         self.world
-            .spawn_mock_player(name, held_item, position)
+            .spawn_mock_player(name, game_mode, held_item, position)
             .await
     }
 
@@ -837,6 +850,100 @@ impl GameTestHelper {
             message: format!(
                 "unexpected entity '{entity_name}' in box {relative_min}..{relative_max} (found {count})"
             ),
+        })
+    }
+
+    /// Vanilla `assertEntityData` with `Mob::getTarget`: every living `entity_name` touching the
+    /// box targets an entity of type `expected`, or nothing when `expected` is `None`.
+    pub async fn assert_entity_target(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+        expected: Option<&str>,
+    ) -> GameTestResult<()> {
+        let (abs_a, min, max) = self.absolute_box(&relative_min, &relative_max);
+        let targets = self.world.mob_targets_in_box(entity_name, min, max).await?;
+        let expected = expected.map(|id| normalize_resource_id(id.to_owned()));
+        let wrong = targets.iter().find(|target| **target != expected);
+        let message = match (targets.is_empty(), wrong) {
+            (true, _) => {
+                format!("expected entity '{entity_name}' in box {relative_min}..{relative_max}")
+            }
+            (false, Some(actual)) => format!(
+                "expected '{entity_name}' to target {}, found {}",
+                expected.as_deref().unwrap_or("nothing"),
+                actual.as_deref().unwrap_or("nothing")
+            ),
+            (false, None) => return Ok(()),
+        };
+        Err(GameTestError::Assertion {
+            tick: self.tick,
+            position: Some(abs_a),
+            message,
+        })
+    }
+
+    /// Vanilla `assertEntityIsHolding`: some living `entity_name` touching the box holds
+    /// `item_name` in either hand.
+    pub async fn assert_entity_is_holding(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+        item_name: &str,
+    ) -> GameTestResult<()> {
+        let (abs_a, min, max) = self.absolute_box(&relative_min, &relative_max);
+        let hands = self.world.held_items_in_box(entity_name, min, max).await?;
+        let item = normalize_resource_id(item_name.to_owned());
+        if hands.iter().flatten().any(|held| *held == item) {
+            return Ok(());
+        }
+        let message = if hands.is_empty() {
+            format!("expected entity '{entity_name}' in box {relative_min}..{relative_max}")
+        } else {
+            format!("expected '{entity_name}' holding '{item}', found {hands:?}")
+        };
+        Err(GameTestError::Assertion {
+            tick: self.tick,
+            position: Some(abs_a),
+            message,
+        })
+    }
+
+    /// Every living `entity_name` touching the box has `expected` at the NBT path `path`
+    /// (`/data get entity` syntax), like `execute if data entity <path>` checked against a value.
+    pub async fn assert_entity_nbt(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+        path: &str,
+        expected: &NbtTag,
+    ) -> GameTestResult<()> {
+        let (abs_a, min, max) = self.absolute_box(&relative_min, &relative_max);
+        let found = self
+            .world
+            .entity_nbt_at_path(entity_name, min, max, path)
+            .await?;
+        let wrong = found.iter().find(|tags| !tags.contains(expected));
+        let message = match (found.is_empty(), wrong) {
+            (true, _) => {
+                format!("expected entity '{entity_name}' in box {relative_min}..{relative_max}")
+            }
+            (false, Some(tags)) => {
+                let tags: Vec<String> = tags.iter().map(ToString::to_string).collect();
+                format!(
+                    "expected '{entity_name}' to have {expected} at {path}, found [{}]",
+                    tags.join(", ")
+                )
+            }
+            (false, None) => return Ok(()),
+        };
+        Err(GameTestError::Assertion {
+            tick: self.tick,
+            position: Some(abs_a),
+            message,
         })
     }
 

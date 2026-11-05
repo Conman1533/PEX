@@ -4,6 +4,7 @@ use pumpkin_data::{
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
 use pumpkin_nbt::NbtCompound;
+use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 
 use super::build_stone_floor;
@@ -366,6 +367,7 @@ pub(super) async fn test_quoted_non_ascii_player_name(
     helper
         .spawn_named_mock_player_at(
             NON_ASCII_PLAYER_NAME,
+            GameMode::Creative,
             "minecraft:stick",
             Vector3::new(1.5, 1.0, 1.5),
         )

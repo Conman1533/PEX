@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use pumpkin_data::BlockStateId;
-use pumpkin_nbt::NbtCompound;
+use pumpkin_nbt::{NbtCompound, tag::NbtTag};
+use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 use pumpkin_world::world::BlockFlags;
 
@@ -104,12 +105,13 @@ pub trait GameTestWorld: Send + Sync {
         ))
     }
 
-    /// Adds a creative mode player called `name` holding `held_item` in its main hand at
+    /// Adds a player called `name` in `game_mode` holding `held_item` in its main hand at
     /// `position`, like vanilla `GameTestHelper.makeMockServerPlayerInLevel`. It stays until
     /// [`Self::remove_mock_players`].
     async fn spawn_mock_player(
         &self,
         _name: &str,
+        _game_mode: GameMode,
         _held_item: &str,
         _position: Vector3<f64>,
     ) -> GameTestResult<()> {
@@ -137,6 +139,40 @@ pub trait GameTestWorld: Send + Sync {
         _max: Vector3<f64>,
     ) -> GameTestResult<u32> {
         Ok(0)
+    }
+
+    /// The target type (such as `minecraft:player`) of each living `entity_name` touching the
+    /// box, `None` for one without a target.
+    async fn mob_targets_in_box(
+        &self,
+        _entity_name: &str,
+        _min: Vector3<f64>,
+        _max: Vector3<f64>,
+    ) -> GameTestResult<Vec<Option<String>>> {
+        Ok(Vec::new())
+    }
+
+    /// The main hand and off hand items (such as `minecraft:air`) of each living `entity_name`
+    /// touching the box.
+    async fn held_items_in_box(
+        &self,
+        _entity_name: &str,
+        _min: Vector3<f64>,
+        _max: Vector3<f64>,
+    ) -> GameTestResult<Vec<[String; 2]>> {
+        Ok(Vec::new())
+    }
+
+    /// The tags at the NBT path `path` (`/data get entity` syntax) in the saved data of each
+    /// living `entity_name` touching the box, empty for an entity where nothing matches.
+    async fn entity_nbt_at_path(
+        &self,
+        _entity_name: &str,
+        _min: Vector3<f64>,
+        _max: Vector3<f64>,
+        _path: &str,
+    ) -> GameTestResult<Vec<Vec<NbtTag>>> {
+        Ok(Vec::new())
     }
 
     async fn container_item_count(
