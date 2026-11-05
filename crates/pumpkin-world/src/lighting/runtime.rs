@@ -374,13 +374,14 @@ impl DynamicLightEngine {
                 removed_light.saturating_sub(1).saturating_sub(opacity)
             };
 
+            // Vanilla `SkyLightEngine.propagateDecrease`: a neighbor darker than the removed light
+            // (or the 15 it passed straight down) may have been lit by us, so it goes dark and
+            // passes the decrease on. Any other neighbor has its own source, such as the open sky
+            // beside the column under a new block, and lights the gap back up.
             if neighbor_light == expected || neighbor_light < removed_light {
-                // This neighbor was lit by us, darken it
                 self.set_sky_light_level(level, &neighbor_pos, 0).ok();
                 self.queue_sky_light_decrease(neighbor_pos, neighbor_light);
-            } else if neighbor_light > removed_light {
-                // Neighbor has brighter light from another source
-                // Re-propagate from it to fill in the gap we left
+            } else {
                 self.queue_sky_light_increase(neighbor_pos, neighbor_light);
             }
         }
@@ -635,5 +636,54 @@ impl DynamicLightEngine {
             Ok(())
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chunk::{ChunkData, format::LightContainer};
+    use crate::level::Level;
+    use pumpkin_config::world::LevelConfig;
+    use pumpkin_data::{Block, dimension::Dimension};
+    use pumpkin_util::math::{position::BlockPos, vector2::Vector2};
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn sky_light_refills_under_a_block_in_open_air() {
+        // Vanilla: the column under one block in open sky gets 14 from its sides all the way
+        // down, and the sky above it stays 15.
+        let temp_dir = TempDir::new().unwrap();
+        let level = Level::from_root_folder(
+            &LevelConfig::default(),
+            temp_dir.path().to_path_buf(),
+            0,
+            Dimension::OVERWORLD,
+        );
+        let chunk = ChunkData::empty_sync(0, 0);
+        let mut light = chunk.light_engine.lock().unwrap();
+        light.sky_light = vec![LightContainer::Empty(15); 24].into_boxed_slice();
+        light.block_light = vec![LightContainer::Empty(0); 24].into_boxed_slice();
+        drop(light);
+        level.loaded_chunks.insert(Vector2::new(0, 0), chunk);
+        let block = BlockPos::new(8, 100, 8);
+        level.set_block_state(&block, Block::STONE.default_state.id);
+        level.light_engine.update_lighting_at(&level, block);
+
+        let sky = |y| {
+            level
+                .light_engine
+                .get_sky_light_level(&level, &BlockPos::new(8, y, 8))
+        };
+        assert_eq!(sky(100), 0);
+        assert_eq!(sky(101), 15);
+        for y in [99, 95, 80, -60] {
+            assert_eq!(sky(y), 14, "y {y}");
+        }
+        assert_eq!(
+            level
+                .light_engine
+                .get_sky_light_level(&level, &BlockPos::new(9, 99, 8)),
+            15
+        );
     }
 }
