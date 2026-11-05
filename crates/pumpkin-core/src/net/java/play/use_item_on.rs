@@ -188,7 +188,7 @@ impl JavaClient {
             player.world().send_entity_status(
                 player.get_entity(),
                 equipment_break_status(slot),
-                None,
+                ActorEventID::None,
             );
         }
 

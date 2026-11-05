@@ -129,7 +129,7 @@ impl FireworkRocketEntity {
         world.send_entity_status(
             entity,
             EntityStatus::FireworksExplode,
-            Some(ActorEventID::FireworksExplode),
+            ActorEventID::FireworksExplode,
         );
         let owner = self.entity.owner_id.and_then(|id| {
             world.get_entity_by_id(id).or_else(|| {

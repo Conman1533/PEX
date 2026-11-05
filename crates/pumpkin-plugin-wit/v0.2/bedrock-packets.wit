@@ -112,6 +112,8 @@ interface bedrock-packets {
     data: f32,
     /// Source context that triggered an arm swing.
     swing-source: option<actor-swing-source>,
+    /// Hand used for the animation (0: main hand, 1: off hand).
+    hand: u8,
   }
   /// Synchronizes block-actor updates from the client, such as edited sign text.
   record s-block-actor-data {
@@ -171,6 +173,11 @@ interface bedrock-packets {
     container-type: u8,
     /// True if the close was initiated by the server rather than the player.
     server-initiated-close: bool,
+  }
+  /// Sent by the client to signal the start and stop of a cursor item drag operation across inventory slots.
+  record s-cursor-item-drag {
+    /// Drag operation state (`0` for start, `1` for stop).
+    state: u8,
   }
   /// Transmits player emote animations to the server and broadcasts them to nearby players.
   record s-emote {
@@ -265,6 +272,7 @@ interface bedrock-packets {
     target-entity-runtime-id: s64,
     action-type: s32,
     hot-bar-slot: s32,
+    hand: hand-slot,
     item-in-hand: network-item-descriptor,
     player-position: tuple<f64, f64, f64>,
     click-position: tuple<f64, f64, f64>,
@@ -274,6 +282,7 @@ interface bedrock-packets {
     hot-bar-slot: s32,
     item-in-hand: network-item-descriptor,
     head-position: tuple<f64, f64, f64>,
+    hand: hand-slot,
   }
   /// Sent by the client when performing complex inventory interactions, item usages, and entity attacks.
   record s-inventory-transaction {
@@ -381,6 +390,11 @@ interface bedrock-packets {
     pattern-id: string,
     repetitions: u8,
   }
+  /// Generated; extracted from variant arm. See `item-stack-request-action.craft-reserved` for details.
+  record item-stack-request-action-craft-reserved {
+    reserved-id: string,
+    repetitions: u8,
+  }
   /// Generated; extracted from variant arm. See `item-stack-request-action.craft-results-deprecated` for details.
   record item-stack-request-action-craft-results-deprecated {
     result-items: list<stack-request-item>,
@@ -403,6 +417,7 @@ interface bedrock-packets {
     optional(item-stack-request-action-optional),
     grindstone(item-stack-request-action-grindstone),
     loom(item-stack-request-action-loom),
+    craft-reserved(item-stack-request-action-craft-reserved),
     craft-non-implemented,
     craft-results-deprecated(item-stack-request-action-craft-results-deprecated),
   }
@@ -934,6 +949,8 @@ interface bedrock-packets {
     synced-properties: property-sync-data,
     /// Entity attachment links (e.g. passenger or leash connections).
     actor-links: list<actor-link>,
+    /// Whether passenger block data is present.
+    has-passenger-block-data: bool,
   }
   /// Synchronized numeric entity attribute with min, current, and max bounds.
   record synced-attribute {
@@ -997,6 +1014,8 @@ interface bedrock-packets {
     abilities-data: serialized-abilities-data,
     /// Vehicle and attachment links.
     actor-links: list<actor-link>,
+    /// Whether passenger block data is present.
+    has-passenger-block-data: bool,
     /// Unique device ID of the client device.
     device-id: string,
     /// Operating system platform of the player.
@@ -2085,6 +2104,7 @@ interface bedrock-packets {
     editor-world-type: s32,
     is-created-in-editor: bool,
     is-exported-from-editor: bool,
+    editor-level-migration-version: u8,
     day-cycle-stop-time: s32,
     education-edition-offer: s32,
     has-education-features-enabled: bool,
@@ -2438,6 +2458,8 @@ interface bedrock-packets {
     s-command-request(s-command-request),
     /// Sent by either client or server to close an open container inventory window.
     s-container-close(s-container-close),
+    /// Sent by the client to signal the start and stop of a cursor item drag operation across inventory slots.
+    s-cursor-item-drag(s-cursor-item-drag),
     /// Transmits player emote animations to the server and broadcasts them to nearby players.
     s-emote(s-emote),
     /// Sent by the client to provide the server with a list of all emotes unlocked and equipped by the player.

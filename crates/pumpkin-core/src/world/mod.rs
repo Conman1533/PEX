@@ -798,19 +798,19 @@ impl World {
         &self,
         entity: &Entity,
         java_status: EntityStatus,
-        bedrock_status: Option<ActorEventID>,
+        bedrock_status: ActorEventID,
     ) {
         let je_packet = CEntityStatus::new(entity.entity_id, java_status as i8);
-        if let Some(be_event) = bedrock_status {
+        if bedrock_status == ActorEventID::None {
+            self.send_to_tracking_players_and_self(entity, &je_packet);
+        } else {
             let be_packet = SActorEvent {
                 target_runtime_id: VarULong(entity.entity_id as u64),
-                event_id: be_event,
+                event_id: bedrock_status,
                 data: VarInt(0),
                 fire_at_position: None,
             };
             self.send_to_tracking_players_and_self_editioned(entity, &je_packet, &be_packet);
-        } else {
-            self.send_to_tracking_players_and_self(entity, &je_packet);
         }
     }
 
@@ -840,7 +840,7 @@ impl World {
         &self,
         entity: &Entity,
         java_status: EntityStatus,
-        bedrock_status: Option<ActorEventID>,
+        bedrock_status: ActorEventID,
     ) {
         self.broadcast_entity_event(entity, java_status, bedrock_status);
     }
@@ -944,6 +944,8 @@ impl World {
     ) {
         if let Some(tracked) = self.entity_tracker.get_tracked_entity(entity.entity_id) {
             tracked.send_to_tracking_players_and_self_editioned(je_packet, be_packet, self);
+        } else if let Some(player) = self.get_player_by_id(entity.entity_id) {
+            player.try_enqueue_packet_editioned(je_packet, be_packet);
         }
     }
 
@@ -2972,6 +2974,7 @@ impl World {
             editor_world_type: VarInt(0),
             is_created_in_editor: false,
             is_exported_from_editor: false,
+            editor_level_migration_version: 0,
             day_cycle_stop_time: VarInt(-1),
             education_edition_offer: VarUInt(0),
             has_education_features_enabled: false,
@@ -3163,7 +3166,7 @@ impl World {
         }
 
         let crafting_data = pumpkin_protocol::bedrock::client::CCraftingData {
-            recipes: crate::net::bedrock::recipe::crafting_data().to_vec(),
+            recipes: crate::net::bedrock::recipe::crafting_data(&server.recipe_manager),
             clean_recipes: false,
         };
         if let Ok(data) = client.serialize_packet(&crafting_data) {

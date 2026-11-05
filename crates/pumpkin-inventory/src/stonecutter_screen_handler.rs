@@ -52,7 +52,7 @@ impl StonecutterScreenHandler {
         handler
     }
 
-    fn update_output(&self) {
+    pub fn update_output(&self) {
         let input_lock = self.input_inventory.get_stack(0);
 
         if input_lock.is_empty() {
@@ -74,7 +74,13 @@ impl StonecutterScreenHandler {
         }
     }
 
-    fn get_available_recipes(input: &ItemStack) -> Vec<&'static StonecutterRecipe> {
+    pub fn set_selected_recipe(&self, index: u8) {
+        self.selected_recipe.store(index, Ordering::Relaxed);
+        self.update_output();
+    }
+
+    #[must_use]
+    pub fn get_available_recipes(input: &ItemStack) -> Vec<&'static StonecutterRecipe> {
         let item = input.item;
         RECIPES_STONECUTTING
             .iter()

@@ -20,6 +20,7 @@ use pumpkin_data::{
     tag::{self, Taggable},
 };
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_protocol::java::client::play::TrailParticleOption;
 use pumpkin_util::{
     Difficulty,
@@ -392,7 +393,11 @@ impl CreakingHeartBlockEntity {
                     spawn_pos,
                     GameEventContext::of(Some(dyn_creaking), None),
                 );
-                world.send_entity_status(creaking.get_entity(), EntityStatus::Poof, None);
+                world.send_entity_status(
+                    creaking.get_entity(),
+                    EntityStatus::Poof,
+                    ActorEventID::None,
+                );
                 return Some(creaking);
             }
         }

@@ -22,12 +22,12 @@ use tracing::{debug, info, trace, warn};
 
 use crate::{STOP_INTERRUPT, server::Server};
 
+use super::ice_socket::IceSocket;
 use super::state::NetherNetState;
 use super::{
     discovery::NetherNetDiscovery, ice_router::IceRouter, peer::negotiate_direct,
     session::IncomingSession,
 };
-use crate::net::bedrock::status::IceSocket;
 
 const MAX_SDP_SIZE: usize = 1 << 20;
 
@@ -48,7 +48,9 @@ impl NetherNetListener {
         let address = config.address;
         let listener = TcpListener::bind(address).await?;
         let local_addr = listener.local_addr()?;
-        let ice_router = Arc::new(IceRouter::bind(ice_socket).await?);
+        let ice_router = Arc::new(
+            IceRouter::bind(ice_socket, Arc::downgrade(server), server.server_guid).await?,
+        );
         let ice_local_addr = ice_router.public_addr();
         let (incoming, receiver) = mpsc::channel(128);
         let state = NetherNetState {
@@ -64,6 +66,10 @@ impl NetherNetListener {
         };
         let router = Router::new()
             .route("/v1/join", get(status))
+            .route("/join", get(status))
+            .route("/v1/ping", get(status))
+            .route("/ping", get(status))
+            .route("/status", get(status))
             .route("/v1/join/{network_id}", post(join))
             .fallback(unknown_request)
             .layer(DefaultBodyLimit::max(MAX_SDP_SIZE))
@@ -223,5 +229,27 @@ async fn join(
             warn!("NetherNet negotiation with {address} failed: {error}");
             (StatusCode::BAD_REQUEST, error).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_reports_the_current_bedrock_version() {
+        let status = NetherNetStatus {
+            name: "Pumpkin",
+            protocol: CURRENT_BEDROCK_MC_PROTOCOL,
+            version: CURRENT_BEDROCK_MC_VERSION,
+            level: "world",
+            players: 2,
+            max_players: 20,
+            game_type: 1,
+        };
+        assert_eq!(
+            serde_json::to_string(&status).unwrap(),
+            r#"{"name":"Pumpkin","protocol":2225,"version":"1.26.60","level":"world","players":2,"maxPlayers":20,"gameType":1}"#
+        );
     }
 }

@@ -238,7 +238,7 @@ use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::EnchantmentsImpl;
 use pumpkin_data::data_component_impl::{
-    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
+    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, GliderImpl, ToolImpl, WeaponImpl,
 };
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
@@ -302,6 +302,7 @@ use crate::data::SaveJSONConfiguration;
 use crate::log_at_level;
 use crate::net::{ClientPlatform, GameProfile};
 use crate::net::{DisconnectReason, PlayerConfig};
+use crate::plugin::api::events::entity::entity_toggle_glide::EntityToggleGlideEvent;
 use crate::plugin::player::exp_change::PlayerExpChangeEvent;
 use crate::plugin::player::inventory_interact::InventoryClickEvent;
 use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
@@ -1206,6 +1207,7 @@ impl Player {
                 }],
             },
             actor_links: Vec::new(),
+            has_passenger_block_data: false,
             device_id: String::new(),
             build_platform: BuildPlatform::Unknown,
         };
@@ -1562,6 +1564,7 @@ impl Player {
                 target_actor_runtime_id: VarULong(victim_entity.entity_id as u64),
                 data: 0.0,
                 swing_source: None,
+                hand: 0,
             };
             world.broadcast_editioned(&je_packet, &be_packet);
         }
@@ -1828,7 +1831,7 @@ impl Player {
                 self.world().send_entity_status(
                     &self.living_entity.entity,
                     super::equipment_break_status(slot),
-                    None,
+                    ActorEventID::None,
                 );
             }
 
@@ -2299,6 +2302,43 @@ impl Player {
         self.living_entity.set_sprinting(is_sprinting);
     }
 
+    pub fn try_start_fall_flying(&self, server: &Arc<Server>) {
+        let entity = self.get_entity();
+        let has_glider = self
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .equipment
+            .values()
+            .any(|stack| {
+                stack.get_data_component::<GliderImpl>().is_some()
+                    && !stack.next_damage_will_break()
+            });
+        let fall_flying = entity.check_fall_flying() && has_glider;
+        if fall_flying && !entity.is_fall_flying() {
+            let mut event = EntityToggleGlideEvent::new(entity.entity_id, true);
+            server.plugin_manager.fire_blocking(server, &mut event);
+            if !event.cancelled && event.is_gliding {
+                entity.set_fall_flying(true);
+                self.living_entity.fall_distance.store(0.0);
+                self.update_player_pose();
+            }
+        }
+    }
+
+    pub fn stop_fall_flying(&self, server: &Arc<Server>) {
+        let entity = self.get_entity();
+        if entity.is_fall_flying() {
+            let mut event = EntityToggleGlideEvent::new(entity.entity_id, false);
+            server.plugin_manager.fire_blocking(server, &mut event);
+            if !event.cancelled && !event.is_gliding {
+                entity.set_fall_flying(false);
+                self.update_player_pose();
+            }
+        }
+    }
+
     #[must_use]
     pub fn get_block_speed_factor(&self) -> f32 {
         self.living_entity.get_block_speed_factor()
@@ -2618,8 +2658,14 @@ impl Player {
     }
 
     pub fn send_hurt_animation(&self, yaw: f32) {
-        let packet = CHurtAnimation::new(self.entity_id().into(), yaw);
-        self.try_send_client_packet(&packet);
+        let je_packet = CHurtAnimation::new(self.entity_id().into(), yaw);
+        let be_packet = SActorEvent {
+            target_runtime_id: VarULong(self.entity_id() as u64),
+            event_id: ActorEventID::Hurt,
+            data: VarInt(0),
+            fire_at_position: None,
+        };
+        self.try_enqueue_packet_editioned(&je_packet, &be_packet);
     }
 
     pub fn open_book(&self, hand: Hand) {
@@ -2992,29 +3038,7 @@ impl Player {
                 );
                 if finished && matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     p.stop_mining();
-
-                    let block = Block::from_state_id(state.id);
-                    let can_harvest = p.can_harvest(state, block);
-                    let flags = if can_harvest {
-                        pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    } else {
-                        pumpkin_world::world::BlockFlags::SKIP_DROPS
-                            | pumpkin_world::world::BlockFlags::NOTIFY_ALL
-                    };
-                    if world.break_block(&pos, Some(&p), flags).is_some() {
-                        if let Some(server) = server_clone {
-                            server
-                                .block_registry
-                                .broken(&world, block, &p, &pos, &server, state);
-                        }
-                        p.apply_tool_damage_for_block_break(state);
-                        if can_harvest {
-                            p.add_exhaustion(MINE_BLOCK_EXHAUSTION);
-                        }
-                        let item_id = p.inventory().held_item().item.id;
-                        p.increment_stat(StatisticCategory::Used, item_id as i32, 1);
-                        p.increment_stat(StatisticCategory::Mined, state.id.as_u16() as i32, 1);
-                    }
+                    p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
                 }
             }
         }
@@ -3087,6 +3111,39 @@ impl Player {
                     ),
                 );
             }
+        }
+    }
+
+    /// Breaks the block a Bedrock player finished digging, with its drops, tool damage,
+    /// exhaustion and stats.
+    fn break_bedrock_dug_block(
+        self: &Arc<Self>,
+        world: &Arc<World>,
+        server: Option<&Server>,
+        pos: BlockPos,
+        state: &BlockState,
+    ) {
+        let block = Block::from_state_id(state.id);
+        let can_harvest = self.can_harvest(state, block);
+        let flags = if can_harvest {
+            pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        } else {
+            pumpkin_world::world::BlockFlags::SKIP_DROPS
+                | pumpkin_world::world::BlockFlags::NOTIFY_ALL
+        };
+        if world.break_block(&pos, Some(self), flags).is_some() {
+            if let Some(server) = server {
+                server
+                    .block_registry
+                    .broken(world, block, self, &pos, server, state);
+            }
+            self.apply_tool_damage_for_block_break(state);
+            if can_harvest {
+                self.add_exhaustion(MINE_BLOCK_EXHAUSTION);
+            }
+            let item_id = self.inventory().held_item().item.id;
+            self.increment_stat(StatisticCategory::Used, item_id as i32, 1);
+            self.increment_stat(StatisticCategory::Mined, block.id.as_u16() as i32, 1);
         }
     }
 
@@ -4398,10 +4455,59 @@ impl Player {
     }
 
     pub fn block_interaction_range(&self) -> f64 {
+        let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
         if self.gamemode.load() == GameMode::Creative {
             5.0
+        } else if is_bedrock {
+            let attr = self
+                .living_entity
+                .get_attribute_value(&Attributes::BLOCK_INTERACTION_RANGE);
+            attr.max(5.0)
         } else {
-            4.5
+            self.living_entity
+                .get_attribute_value(&Attributes::BLOCK_INTERACTION_RANGE)
+        }
+    }
+
+    pub fn update_bedrock_shield_sneaking(&self) {
+        if !matches!(self.client.as_ref(), ClientPlatform::Bedrock(_)) {
+            return;
+        }
+        if !self.get_entity().is_sneaking() {
+            if self.living_entity.is_blocking() {
+                self.living_entity.clear_active_hand();
+            }
+            return;
+        }
+
+        let is_blocking = self.living_entity.is_blocking();
+        let shield_hand_and_stack = [Hand::Left, Hand::Right].into_iter().find_map(|hand| {
+            let stack = self.inventory.get_stack_in_hand(hand);
+            (stack
+                .get_data_component::<pumpkin_data::data_component_impl::BlocksAttacksImpl>()
+                .is_some()
+                && !self.is_on_cooldown(stack.item.registry_key))
+            .then_some((hand, stack))
+        });
+
+        match (is_blocking, shield_hand_and_stack) {
+            (true, Some((hand, stack))) => {
+                let current_hand = *self
+                    .living_entity
+                    .active_hand
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if current_hand != Some(hand) {
+                    self.living_entity.set_active_hand(hand, stack, 72000);
+                }
+            }
+            (true, None) => {
+                self.living_entity.clear_active_hand();
+            }
+            (false, Some((hand, stack))) => {
+                self.living_entity.set_active_hand(hand, stack, 72000);
+            }
+            (false, None) => {}
         }
     }
 
@@ -6612,6 +6718,7 @@ impl Player {
             target_actor_runtime_id: pumpkin_protocol::codec::var_ulong::VarULong(entity_id as u64),
             data: 0.0,
             swing_source: None,
+            hand: u8::from(hand == Hand::Left),
         };
 
         if all {
@@ -8346,7 +8453,10 @@ mod tests {
 
     use super::{Player, bedrock_inventory_slot, read_root_vehicle, write_root_vehicle};
     use crate::world::{BlockFlags, World, test_player, test_world};
-    use pumpkin_data::{Block, attributes::Attributes, effect::StatusEffect, potion::Effect};
+    use pumpkin_data::{
+        Block, attributes::Attributes, effect::StatusEffect, potion::Effect,
+        statistic::StatisticCategory,
+    };
     use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
     use pumpkin_world::chunk::ChunkData;
@@ -8542,6 +8652,24 @@ mod tests {
         assert!(!player.stop_destroy_block(&world, BlockPos::new(3, 64, 0)));
         assert_eq!(player.delayed_destroy.load(), None);
         assert!(player.mining.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn bedrock_dug_block_counts_as_mined_by_block_id() {
+        let world = mining_world();
+        let player = standing_player(&world);
+        let pos = BlockPos::new(2, 64, 0);
+        world.set_block_state(&pos, Block::DIRT.default_state.id, BlockFlags::empty());
+
+        player.break_bedrock_dug_block(&world, None, pos, world.get_block_state(&pos));
+
+        assert!(world.get_block_state(&pos).is_air());
+        let stats = player.stats.lock().unwrap();
+        // Vanilla `Block.playerDestroy` awards `Stats.BLOCK_MINED` for the block. Dirt is block 9,
+        // its default state is 10.
+        let mined = |id: u16| stats.get(StatisticCategory::Mined, i32::from(id));
+        assert_eq!(mined(Block::DIRT.id.as_u16()), 1);
+        assert_eq!(mined(Block::DIRT.default_state.id.as_u16()), 0);
     }
 
     #[tokio::test]
