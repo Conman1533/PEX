@@ -377,17 +377,15 @@ impl HeadlessBot {
 
     fn handle_entity_packet(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), ReadingError> {
         if id == CSpawnEntity::to_id(CURRENT_MC_VERSION) {
-            // Only the fields up to the position: `LpVector3d::read` misreads a zero velocity.
-            let entity_id = payload.get_var_int()?.0;
-            payload.get_uuid()?;
-            let entity_type = payload.get_var_int()?.0;
-            if entity_type == i32::from(EntityType::ITEM.id) {
-                let position = Vector3::new(
-                    payload.get_f64_be()?,
-                    payload.get_f64_be()?,
-                    payload.get_f64_be()?,
-                );
-                self.item_entities.insert(entity_id, position);
+            let spawn = CSpawnEntity::read_packet_data(&mut *payload, &CURRENT_MC_VERSION)?;
+            if !payload.is_empty() {
+                return Err(ReadingError::Message(format!(
+                    "{} bytes left after the spawn entity packet",
+                    payload.len()
+                )));
+            }
+            if spawn.r#type.0 == i32::from(EntityType::ITEM.id) {
+                self.item_entities.insert(spawn.entity_id.0, spawn.position);
             }
         } else if id == CUpdateEntityPos::to_id(CURRENT_MC_VERSION)
             || id == CUpdateEntityPosRot::to_id(CURRENT_MC_VERSION)
@@ -510,8 +508,7 @@ impl HeadlessBot {
     }
 
     /// Right-clicks an entity with the main hand. `location` is where the click hit it, relative
-    /// to its position, as the vanilla client sends it. Keep it nonzero: `LpVector3d::read`
-    /// misreads a zero vector.
+    /// to its position, as the vanilla client sends it.
     pub async fn interact_entity(
         &mut self,
         entity_id: i32,

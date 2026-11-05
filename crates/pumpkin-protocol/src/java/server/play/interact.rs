@@ -168,3 +168,25 @@ impl TryFrom<i32> for ActionType {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SInteract;
+    use crate::{ServerPacket, VarInt};
+    use pumpkin_util::{math::vector3::Vector3, version::JavaMinecraftVersion};
+
+    #[test]
+    fn reads_vanilla_interact_at_zero_location() -> Result<(), Box<dyn std::error::Error>> {
+        // Vanilla 26.3 `ServerboundInteractPacket.STREAM_CODEC` for entity 42, main hand,
+        // location `Vec3.ZERO`, sneaking.
+        let mut read: &[u8] = &[0x2a, 0x00, 0x00, 0x01];
+        let packet = SInteract::read(&mut read, &JavaMinecraftVersion::V_26_3)?;
+
+        assert!(read.is_empty());
+        assert_eq!(packet.entity_id, VarInt(42));
+        assert_eq!(packet.hand, Some(VarInt(0)));
+        assert_eq!(packet.target_position, Some(Vector3::new(0.0, 0.0, 0.0)));
+        assert!(packet.sneaking);
+        Ok(())
+    }
+}
