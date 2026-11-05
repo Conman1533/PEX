@@ -1,0 +1,11 @@
+# actionlint 1.7.12 has older data than GitHub for these two; both work on GitHub.
+self-hosted-runner:
+  labels:
+    # A GitHub-hosted label, missing from actionlint's list.
+    - ubuntu-26.04-arm
+paths:
+  .github/workflows/sync-wit.yml:
+    ignore:
+      # actions/create-github-app-token v3 takes client-id and deprecates app-id.
+      - input "client-id" is not defined
+      - missing input "app-id"
