@@ -1,4 +1,5 @@
 mod block_breaking;
+pub mod block_entity_unload;
 mod block_tuning_and_invert;
 mod commands_and_gamemode;
 mod entity_interaction_range;
@@ -16,12 +17,14 @@ use std::{net::SocketAddr, sync::Arc};
 use pumpkin_core::server::Server;
 use pumpkin_gametest::GameTestRunner;
 
+use block_entity_unload::UnloadedChests;
+
 pub async fn run_bot_tests(
     server: &Arc<Server>,
     addr: SocketAddr,
     runner: &mut GameTestRunner,
     summary_lines: &mut Vec<String>,
-) -> Result<(), String> {
+) -> Result<UnloadedChests, String> {
     status_ping::run_bot_status_ping_test(addr, summary_lines).await?;
 
     let (mut bot1, bot2) =
@@ -59,6 +62,7 @@ pub async fn run_bot_tests(
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)
         .await?;
 
-    Ok(())
+    // Last, so no other bot keeps its chunks loaded. Checked after the server stops.
+    block_entity_unload::run_block_entity_unload_test(server, addr).await
 }
 mod allay;

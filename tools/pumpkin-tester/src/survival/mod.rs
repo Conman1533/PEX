@@ -58,7 +58,11 @@ pub struct StageContext<'a> {
 }
 
 impl<'a> StageContext<'a> {
-    async fn join(server: &'a Arc<Server>, addr: SocketAddr, name: &str) -> Result<Self, String> {
+    pub async fn join(
+        server: &'a Arc<Server>,
+        addr: SocketAddr,
+        name: &str,
+    ) -> Result<Self, String> {
         let bot = HeadlessBot::connect_and_join(addr, name).await?;
         for _ in 0..MAX_POLL_TICKS {
             server.tick();
@@ -78,7 +82,7 @@ impl<'a> StageContext<'a> {
         Err(format!("Bot '{name}' never appeared on the server"))
     }
 
-    async fn leave(self) -> Result<(), String> {
+    pub async fn leave(self) -> Result<(), String> {
         let Self { server, bot, .. } = self;
         let name = bot.name.clone();
         drop(bot);
