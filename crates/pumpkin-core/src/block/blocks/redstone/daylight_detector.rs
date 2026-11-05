@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::block::entities::daylight_detector::DaylightDetectorBlockEntity;
-use pumpkin_data::game_event::GameEvent;
+use pumpkin_data::{Block, game_event::GameEvent};
 use pumpkin_macros::pumpkin_block;
 use pumpkin_util::math::{cos, position::BlockPos};
 use pumpkin_world::world::BlockFlags;
@@ -90,6 +90,10 @@ impl DaylightDetectorBlock {
 
     pub fn update_signal_strength(world: &Arc<World>, block_pos: &BlockPos) {
         let (block, state) = world.get_block_and_state(block_pos);
+        // Another Rayon worker can replace the block after the tick checked it.
+        if block != &Block::DAYLIGHT_DETECTOR {
+            return;
+        }
         let mut props = DaylightDetectorProperties::from_state_id(state.id);
 
         let target = Self::calculate_signal_strength(

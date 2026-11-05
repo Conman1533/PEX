@@ -30,6 +30,12 @@ impl BlockEntity for BedBlockEntity {
 
     fn write_nbt(&self, _nbt: &mut NbtCompound) {}
 
+    /// Vanilla 26.3 has no bed block entity, so beds have no block entity type to check against.
+    /// This one only carries the bed colour for Bedrock and never ticks.
+    fn is_valid_block_state(&self, _state: &BlockState) -> bool {
+        true
+    }
+
     fn bedrock_block_actor_data(&self, state_id: BlockStateId) -> Option<NbtCompound> {
         let (block, _) = BlockState::from_id_with_block(state_id);
         if !block.has_tag(&BlockTag::MINECRAFT_BEDS) {

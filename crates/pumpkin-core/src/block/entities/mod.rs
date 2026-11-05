@@ -1,7 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_data::{Block, block_properties::BLOCK_ENTITY_TYPES};
+use pumpkin_data::{Block, BlockState, block_properties::BLOCK_ENTITY_TYPES};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::position::BlockPos;
 
@@ -116,6 +116,14 @@ pub trait BlockEntity: Any + Send + Sync {
             .iter()
             .position(|block_entity_name| *block_entity_name == name)
             .unwrap_or(0) as u32
+    }
+
+    /// Vanilla `BlockEntity.isValidBlockState`: whether a block in `state` takes this block entity.
+    fn is_valid_block_state(&self, state: &BlockState) -> bool {
+        let name = self.resource_location().split(':').next_back();
+        BLOCK_ENTITY_TYPES
+            .get(usize::from(state.block_entity_type))
+            .is_some_and(|valid| Some(*valid) == name)
     }
 
     /// Obtain NBT data for sending to the client in `ChunkData`
@@ -448,12 +456,34 @@ pub fn create_block_entity(
 
 #[cfg(test)]
 mod test {
-    use super::{BlockEntity, block_entity_from_nbt, furnace::FurnaceBlockEntity};
-    use pumpkin_data::{item::Item, item_stack::ItemStack};
+    use super::{
+        BlockEntity, block_entity_from_nbt, create_block_entity, furnace::FurnaceBlockEntity,
+    };
+    use pumpkin_data::{BlockStateId, item::Item, item_stack::ItemStack};
     use pumpkin_inventory::Inventory;
     use pumpkin_nbt::compound::NbtCompound;
     use pumpkin_util::math::position::BlockPos;
     use std::sync::Arc;
+
+    /// The world only ticks a block entity that its block takes, so a block entity whose id
+    /// differs from the block entity type of the blocks that create it would never tick.
+    #[test]
+    fn block_entities_are_valid_on_the_blocks_that_create_them() {
+        for id in 0..BlockStateId::COUNT {
+            let Some(state) = BlockStateId::new(id).map(BlockStateId::to_state) else {
+                continue;
+            };
+            if let Some(block_entity) =
+                create_block_entity(state.block_entity_type, BlockPos::new(0, 0, 0))
+            {
+                assert!(
+                    block_entity.is_valid_block_state(state),
+                    "{} on state {id}",
+                    block_entity.resource_location()
+                );
+            }
+        }
+    }
 
     /// A loaded block entity is serialized back into its chunk with
     /// `write_internal`, so whatever it holds has to survive that round trip or
