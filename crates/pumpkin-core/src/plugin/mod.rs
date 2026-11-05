@@ -192,6 +192,15 @@ where
 /// and the value is a vector of dynamic event handlers.
 pub type HandlerMap = HashMap<&'static str, Vec<Arc<dyn DynEventHandler>>>;
 
+/// Inserts `handler` so the list stays in call order: from `Lowest` to `Highest`
+/// priority, and in registration order within one priority. `fire` runs the
+/// blocking handlers in this order, then the non-blocking ones.
+fn insert_handler(handlers: &mut Vec<Arc<dyn DynEventHandler>>, handler: Arc<dyn DynEventHandler>) {
+    // `EventPriority` derives `Highest < Lowest`, so the list is sorted descending.
+    let index = handlers.partition_point(|h| h.get_priority() >= handler.get_priority());
+    handlers.insert(index, handler);
+}
+
 /// Plugin loading state
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PluginState {
@@ -1201,10 +1210,10 @@ impl PluginManager {
 
         self.handlers.rcu(|handlers| {
             let mut new_handlers = (**handlers).clone();
-            new_handlers
-                .entry(E::get_name_static())
-                .or_default()
-                .push(typed_handler.clone());
+            insert_handler(
+                new_handlers.entry(E::get_name_static()).or_default(),
+                typed_handler.clone(),
+            );
             Arc::new(new_handlers)
         });
     }
@@ -1335,6 +1344,127 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugin::server::server_tick_start::ServerTickStartEvent;
+    use std::sync::{Mutex, OnceLock};
+
+    struct Recorder {
+        label: &'static str,
+        calls: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl Recorder {
+        fn record(&self) {
+            self.calls.lock().unwrap().push(self.label);
+        }
+    }
+
+    impl EventHandler<ServerTickStartEvent> for Recorder {
+        fn handle<'a>(
+            &'a self,
+            _server: &'a Arc<Server>,
+            _event: &'a ServerTickStartEvent,
+        ) -> BoxFuture<'a, ()> {
+            self.record();
+            Box::pin(async {})
+        }
+
+        fn handle_blocking<'a>(
+            &'a self,
+            _server: &'a Arc<Server>,
+            _event: &'a mut ServerTickStartEvent,
+        ) -> BoxFuture<'a, ()> {
+            self.record();
+            Box::pin(async {})
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn handlers_run_in_priority_order() {
+        let folder = tempfile::tempdir().unwrap();
+        let basic_config = pumpkin_config::BasicConfiguration {
+            default_level_name: folder.path().to_string_lossy().into_owned(),
+            allow_nether: false,
+            allow_end: false,
+            ..Default::default()
+        };
+        let mut advanced_config = pumpkin_config::AdvancedConfiguration::default();
+        // Metrics would write `metrics/` into the crate folder.
+        advanced_config.metrics.enabled = false;
+        let server = Server::new(
+            basic_config,
+            advanced_config,
+            pumpkin_config::TelemetryConfig::default(),
+            crate::data::VanillaData::default(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+        let manager = &server.plugin_manager;
+        let context = Context::new(
+            PluginMetadata {
+                name: "ordering".to_string(),
+                version: "0".to_string(),
+                authors: Vec::new(),
+                description: String::new(),
+                dependencies: Vec::new(),
+                permissions: Vec::new(),
+            },
+            server.clone(),
+            manager.handlers.clone(),
+            manager.clone(),
+            Arc::new(OnceLock::new()),
+        );
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        // (label, priority, blocking, registered through Context rather than PluginManager)
+        let registrations = [
+            ("observe-high", EventPriority::High, false, true),
+            ("normal-1", EventPriority::Normal, true, false),
+            ("observe-lowest", EventPriority::Lowest, false, false),
+            ("highest", EventPriority::Highest, true, true),
+            ("observe-normal", EventPriority::Normal, false, true),
+            ("low", EventPriority::Low, true, false),
+            ("observe-highest", EventPriority::Highest, false, false),
+            ("normal-2", EventPriority::Normal, true, true),
+            ("lowest", EventPriority::Lowest, true, true),
+            ("observe-low", EventPriority::Low, false, true),
+            ("high", EventPriority::High, true, false),
+            ("normal-3", EventPriority::Normal, true, false),
+        ];
+        for (label, priority, blocking, through_context) in registrations {
+            let handler = Arc::new(Recorder {
+                label,
+                calls: calls.clone(),
+            });
+            if through_context {
+                context.register_event::<ServerTickStartEvent, _>(handler, priority, blocking);
+            } else {
+                manager.register::<ServerTickStartEvent, _>(handler, priority, blocking);
+            }
+        }
+
+        manager
+            .fire(&server, &mut ServerTickStartEvent::new(0))
+            .await;
+
+        assert_eq!(
+            *calls.lock().unwrap(),
+            [
+                "lowest",
+                "low",
+                "normal-1",
+                "normal-2",
+                "normal-3",
+                "high",
+                "highest",
+                "observe-lowest",
+                "observe-low",
+                "observe-normal",
+                "observe-high",
+                "observe-highest",
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn topological_sort() {
