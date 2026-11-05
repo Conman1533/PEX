@@ -12,7 +12,10 @@ use crate::{
         palette::has_random_ticking_fluid,
     },
     generation::get_world_gen_with_all_settings,
-    tick::{OrderedTick, ScheduledTick, TickPriority, order},
+    tick::{
+        OrderedTick, ScheduledTick, TickPriority, order, scheduler::ChunkTickScheduler,
+        sort_and_cap,
+    },
     world::WorldPortalExt,
 };
 use arc_swap::ArcSwap;
@@ -624,10 +627,27 @@ impl Level {
             }
         }
 
-        ticks.block_ticks.sort_unstable();
-        ticks.fluid_ticks.sort_unstable();
+        for tick in sort_and_cap(&mut ticks.block_ticks) {
+            self.carry_over_tick(tick, |chunk| &chunk.block_ticks);
+        }
+        for tick in sort_and_cap(&mut ticks.fluid_ticks) {
+            self.carry_over_tick(tick, |chunk| &chunk.fluid_ticks);
+        }
 
         ticks
+    }
+
+    /// Puts back a tick over `MAX_TICKS_PER_GAME_TICK`, so it runs in the next game tick.
+    fn carry_over_tick<T: std::hash::Hash + Eq>(
+        &self,
+        tick: OrderedTick<&'static T>,
+        scheduler: impl Fn(&ChunkData) -> &ChunkTickScheduler<&'static T>,
+    ) {
+        let pos = tick.position.chunk_position();
+        if let Some(chunk) = self.loaded_chunks.get(&pos) {
+            scheduler(chunk.value()).carry_over([tick]);
+            self.chunks_with_scheduled_ticks.insert(pos);
+        }
     }
 
     pub fn clean_entity_chunk(self: &Arc<Self>, chunk: &Vector2<i32>) {
@@ -985,11 +1005,12 @@ impl Level {
         &self,
         block: &Block,
         block_pos: BlockPos,
-        delay: u8,
+        delay: i32,
         priority: TickPriority,
     ) {
         let tick_order = order::next_entity_order()
-            .unwrap_or_else(|| self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed));
+            .unwrap_or_else(|| self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed))
+            .cast_signed();
         let scheduled_tick = ScheduledTick {
             delay,
             position: block_pos,
@@ -1013,11 +1034,12 @@ impl Level {
         &self,
         fluid: &Fluid,
         block_pos: BlockPos,
-        delay: u8,
+        delay: i32,
         priority: TickPriority,
     ) {
         let tick_order = order::next_entity_order()
-            .unwrap_or_else(|| self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed));
+            .unwrap_or_else(|| self.schedule_tick_counts.fetch_add(1, Ordering::Relaxed))
+            .cast_signed();
         let scheduled_tick = ScheduledTick {
             delay,
             position: block_pos,
