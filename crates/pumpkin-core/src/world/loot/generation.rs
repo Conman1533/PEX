@@ -1,4 +1,13 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
+
+use pumpkin_data::Enchantment;
+use pumpkin_data::data_component::DataComponent;
+use pumpkin_data::data_component_impl::{
+    DataComponentImpl, PotionContentsImpl, StoredEnchantmentsImpl,
+};
+use pumpkin_data::potion::Potion;
+use pumpkin_data::tag::{RegistryKey, get_tag_values};
 
 use super::{
     DynamicLootCondition, DynamicLootEntry, DynamicLootEntryKind, DynamicLootFunction,
@@ -205,6 +214,77 @@ struct Candidate<'a> {
 struct Stack {
     item: &'static Item,
     count: i32,
+    enchantments: Vec<(&'static Enchantment, i32)>,
+    potion: Option<&'static Potion>,
+}
+
+impl Stack {
+    const fn new(item: &'static Item) -> Self {
+        Self {
+            item,
+            count: 1,
+            enchantments: Vec::new(),
+            potion: None,
+        }
+    }
+
+    fn to_item_stack(&self, count: i32) -> ItemStack {
+        let mut item_stack = ItemStack::new(count as u8, self.item);
+        if self.item == &Item::ENCHANTED_BOOK && !self.enchantments.is_empty() {
+            item_stack.patch.push((
+                DataComponent::StoredEnchantments,
+                Some(Box::new(StoredEnchantmentsImpl {
+                    enchantment: Cow::Owned(self.enchantments.clone()),
+                })),
+            ));
+        } else {
+            for &(enchantment, level) in &self.enchantments {
+                item_stack.enchant(enchantment, level);
+            }
+        }
+        if let Some(potion) = self.potion {
+            item_stack.patch.push((
+                DataComponent::PotionContents,
+                Some(
+                    PotionContentsImpl {
+                        potion_id: Some(i32::from(potion.id)),
+                        custom_color: None,
+                        custom_effects: Vec::new(),
+                        custom_name: None,
+                    }
+                    .to_dyn(),
+                ),
+            ));
+        }
+        item_stack
+    }
+}
+
+/// The enchantments an `enchant_randomly` function picks from: its ids and `#tags`, or every
+/// enchantment without options.
+fn enchantment_options(options: Option<&str>) -> Vec<&'static Enchantment> {
+    let Some(options) = options else {
+        return Enchantment::all().copied().collect();
+    };
+    let mut enchantments = Vec::new();
+    for option in options.split(',') {
+        if let Some(tag) = option.strip_prefix('#') {
+            let key = if tag.contains(':') {
+                tag.to_owned()
+            } else {
+                format!("minecraft:{tag}")
+            };
+            enchantments.extend(
+                get_tag_values(RegistryKey::Enchantment, &key)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|name| Enchantment::from_name(name)),
+            );
+        } else if let Some(enchantment) = Enchantment::from_name(option) {
+            enchantments.push(enchantment);
+        }
+    }
+    enchantments
 }
 
 pub(super) fn generate(
@@ -235,7 +315,7 @@ pub(super) fn generate(
         let mut count = stack.count;
         while count > 0 {
             let split = count.min(max_count);
-            result.push(ItemStack::new(split as u8, stack.item));
+            result.push(stack.to_item_stack(split));
             count -= split;
         }
     }
@@ -433,13 +513,13 @@ impl Generator<'_, '_> {
         output: &mut Vec<Stack>,
     ) {
         if let Some(item) = candidate.item {
-            self.emit(Stack { item, count: 1 }, functions, output);
+            self.emit(Stack::new(item), functions, output);
             return;
         }
         match candidate.entry.kind() {
             Kind::Item(name) => {
                 if let Some(item) = Item::from_registry_key(name.trim_start_matches("minecraft:")) {
-                    self.emit(Stack { item, count: 1 }, functions, output);
+                    self.emit(Stack::new(item), functions, output);
                 }
             }
             // Dynamic drops emit nothing without a block-registered callback.
@@ -449,7 +529,7 @@ impl Generator<'_, '_> {
                     if let Some(item) =
                         Item::from_registry_key(name.trim_start_matches("minecraft:"))
                     {
-                        self.emit(Stack { item, count: 1 }, functions, output);
+                        self.emit(Stack::new(item), functions, output);
                     }
                 }
             }
@@ -547,6 +627,29 @@ impl Generator<'_, '_> {
                         let (item, count) = smelt(stack.item, stack.count);
                         stack.item = item;
                         stack.count = count;
+                    }
+                    LootFunctionKind::EnchantRandomly { only_compatible } => {
+                        // Vanilla `EnchantRandomlyFunction.run`.
+                        let is_book = stack.item == &Item::BOOK;
+                        let candidates: Vec<_> = enchantment_options(enchantment)
+                            .into_iter()
+                            .filter(|e| !only_compatible || is_book || e.can_enchant(stack.item))
+                            .collect();
+                        if candidates.is_empty() {
+                            continue;
+                        }
+                        let chosen =
+                            candidates[self.rng.next_bounded_i32(candidates.len() as i32) as usize];
+                        let level = 1 + self.rng.next_bounded_i32(chosen.max_level.max(1));
+                        if is_book {
+                            stack.item = &Item::ENCHANTED_BOOK;
+                        }
+                        stack.enchantments.push((chosen, level));
+                    }
+                    LootFunctionKind::SetPotion => {
+                        stack.potion = enchantment.and_then(|id| {
+                            Potion::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
+                        });
                     }
                 }
             }

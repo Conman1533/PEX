@@ -91,11 +91,20 @@ pub enum LootFunctionKind {
     ExplosionDecay,
     ApplyBonus(LootBonusFormula),
     FurnaceSmelt,
+    /// Vanilla `enchant_randomly`: one random enchantment from the function's options,
+    /// turning a book into an enchanted book.
+    EnchantRandomly {
+        only_compatible: bool,
+    },
+    /// Vanilla `set_potion`.
+    SetPotion,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct LootFunction {
     pub kind: LootFunctionKind,
+    /// The enchantment the function reads. `EnchantRandomly` keeps its options here (ids or
+    /// `#tags` joined with `,`, none for every enchantment) and `SetPotion` the potion id.
     pub enchantment: Option<&'static str>,
     pub condition: LootCondition,
 }
@@ -262,6 +271,7 @@ impl From<LootCondition> for DynamicLootCondition {
 #[derive(Clone, Debug)]
 pub struct DynamicLootFunction {
     pub kind: LootFunctionKind,
+    /// See [`LootFunction::enchantment`].
     pub enchantment: Option<String>,
     pub condition: DynamicLootCondition,
 }

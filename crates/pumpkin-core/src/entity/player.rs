@@ -236,10 +236,10 @@ impl BedrockPlayer<'_> {
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
+use pumpkin_data::data_component_impl::EnchantmentsImpl;
 use pumpkin_data::data_component_impl::{
     AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, ToolImpl, WeaponImpl,
 };
-use pumpkin_data::data_component_impl::{AttributeModifiersImpl, EnchantmentsImpl, Operation};
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
 use pumpkin_data::item_stack::{DamageResult, ItemStack};
@@ -1396,30 +1396,12 @@ impl Player {
         let base_damage = self
             .living_entity
             .get_attribute_value(&Attributes::ATTACK_DAMAGE);
-        let base_attack_speed = 4.0;
-
         let mut damage_multiplier = 1.0;
-        let mut add_speed = 0.0;
         let mut extra_ench_damage = 0.0;
         let mut knockback_level = 0u32;
 
         {
             let stack = &item_stack;
-            if stack.is_empty() {
-                // Vanilla fist: base_attack_speed = -2.4
-                add_speed = -2.4;
-            } else if let Some(modifiers) = stack.get_data_component::<AttributeModifiersImpl>() {
-                // Only attack speed is read from the item here.
-                // Attack damage is already  part of `base_damage` via the held item's live
-                // ATTACK_DAMAGE modifier, re-adding it here would double it.
-                for item_mod in modifiers.attribute_modifiers.iter() {
-                    if item_mod.operation == Operation::AddValue
-                        && item_mod.id == "minecraft:base_attack_speed"
-                    {
-                        add_speed = item_mod.amount;
-                    }
-                }
-            }
             if let Some(enchantments) = stack.get_data_component::<EnchantmentsImpl>() {
                 for (enchantment, level) in enchantments.enchantment.iter() {
                     enchantment.modify_damage_against(
@@ -1434,7 +1416,11 @@ impl Player {
             }
         }
 
-        let attack_speed = base_attack_speed + add_speed;
+        // Vanilla `getCurrentItemAttackStrengthDelay` reads the attribute, which holds the
+        // item's `base_attack_speed` modifier and the Haste and Mining Fatigue ones.
+        let attack_speed = self
+            .living_entity
+            .get_attribute_value(&Attributes::ATTACK_SPEED);
 
         let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
         if !is_bedrock
@@ -1443,11 +1429,7 @@ impl Player {
             )
             && min_charge.charge > 0.0
         {
-            let charge_progress = self.get_attack_cooldown_progress(
-                f64::from(server.basic_config.tps),
-                5.0,
-                attack_speed,
-            );
+            let charge_progress = self.get_attack_cooldown_progress(5.0, attack_speed);
             if (charge_progress as f32) < min_charge.charge {
                 return;
             }
@@ -1455,7 +1437,7 @@ impl Player {
         let attack_cooldown_progress = if is_bedrock {
             1.0
         } else {
-            self.get_attack_cooldown_progress(f64::from(server.basic_config.tps), 0.5, attack_speed)
+            self.get_attack_cooldown_progress(0.5, attack_speed)
         };
         self.last_attacked_ticks.store(0, Ordering::Relaxed);
 
@@ -3330,12 +3312,18 @@ impl Player {
         self.client_loaded.store(loaded, Ordering::Relaxed);
     }
 
-    pub fn get_attack_cooldown_progress(&self, tps: f64, base_time: f64, attack_speed: f64) -> f64 {
+    /// Vanilla `getAttackStrengthScale`: the charge after `base_time` more ticks, against a
+    /// delay of 20 ticks over `attack_speed` whatever the server's tick rate.
+    pub fn get_attack_cooldown_progress(&self, base_time: f64, attack_speed: f64) -> f64 {
         let x = f64::from(self.last_attacked_ticks.load(Ordering::Acquire)) + base_time;
-
-        let progress_per_tick = tps / attack_speed;
-        let progress = x / progress_per_tick;
+        let progress = x / Self::attack_strength_delay(attack_speed);
         progress.clamp(0.0, 1.0)
+    }
+
+    /// Vanilla `getCurrentItemAttackStrengthDelay`, in ticks.
+    #[must_use]
+    pub fn attack_strength_delay(attack_speed: f64) -> f64 {
+        20.0 / attack_speed
     }
 
     pub async fn fire_packet_sent<P: Send + Sync + std::any::Any>(
@@ -8346,6 +8334,15 @@ impl InventoryPlayer for Player {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn attack_strength_delay_is_twenty_ticks_over_attack_speed() {
+        // A fist (attack speed 4) recharges in 5 ticks, a sword (1.6) in 12.5, whatever the
+        // server's tick rate.
+        assert!((super::Player::attack_strength_delay(4.0) - 5.0).abs() < f64::EPSILON);
+        assert!((super::Player::attack_strength_delay(1.6) - 12.5).abs() < 1e-9);
+    }
+
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
 

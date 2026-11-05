@@ -15,6 +15,7 @@ use crate::entity::item::ItemEntity;
 use crate::entity::living::LivingEntity;
 use crate::entity::mob::piglin::{PiglinActivity, PiglinEntity};
 use crate::entity::player::Player;
+use crate::world::loot::LootContextParameters;
 
 pub struct PiglinAi;
 
@@ -175,45 +176,24 @@ impl PiglinAi {
     }
 
     #[must_use]
-    pub fn get_barter_response_items() -> Vec<ItemStack> {
-        let roll = rand::random_range(0..459);
-        match roll {
-            0..5 => vec![ItemStack::new(1, &Item::ENCHANTED_BOOK)],
-            5..13 => vec![ItemStack::new(1, &Item::IRON_BOOTS)],
-            13..21 => vec![ItemStack::new(1, &Item::SPLASH_POTION)],
-            21..39 => vec![ItemStack::new(1, &Item::POTION)],
-            39..49 => vec![ItemStack::new(
-                rand::random_range(10..=36),
-                &Item::IRON_NUGGET,
-            )],
-            49..59 => vec![ItemStack::new(
-                rand::random_range(2..=4),
-                &Item::ENDER_PEARL,
-            )],
-            59..79 => vec![ItemStack::new(rand::random_range(3..=9), &Item::STRING)],
-            79..99 => vec![ItemStack::new(rand::random_range(5..=12), &Item::QUARTZ)],
-            99..139 => vec![ItemStack::new(1, &Item::OBSIDIAN)],
-            139..179 => vec![ItemStack::new(
-                rand::random_range(1..=3),
-                &Item::CRYING_OBSIDIAN,
-            )],
-            179..219 => vec![ItemStack::new(1, &Item::FIRE_CHARGE)],
-            219..259 => vec![ItemStack::new(rand::random_range(2..=4), &Item::LEATHER)],
-            259..299 => vec![ItemStack::new(rand::random_range(2..=8), &Item::SOUL_SAND)],
-            299..339 => vec![ItemStack::new(
-                rand::random_range(2..=8),
-                &Item::NETHER_BRICK,
-            )],
-            339..379 => vec![ItemStack::new(
-                rand::random_range(6..=12),
-                &Item::SPECTRAL_ARROW,
-            )],
-            379..419 => vec![ItemStack::new(rand::random_range(8..=16), &Item::GRAVEL)],
-            _ => vec![ItemStack::new(
-                rand::random_range(8..=16),
-                &Item::BLACKSTONE,
-            )],
-        }
+    /// Vanilla `PiglinAi.getBarterResponseItems`: a roll of the `gameplay/piglin_bartering` loot
+    /// table with the piglin as `this_entity`, so a datapack's table applies and the books, boots
+    /// and potions carry their enchantments and effects.
+    pub fn get_barter_response_items(piglin: &PiglinEntity) -> Vec<ItemStack> {
+        let entity = &piglin.mob_entity.living_entity.entity;
+        let world = entity.world.load_full();
+        let Some(table) = world.get_loot_table("minecraft:gameplay/piglin_bartering") else {
+            return Vec::new();
+        };
+        table.generate_loot_with_context(
+            rand::random::<i64>(),
+            &LootContextParameters {
+                world: Some(world.as_ref()),
+                this_entity: Some(piglin as &dyn EntityBase),
+                position: Some(entity.pos.load()),
+                ..Default::default()
+            },
+        )
     }
 
     #[must_use]
@@ -347,5 +327,62 @@ impl PiglinAi {
             Self::RANDOM_THROW_POS_RANGE_VERTICAL,
         )
         .unwrap_or_else(|| piglin.mob_entity.living_entity.entity.pos.load())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pumpkin_data::entity::EntityType;
+    use pumpkin_data::item::Item;
+    use pumpkin_util::math::vector3::Vector3;
+
+    use super::PiglinAi;
+    use crate::entity::mob::piglin::PiglinEntity;
+    use crate::world::test_world;
+
+    #[tokio::test]
+    async fn bartering_rolls_the_loot_table() {
+        let world = test_world();
+        let piglin = crate::entity::r#type::from_type(
+            &EntityType::PIGLIN,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            uuid::Uuid::new_v4(),
+        );
+        let piglin = piglin
+            .cast_any()
+            .downcast_ref::<PiglinEntity>()
+            .expect("a piglin");
+        let soul_speed = &pumpkin_data::Enchantment::SOUL_SPEED;
+        let (mut books, mut boots, mut potions) = (0, 0, 0);
+        for _ in 0..2000 {
+            let items = PiglinAi::get_barter_response_items(piglin);
+            assert_eq!(items.len(), 1, "one stack per barter");
+            let item = &items[0];
+            assert!(!item.is_empty());
+            assert_ne!(item.item, &Item::BOOK, "the book is always enchanted");
+            if item.item == &Item::ENCHANTED_BOOK {
+                let stored = item
+                    .get_data_component::<pumpkin_data::data_component_impl::StoredEnchantmentsImpl>()
+                    .expect("stored enchantments");
+                assert_eq!(stored.enchantment[0].0.name, soul_speed.name);
+                books += 1;
+            } else if item.item == &Item::IRON_BOOTS {
+                assert!(item.get_enchantment_level(soul_speed) > 0);
+                boots += 1;
+            } else if item.item == &Item::POTION || item.item == &Item::SPLASH_POTION {
+                assert!(
+                    item.get_data_component::<pumpkin_data::data_component_impl::PotionContentsImpl>()
+                        .is_some_and(|p| p.potion_id.is_some()),
+                    "fire resistance potion"
+                );
+                potions += 1;
+            }
+        }
+        // 5, 8 and 8 + 8 of 459 weight: about 22, 35 and 70 in 2000.
+        assert!(
+            books > 0 && boots > 0 && potions > 0,
+            "{books} {boots} {potions}"
+        );
     }
 }

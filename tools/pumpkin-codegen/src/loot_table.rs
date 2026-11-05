@@ -219,6 +219,10 @@ impl Generator {
                         quote! { LootFunctionKind::ApplyBonus(#formula) }
                     }
                     LootFunctionKind::FurnaceSmelt => quote! { LootFunctionKind::FurnaceSmelt },
+                    LootFunctionKind::EnchantRandomly { only_compatible } => {
+                        quote! { LootFunctionKind::EnchantRandomly { only_compatible: #only_compatible } }
+                    }
+                    LootFunctionKind::SetPotion => quote! { LootFunctionKind::SetPotion },
                 };
                 let condition = self.condition(&function.condition);
                 let enchantment = function.enchantment.as_ref().map_or_else(|| quote! {None}, |name| quote! {Some(#name)});
