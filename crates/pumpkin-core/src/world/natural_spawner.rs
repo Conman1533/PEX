@@ -637,6 +637,11 @@ pub fn spawn_mobs_for_chunk_generation(
                         entity
                             .get_entity()
                             .set_rotation(rand::random::<f32>() * 360.0, 0.0);
+                        if let Some(mob) = entity.get_mob() {
+                            mob.get_mob_entity()
+                                .natural_spawn
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
                         group_data = finalize_spawn(&entity, world, group_data);
                         // Equipment and synced defaults, like `World::spawn_entity`.
                         entity.init_data_tracker();
