@@ -25,8 +25,8 @@ use crate::{
 
 const MIN_TADPOLES_SPAWN: u8 = 2;
 const MAX_TADPOLES_SPAWN: u8 = 5;
-/// Clamped to `u8::MAX` due to Pumpkin's block tick delay representation.
-const HATCH_DELAY: u8 = u8::MAX;
+/// Vanilla `FrogspawnBlock.MIN_HATCH_TICK_DELAY` and `MAX_HATCH_TICK_DELAY`.
+const HATCH_DELAY: std::ops::Range<i32> = 3600..12000;
 
 #[pumpkin_block("minecraft:frogspawn")]
 pub struct FrogspawnBlock;
@@ -69,7 +69,7 @@ impl BlockBehaviour for FrogspawnBlock {
         args.world.schedule_block_tick(
             args.block,
             *args.position,
-            HATCH_DELAY,
+            rand::rng().random_range(HATCH_DELAY),
             TickPriority::Normal,
         );
     }

@@ -1,15 +1,20 @@
 use pumpkin_data::block_properties::SnifferEggLikeProperties;
+use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::{BlockId, BlockState, BlockStateId};
 use pumpkin_macros::pumpkin_block;
+use pumpkin_util::math::vector3::Vector3;
 use pumpkin_world::tick::TickPriority;
 use pumpkin_world::world::BlockFlags;
+use rand::RngExt;
+use uuid::Uuid;
 
 use crate::block::{
     BlockBehaviour, BrokenArgs, OnPlaceArgs, OnScheduledTickArgs, PathComputationType, PlacedArgs,
 };
+use crate::entity::r#type::from_type;
 
 #[pumpkin_block("minecraft:sniffer_egg")]
 pub struct SnifferEggBlock;
@@ -25,8 +30,11 @@ impl SnifferEggBlock {
         block == BlockId::MOSS_BLOCK
     }
 
-    const fn get_hatch_delay(on_moss: bool) -> u8 {
-        if on_moss { 100 } else { 200 }
+    /// Vanilla: a third of the 24000-tick hatch time (12000 on moss) per crack, plus up to
+    /// 300 ticks.
+    fn get_hatch_delay(on_moss: bool) -> i32 {
+        let hatch_time = if on_moss { 12000 } else { 24000 };
+        hatch_time / 3 + rand::rng().random_range(0..300)
     }
 }
 
@@ -82,6 +90,19 @@ impl BlockBehaviour for SnifferEggBlock {
                 SoundCategory::Blocks,
                 &args.position.to_f64(),
             );
+            let center = Vector3::new(
+                f64::from(args.position.0.x) + 0.5,
+                f64::from(args.position.0.y) + 0.5,
+                f64::from(args.position.0.z) + 0.5,
+            );
+            let sniffer = from_type(&EntityType::SNIFFER, center, args.world, Uuid::new_v4());
+            sniffer
+                .get_entity()
+                .set_rotation(rand::rng().random::<f32>() * 360.0 - 180.0, 0.0);
+            if let Some(ageable) = sniffer.get_mob().and_then(|mob| mob.as_ageable()) {
+                ageable.set_baby(true);
+            }
+            args.world.spawn_entity(sniffer);
         }
     }
 
