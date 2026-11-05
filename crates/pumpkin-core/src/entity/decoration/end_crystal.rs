@@ -1,7 +1,9 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::entity::{Entity, EntityBase, living::LivingEntity};
+use crate::entity::{
+    Entity, EntityBase, boss::ender_dragon::EnderDragonEntity, living::LivingEntity,
+};
 use pumpkin_data::{
     damage::DamageType,
     tag::{self, Taggable},
@@ -81,7 +83,7 @@ impl EntityBase for EndCrystalEntity {
         _amount: f32,
         damage_type: DamageType,
         _position: Option<Vector3<f64>>,
-        _source: Option<&dyn EntityBase>,
+        source: Option<&dyn EntityBase>,
         _cause: Option<&dyn EntityBase>,
     ) -> bool {
         if self.is_invulnerable() {
@@ -95,10 +97,18 @@ impl EntityBase for EndCrystalEntity {
             world.explode(pos, 6.0, crate::world::ExplosionInteraction::Block);
         }
 
-        if let Some(ref fight_mutex) = world.dragon_fight
+        let dragon_uuid = if let Some(ref fight_mutex) = world.dragon_fight
             && let Ok(mut fight) = fight_mutex.lock()
         {
-            fight.on_crystal_destroyed(&world, self.entity.entity_uuid);
+            fight.on_crystal_destroyed(&world, self.entity.entity_uuid)
+        } else {
+            None
+        };
+        // Vanilla `EnderDragonFight.onCrystalDestroyed` tells the dragon after the fight is done.
+        if let Some(dragon) = dragon_uuid.and_then(|uuid| world.get_entity_by_uuid(uuid))
+            && let Some(dragon) = dragon.cast_any().downcast_ref::<EnderDragonEntity>()
+        {
+            dragon.on_crystal_destroyed(self.entity.entity_uuid, self.entity.pos.load(), source);
         }
 
         true

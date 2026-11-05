@@ -1171,6 +1171,12 @@ pub trait Mob: EntityBase + Send + Sync {
         true
     }
 
+    /// Whether `MobEntity::check_despawn` runs for this mob. Vanilla `EnderDragon` overrides
+    /// `checkDespawn` to do nothing.
+    fn checks_despawn(&self) -> bool {
+        true
+    }
+
     /// Vanilla `Mob.removeWhenFarAway`, which `Animal` overrides to `false`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         self.as_animal().is_none()
@@ -1405,6 +1411,12 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn on_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) {}
+
+    /// Replaces the generic `kill` (lethal `GENERIC_KILL` damage) when it returns `true`, like
+    /// vanilla `EnderDragon.kill`.
+    fn mob_kill(&self) -> bool {
+        false
+    }
 
     fn on_attack(&self, _target: &dyn EntityBase) {}
 
@@ -1869,6 +1881,12 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         self.mob_is_pushed_by_fluids()
     }
 
+    fn kill(&self, caller: &dyn EntityBase) {
+        if !self.mob_kill() {
+            caller.damage(caller, f32::MAX, DamageType::GENERIC_KILL);
+        }
+    }
+
     fn get_mob(&self) -> Option<&dyn Mob> {
         Some(self)
     }
@@ -1950,7 +1968,9 @@ impl<T: Mob + Send + 'static> EntityBase for T {
             }
         }
 
-        mob_entity.check_despawn(self);
+        if self.checks_despawn() {
+            mob_entity.check_despawn(self);
+        }
         if mob_entity.living_entity.entity.is_removed() {
             return;
         }

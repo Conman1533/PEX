@@ -1,15 +1,23 @@
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::entity::EntityType;
+use pumpkin_data::tag::{self, Taggable};
+use pumpkin_data::tracked_data;
 use pumpkin_data::{Block, BlockStateId};
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::codec::var_int::VarInt;
+use pumpkin_util::math::atomic_f32::AtomicF32;
+use pumpkin_util::math::boundingbox::EntityDimensions;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::math::{cos, sin};
 use pumpkin_world::{chunk::ChunkHeightmapType, world::BlockFlags};
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::entity::{
     Entity, EntityBase,
-    living::LivingEntity,
+    ai::target_predicate::TargetPredicate,
+    living::{LivingEntity, can_be_seen_as_enemy},
     mob::{Mob, MobEntity},
     player::Player,
 };
@@ -20,15 +28,36 @@ pub mod phase;
 use flight_history::DragonFlightHistory;
 use phase::{EnderDragonPhase, PhaseManager};
 
+/// Vanilla `damage / 4 + min(damage, 1)` for every part but the head and neck.
+fn reduce_body_damage(amount: f32) -> f32 {
+    amount / 4.0 + amount.min(1.0)
+}
+
 pub const NODE_COUNT: usize = 24;
 pub const NODE_Y: i32 = 105;
-pub const NODE_REACH_SQ: f64 = 64.0;
 pub const DEATH_TIMER_MAX: i32 = 200;
 const GROWL_COOLDOWN_BASE: i32 = 200;
 const FLAP_SPEED: f32 = 0.2;
-pub const FLY_ACCEL: f64 = 0.1;
-pub const FLY_SPEED: f64 = 0.6;
-const ARENA_RADIUS: f64 = 192.0;
+/// Width and height of the head part (vanilla `new EnderDragonPart(this, "head", 1.0F, 1.0F)`).
+pub const HEAD_SIZE: f64 = 1.0;
+const SITTING_ALLOWED_DAMAGE_PERCENTAGE: f32 = 0.25;
+/// Width and height of each part in `EnderDragonEntity::parts`, in vanilla's order: head, neck,
+/// body, three tail parts and two wings.
+const PART_SIZES: [(f32, f32); 8] = [
+    (1.0, 1.0),
+    (3.0, 3.0),
+    (5.0, 3.0),
+    (2.0, 2.0),
+    (2.0, 2.0),
+    (2.0, 2.0),
+    (4.0, 2.0),
+    (4.0, 2.0),
+];
+const HEAD_PART: usize = 0;
+const NECK_PART: usize = 1;
+const DRAGON_PHASE_KEY: &str = "DragonPhase";
+const DRAGON_DEATH_TIME_KEY: &str = "DragonDeathTime";
+const SITTING_DAMAGE_RECEIVED_KEY: &str = "sitting_damage_received";
 
 const NODE_ADJACENCY: [u32; NODE_COUNT] = [
     6146, 8197, 8202, 16404, 32808, 32848, 65696, 131392, 131712, 263424, 526848, 525313, 1581057,
@@ -36,121 +65,73 @@ const NODE_ADJACENCY: [u32; NODE_COUNT] = [
     8257536,
 ];
 
-#[derive(Clone, Copy, Default, Debug)]
+/// A node of the dragon's flight graph, or the final point appended to a path (vanilla `Node`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DragonNode {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
 }
 
 impl DragonNode {
     #[must_use]
-    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+    pub const fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
     }
 
-    #[inline]
-    #[must_use]
-    pub fn dist_sq(&self, other: &Self) -> f64 {
-        let (dx, dy, dz) = (self.x - other.x, self.y - other.y, self.z - other.z);
-        dx * dx + dy * dy + dz * dz
+    fn distance_to_sqr(self, other: Self) -> f32 {
+        let xd = (other.x - self.x) as f32;
+        let yd = (other.y - self.y) as f32;
+        let zd = (other.z - self.z) as f32;
+        xd * xd + yd * yd + zd * zd
     }
 
-    #[inline]
-    #[must_use]
-    pub fn dist_sq_vec(&self, v: Vector3<f64>) -> f64 {
-        let (dx, dy, dz) = (self.x - v.x, self.y - v.y, self.z - v.z);
-        dx * dx + dy * dy + dz * dz
-    }
-
-    #[inline]
-    #[must_use]
-    pub const fn as_vec3(&self) -> Vector3<f64> {
-        Vector3::new(self.x, self.y, self.z)
+    fn distance_to(self, other: Self) -> f32 {
+        self.distance_to_sqr(other).sqrt()
     }
 }
 
-#[must_use]
-pub fn find_path(
-    nodes: &[Option<DragonNode>; NODE_COUNT],
-    from: usize,
-    to: usize,
-    final_node: Option<DragonNode>,
-) -> Vec<usize> {
-    if from == to && final_node.is_none() {
-        return vec![];
+/// Vanilla `Path` as the dragon uses it: nodes from the start node on, and the index of the next.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DragonPath {
+    nodes: Vec<DragonNode>,
+    next: usize,
+}
+
+impl DragonPath {
+    pub const fn advance(&mut self) {
+        self.next += 1;
     }
 
-    let mut g = [f64::MAX; NODE_COUNT];
-    let mut came_from = [NODE_COUNT; NODE_COUNT];
-    let mut closed = [false; NODE_COUNT];
-    let mut open: std::collections::BinaryHeap<(ordered_float::OrderedFloat<f64>, usize)> =
-        std::collections::BinaryHeap::new();
-
-    let h = |n: usize| -> f64 {
-        if let Some(target) = final_node
-            && let Some(node) = nodes[n]
-        {
-            return node.dist_sq(&target).sqrt();
-        }
-        match (nodes[n], nodes[to]) {
-            (Some(a), Some(b)) => a.dist_sq(&b).sqrt(),
-            _ => 0.0,
-        }
-    };
-
-    g[from] = 0.0;
-    open.push((ordered_float::OrderedFloat(-h(from)), from));
-
-    'outer: while let Some((_, cur)) = open.pop() {
-        if closed[cur] {
-            continue;
-        }
-        if cur == to {
-            break 'outer;
-        }
-        closed[cur] = true;
-
-        let adj = NODE_ADJACENCY[cur];
-        for nbr in 0..NODE_COUNT {
-            if (adj >> nbr) & 1 == 0 || closed[nbr] {
-                continue;
-            }
-            let (Some(cn), Some(nn)) = (nodes[cur], nodes[nbr]) else {
-                continue;
-            };
-            let ng = g[cur] + cn.dist_sq(&nn).sqrt();
-            if ng < g[nbr] {
-                g[nbr] = ng;
-                came_from[nbr] = cur;
-                open.push((ordered_float::OrderedFloat(-(ng + h(nbr))), nbr));
-            }
-        }
+    /// Vanilla `while (!path.isDone()) path.advance()`.
+    pub const fn finish(&mut self) {
+        self.next = self.nodes.len();
     }
 
-    let mut path = Vec::new();
-    let mut cur = to;
-    while cur != NODE_COUNT {
-        path.push(cur);
-        cur = came_from[cur];
+    #[must_use]
+    pub const fn is_done(&self) -> bool {
+        self.next >= self.nodes.len()
     }
-    path.reverse();
-    if path.first() == Some(&from) {
-        path.remove(0);
+
+    #[must_use]
+    pub fn next_node_pos(&self) -> Option<DragonNode> {
+        self.nodes.get(self.next).copied()
     }
-    path
 }
 
 pub struct EnderDragonPart {
     pub entity: Entity,
     pub dragon_uuid: uuid::Uuid,
+    /// Index in `EnderDragonEntity::parts`.
+    pub index: usize,
 }
 
 impl EnderDragonPart {
-    pub const fn new(entity: Entity, dragon_uuid: uuid::Uuid) -> Self {
+    pub const fn new(entity: Entity, dragon_uuid: uuid::Uuid, index: usize) -> Self {
         Self {
             entity,
             dragon_uuid,
+            index,
         }
     }
 }
@@ -160,17 +141,36 @@ impl EntityBase for EnderDragonPart {
         &self.entity
     }
 
-    fn damage(&self, source: &dyn EntityBase, amount: f32, damage_type: DamageType) -> bool {
+    fn damage(&self, caller: &dyn EntityBase, amount: f32, damage_type: DamageType) -> bool {
+        self.damage_with_context(caller, amount, damage_type, None, None, None)
+    }
+
+    /// Vanilla `EnderDragonPart.hurtServer`: the dragon takes the hit for this part.
+    fn damage_with_context(
+        &self,
+        _caller: &dyn EntityBase,
+        amount: f32,
+        damage_type: DamageType,
+        position: Option<Vector3<f64>>,
+        source: Option<&dyn EntityBase>,
+        cause: Option<&dyn EntityBase>,
+    ) -> bool {
         let world = self.entity.world.load();
-        if let Some(dragon_base) = world
-            .entities
-            .load()
-            .iter()
-            .find(|e| e.get_entity().entity_uuid == self.dragon_uuid)
-        {
-            return dragon_base.damage(source, amount, damage_type);
-        }
-        false
+        let Some(dragon) = world.get_entity_by_uuid(self.dragon_uuid) else {
+            return false;
+        };
+        let Some(ender_dragon) = dragon.cast_any().downcast_ref::<EnderDragonEntity>() else {
+            return false;
+        };
+        ender_dragon.hurt_part(
+            dragon.as_ref(),
+            self.index,
+            amount,
+            damage_type,
+            position,
+            source,
+            cause,
+        )
     }
 
     fn cast_any(&self) -> &dyn std::any::Any {
@@ -196,28 +196,18 @@ pub struct EnderDragonEntity {
     pub in_wall: Mutex<bool>,
     pub dragon_death_time: Mutex<i32>,
     pub sitting_damage_received: Mutex<f32>,
-
-    pub nodes_initialized: Mutex<bool>,
+    /// Health before the hit being handled, for `sitting_damage_received`.
+    health_before_hurt: AtomicF32,
 
     pub fight_origin: Mutex<BlockPos>,
 
     pub phase_manager: PhaseManager,
-    pub phase: Mutex<EnderDragonPhase>,
     pub growl_time: Mutex<i32>,
     pub yaw_rot_accel: Mutex<f32>,
-    pub holding_pattern_clockwise: Mutex<bool>,
-    pub target_location: Mutex<Option<Vector3<f64>>>,
-    pub fireball_charge: Mutex<i32>,
 
-    pub nodes: Mutex<[Option<DragonNode>; NODE_COUNT]>,
-    pub path: Mutex<Vec<usize>>,
-    pub target_node: Mutex<usize>,
-
-    pub strafe_target: Mutex<Option<Vector3<f64>>>,
-    pub target_player: Mutex<Option<uuid::Uuid>>,
-    pub ticks_sitting: Mutex<i32>,
-    pub sit_attack_timer: Mutex<i32>,
-    pub breathing_timer: Mutex<i32>,
+    nodes: Mutex<Option<[DragonNode; NODE_COUNT]>>,
+    /// The crystal healing the dragon (vanilla `nearestCrystal`).
+    nearest_crystal: Mutex<Option<uuid::Uuid>>,
 }
 
 impl EnderDragonEntity {
@@ -230,7 +220,7 @@ impl EnderDragonEntity {
         let _ = Entity::reserve_ids(8);
 
         let mut parts = Vec::new();
-        for i in 1..=8 {
+        for (i, (width, height)) in (1..).zip(PART_SIZES) {
             let part_entity = Entity::from_uuid_with_id(
                 base_id + i,
                 uuid::Uuid::new_v4(),
@@ -238,7 +228,14 @@ impl EnderDragonEntity {
                 entity.pos.load(),
                 &EntityType::ENDER_DRAGON,
             );
-            let part = Arc::new(EnderDragonPart::new(part_entity, dragon_uuid));
+            part_entity
+                .entity_dimension
+                .store(EntityDimensions::new(width, height, height * 0.85));
+            let part = Arc::new(EnderDragonPart::new(
+                part_entity,
+                dragon_uuid,
+                i as usize - 1,
+            ));
             // TODO: world.add_entity_silent(part.clone() as Arc<dyn EntityBase>);
             parts.push(part);
         }
@@ -252,147 +249,336 @@ impl EnderDragonEntity {
             in_wall: Mutex::new(false),
             dragon_death_time: Mutex::new(0),
             sitting_damage_received: Mutex::new(0.0),
-            nodes_initialized: Mutex::new(false),
+            health_before_hurt: AtomicF32::new(0.0),
             fight_origin: Mutex::new(BlockPos::new(0, 128, 0)),
             phase_manager: PhaseManager::new(),
-            phase: Mutex::new(EnderDragonPhase::Circling),
             growl_time: Mutex::new(GROWL_COOLDOWN_BASE),
             yaw_rot_accel: Mutex::new(0.0),
-            holding_pattern_clockwise: Mutex::new(true),
-            target_location: Mutex::new(None),
-            fireball_charge: Mutex::new(0),
-            nodes: Mutex::new([None; NODE_COUNT]),
-            path: Mutex::new(Vec::new()),
-            target_node: Mutex::new(0),
-            strafe_target: Mutex::new(None),
-            target_player: Mutex::new(None),
-            ticks_sitting: Mutex::new(0),
-            sit_attack_timer: Mutex::new(0),
-            breathing_timer: Mutex::new(0),
+            nodes: Mutex::new(None),
+            nearest_crystal: Mutex::new(None),
         })
     }
 
+    /// Vanilla `EnderDragon.hurt(part, ...)`: only the head and neck take full damage, and only
+    /// players and `always_hurts_ender_dragons` damage hurt the dragon at all.
+    #[expect(clippy::too_many_arguments)]
+    pub fn hurt_part(
+        &self,
+        caller: &dyn EntityBase,
+        part: usize,
+        amount: f32,
+        damage_type: DamageType,
+        position: Option<Vector3<f64>>,
+        source: Option<&dyn EntityBase>,
+        cause: Option<&dyn EntityBase>,
+    ) -> bool {
+        if !self.pre_damage_with_context(damage_type, source, cause) {
+            return false;
+        }
+        let amount = if part == HEAD_PART || part == NECK_PART {
+            amount
+        } else {
+            reduce_body_damage(amount)
+        };
+        if amount < 0.01 {
+            return false;
+        }
+        let damaged = self.mob_entity.living_entity.damage_with_context(
+            caller,
+            amount,
+            damage_type,
+            position,
+            source,
+            cause,
+        );
+        if damaged {
+            self.reset_ambient_sound_time();
+            self.on_damage(damage_type, source);
+        }
+        damaged
+    }
+
     pub fn set_fight_origin(&self, pos: BlockPos) {
-        if let (Ok(mut initialized), Ok(mut origin)) = (
-            self.nodes_initialized.try_lock(),
-            self.fight_origin.try_lock(),
-        ) && *origin != pos
-        {
+        if let Ok(mut origin) = self.fight_origin.try_lock() {
             *origin = pos;
-            *initialized = false;
         }
     }
 
-    pub fn set_phase(&self, phase_type: EnderDragonPhase) {
-        let mut phase_lock = self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if *phase_lock == phase_type {
-            return;
-        }
-
-        let old_phase = self.phase_manager.get_phase(*phase_lock);
-        old_phase.end(self);
-
-        *phase_lock = phase_type;
-
-        let new_phase = self.phase_manager.get_phase(phase_type);
-        new_phase.begin(self);
+    #[must_use]
+    pub fn phase(&self) -> EnderDragonPhase {
+        self.phase_manager.current()
     }
 
-    fn ensure_nodes_initialized(&self) {
-        let mut initialized = self
-            .nodes_initialized
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if *initialized {
+    /// Vanilla `EnderDragonPhaseManager.setPhase`: ends the old phase, syncs `DATA_PHASE` and
+    /// begins the new one.
+    pub fn set_phase(&self, target: EnderDragonPhase) {
+        let previous = self.phase_manager.current();
+        if previous == target {
             return;
         }
+        self.phase_manager.get(previous).end(self);
+        self.phase_manager.set_current(target);
+        self.get_entity()
+            .set_synced_data(tracked_data::ender_dragon::DATA_PHASE, VarInt(target.id()));
+        self.phase_manager.get(target).begin(self);
+    }
 
-        let world = self.mob_entity.living_entity.entity.world.load();
-        let fight_origin = self
+    /// Vanilla `getDragonFight().aliveCrystals()`; `None` when this dragon isn't the fight's
+    /// dragon, which vanilla treats like a fight without crystals in most places.
+    #[must_use]
+    pub fn fight_alive_crystals(&self) -> Option<i32> {
+        let world = self.get_entity().world.load();
+        let fight = world
+            .dragon_fight
+            .as_ref()?
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        (fight.dragon_uuid() == Some(self.get_entity().entity_uuid)).then(|| fight.alive_crystals())
+    }
+
+    /// Vanilla `level.getHeightmapPos(heightmap, EnderDragonFight.getPodiumLocation(fightOrigin))`.
+    #[must_use]
+    pub fn podium_pos(&self, heightmap: ChunkHeightmapType) -> BlockPos {
+        let origin = *self
             .fight_origin
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-        let mut nodes = self
-            .nodes
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for i in 0..NODE_COUNT {
-            let mut y_adjustment = 5;
-            let node_x;
-            let node_z;
-
-            if i < 12 {
-                node_x = fight_origin.0.x
-                    + (60.0 * ((i as f32) * std::f32::consts::TAU / 12.0).cos()) as i32;
-                node_z = fight_origin.0.z
-                    + (60.0 * ((i as f32) * std::f32::consts::TAU / 12.0).sin()) as i32;
-            } else if i < 20 {
-                let multiplier = i - 12;
-                node_x = fight_origin.0.x
-                    + (40.0 * ((multiplier as f32) * std::f32::consts::TAU / 8.0).cos()) as i32;
-                node_z = fight_origin.0.z
-                    + (40.0 * ((multiplier as f32) * std::f32::consts::TAU / 8.0).sin()) as i32;
-                y_adjustment += 10;
-            } else {
-                let multiplier = i - 20;
-                node_x = fight_origin.0.x
-                    + (20.0 * ((multiplier as f32) * std::f32::consts::TAU / 4.0).cos()) as i32;
-                node_z = fight_origin.0.z
-                    + (20.0 * ((multiplier as f32) * std::f32::consts::TAU / 4.0).sin()) as i32;
-            }
-
-            let height =
-                world.get_heightmap_height(ChunkHeightmapType::MotionBlocking, node_x, node_z);
-            let node_y = 73.max(height + y_adjustment);
-            nodes[i] = Some(DragonNode::new(node_x as f64, node_y as f64, node_z as f64));
-        }
-
-        let pos = self.mob_entity.living_entity.entity.pos.load();
-        let nearest = Self::nearest_node_in(&nodes, pos);
-        let dest = Self::random_node_idx();
-        let new_path = find_path(&nodes, nearest, dest, None);
-        drop(nodes);
-
-        *self
-            .target_node
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = dest;
-        *self
-            .path
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = new_path;
-        *initialized = true;
+            .unwrap_or_else(PoisonError::into_inner);
+        let world = self.get_entity().world.load();
+        let y = world.get_heightmap_height(heightmap, origin.0.x, origin.0.z);
+        BlockPos::new(origin.0.x, y, origin.0.z)
     }
 
+    #[must_use]
+    pub fn horizontal_speed(&self) -> f32 {
+        self.get_entity().velocity.load().horizontal_length() as f32
+    }
+
+    /// Vanilla `level.getNearestPlayer(conditions, dragon, x, y, z)`.
+    #[must_use]
+    pub fn nearest_player(
+        &self,
+        targeting: &TargetPredicate,
+        pos: Vector3<f64>,
+    ) -> Option<Arc<Player>> {
+        self.nearest_player_matching(targeting, pos, |_| true)
+    }
+
+    /// [`Self::nearest_player`] with an extra selector, like `TargetingConditions.selector`.
+    pub fn nearest_player_matching(
+        &self,
+        targeting: &TargetPredicate,
+        pos: Vector3<f64>,
+        selector: impl Fn(&Player) -> bool,
+    ) -> Option<Arc<Player>> {
+        let world = self.get_entity().world.load_full();
+        world.get_nearest_player(pos, f64::INFINITY, |player| {
+            targeting.test(&world, Some(self as &dyn EntityBase), player.as_ref())
+                && selector(player)
+        })
+    }
+
+    /// Vanilla `getHeadLookVector(1.0F)`: while landing or taking off the head tilts down by the
+    /// distance to the portal, while perched it looks 45 degrees down.
+    #[must_use]
+    pub fn head_look_vector(&self) -> Vector3<f64> {
+        let entity = self.get_entity();
+        let phase = self.phase();
+        let pitch = if matches!(phase, EnderDragonPhase::Landing | EnderDragonPhase::Takeoff) {
+            let egg = self.podium_pos(ChunkHeightmapType::MotionBlockingNoLeaves);
+            let dist_sq = egg
+                .to_centered_f64()
+                .squared_distance_to_vec(&entity.pos.load());
+            let dist = (dist_sq.sqrt() as f32 / 4.0).max(1.0);
+            let y_offset = 6.0 / dist;
+            -y_offset * 1.5 * 5.0
+        } else if phase.is_sitting() {
+            -45.0
+        } else {
+            entity.pitch.load()
+        };
+        Vector3::from_yaw_pitch(entity.yaw.load(), pitch)
+    }
+
+    /// Vanilla `findClosestNode()`, which builds the 24 nodes the first time: 12 on an outer ring
+    /// around the world origin, 8 higher ones on a middle ring and 4 on an inner ring.
     pub fn find_closest_node(&self) -> usize {
-        let pos = self.mob_entity.living_entity.entity.pos.load();
-        self.find_closest_node_to(pos)
+        {
+            let mut nodes = self.nodes.lock().unwrap_or_else(PoisonError::into_inner);
+            if nodes.is_none() {
+                let world = self.get_entity().world.load();
+                *nodes = Some(std::array::from_fn(|i| {
+                    let (radius, step, index, y_adjustment) = if i < 12 {
+                        (60.0, std::f32::consts::PI / 12.0, i, 5)
+                    } else if i < 20 {
+                        (40.0, std::f32::consts::PI / 8.0, i - 12, 15)
+                    } else {
+                        (20.0, std::f32::consts::PI / 4.0, i - 20, 5)
+                    };
+                    let angle = 2.0 * (-std::f32::consts::PI + step * index as f32);
+                    let x = (radius * cos(angle)).floor() as i32;
+                    let z = (radius * sin(angle)).floor() as i32;
+                    let height = world.get_heightmap_height(
+                        ChunkHeightmapType::MotionBlockingNoLeaves,
+                        x,
+                        z,
+                    );
+                    DragonNode::new(x, 73.max(height + y_adjustment), z)
+                }));
+            }
+        }
+        self.find_closest_node_to(self.get_entity().pos.load())
     }
 
+    /// Vanilla `findClosestNode(x, y, z)`: only the inner rings once the crystals are gone.
     pub fn find_closest_node_to(&self, pos: Vector3<f64>) -> usize {
-        self.ensure_nodes_initialized();
-        let nodes = self
-            .nodes
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        Self::nearest_node_in(&nodes, pos)
+        let start_index = if self
+            .fight_alive_crystals()
+            .is_none_or(|crystals| crystals == 0)
+        {
+            12
+        } else {
+            0
+        };
+        let current = DragonNode::new(
+            pos.x.floor() as i32,
+            pos.y.floor() as i32,
+            pos.z.floor() as i32,
+        );
+        let nodes = self.nodes.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(nodes) = nodes.as_ref() else {
+            return 0;
+        };
+        let mut closest_dist = 10000.0;
+        let mut closest_index = 0;
+        for (i, node) in nodes.iter().enumerate().skip(start_index) {
+            let dist = node.distance_to_sqr(current);
+            if dist < closest_dist {
+                closest_dist = dist;
+                closest_index = i;
+            }
+        }
+        closest_index
     }
 
-    fn nearest_node_in(nodes: &[Option<DragonNode>; NODE_COUNT], pos: Vector3<f64>) -> usize {
-        nodes
+    /// Vanilla `findPath`: A* over the node graph from `start` to `end`, then on to `final_node`.
+    /// When `end` can't be reached the path stops at the node closest to it.
+    pub fn find_path(
+        &self,
+        start: usize,
+        end: usize,
+        final_node: Option<DragonNode>,
+    ) -> Option<DragonPath> {
+        let minimum_index = if self
+            .fight_alive_crystals()
+            .is_none_or(|crystals| crystals == 0)
+        {
+            12
+        } else {
+            0
+        };
+        let nodes = (*self.nodes.lock().unwrap_or_else(PoisonError::into_inner))?;
+        let to = nodes[end];
+
+        let mut g = [0.0f32; NODE_COUNT];
+        let mut f = [0.0f32; NODE_COUNT];
+        let mut came_from = [None; NODE_COUNT];
+        let mut closed = [false; NODE_COUNT];
+        let mut open: Vec<usize> = vec![start];
+        f[start] = nodes[start].distance_to(to);
+        let mut closest = start;
+
+        let reconstruct = |came_from: &[Option<usize>; NODE_COUNT], last: usize| {
+            let mut path = vec![nodes[last]];
+            let mut index = last;
+            while let Some(previous) = came_from[index] {
+                path.push(nodes[previous]);
+                index = previous;
+            }
+            path.reverse();
+            path.extend(final_node);
+            DragonPath {
+                nodes: path,
+                next: 0,
+            }
+        };
+
+        while let Some(open_pos) = open
             .iter()
             .enumerate()
-            .filter_map(|(i, n)| n.map(|n| (i, n.dist_sq_vec(pos))))
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map_or(0, |(i, _)| i)
+            .min_by(|a, b| f[*a.1].total_cmp(&f[*b.1]))
+            .map(|(pos, _)| pos)
+        {
+            let current = open.swap_remove(open_pos);
+            if current == end {
+                return Some(reconstruct(&came_from, end));
+            }
+            if nodes[current].distance_to(to) < nodes[closest].distance_to(to) {
+                closest = current;
+            }
+            closed[current] = true;
+
+            for neighbour in minimum_index..NODE_COUNT {
+                if NODE_ADJACENCY[current] & (1 << neighbour) == 0 || closed[neighbour] {
+                    continue;
+                }
+                let tentative_g = g[current] + nodes[current].distance_to(nodes[neighbour]);
+                let in_open = open.contains(&neighbour);
+                if !in_open || tentative_g < g[neighbour] {
+                    came_from[neighbour] = Some(current);
+                    g[neighbour] = tentative_g;
+                    f[neighbour] = tentative_g + nodes[neighbour].distance_to(to);
+                    if !in_open {
+                        open.push(neighbour);
+                    }
+                }
+            }
+        }
+
+        (closest != start).then(|| reconstruct(&came_from, closest))
     }
 
-    fn random_node_idx() -> usize {
-        rand::random_range(0..NODE_COUNT)
+    /// Vanilla `onCrystalDestroyed`: the current phase reacts to the player who broke it, or to
+    /// the nearest player when nobody did.
+    pub fn on_crystal_destroyed(
+        &self,
+        crystal_uuid: uuid::Uuid,
+        crystal_pos: Vector3<f64>,
+        source: Option<&dyn EntityBase>,
+    ) {
+        let world = self.get_entity().world.load_full();
+        let player = source
+            .and_then(EntityBase::get_player)
+            .and_then(|player| world.get_player_by_id(player.entity_id()))
+            .or_else(|| {
+                // Vanilla `CRYSTAL_DESTROY_TARGETING` without a targeter ignores its range.
+                world.get_nearest_player(crystal_pos, f64::INFINITY, |player| {
+                    TargetPredicate::create_attackable().test(&world, None, player.as_ref())
+                })
+            });
+        let healing = *self
+            .nearest_crystal
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            == Some(crystal_uuid);
+        if healing {
+            let damage_type = if player.is_some() {
+                DamageType::PLAYER_EXPLOSION
+            } else {
+                DamageType::EXPLOSION
+            };
+            self.hurt_part(
+                self,
+                HEAD_PART,
+                10.0,
+                damage_type,
+                Some(crystal_pos),
+                None,
+                player.as_deref().map(|player| player as &dyn EntityBase),
+            );
+        }
+        self.phase_manager
+            .get(self.phase())
+            .on_crystal_destroyed(self, player);
     }
 
     #[inline]
@@ -508,11 +694,7 @@ impl EnderDragonEntity {
     }
 
     fn update_flap_time(&self) {
-        let sitting = self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_sitting();
+        let sitting = self.phase().is_sitting();
         let in_wall = *self
             .in_wall
             .lock()
@@ -540,12 +722,7 @@ impl EnderDragonEntity {
     }
 
     fn tick_growl(&self) {
-        if self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_sitting()
-        {
+        if self.phase().is_sitting() {
             return;
         }
         let mut t = self
@@ -557,27 +734,6 @@ impl EnderDragonEntity {
         } else {
             *t = GROWL_COOLDOWN_BASE + rand::random_range(0..100);
         }
-    }
-
-    fn find_nearest_player(&self) -> Option<Arc<Player>> {
-        let world = self.mob_entity.living_entity.entity.world.load();
-        let pos = self.mob_entity.living_entity.entity.pos.load();
-        world
-            .players
-            .load()
-            .iter()
-            .filter(|p| {
-                let p_pos = p.living_entity.entity.pos.load();
-                p_pos.distance_squared(pos) < ARENA_RADIUS * ARENA_RADIUS
-            })
-            .min_by(|a, b| {
-                let a_pos = a.living_entity.entity.pos.load();
-                let b_pos = b.living_entity.entity.pos.load();
-                a_pos
-                    .distance_squared(pos)
-                    .total_cmp(&b_pos.distance_squared(pos))
-            })
-            .cloned()
     }
 
     fn handle_player_collisions(&self) {
@@ -608,49 +764,62 @@ impl EnderDragonEntity {
                 );
                 player.get_entity().send_velocity();
 
-                if !self
-                    .phase
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .is_sitting()
-                {
+                if !self.phase().is_sitting() {
                     player.damage(self, 5.0, DamageType::MOB_ATTACK);
                 }
             }
         }
     }
 
+    /// Vanilla `EnderDragon.checkCrystals`: the nearest crystal heals 1 every 10 ticks, and the
+    /// dragon looks for it again on a random tenth of its ticks.
     fn tick_crystal_healing(&self) {
-        let world = self.mob_entity.living_entity.entity.world.load();
-        let pos = self.mob_entity.living_entity.entity.pos.load();
-
-        let mut nearest_crystal = None;
-        let mut min_dist_sq = 1024.0; // 32 blocks
-
-        for entity in world.entities.load().iter() {
-            if entity.get_entity().entity_type == &EntityType::END_CRYSTAL {
-                let crystal_pos = entity.get_entity().pos.load();
-                let dist_sq = pos.distance_squared(crystal_pos);
-                if dist_sq < min_dist_sq {
-                    min_dist_sq = dist_sq;
-                    nearest_crystal = Some(entity.clone());
-                }
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        if living.is_dead_or_dying() || self.phase() == EnderDragonPhase::Dying {
+            return;
+        }
+        let world = entity.world.load();
+        let mut nearest = self
+            .nearest_crystal
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(uuid) = *nearest {
+            if world
+                .get_entity_by_uuid(uuid)
+                .is_none_or(|crystal| crystal.get_entity().is_removed())
+            {
+                *nearest = None;
+            } else if entity.age.load(Ordering::Relaxed) % 10 == 0
+                && living.health.load() < living.get_max_health()
+            {
+                living.heal(1.0);
             }
         }
 
-        if let Some(_crystal) = nearest_crystal {
-            let living = &self.mob_entity.living_entity;
-            if living.health.load() < living.get_max_health() {
-                living.heal(1.0);
-            }
+        if rand::random_range(0..10) == 0 {
+            let search = entity.bounding_box.load().expand_all(32.0);
+            let pos = entity.pos.load();
+            *nearest = world
+                .entities
+                .load()
+                .iter()
+                .filter(|other| {
+                    let other = other.get_entity();
+                    other.entity_type == &EntityType::END_CRYSTAL
+                        && !other.is_removed()
+                        && other.bounding_box.load().intersects(&search)
+                })
+                .min_by(|a, b| {
+                    pos.distance_squared(a.get_entity().pos.load())
+                        .total_cmp(&pos.distance_squared(b.get_entity().pos.load()))
+                })
+                .map(|crystal| crystal.get_entity().entity_uuid);
         }
     }
 
     fn tick_block_breaking(&self) {
-        let phase_type = *self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let phase_type = self.phase();
         if phase_type.is_sitting() || phase_type == EnderDragonPhase::Dying {
             return;
         }
@@ -712,12 +881,7 @@ impl EnderDragonEntity {
             pos.z - ss1 * 4.5,
         ));
 
-        let head_y_offset = if self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_sitting()
-        {
+        let head_y_offset = if self.phase().is_sitting() {
             -1.0
         } else {
             p5.y - p0.y
@@ -765,7 +929,6 @@ impl EnderDragonEntity {
             return;
         }
         self.mob_entity.living_entity.entity.update_last_pos();
-        self.ensure_nodes_initialized();
         self.update_flap_time();
 
         {
@@ -797,53 +960,43 @@ impl EnderDragonEntity {
             }
         }
 
-        let phase_type: EnderDragonPhase = *self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let phase = self.phase_manager.get_phase(phase_type);
-
-        if phase_type.is_sitting() {
-            *self
-                .ticks_sitting
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
-        } else {
+        let mut phase_type = self.phase();
+        // PEX's stand-in for vanilla `checkWalls` and wing knockback stays off near the portal.
+        let near_portal = phase_type.is_sitting()
+            || matches!(
+                phase_type,
+                EnderDragonPhase::LandingApproach
+                    | EnderDragonPhase::Landing
+                    | EnderDragonPhase::Takeoff
+            );
+        if !near_portal {
             self.handle_player_collisions();
             self.tick_block_breaking();
         }
 
-        phase.tick(self);
+        // Vanilla ticks a phase that the current one switched to in the same tick.
+        self.phase_manager.get(phase_type).do_server_tick(self);
+        if self.phase() != phase_type {
+            phase_type = self.phase();
+            self.phase_manager.get(phase_type).do_server_tick(self);
+        }
 
         if self.mob_entity.living_entity.entity.is_removed() {
             return;
         }
 
-        if phase_type != EnderDragonPhase::Dying {
-            let target_location = *self
-                .target_location
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if let Some(target) = target_location {
-                let pos = self.mob_entity.living_entity.entity.pos.load();
-                self.steer_toward(pos, target, phase.get_fly_speed(), phase.get_turn_speed());
-            }
+        let phase = self.phase_manager.get(phase_type);
+        if let Some(target) = phase.get_fly_target_location() {
+            let pos = self.mob_entity.living_entity.entity.pos.load();
+            self.steer_toward(
+                pos,
+                target,
+                phase.get_fly_speed(),
+                phase.get_turn_speed(self),
+            );
         }
 
         self.tick_parts();
-    }
-
-    pub fn hurt(&self, damage: f32) {
-        let phase_type: EnderDragonPhase = *self
-            .phase
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if phase_type.is_sitting() {
-            *self
-                .sitting_damage_received
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) += damage;
-        }
     }
 }
 
@@ -856,15 +1009,146 @@ impl Mob for EnderDragonEntity {
         self.ai_step();
     }
 
+    fn mob_init_data_tracker(&self) {
+        self.get_entity().set_synced_data(
+            tracked_data::ender_dragon::DATA_PHASE,
+            VarInt(self.phase().id()),
+        );
+    }
+
+    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
+        nbt.put_int(DRAGON_PHASE_KEY, self.phase().id());
+        nbt.put_int(
+            DRAGON_DEATH_TIME_KEY,
+            *self
+                .dragon_death_time
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        nbt.put_float(
+            SITTING_DAMAGE_RECEIVED_KEY,
+            *self
+                .sitting_damage_received
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+    }
+
+    fn mob_read_nbt(&self, nbt: &NbtCompound) {
+        if let Some(phase_id) = nbt.get_int(DRAGON_PHASE_KEY) {
+            self.set_phase(EnderDragonPhase::by_id(phase_id));
+        }
+        *self
+            .dragon_death_time
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) =
+            nbt.get_int(DRAGON_DEATH_TIME_KEY).unwrap_or(0);
+        *self
+            .sitting_damage_received
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) =
+            nbt.get_float(SITTING_DAMAGE_RECEIVED_KEY).unwrap_or(0.0);
+    }
+
+    /// Vanilla `EnderDragon.canAttack`.
+    fn can_attack(&self, target: &dyn EntityBase) -> bool {
+        can_be_seen_as_enemy(target)
+    }
+
+    /// Vanilla `EnderDragon.kill`: no death sequence, the fight counts the dragon as killed.
+    fn mob_kill(&self) -> bool {
+        let entity = &self.mob_entity.living_entity.entity;
+        let world = entity.world.load();
+        for part in &self.parts {
+            part.entity.remove();
+        }
+        entity.remove();
+        if let Some(ref fight_mutex) = world.dragon_fight {
+            fight_mutex
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .set_dragon_killed(&world, entity.entity_uuid);
+        }
+        true
+    }
+
+    /// A hit on the dragon itself is a hit on its body (vanilla `EnderDragon.hurtServer`).
+    fn modify_incoming_damage(&self, amount: f32, _damage_type: DamageType) -> f32 {
+        reduce_body_damage(amount)
+    }
+
+    /// The early returns of vanilla `EnderDragon.hurt`: no damage while dying, the sitting
+    /// phases (`AbstractDragonSittingPhase.onHurt`) shrug off arrows and wind charges, and only
+    /// a player or `always_hurts_ender_dragons` damage hurts it.
+    fn pre_damage_with_context(
+        &self,
+        damage_type: DamageType,
+        source: Option<&dyn EntityBase>,
+        cause: Option<&dyn EntityBase>,
+    ) -> bool {
+        let by_player = cause
+            .or(source)
+            .is_some_and(|entity| entity.get_entity().entity_type == &EntityType::PLAYER);
+        if !by_player
+            && !damage_type.has_tag(&tag::DamageType::MINECRAFT_ALWAYS_HURTS_ENDER_DRAGONS)
+        {
+            return false;
+        }
+        self.pre_damage(damage_type, source)
+    }
+
+    fn pre_damage(&self, damage_type: DamageType, _source: Option<&dyn EntityBase>) -> bool {
+        let phase = self.phase();
+        if phase == EnderDragonPhase::Dying {
+            return false;
+        }
+        if phase.is_sitting()
+            && [
+                DamageType::ARROW,
+                DamageType::TRIDENT,
+                DamageType::WIND_CHARGE,
+            ]
+            .contains(&damage_type)
+        {
+            return false;
+        }
+        self.health_before_hurt.store(
+            self.mob_entity.living_entity.health.load(),
+            Ordering::Relaxed,
+        );
+        true
+    }
+
     fn on_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) {
         let living = &self.mob_entity.living_entity;
+        if self.phase().is_sitting() {
+            let mut received = self
+                .sitting_damage_received
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            *received += self.health_before_hurt.load(Ordering::Relaxed) - living.health.load();
+            if *received > SITTING_ALLOWED_DAMAGE_PERCENTAGE * living.get_max_health() {
+                *received = 0.0;
+                drop(received);
+                self.set_phase(EnderDragonPhase::Takeoff);
+            }
+        }
+        // Vanilla `EnderDragon.handleKillingBlow`: a dragon killed in flight stays at 1 health
+        // while it dies.
         if living.health.load() <= 0.0 {
+            if !self.phase().is_sitting() {
+                living.health.store(1.0);
+            }
             self.set_phase(EnderDragonPhase::Dying);
         }
     }
 
     fn get_mob_gravity(&self) -> f64 {
         0.0
+    }
+
+    fn checks_despawn(&self) -> bool {
+        false
     }
 }
 
@@ -876,5 +1160,211 @@ impl Vector3Ext for Vector3<f64> {
     fn distance_squared(self, other: Self) -> f64 {
         let (dx, dy, dz) = (self.x - other.x, self.y - other.y, self.z - other.z);
         dx * dx + dy * dy + dz * dz
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use pumpkin_data::damage::DamageType;
+    use pumpkin_data::entity::EntityType;
+    use pumpkin_nbt::compound::NbtCompound;
+    use pumpkin_util::math::vector3::Vector3;
+
+    use super::{EnderDragonEntity, phase::EnderDragonPhase};
+    use crate::entity::ai::test_support::world;
+    use crate::entity::mob::Mob;
+    use crate::entity::{Entity, EntityBase};
+    use crate::world::test_player;
+
+    fn dragon(world: &Arc<crate::world::World>, pos: Vector3<f64>) -> Arc<EnderDragonEntity> {
+        EnderDragonEntity::new(Entity::new(world.clone(), pos, &EntityType::ENDER_DRAGON))
+    }
+
+    #[tokio::test]
+    async fn dragon_phase_round_trips_through_nbt() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let saved = dragon(&world, Vector3::new(0.0, 70.0, 0.0));
+        saved.set_phase(EnderDragonPhase::SittingScanning);
+
+        let mut nbt = NbtCompound::new();
+        saved.write_nbt(&mut nbt);
+        // Vanilla `EnderDragonPhase.SITTING_SCANNING.getId()`.
+        assert_eq!(nbt.get_int("DragonPhase"), Some(6));
+
+        let loaded = dragon(&world, Vector3::new(0.0, 70.0, 0.0));
+        assert_eq!(loaded.phase(), EnderDragonPhase::Hovering);
+        loaded.read_nbt_non_mut(&nbt);
+        assert_eq!(loaded.phase(), EnderDragonPhase::SittingScanning);
+
+        let mut resaved = NbtCompound::new();
+        loaded.write_nbt(&mut resaved);
+        assert_eq!(resaved.get_int("DragonPhase"), Some(6));
+        world.level.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn parts_resolve_by_id_with_their_own_sizes() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        world.spawn_entity_non_save(fighting.clone());
+        let id = fighting.get_entity().entity_id;
+
+        // Clients attack a part by its own id, the dragon's id plus 1 to 8.
+        for i in 1..=8 {
+            let part = world
+                .get_entity_or_part(id + i)
+                .expect("each part id resolves");
+            assert_eq!(part.get_entity().entity_id, id + i);
+        }
+        let head = fighting.parts[0].get_entity().entity_dimension.load();
+        assert!((head.width - 1.0).abs() < f32::EPSILON);
+        let body = fighting.parts[2].get_entity().entity_dimension.load();
+        assert!((body.width - 5.0).abs() < f32::EPSILON);
+        world.level.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn projectiles_find_the_parts_not_the_dragon() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        let everywhere = pumpkin_util::math::boundingbox::BoundingBox::new(
+            Vector3::new(-64.0, 0.0, -64.0),
+            Vector3::new(64.0, 200.0, 64.0),
+        );
+        let dragon_id = fighting.get_entity().entity_id;
+        let found =
+            crate::entity::projectile::with_dragon_parts(vec![fighting.clone()], &everywhere, true);
+        assert_eq!(found.len(), fighting.parts.len());
+        assert!(found.iter().all(|e| e.get_entity().entity_id != dragon_id));
+        // The dragon's own fireballs pass through it.
+        assert!(
+            crate::entity::projectile::with_dragon_parts(vec![fighting], &everywhere, false)
+                .is_empty()
+        );
+        world.level.shutdown().await;
+    }
+
+    #[test]
+    fn body_parts_take_a_quarter_plus_one() {
+        assert!((super::reduce_body_damage(8.0) - 3.0).abs() < f32::EPSILON);
+        assert!((super::reduce_body_damage(0.5) - 0.625).abs() < f32::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn only_players_and_dragon_damage_types_hurt_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        let player = test_player(&world, Vector3::new(0.5, 100.0, 10.5));
+        fighting.set_phase(EnderDragonPhase::HoldingPattern);
+
+        assert!(fighting.pre_damage_with_context(
+            DamageType::PLAYER_ATTACK,
+            Some(player.as_ref()),
+            Some(player.as_ref()),
+        ));
+        assert!(!fighting.pre_damage_with_context(DamageType::MOB_ATTACK, None, None));
+        assert!(fighting.pre_damage_with_context(DamageType::EXPLOSION, None, None));
+        fighting.set_phase(EnderDragonPhase::Dying);
+        assert!(!fighting.pre_damage_with_context(
+            DamageType::PLAYER_ATTACK,
+            Some(player.as_ref()),
+            Some(player.as_ref()),
+        ));
+        world.level.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn killing_blow_in_flight_keeps_one_health_and_dies_over_200_ticks() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        world.spawn_entity_non_save(fighting.clone());
+        fighting.set_phase(EnderDragonPhase::HoldingPattern);
+
+        // What the living damage code leaves after a lethal hit.
+        fighting.mob_entity.living_entity.health.store(0.0);
+        fighting.on_damage(DamageType::PLAYER_ATTACK, None);
+        assert_eq!(fighting.phase(), EnderDragonPhase::Dying);
+        assert!((fighting.mob_entity.living_entity.health.load() - 1.0).abs() < f32::EPSILON);
+
+        // Vanilla `tickDeath` removes the dragon on its 200th tick.
+        for _ in 0..199 {
+            fighting
+                .phase_manager
+                .get(EnderDragonPhase::Dying)
+                .do_server_tick(&fighting);
+        }
+        assert!(!fighting.get_entity().is_removed());
+        fighting
+            .phase_manager
+            .get(EnderDragonPhase::Dying)
+            .do_server_tick(&fighting);
+        assert!(fighting.get_entity().is_removed());
+        world.level.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn kill_removes_the_dragon_at_once() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let killed = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        world.spawn_entity_non_save(killed.clone());
+        killed.kill(killed.as_ref());
+        assert!(killed.get_entity().is_removed());
+        assert!(killed.parts.iter().all(|part| part.entity.is_removed()));
+        world.level.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn strafe_phase_shoots_dragon_fireball() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        // Yaw 0 faces north (-z), straight at the player 30 blocks away.
+        let strafing = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        let player = test_player(&world, Vector3::new(0.5, 100.0, -29.5));
+        strafing.set_phase(EnderDragonPhase::StrafePlayer);
+        strafing
+            .phase_manager
+            .strafe_player
+            .set_target(&strafing, &(player as Arc<dyn EntityBase>));
+
+        // Vanilla `FIREBALL_CHARGE_AMOUNT` ticks of charging.
+        for _ in 0..5 {
+            assert!(
+                !world
+                    .entities
+                    .load()
+                    .iter()
+                    .any(|e| e.get_entity().entity_type == &EntityType::DRAGON_FIREBALL),
+                "the fireball came before the charge was full"
+            );
+            strafing
+                .phase_manager
+                .get(strafing.phase())
+                .do_server_tick(&strafing);
+        }
+
+        let entities = world.entities.load();
+        let fireball = entities
+            .iter()
+            .find(|e| e.get_entity().entity_type == &EntityType::DRAGON_FIREBALL)
+            .expect("the strafing dragon shot a dragon fireball");
+        assert_eq!(
+            fireball.get_owner_id(),
+            Some(strafing.get_entity().entity_id)
+        );
+        let velocity = fireball.get_entity().velocity.load();
+        assert!(
+            velocity.z < 0.0 && velocity.x.abs() < 1e-6,
+            "the fireball flies toward the player, got {velocity:?}"
+        );
+        assert_eq!(strafing.phase(), EnderDragonPhase::HoldingPattern);
+        world.level.shutdown().await;
     }
 }

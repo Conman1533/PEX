@@ -3973,6 +3973,10 @@ impl EntityBase for LivingEntity {
                 // respawn. Removing one here breaks reconnecting while dead.
                 return;
             }
+            // Vanilla `EnderDragon.tickDeath` takes 200 ticks; the dying phase runs it.
+            if self.entity.entity_type == &EntityType::ENDER_DRAGON {
+                return;
+            }
             // Vanilla `LivingEntity.tickDeath` sends the POOF (60) particle event
             // once the death animation finished; the death event (3) was already
             // broadcast in `on_death`. Sending it again here would restart the

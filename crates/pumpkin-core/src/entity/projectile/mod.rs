@@ -9,6 +9,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 pub mod arrow;
+pub mod dragon_fireball;
 pub mod egg;
 pub mod ender_pearl;
 pub mod evoker_fangs;
@@ -227,7 +228,11 @@ impl ThrownItemEntity {
         }
 
         // Entity collisions
-        let candidates = world.get_all_at_box(&search_box);
+        let candidates = with_dragon_parts(
+            world.get_all_at_box(&search_box),
+            &search_box,
+            *entity.entity_type != EntityType::DRAGON_FIREBALL,
+        );
         for cand in candidates {
             if self.should_skip_collision(entity, &cand) {
                 continue;
@@ -301,6 +306,14 @@ impl ThrownItemEntity {
             return true;
         }
 
+        // Vanilla `AbstractHurtingProjectile.canHitEntity` skips no-physics entities, so the
+        // dragon never hits itself with its fireball.
+        if *self_ent.entity_type == EntityType::DRAGON_FIREBALL
+            && other_ent.no_physics.load(Ordering::Relaxed)
+        {
+            return true;
+        }
+
         // Projectile vs projectile logic
         if !self.collides_with_projectiles && is_projectile(other_ent.entity_type) {
             return true;
@@ -353,6 +366,35 @@ pub(crate) fn calculate_ray_intersection(
 }
 
 /// Get the face of the block that was hit
+/// Vanilla `EnderDragon.isPickable` is false: projectiles hit the parts of a dragon (its own
+/// fireballs none of them, as they skip the dragon itself).
+pub(crate) fn with_dragon_parts(
+    candidates: Vec<Arc<dyn EntityBase>>,
+    search_box: &BoundingBox,
+    hit_parts: bool,
+) -> Vec<Arc<dyn EntityBase>> {
+    let mut expanded = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        let Some(dragon) = candidate
+            .cast_any()
+            .downcast_ref::<crate::entity::boss::ender_dragon::EnderDragonEntity>()
+        else {
+            expanded.push(candidate);
+            continue;
+        };
+        if hit_parts {
+            expanded.extend(
+                dragon
+                    .parts
+                    .iter()
+                    .filter(|part| part.entity.bounding_box.load().intersects(search_box))
+                    .map(|part| Arc::clone(part) as Arc<dyn EntityBase>),
+            );
+        }
+    }
+    expanded
+}
+
 fn get_hit_face(hit_pos: Vector3<f64>, block_pos: BlockPos) -> BlockDirection {
     let local = hit_pos.sub(&block_pos.0.to_f64());
     let eps = 1.0e-4;
