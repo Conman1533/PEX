@@ -97,7 +97,7 @@ impl ServerPlayerData {
             }
 
             let storage = self.storage.clone();
-            rayon::spawn(move || {
+            pumpkin_world::background_pool().spawn(move || {
                 let save_at = SystemTime::now();
                 let save_start = Instant::now();
                 for (uuid, nbt) in snapshots {

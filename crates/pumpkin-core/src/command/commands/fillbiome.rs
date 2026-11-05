@@ -114,6 +114,9 @@ impl CommandExecutor for FillBiomeExecutor {
                         modified = true;
                     }
                 }
+                if modified {
+                    chunk.mark_changed();
+                }
                 (local_count, modified.then(|| chunk.clone()))
             });
 

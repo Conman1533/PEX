@@ -93,6 +93,7 @@ pub fn set_block_light(cache: &mut Cache, pos: BlockPos, level: u8) {
             };
             if marked_dirty {
                 c.dirty.store(true, std::sync::atomic::Ordering::Relaxed);
+                c.mark_changed();
             }
         }
         Chunk::Proto(c) => {
@@ -173,6 +174,7 @@ pub fn set_sky_light(cache: &mut Cache, pos: BlockPos, level: u8) {
             };
             if marked_dirty {
                 c.dirty.store(true, std::sync::atomic::Ordering::Relaxed);
+                c.mark_changed();
             }
         }
         Chunk::Proto(c) => {

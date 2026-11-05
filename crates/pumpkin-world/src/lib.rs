@@ -26,6 +26,28 @@ pub const CURRENT_MC_VERSION: &str = "26.3";
 pub const CURRENT_BEDROCK_MC_VERSION: &str = "1.26.60";
 pub const CURRENT_BEDROCK_MC_PROTOCOL: u32 = 2225;
 
+/// The Rayon pool for background work: region reads and writes, entity chunk loads,
+/// player saves and chunk packet encoding.
+///
+/// The tick's `par_iter` calls run on the global pool from a thread outside it, so they
+/// queue behind every job already there. Background work stays off that queue.
+#[must_use]
+#[expect(
+    clippy::expect_used,
+    reason = "the server can't load or send chunks without it, like `ChunkGen`"
+)]
+pub fn background_pool() -> &'static rayon::ThreadPool {
+    static POOL: std::sync::LazyLock<rayon::ThreadPool> = std::sync::LazyLock::new(|| {
+        let cpus = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads((cpus / 2).clamp(2, 16))
+            .thread_name(|i| format!("Background-{i}"))
+            .build()
+            .expect("Failed to build Background ThreadPool")
+    });
+    &POOL
+}
+
 #[macro_export]
 macro_rules! global_path {
     ($path:expr) => {{

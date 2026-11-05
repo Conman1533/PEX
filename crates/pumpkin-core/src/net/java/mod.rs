@@ -137,6 +137,28 @@ pub struct JavaClient {
 }
 
 impl JavaClient {
+    /// The queue of packets this client would write, for unit tests.
+    #[cfg(test)]
+    pub(crate) const fn take_outgoing_queue(
+        &mut self,
+    ) -> Option<UnboundedReceiver<OutgoingPacket>> {
+        self.outgoing_packet_queue_recv.take()
+    }
+
+    /// The ids of the packets queued so far, in order.
+    #[cfg(test)]
+    pub(crate) fn queued_packet_ids(queue: &mut UnboundedReceiver<OutgoingPacket>) -> Vec<i32> {
+        let mut ids = Vec::new();
+        while let Ok(packet) = queue.try_recv() {
+            if let OutgoingPacket::Data { data, .. } = packet
+                && let Ok(id) = (&data[..]).get_var_int()
+            {
+                ids.push(id.0);
+            }
+        }
+        ids
+    }
+
     /// A client with no connection behind it, for unit tests and `GameTest` mock players.
     #[must_use]
     pub fn new_for_test(gameprofile: GameProfile) -> Self {
@@ -384,7 +406,7 @@ impl JavaClient {
         }
 
         let (tx, rx) = oneshot::channel();
-        rayon::spawn(move || {
+        pumpkin_world::background_pool().spawn(move || {
             let mut serialized = Vec::with_capacity(valid_chunks.len());
             for chunk in valid_chunks {
                 let mut buf = Vec::with_capacity(32 * 1024);
