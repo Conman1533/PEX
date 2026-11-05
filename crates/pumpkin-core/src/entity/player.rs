@@ -238,7 +238,8 @@ use pumpkin_data::block_properties::HorizontalFacing;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::data_component_impl::EnchantmentsImpl;
 use pumpkin_data::data_component_impl::{
-    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, GliderImpl, ToolImpl, WeaponImpl,
+    AttackRangeImpl, CanBreakImpl, EquipmentSlot, EquippableImpl, GliderImpl,
+    MinimumAttackChargeImpl, ToolImpl, WeaponImpl,
 };
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
@@ -382,9 +383,9 @@ const STOP_DESTROY_MIN_PROGRESS: f32 = 0.7;
 /// `entity_interaction_range` attribute while the player is in creative.
 const CREATIVE_ENTITY_INTERACTION_RANGE_MODIFIER: f64 = 2.0;
 
-/// Reach the server allows beyond the player's own when an interact or attack packet names an
-/// entity, for latency. Vanilla passes 3.0 in `ServerGamePacketListenerImpl.handleInteract` and
-/// `handleAttack`.
+/// Reach the server allows beyond the player's own when a packet names an entity, for latency.
+/// Vanilla passes 3.0 in `ServerGamePacketListenerImpl.handleInteract`, `handleAttack`,
+/// `handlePickItemFromEntity` and `handleSpectatorAction`.
 const ENTITY_PACKET_RANGE_BUFFER: f64 = 3.0;
 
 const fn bedrock_inventory_slot(player_screen_slot: i16) -> Option<u32> {
@@ -1425,17 +1426,6 @@ impl Player {
             .get_attribute_value(&Attributes::ATTACK_SPEED);
 
         let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
-        if !is_bedrock
-            && let Some(min_charge) = item_stack
-                .get_data_component::<pumpkin_data::data_component_impl::MinimumAttackChargeImpl>(
-            )
-            && min_charge.charge > 0.0
-        {
-            let charge_progress = self.get_attack_cooldown_progress(5.0, attack_speed);
-            if (charge_progress as f32) < min_charge.charge {
-                return;
-            }
-        }
         let attack_cooldown_progress = if is_bedrock {
             1.0
         } else {
@@ -3381,6 +3371,25 @@ impl Player {
         20.0 / attack_speed
     }
 
+    /// Vanilla `Player.cannotAttackWithItem`: `stack` has a `minimum_attack_charge` that the attack
+    /// strength won't reach even `tolerance` ticks from now.
+    pub fn cannot_attack_with_item(&self, stack: &ItemStack, tolerance: u32) -> bool {
+        let required_strength = stack
+            .get_data_component::<MinimumAttackChargeImpl>()
+            .map_or(0.0, |charge| charge.charge);
+        // Vanilla `Player.getCurrentItemAttackStrengthDelay`.
+        let strength_delay = Self::attack_strength_delay(
+            self.living_entity
+                .get_attribute_value(&Attributes::ATTACK_SPEED),
+        ) as f32;
+        let optimistic_strength = self
+            .last_attacked_ticks
+            .load(Ordering::Acquire)
+            .saturating_add(tolerance) as f32
+            / strength_delay;
+        required_strength > 0.0 && optimistic_strength < required_strength
+    }
+
     pub async fn fire_packet_sent<P: Send + Sync + std::any::Any>(
         self: &Arc<Self>,
         packet: P,
@@ -4566,8 +4575,9 @@ impl Player {
             && distance <= f64::from(max_reach + hitbox_margin) + buffer
     }
 
-    /// Vanilla `ServerGamePacketListenerImpl.handleInteract` acts on `target` only when its block is
-    /// inside the world border and it is within entity interaction range.
+    /// Vanilla `ServerGamePacketListenerImpl.handleInteract` and `handleSpectatorAction` act on
+    /// `target` only when its block is inside the world border and it is within entity interaction
+    /// range.
     pub fn can_interact_with_entity(&self, target: &Entity) -> bool {
         self.is_within_world_border(target)
             && self.is_within_entity_interaction_range(
@@ -4582,6 +4592,17 @@ impl Player {
         self.is_within_world_border(target)
             && self.is_within_attack_range(
                 &self.inventory().held_item(),
+                &target.bounding_box.load(),
+                ENTITY_PACKET_RANGE_BUFFER,
+            )
+    }
+
+    /// Vanilla `ServerGamePacketListenerImpl.handlePickItemFromEntity` picks from `target` only
+    /// when it is within entity interaction range. It doesn't check the world border, and
+    /// `Player.isWithinEntityInteractionRange(Entity, double)` refuses a removed entity.
+    pub fn can_pick_item_from_entity(&self, target: &Entity) -> bool {
+        !target.is_removed()
+            && self.is_within_entity_interaction_range(
                 &target.bounding_box.load(),
                 ENTITY_PACKET_RANGE_BUFFER,
             )
@@ -7246,6 +7267,11 @@ impl EntityBase for Player {
 
     fn is_spectator(&self) -> bool {
         self.gamemode.load() == GameMode::Spectator
+    }
+
+    /// Vanilla `Player.isPickable`.
+    fn can_hit(&self) -> bool {
+        !self.is_spectator() && !self.living_entity.entity.is_removed()
     }
 
     fn set_on_fire_for_ticks(&self, ticks: u32) {

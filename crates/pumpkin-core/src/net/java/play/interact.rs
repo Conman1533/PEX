@@ -88,6 +88,12 @@ impl JavaClient {
                                     return;
                                 }
                             }
+                            if player.cannot_attack_with_item(
+                                &player.inventory().held_item(),
+                                super::attack::ATTACK_CHARGE_TOLERANCE_TICKS,
+                            ) {
+                                return;
+                            }
                             player.attack(&event.target);
                         }
                         ActionType::Interact | ActionType::InteractAt => {

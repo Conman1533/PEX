@@ -281,6 +281,11 @@ impl EntityBase for ShulkerBulletEntity {
     fn get_living_entity(&self) -> Option<&crate::entity::living::LivingEntity> {
         None
     }
+    /// Vanilla `ShulkerBullet.isPickable`.
+    fn can_hit(&self) -> bool {
+        true
+    }
+
     fn cast_any(&self) -> &dyn std::any::Any {
         self
     }

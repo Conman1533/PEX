@@ -2,6 +2,7 @@ mod block_breaking;
 mod block_tuning_and_invert;
 mod commands_and_gamemode;
 mod entity_interaction_range;
+mod entity_target_packets;
 mod login_and_movement;
 mod loot_tables;
 mod player_actions;
@@ -50,6 +51,9 @@ pub async fn run_bot_tests(
     allay::run_allay_interaction_test(server, &mut bot1, summary_lines).await?;
 
     entity_interaction_range::run_entity_interaction_range_tests(server, &mut bot1, summary_lines)
+        .await?;
+
+    entity_target_packets::run_entity_target_packet_tests(server, addr, &mut bot1, summary_lines)
         .await?;
 
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)

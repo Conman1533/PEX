@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::item_stack_seralizer::ItemStackSerializer;
 use pumpkin_util::math::atomic_f32::AtomicF32;
@@ -232,6 +233,13 @@ impl EntityBase for FireballEntity {
 
     fn get_living_entity(&self) -> Option<&crate::entity::living::LivingEntity> {
         None
+    }
+
+    /// Vanilla `Projectile.isPickable`.
+    fn can_hit(&self) -> bool {
+        self.get_entity()
+            .entity_type
+            .has_tag(&tag::EntityType::MINECRAFT_REDIRECTABLE_PROJECTILE)
     }
 
     fn cast_any(&self) -> &dyn std::any::Any {
