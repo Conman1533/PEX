@@ -5802,22 +5802,22 @@ impl World {
         &self,
         block: &Block,
         block_pos: BlockPos,
-        delay: u8,
+        delay: impl Into<i32>,
         priority: TickPriority,
     ) {
         self.level
-            .schedule_block_tick(block, block_pos, delay, priority);
+            .schedule_block_tick(block, block_pos, delay.into(), priority);
     }
 
     pub fn schedule_fluid_tick(
         &self,
         fluid: &Fluid,
         block_pos: BlockPos,
-        delay: u8,
+        delay: impl Into<i32>,
         priority: TickPriority,
     ) {
         self.level
-            .schedule_fluid_tick(fluid, block_pos, delay, priority);
+            .schedule_fluid_tick(fluid, block_pos, delay.into(), priority);
     }
 
     pub fn is_block_tick_scheduled(&self, block_pos: &BlockPos, block: &Block) -> bool {

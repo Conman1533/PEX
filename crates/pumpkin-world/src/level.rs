@@ -1005,7 +1005,7 @@ impl Level {
         &self,
         block: &Block,
         block_pos: BlockPos,
-        delay: u8,
+        delay: i32,
         priority: TickPriority,
     ) {
         let tick_order = order::next_entity_order()
@@ -1034,7 +1034,7 @@ impl Level {
         &self,
         fluid: &Fluid,
         block_pos: BlockPos,
-        delay: u8,
+        delay: i32,
         priority: TickPriority,
     ) {
         let tick_order = order::next_entity_order()

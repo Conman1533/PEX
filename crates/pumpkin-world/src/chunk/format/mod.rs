@@ -204,7 +204,7 @@ where
     let x = nbt.get_int("x")?;
     let y = nbt.get_int("y")?;
     let z = nbt.get_int("z")?;
-    let delay = nbt.get_int("t")? as u8;
+    let delay = nbt.get_int("t")?;
     let priority = TickPriority::try_from(nbt.get_int("p")?).ok()?;
     let res_loc_str = nbt.get_string("i")?;
     let res_loc = ResourceLocation::from_str(res_loc_str).ok()?;
@@ -654,7 +654,7 @@ impl ChunkData {
             tick_comp.put_int("x", tick.position.0.x);
             tick_comp.put_int("y", tick.position.0.y);
             tick_comp.put_int("z", tick.position.0.z);
-            tick_comp.put_int("t", tick.delay as i32);
+            tick_comp.put_int("t", tick.delay);
             tick_comp.put_int("p", tick.priority as i32);
             tick_comp.put_string("i", tick.value.to_resource_location());
             block_ticks_list.push(NbtTag::Compound(tick_comp));
@@ -667,7 +667,7 @@ impl ChunkData {
             tick_comp.put_int("x", tick.position.0.x);
             tick_comp.put_int("y", tick.position.0.y);
             tick_comp.put_int("z", tick.position.0.z);
-            tick_comp.put_int("t", tick.delay as i32);
+            tick_comp.put_int("t", tick.delay);
             tick_comp.put_int("p", tick.priority as i32);
             tick_comp.put_string("i", tick.value.to_resource_location());
             fluid_ticks_list.push(NbtTag::Compound(tick_comp));
@@ -700,7 +700,8 @@ impl ChunkData {
 
     #[allow(clippy::too_many_lines)]
     pub fn internal_to_pump_bytes(&self) -> Bytes {
-        const PUMP_CHUNK_VERSION: u8 = 1;
+        // Version 2 widened tick delays from a byte to an int.
+        const PUMP_CHUNK_VERSION: u8 = 2;
 
         let is_light_correct = self.light_populated.load(Ordering::Relaxed);
         let block_entities_nbt = {
@@ -831,7 +832,7 @@ impl ChunkData {
             out.put_i32(tick.position.0.x);
             out.put_i32(tick.position.0.y);
             out.put_i32(tick.position.0.z);
-            out.put_u8(tick.delay);
+            out.put_i32(tick.delay);
             out.put_i8(tick.priority as i32 as i8);
             out.put_u16(tick.value.id.as_u16());
         }
@@ -842,7 +843,7 @@ impl ChunkData {
             out.put_i32(tick.position.0.x);
             out.put_i32(tick.position.0.y);
             out.put_i32(tick.position.0.z);
-            out.put_u8(tick.delay);
+            out.put_i32(tick.delay);
             out.put_i8(tick.priority as i32 as i8);
             out.put_u16(tick.value.id);
         }
@@ -881,7 +882,7 @@ impl ChunkData {
 
         let mut buf = &chunk_data[4..];
         let version = buf.get_u8();
-        if version != 1 {
+        if version != 1 && version != 2 {
             return Err(ChunkParsingError::ErrorDeserializingChunk(format!(
                 "Unsupported pump chunk version {version}"
             )));
@@ -1015,7 +1016,8 @@ impl ChunkData {
             ));
         }
         let block_tick_count = buf.get_u32() as usize;
-        if block_tick_count > MAX_TICKS || buf.remaining() < block_tick_count * 16 {
+        let tick_size = if version == 1 { 16 } else { 19 };
+        if block_tick_count > MAX_TICKS || buf.remaining() < block_tick_count * tick_size {
             return Err(ChunkParsingError::ErrorDeserializingChunk(
                 "Invalid block tick count".into(),
             ));
@@ -1025,7 +1027,11 @@ impl ChunkData {
             let x = buf.get_i32();
             let y = buf.get_i32();
             let z = buf.get_i32();
-            let delay = buf.get_u8();
+            let delay = if version == 1 {
+                i32::from(buf.get_u8())
+            } else {
+                buf.get_i32()
+            };
             let priority = i32::from(buf.get_i8());
             let raw_id = buf.get_u16();
             if let Ok(priority) = TickPriority::try_from(priority)
@@ -1046,7 +1052,7 @@ impl ChunkData {
             ));
         }
         let fluid_tick_count = buf.get_u32() as usize;
-        if fluid_tick_count > MAX_TICKS || buf.remaining() < fluid_tick_count * 16 {
+        if fluid_tick_count > MAX_TICKS || buf.remaining() < fluid_tick_count * tick_size {
             return Err(ChunkParsingError::ErrorDeserializingChunk(
                 "Invalid fluid tick count".into(),
             ));
@@ -1056,7 +1062,11 @@ impl ChunkData {
             let x = buf.get_i32();
             let y = buf.get_i32();
             let z = buf.get_i32();
-            let delay = buf.get_u8();
+            let delay = if version == 1 {
+                i32::from(buf.get_u8())
+            } else {
+                buf.get_i32()
+            };
             let priority = i32::from(buf.get_i8());
             let raw_id = buf.get_u16();
             if let Ok(priority) = TickPriority::try_from(priority)
