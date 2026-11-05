@@ -1,5 +1,6 @@
 use crate::{AuthenticationConfig, CompressionConfig, PacketLimiterConfig};
-use serde::{Deserialize, Serialize};
+use serde::de::{Error, Unexpected};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::net::SocketAddr;
 use std::num::NonZero;
 
@@ -24,7 +25,8 @@ pub struct JavaConfig {
     pub validate_player_names: bool,
     /// The maximum number of players allowed on the server. Specifying `0` disables the limit.
     pub max_players: u32,
-    /// The maximum view distance for players.
+    /// The maximum view distance for players, from 2 to 64.
+    #[serde(deserialize_with = "super::deserialize_view_distance")]
     pub view_distance: NonZero<u8>,
     /// The maximum simulated view distance.
     pub simulation_distance: NonZero<u8>,
@@ -32,7 +34,8 @@ pub struct JavaConfig {
     #[serde(
         alias = "keep-alive-time",
         alias = "keep_alive_interval",
-        alias = "keep-alive-interval"
+        alias = "keep-alive-interval",
+        deserialize_with = "deserialize_keep_alive_time"
     )]
     pub keep_alive_time: u64,
     /// Java Edition packet compression settings.
@@ -43,6 +46,19 @@ pub struct JavaConfig {
     pub authentication: AuthenticationConfig,
     /// Packet rate limiting settings.
     pub packet_limiter: PacketLimiterConfig,
+}
+
+fn deserialize_keep_alive_time<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u64, D::Error> {
+    let seconds = u64::deserialize(deserializer)?;
+    if seconds == 0 {
+        return Err(D::Error::invalid_value(
+            Unexpected::Unsigned(0),
+            &"a number of seconds above 0",
+        ));
+    }
+    Ok(seconds)
 }
 
 impl Default for JavaConfig {

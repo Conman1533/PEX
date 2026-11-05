@@ -13,10 +13,11 @@ use recipe::RecipeConfig;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use std::path::PathBuf;
-use std::{fs, num::NonZero, path::Path};
+use std::{fs, path::Path};
 use toml_edit::DocumentMut;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
+mod fallback;
 /// Fun and experimental configuration options.
 pub mod fun;
 /// Server logging configuration options.
@@ -107,53 +108,28 @@ impl LoadConfiguration for PumpkinConfig {
         Path::new("pumpkin.toml")
     }
 
-    fn validate(&self) {
+    fn validate(&mut self) -> Vec<LoadMessage> {
         self.basic.validate();
         self.advanced.validate();
         self.telemetry.validate();
 
-        let Some(min_vd) = NonZero::new(2) else {
-            return;
-        };
-        let Some(max_vd) = NonZero::new(64) else {
-            return;
-        };
-
-        // Validate Java
-        assert!(
-            self.advanced.networking.java.keep_alive_time > 0,
-            "Java Keep alive time must be greater than 0"
-        );
-        assert!(
-            self.advanced.networking.java.view_distance >= min_vd,
-            "Java View distance must be at least 2"
-        );
-        assert!(
-            self.advanced.networking.java.view_distance <= max_vd,
-            "Java View distance must be less than 64"
-        );
-        if self.advanced.networking.java.online_mode {
+        let mut messages = Vec::new();
+        let java = &self.advanced.networking.java;
+        if java.online_mode {
             assert!(
-                self.advanced.networking.java.encryption,
+                java.encryption,
                 "When online mode is enabled, encryption must be enabled"
             );
         }
-
-        // Validate Bedrock
-        assert!(
-            self.advanced.networking.bedrock.view_distance >= min_vd,
-            "Bedrock View distance must be at least 2"
-        );
-        assert!(
-            self.advanced.networking.bedrock.view_distance <= max_vd,
-            "Bedrock View distance must be less than 64"
-        );
-        if self.basic.allow_chat_reports {
-            assert!(
-                self.advanced.networking.java.online_mode,
-                "When allow_chat_reports is enabled, java.online_mode must be enabled"
-            );
+        // Vanilla `DedicatedServer.enforceSecureProfile` also needs online mode.
+        if self.basic.allow_chat_reports && !java.online_mode {
+            self.basic.allow_chat_reports = false;
+            messages.push(LoadMessage::Warn(format!(
+                "{}: allow_chat_reports needs networking.java.online_mode, so chat reports are off",
+                file_name(Self::get_path())
+            )));
         }
+        messages
     }
 }
 
@@ -296,10 +272,8 @@ impl AdvancedConfiguration {
 pub enum LoadMessage {
     /// A change made to the file.
     Info(String),
-    /// A problem the server works around, such as a change it couldn't save.
+    /// A problem the server works around, such as a bad value or a change it couldn't save.
     Warn(String),
-    /// The file couldn't be read or parsed, so the defaults are used.
-    Error(String),
 }
 
 impl LoadMessage {
@@ -308,7 +282,6 @@ impl LoadMessage {
         match self {
             Self::Info(line) => info!("{line}"),
             Self::Warn(line) => warn!("{line}"),
-            Self::Error(line) => error!("{line}"),
         }
     }
 }
@@ -373,11 +346,15 @@ pub trait LoadConfiguration {
     ///
     /// Creates the directory if it doesn't exist and reads the TOML file. An older file is
     /// updated by [`Self::MIGRATIONS`], missing keys get their defaults, and a changed file is
-    /// backed up before it is rewritten. Returns the validated configuration and the lines to
-    /// log once the logger is ready. While a [`Step::ServerFiles`] migration is pending, the file
-    /// isn't written: the server writes it with the returned [`PendingSave`] once that work is done.
-    #[must_use]
-    fn load(config_dir: &Path) -> (Self, Vec<LoadMessage>, Option<PendingSave>)
+    /// backed up before it is rewritten. A value that doesn't fit its key gets the key's default.
+    /// Returns the validated configuration and the lines to log once the logger is ready. While a
+    /// [`Step::ServerFiles`] migration is pending, the file isn't written: the server writes it
+    /// with the returned [`PendingSave`] once that work is done.
+    ///
+    /// # Errors
+    /// The file exists but can't be read or isn't valid TOML. The server must not start then,
+    /// because none of its settings would apply.
+    fn load(config_dir: &Path) -> Result<(Self, Vec<LoadMessage>, Option<PendingSave>), String>
     where
         Self: Sized + Default + Serialize + DeserializeOwned,
     {
@@ -389,18 +366,14 @@ pub trait LoadConfiguration {
         let path = config_dir.join(Self::get_path());
         let mut messages = Vec::new();
 
-        let (config, save) = if path.exists() {
-            let file_content = match fs::read_to_string(&path) {
-                Ok(content) => content,
-                Err(err) => {
-                    messages.push(LoadMessage::Error(format!(
-                        "Couldn't read configuration file at {}: {err}",
-                        path.display()
-                    )));
-                    return (Self::default(), messages, None);
-                }
-            };
-            load_existing(&path, &file_content, &mut messages)
+        let (mut config, save) = if path.exists() {
+            let file_content = fs::read_to_string(&path).map_err(|err| {
+                format!(
+                    "Couldn't read configuration file at {}: {err}",
+                    path.display()
+                )
+            })?;
+            load_existing(&path, &file_content, &mut messages)?
         } else {
             let content = Self::default();
             let save = match default_document(&content) {
@@ -438,41 +411,39 @@ pub trait LoadConfiguration {
             }
         });
 
-        config.validate();
-        (config, messages, pending)
+        messages.extend(config.validate());
+        Ok((config, messages, pending))
     }
 
     /// Returns the path to the configuration file relative to the config directory.
     fn get_path() -> &'static Path;
 
-    /// Validates the configuration after loading or merging.
-    fn validate(&self);
+    /// Applies the rules that involve more than one key. Returns the lines to log.
+    fn validate(&mut self) -> Vec<LoadMessage>;
 }
 
 /// Parses an existing config file and brings it up to date. Returns the config and, if anything
-/// changed, the file to save.
+/// changed, the file to save, or why the file can't be parsed.
 fn load_existing<C>(
     path: &Path,
     file_content: &str,
     messages: &mut Vec<LoadMessage>,
-) -> (C, Option<PendingSave>)
+) -> Result<(C, Option<PendingSave>), String>
 where
     C: LoadConfiguration + Default + Serialize + DeserializeOwned,
 {
-    let mut document: DocumentMut = match file_content.parse() {
-        Ok(document) => document,
-        Err(err) => {
-            messages.push(LoadMessage::Error(format!(
-                "Couldn't parse TOML at {}. Reason: {err}. Using default config.",
-                path.display()
-            )));
-            return (C::default(), None);
-        }
-    };
+    let mut document: DocumentMut = file_content.parse().map_err(|err: toml_edit::TomlError| {
+        let (line, column) = line_and_column(file_content, err.span().map_or(0, |span| span.start));
+        format!(
+            "Couldn't parse {} at line {line}, column {column}: {}",
+            path.display(),
+            err.message()
+        )
+    })?;
 
     let default_config = C::default();
     let Ok(defaults) = default_document(&default_config) else {
-        return (default_config, None);
+        return Ok((default_config, None));
     };
 
     let latest = migration::latest_version(C::MIGRATIONS);
@@ -503,8 +474,21 @@ where
         let _ = migration::add_missing_keys(&mut document, &defaults);
     }
 
-    let config = toml::from_str(&document.to_string()).unwrap_or_else(|_| C::default());
-    (config, save)
+    let config = fallback::deserialize_per_key(
+        &document,
+        default_config,
+        &defaults,
+        &file_name(path),
+        messages,
+    );
+    Ok((config, save))
+}
+
+/// The 1-based line and column of byte `offset` in `text`.
+fn line_and_column(text: &str, offset: usize) -> (usize, usize) {
+    let before = text.get(..offset).unwrap_or(text);
+    let line = before.rsplit('\n').next().unwrap_or(before);
+    (before.matches('\n').count() + 1, line.chars().count() + 1)
 }
 
 /// Backs the file up as it was, then writes the migrated document in its place.

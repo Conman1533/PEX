@@ -35,7 +35,9 @@ use pumpkin_core::{
 };
 use pumpkin_core::{PumpkinServer, stop_server};
 
-use pumpkin_config::{LoadConfiguration, LoadMessage, OFFLINE_UUID_VERSION, PumpkinConfig};
+use pumpkin_config::{
+    AdvancedConfiguration, LoadConfiguration, LoadMessage, OFFLINE_UUID_VERSION, PumpkinConfig,
+};
 use pumpkin_core::plugin::loader::PluginLoader;
 use pumpkin_util::text::{
     TextComponent,
@@ -76,7 +78,15 @@ async fn main() {
 
     let exec_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-    let (config, config_messages, pending_config) = PumpkinConfig::load(&exec_dir);
+    let (config, config_messages, pending_config) = match PumpkinConfig::load(&exec_dir) {
+        Ok(loaded) => loaded,
+        Err(err) => {
+            // Starting on defaults could create a new world and turn the whitelist off.
+            pumpkin_core::init_logger(&AdvancedConfiguration::default());
+            tracing::error!("{err}");
+            exit(1);
+        }
+    };
 
     pumpkin_core::init_logger(&config.advanced);
     // The config is read before the logger exists, so its lines are logged here.

@@ -17,12 +17,12 @@ const RELEASE_FILES: [(&str, &str); 3] = [
 
 fn load_file(dir: &Path, contents: &str) -> (PumpkinConfig, Vec<LoadMessage>, Option<PendingSave>) {
     fs::write(dir.join("pumpkin.toml"), contents).unwrap();
-    PumpkinConfig::load(dir)
+    PumpkinConfig::load(dir).unwrap()
 }
 
 /// Loads like a server whose file migrations succeed: saves the pending file right away.
 fn load_and_save(dir: &Path) -> Vec<LoadMessage> {
-    let (_, mut messages, pending) = PumpkinConfig::load(dir);
+    let (_, mut messages, pending) = PumpkinConfig::load(dir).unwrap();
     if let Some(pending) = pending {
         messages.extend(pending.save());
     }
@@ -93,7 +93,7 @@ fn release_files_migrate_to_the_current_version() {
         );
 
         // A migrated file is current: loading it again changes nothing.
-        let (_, messages, pending) = PumpkinConfig::load(dir.path());
+        let (_, messages, pending) = PumpkinConfig::load(dir.path()).unwrap();
         assert!(messages.is_empty(), "{release}: {messages:?}");
         assert!(pending.is_none(), "{release}");
         assert_eq!(read(dir.path(), "pumpkin.toml"), migrated, "{release}");
@@ -107,7 +107,7 @@ fn current_file_is_left_byte_for_byte() {
     assert!(messages.is_empty(), "{messages:?}");
 
     let generated = read(dir.path(), "pumpkin.toml");
-    let (_, messages, pending) = PumpkinConfig::load(dir.path());
+    let (_, messages, pending) = PumpkinConfig::load(dir.path()).unwrap();
     assert!(messages.is_empty(), "{messages:?}");
     assert!(pending.is_none());
     assert_eq!(read(dir.path(), "pumpkin.toml"), generated);
@@ -166,12 +166,12 @@ fn file_keeps_its_version_until_the_server_files_are_migrated() {
     assert_eq!(read(dir.path(), "pumpkin.toml"), original);
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1, "no backup");
 
-    let (_, _, pending) = PumpkinConfig::load(dir.path());
+    let (_, _, pending) = PumpkinConfig::load(dir.path()).unwrap();
     assert_eq!(pending.map(|pending| pending.version()), Some(1));
 
     // Without a file, an old world could still be there, so it is checked too.
     let new = TempDir::new().unwrap();
-    let (_, _, pending) = PumpkinConfig::load(new.path());
+    let (_, _, pending) = PumpkinConfig::load(new.path()).unwrap();
     assert_eq!(pending.map(|pending| pending.version()), Some(1));
     assert!(!new.path().join("pumpkin.toml").exists());
 }
