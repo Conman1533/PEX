@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct AuthenticationConfig {
-    /// Whether to use Mojang authentication.
-    pub enabled: bool,
     /// Optional custom authentication URL.
     pub url: Option<String>,
     /// Fallback authentication server URLs to use if the primary/official server is down.
@@ -43,7 +41,6 @@ pub struct AuthenticationConfig {
 impl Default for AuthenticationConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
             prevent_proxy_connections: false,
             player_profile: PlayerProfileConfig::default(),
             textures: TextureConfig::default(),
@@ -87,49 +84,21 @@ impl Default for PlayerProfileConfig {
 
 /// Configuration for player textures.
 ///
-/// Controls whether textures are applied, allowed URL schemes/domains, and texture types.
+/// Controls which URLs player textures may come from.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct TextureConfig {
-    /// Whether to use player textures.
-    pub enabled: bool,
     /// Allowed URL schemes for texture URLs.
     pub allowed_url_schemes: Vec<String>,
     /// Allowed URL domains for texture URLs.
     pub allowed_url_domains: Vec<String>,
-    /// Specific texture types.
-    pub types: TextureTypes,
 }
 
 impl Default for TextureConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
             allowed_url_schemes: vec!["http".into(), "https".into()],
             allowed_url_domains: vec![".minecraft.net".into(), ".mojang.com".into()],
-            types: TextureTypes::default(),
-        }
-    }
-}
-
-/// Specifies which player texture types are supported.
-#[derive(Deserialize, Serialize, Clone)]
-#[serde(default)]
-pub struct TextureTypes {
-    /// Use player skins.
-    pub skin: bool,
-    /// Use player capes.
-    pub cape: bool,
-    /// Use player elytras.
-    pub elytra: bool,
-}
-
-impl Default for TextureTypes {
-    fn default() -> Self {
-        Self {
-            skin: true,
-            cape: true,
-            elytra: true,
         }
     }
 }
@@ -141,7 +110,6 @@ mod tests {
     #[test]
     fn auth_config_fallbacks_toml_deserialization() {
         let toml_str = r#"
-enabled = true
 url = "https://primary.auth/hasJoined?username={username}&serverId={server_hash}"
 fallbacks = [
     "https://fallback1.auth/hasJoined?username={username}&serverId={server_hash}",
@@ -164,7 +132,6 @@ fallbacks = [
     #[test]
     fn auth_config_fallback_urls_alias_toml_deserialization() {
         let toml_str = r#"
-enabled = true
 fallback_urls = [
     "https://fallback1.auth/hasJoined?username={username}&serverId={server_hash}"
 ]
@@ -181,7 +148,6 @@ fallback_urls = [
     #[test]
     fn auth_config_profile_urls_toml_deserialization() {
         let toml_str = r#"
-enabled = true
 profile_by_name_url = "https://custom.auth/users/profiles/minecraft/{username}"
 profile_by_name_fallback_urls = [
     "https://fallback.auth/users/profiles/minecraft/{username}"

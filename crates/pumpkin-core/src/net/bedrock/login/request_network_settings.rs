@@ -44,7 +44,6 @@ impl BedrockClient {
             .networking
             .bedrock
             .compression
-            .info
             .clone();
 
         self.send_packet(&CNetworkSettings {

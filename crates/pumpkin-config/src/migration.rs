@@ -74,6 +74,7 @@ pub(crate) fn migrate(
     version: u32,
     migrations: &[Migration],
     defaults: &DocumentMut,
+    aliases: &[(&str, &str)],
 ) -> Vec<String> {
     let mut changes: Vec<String> = migrations
         .iter()
@@ -84,7 +85,7 @@ pub(crate) fn migrate(
         })
         .flat_map(|apply| apply(document))
         .collect();
-    changes.extend(add_missing_keys(document, defaults));
+    changes.extend(add_missing_keys(document, defaults, aliases));
     changes.extend(set_config_version(document, latest_version(migrations)));
     changes
 }
@@ -97,23 +98,70 @@ pub(crate) fn needs_server_files(migrations: &[Migration], version: u32) -> bool
         .any(|migration| migration.version > version && matches!(migration.step, Step::ServerFiles))
 }
 
-/// Adds every key of `defaults` that `document` lacks, and returns one line per added key.
+/// Adds every key of `defaults` that `document` lacks, unless it has the key under one of its
+/// `aliases`, and returns one line per added key.
 #[must_use]
-pub(crate) fn add_missing_keys(document: &mut DocumentMut, defaults: &DocumentMut) -> Vec<String> {
+pub(crate) fn add_missing_keys(
+    document: &mut DocumentMut,
+    defaults: &DocumentMut,
+    aliases: &[(&str, &str)],
+) -> Vec<String> {
     let mut changes = Vec::new();
     add_missing_table_keys(
         document.as_table_mut(),
         defaults.as_table(),
         "",
+        aliases,
         &mut changes,
     );
     changes
+}
+
+/// Removes the keys at `paths`, whether in a table, an inline table or dotted keys, and a table
+/// that has nothing left after that. Returns one line per removed key.
+#[must_use]
+pub(crate) fn remove_keys(document: &mut DocumentMut, paths: &[&str]) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|path| remove_key(document.as_table_mut(), path))
+        .map(|path| format!("removed {path}, which had no effect"))
+        .collect()
+}
+
+fn remove_key(table: &mut dyn TableLike, path: &str) -> bool {
+    let Some((key, rest)) = path.split_once('.') else {
+        return table.remove(path).is_some();
+    };
+    let Some(item) = table.get_mut(key) else {
+        return false;
+    };
+    let Some(inner) = item.as_table_like_mut() else {
+        return false;
+    };
+    if !remove_key(inner, rest) {
+        return false;
+    }
+    if inner.is_empty() {
+        table.remove(key);
+    } else if let Some(inline) = item.as_inline_table_mut() {
+        // `{ ... }` keeps the spacing around the removed key, so respace it.
+        inline.fmt();
+    }
+    true
+}
+
+/// Whether `key` in the table at `path` is another name for a key of that table.
+pub(crate) fn is_alias(aliases: &[(&str, &str)], path: &str, key: &str) -> bool {
+    aliases.iter().any(|&(main, alias)| {
+        alias == key && main.rsplit_once('.').map_or("", |(parent, _)| parent) == path
+    })
 }
 
 fn add_missing_table_keys(
     table: &mut dyn TableLike,
     defaults: &dyn TableLike,
     path: &str,
+    aliases: &[(&str, &str)],
     changes: &mut Vec<String>,
 ) {
     for (key, default) in defaults.iter() {
@@ -127,7 +175,7 @@ fn add_missing_table_keys(
             if let (Some(table), Some(defaults)) =
                 (item.as_table_like_mut(), default.as_table_like())
             {
-                add_missing_table_keys(table, defaults, &key_path, changes);
+                add_missing_table_keys(table, defaults, &key_path, aliases, changes);
             }
             // Keys added to `{ ... }` keep the spacing they had in the defaults, so respace it.
             if changes.len() > changes_before
@@ -135,6 +183,13 @@ fn add_missing_table_keys(
             {
                 inline.fmt();
             }
+            continue;
+        }
+        // serde rejects a key that is also set under another name.
+        if aliases
+            .iter()
+            .any(|&(main, alias)| main == key_path && table.contains_key(alias))
+        {
             continue;
         }
         let mut item = default.clone();
@@ -296,7 +351,7 @@ mod tests {
         let defaults = DocumentMut::new();
 
         let mut unversioned: DocumentMut = "x = 1\n".parse().unwrap();
-        let changes = migrate(&mut unversioned, 1, MIGRATIONS, &defaults);
+        let changes = migrate(&mut unversioned, 1, MIGRATIONS, &defaults, &[]);
         assert_eq!(unversioned.to_string(), "config_version = 3\nx = 11\n");
         assert_eq!(
             changes,
@@ -308,7 +363,7 @@ mod tests {
         );
 
         let mut at_two: DocumentMut = "config_version = 2\nx = 1\n".parse().unwrap();
-        let changes = migrate(&mut at_two, 2, MIGRATIONS, &defaults);
+        let changes = migrate(&mut at_two, 2, MIGRATIONS, &defaults, &[]);
         assert_eq!(at_two.to_string(), "config_version = 3\nx = 2\n");
         assert_eq!(changes, ["added 1 to x", "set config_version to 3"]);
     }
@@ -352,7 +407,7 @@ enabled = true
         .unwrap();
 
         let mut document: DocumentMut = original.parse().unwrap();
-        let changes = migrate(&mut document, 1, &[], &defaults);
+        let changes = migrate(&mut document, 1, &[], &defaults, &[]);
         assert_eq!(
             document.to_string(),
             "\

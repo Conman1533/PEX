@@ -67,12 +67,14 @@ mod advancement;
 mod player_data;
 mod pvp;
 mod server_links;
+mod unknown_keys;
 /// Whitelist configuration options.
 pub mod whitelist;
 /// World generation and dimension configuration options.
 pub mod world;
 
 use advancement::AdvancementConfig;
+use chunk::{AnvilChunkConfig, ChunkConfig};
 use migration::{CONFIG_VERSION_KEY, Migration, Step, UNVERSIONED_CONFIG_VERSION};
 use networking::NetworkingConfig;
 use player_data::PlayerDataConfig;
@@ -98,11 +100,89 @@ pub struct PumpkinConfig {
 /// instead of the ones PEX 1.x gave them. The server moves their files before it saves this version.
 pub const OFFLINE_UUID_VERSION: u32 = 2;
 
+/// Keys that changed nothing, which `config_version` 3 removes. Upstream dropped
+/// `write_in_place` from `AnvilChunkConfig`; nothing ever read the others.
+const DEAD_KEYS: &[&str] = &[
+    "world.chunk.write_in_place",
+    "networking.java.authentication.enabled",
+    "networking.java.authentication.textures.enabled",
+    "networking.java.authentication.textures.types.skin",
+    "networking.java.authentication.textures.types.cape",
+    "networking.java.authentication.textures.types.elytra",
+    "networking.bedrock.compression.enabled",
+    "pvp.swing",
+];
+
+fn remove_dead_keys(document: &mut DocumentMut) -> Vec<String> {
+    migration::remove_keys(document, DEAD_KEYS)
+}
+
 impl LoadConfiguration for PumpkinConfig {
-    const MIGRATIONS: &'static [Migration] = &[Migration {
-        version: OFFLINE_UUID_VERSION,
-        step: Step::ServerFiles,
-    }];
+    const MIGRATIONS: &'static [Migration] = &[
+        Migration {
+            version: OFFLINE_UUID_VERSION,
+            step: Step::ServerFiles,
+        },
+        Migration {
+            version: 3,
+            step: Step::Config(remove_dead_keys),
+        },
+    ];
+
+    const ALIASES: &'static [(&'static str, &'static str)] = &[
+        ("accepts_transfers", "accepts-transfers"),
+        ("networking.java.keep_alive_time", "keep-alive-time"),
+        ("networking.java.keep_alive_time", "keep_alive_interval"),
+        ("networking.java.keep_alive_time", "keep-alive-interval"),
+        ("networking.java.authentication.fallbacks", "fallback_urls"),
+        (
+            "networking.java.authentication.profile_by_name_fallbacks",
+            "profile_by_name_fallback_urls",
+        ),
+        (
+            "networking.java.authentication.profile_by_uuid_fallbacks",
+            "profile_by_uuid_fallback_urls",
+        ),
+        (
+            "networking.java.packet_limiter.max_packet_rate",
+            "max-packet-rate",
+        ),
+        (
+            "networking.java.packet_limiter.burst_capacity",
+            "burst-capacity",
+        ),
+        (
+            "networking.java.packet_limiter.kick_message",
+            "kick-message",
+        ),
+        (
+            "networking.bedrock.packet_limiter.max_packet_rate",
+            "max-packet-rate",
+        ),
+        (
+            "networking.bedrock.packet_limiter.burst_capacity",
+            "burst-capacity",
+        ),
+        (
+            "networking.bedrock.packet_limiter.kick_message",
+            "kick-message",
+        ),
+        (
+            "chat.anti_spam.chat_spam_threshold_seconds",
+            "chat-spam-threshold-seconds",
+        ),
+        (
+            "chat.anti_spam.command_spam_threshold_seconds",
+            "command-spam-threshold-seconds",
+        ),
+    ];
+
+    fn other_layouts() -> Vec<Self> {
+        // `[world.chunk.compression]` is only written for Anvil worlds.
+        let mut anvil = Self::default();
+        anvil.advanced.world.chunk = ChunkConfig::Anvil(AnvilChunkConfig::default());
+        vec![anvil]
+    }
 
     fn get_path() -> &'static Path {
         Path::new("pumpkin.toml")
@@ -342,6 +422,17 @@ pub trait LoadConfiguration {
     /// The steps that bring an older version of this file up to date, ordered by version.
     const MIGRATIONS: &'static [Migration];
 
+    /// The other names the structs read keys under (`#[serde(alias)]`), as the path of the key and
+    /// one other name. A file that uses the other name isn't given the key as well, and the name
+    /// doesn't count as unknown.
+    const ALIASES: &'static [(&'static str, &'static str)];
+
+    /// Configs whose keys count as known although the defaults leave them out, such as those of
+    /// a chunk format that isn't the default one.
+    fn other_layouts() -> Vec<Self>
+    where
+        Self: Sized;
+
     /// Load configuration from the given directory.
     ///
     /// Creates the directory if it doesn't exist and reads the TOML file. An older file is
@@ -451,7 +542,8 @@ where
     if let Some(version) = migration::file_version(&document)
         .filter(|version| (UNVERSIONED_CONFIG_VERSION..=latest).contains(version))
     {
-        let changes = migration::migrate(&mut document, version, C::MIGRATIONS, &defaults);
+        let changes =
+            migration::migrate(&mut document, version, C::MIGRATIONS, &defaults, C::ALIASES);
         if !changes.is_empty() {
             save = Some(PendingSave {
                 path: path.to_owned(),
@@ -471,15 +563,27 @@ where
             file_name(path)
         )));
         // Same as before versions existed: read what the file has, defaults for the rest.
-        let _ = migration::add_missing_keys(&mut document, &defaults);
+        let _ = migration::add_missing_keys(&mut document, &defaults, C::ALIASES);
     }
 
-    let config = fallback::deserialize_per_key(
-        &document,
-        default_config,
-        &defaults,
-        &file_name(path),
-        messages,
+    let file_name = file_name(path);
+    let config =
+        fallback::deserialize_per_key(&document, default_config, &defaults, &file_name, messages);
+
+    // A key is known if the defaults, the config as read or another layout writes it.
+    let layouts = C::other_layouts();
+    let known: Vec<DocumentMut> = std::iter::once(Ok(defaults))
+        .chain(
+            std::iter::once(&config)
+                .chain(&layouts)
+                .map(default_document),
+        )
+        .filter_map(Result::ok)
+        .collect();
+    messages.extend(
+        unknown_keys::unknown_keys(&document, &known, C::ALIASES)
+            .into_iter()
+            .map(|key| LoadMessage::Warn(format!("{file_name}: unknown key {key}"))),
     );
     Ok((config, save))
 }
@@ -542,8 +646,40 @@ fn file_name(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use toml::from_str;
+    use toml_edit::TableLike;
 
-    use super::BasicConfiguration;
+    use super::{BasicConfiguration, LoadConfiguration, PumpkinConfig, default_document};
+
+    /// Each alias in the list is one serde reads as its key: with both set, serde rejects the
+    /// duplicate.
+    #[test]
+    fn aliases_name_their_key() {
+        let defaults = default_document(&PumpkinConfig::default()).unwrap();
+        for &(key, alias) in PumpkinConfig::ALIASES {
+            let mut document = defaults.clone();
+            let (parent, name) = key.rsplit_once('.').unwrap_or(("", key));
+            let table = parent.split('.').filter(|part| !part.is_empty()).fold(
+                document.as_table_mut() as &mut dyn TableLike,
+                |table, part| table.get_mut(part).unwrap().as_table_like_mut().unwrap(),
+            );
+            // The aliased keys that default to `None` are numbers of seconds.
+            let value = table
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| toml_edit::value(1));
+            table.insert(name, value.clone());
+            table.insert(alias, value);
+
+            let err = from_str::<PumpkinConfig>(&document.to_string())
+                .err()
+                .unwrap_or_else(|| panic!("{alias} isn't read as {key}"));
+            assert_eq!(
+                err.message(),
+                format!("duplicate field `{name}`"),
+                "{alias}"
+            );
+        }
+    }
 
     #[test]
     fn accepts_transfers_defaults_to_true() {
