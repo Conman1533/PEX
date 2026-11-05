@@ -3,11 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use pumpkin_core::server::Server;
+use pumpkin_core::{command::CommandSender, server::Server};
 use pumpkin_protocol::java::client::play::{
     CEntityPositionSync, CHeadRot, CSpawnEntity, CUpdateEntityPos, CUpdateEntityPosRot,
     CUpdateEntityRot,
 };
+
+use pumpkin_util::math::vector3::Vector3;
 
 use crate::bot::{HeadlessBot, MAX_POLL_TICKS};
 
@@ -53,6 +55,8 @@ pub async fn run_player_move_broadcast_interval_test(
     if !paired {
         return Err("Player move broadcast: the watcher never saw the mover spawn".to_string());
     }
+
+    clear_path(server, mover.position)?;
 
     // Turn to the fixed look first, and let that rotation go out before counting.
     let mut position = mover.position;
@@ -120,4 +124,46 @@ async fn settle(
         }
     }
     Err("Player move broadcast: the server did not answer a ping".to_string())
+}
+
+/// Clears the blocks along the mover's path and puts stone under it. Only the movement itself
+/// may change while counting: whatever the tester seed leaves at spawn (leaves, a slope) changes
+/// the mover's entity data, and vanilla `ServerEntity.sendChanges` sends a movement packet
+/// outside the update interval whenever that data is dirty.
+fn clear_path(server: &Arc<Server>, start: Vector3<f64>) -> Result<(), String> {
+    let x = start.x.floor() as i32;
+    let y = start.y.floor() as i32;
+    let z = start.z.floor() as i32;
+    let reach = (f64::from(MOVE_TICKS) * STEP).ceil() as i32 + 1;
+    for command in [
+        format!(
+            "fill {} {y} {} {} {} {} air",
+            x - 1,
+            z - 1,
+            x + reach,
+            y + 2,
+            z + 1
+        ),
+        format!(
+            "fill {} {} {} {} {} {} stone",
+            x - 1,
+            y - 1,
+            z - 1,
+            x + reach,
+            y - 1,
+            z + 1
+        ),
+    ] {
+        server
+            .command_dispatcher
+            .load()
+            .execute_input(&command, &CommandSender::Console.into_source(server))
+            .map_err(|err| {
+                format!(
+                    "Player move broadcast: '{command}' failed: {}",
+                    err.message.get_text()
+                )
+            })?;
+    }
+    Ok(())
 }
