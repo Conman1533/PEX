@@ -5,11 +5,12 @@ use crate::{
 use crossbeam::atomic::AtomicCell;
 use pumpkin_inventory::screen_handler::ScreenHandler;
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_util::background_event;
 use pumpkin_world::data::player_data::{PlayerDataError, PlayerDataStorage};
 use std::sync::Arc;
 use std::{
     path::PathBuf,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use tracing::{debug, error};
 
@@ -72,6 +73,7 @@ impl ServerPlayerData {
 
         if should_save && self.storage.is_save_enabled() {
             self.last_save.store(now);
+            let snapshot_at = SystemTime::now();
             // Snapshot all online players periodically across all worlds
             let mut snapshots = Vec::new();
             for world in server.worlds.load().iter() {
@@ -82,17 +84,34 @@ impl ServerPlayerData {
                 }
             }
 
+            let snapshot_elapsed = now.elapsed();
+            let players = snapshots.len();
+            background_event::emit("player_snapshot", snapshot_at, || {
+                format!(
+                    "players={players} ms={:.2}",
+                    snapshot_elapsed.as_secs_f64() * 1000.0
+                )
+            });
             if snapshots.is_empty() {
                 return;
             }
 
             let storage = self.storage.clone();
             rayon::spawn(move || {
+                let save_at = SystemTime::now();
+                let save_start = Instant::now();
                 for (uuid, nbt) in snapshots {
                     if let Err(e) = storage.save_player_data(&uuid, nbt) {
                         error!("Failed to save player data for {uuid}: {e}");
                     }
                 }
+                let save_elapsed = save_start.elapsed();
+                background_event::emit("player_save", save_at, || {
+                    format!(
+                        "players={players} ms={:.2}",
+                        save_elapsed.as_secs_f64() * 1000.0
+                    )
+                });
                 debug!("Periodic player data save completed");
             });
         }

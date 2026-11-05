@@ -2,7 +2,9 @@
 //! its peak RSS. Periodically hand the free pages back to the OS from a background thread.
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::time::Duration;
+use pumpkin_util::background_event;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use std::time::{Duration, Instant, SystemTime};
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 const TRIM_INTERVAL: Duration = Duration::from_secs(60);
@@ -19,10 +21,20 @@ pub fn spawn_trimmer() {
             .spawn(|| {
                 loop {
                     std::thread::sleep(TRIM_INTERVAL);
+                    let logged = background_event::is_enabled();
+                    let rss_before = if logged { super::metrics::rss_mib() } else { 0 };
+                    let at = SystemTime::now();
+                    let start = Instant::now();
                     // SAFETY: malloc_trim has no preconditions; it only releases free heap pages.
-                    unsafe {
-                        libc::malloc_trim(0);
-                    }
+                    let released = unsafe { libc::malloc_trim(0) };
+                    let elapsed = start.elapsed();
+                    background_event::emit("malloc_trim", at, || {
+                        format!(
+                            "ms={:.2} released={released} rss_before={rss_before}MiB rss_after={}MiB",
+                            elapsed.as_secs_f64() * 1000.0,
+                            super::metrics::rss_mib()
+                        )
+                    });
                 }
             });
         if let Err(e) = spawned {

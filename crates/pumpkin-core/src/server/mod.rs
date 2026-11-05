@@ -46,7 +46,11 @@ use rsa::RsaPublicKey;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU32};
-use std::{future::Future, sync::atomic::Ordering, time::Duration};
+use std::{
+    future::Future,
+    sync::atomic::Ordering,
+    time::{Duration, Instant},
+};
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
@@ -1193,17 +1197,30 @@ impl Server {
     /// Main server tick method. This now handles both player/network ticking (which always runs)
     /// and world/game logic ticking (which is affected by freeze state).
     pub fn tick(self: &Arc<Self>) {
+        let mut report = metrics::ServerTickReport::default();
         // Do not flush mid-tick; `Flush` is `flushChannel`.
+        let t_phase = Instant::now();
         let suspended = self.suspend_player_flushes();
+        report.suspend_flushes = t_phase.elapsed();
         if self.tick_rate_manager.runs_normally() || self.tick_rate_manager.is_sprinting() {
-            self.tick_worlds();
+            self.tick_worlds(&mut report);
             // Always run player and network ticking, even when game is frozen
         } else {
+            let t_phase = Instant::now();
             self.sync_game_time();
+            report.time_sync = t_phase.elapsed();
+            let t_phase = Instant::now();
             self.tick_players_and_network();
+            report.frozen_players = t_phase.elapsed();
         }
+        let t_phase = Instant::now();
         self.flush_pending_block_updates();
+        report.block_flush = t_phase.elapsed();
+        let t_phase = Instant::now();
         Self::resume_player_flushes(&suspended);
+        drop(suspended);
+        report.resume_flushes = t_phase.elapsed();
+        self.metrics.set_server_report(report);
     }
 
     fn flush_pending_block_updates(&self) {
@@ -1232,35 +1249,51 @@ impl Server {
     }
 
     /// Ticks the game logic for all worlds. This is the part that is affected by `/tick freeze`.
-    pub fn tick_worlds(self: &Arc<Self>) {
+    pub fn tick_worlds(self: &Arc<Self>, report: &mut metrics::ServerTickReport) {
+        let t_phase = Instant::now();
         let source = crate::command::CommandSender::Console
             .into_source(self)
             .with_silent();
         let _ = self
             .datapack_manager
             .execute_function(self, &source, "#minecraft:tick");
+        drop(source);
+        report.tick_functions = t_phase.elapsed();
 
+        let t_phase = Instant::now();
         self.plugin_manager.tick_loaders(self);
+        report.plugin_loaders = t_phase.elapsed();
+        let t_phase = Instant::now();
         self.scheduled_functions.tick(
             self,
             self.tick_count.load(std::sync::atomic::Ordering::Relaxed) as u64,
         );
+        report.scheduled_functions = t_phase.elapsed();
 
+        let t_phase = Instant::now();
         self.sync_game_time();
+        report.time_sync = t_phase.elapsed();
 
+        let t_phase = Instant::now();
         let worlds = self.worlds.load();
         let handle = self.runtime.clone();
-        let reports = worlds
+        report.worlds = worlds
             .par_iter()
             .map(|world| {
+                let queued = t_phase.elapsed();
                 let _guard = handle.enter();
-                world.tick(self)
+                let mut world_report = world.tick(self);
+                world_report.queued = queued;
+                world_report
             })
             .collect();
-        self.metrics.set_world_reports(reports);
+        drop(worlds);
+        report.world_ticks = t_phase.elapsed();
 
         // Global tasks
+        let t_phase = Instant::now();
         self.player_data_storage.tick(self);
+        report.player_data = t_phase.elapsed();
     }
 
     /// Vanilla `tickChildren` "timeSync": every 20 ticks, also while frozen.
@@ -1277,9 +1310,10 @@ impl Server {
     }
 
     /// Updates the tick time statistics with the duration of the last tick.
-    pub fn update_tick_times(&self, tick_duration_nanos: i64) {
+    pub fn update_tick_times(&self, tick_duration_nanos: i64, tick_loop: metrics::TickLoopReport) {
         let tick_count = self.tick_count.fetch_add(1, Ordering::Relaxed);
-        self.metrics.record_tick(tick_count, tick_duration_nanos);
+        self.metrics
+            .record_tick(tick_count, tick_duration_nanos, tick_loop);
         let index = (tick_count % 100) as usize;
 
         let mut tick_times = self

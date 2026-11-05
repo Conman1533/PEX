@@ -5,12 +5,12 @@ use crate::{
     plugin::server::{
         server_tick_end::ServerTickEndEvent, server_tick_start::ServerTickStartEvent,
     },
-    server::Server,
+    server::{Server, metrics::TickLoopReport},
 };
 use pumpkin_gametest::GameTestRunner;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, warn};
 
 const NANOSECONDS_PER_MILLISECOND: i64 = 1_000_000;
@@ -64,6 +64,8 @@ impl Ticker {
         'ticker: loop {
             // Doubles as the tick-duration start, so the loop reads the clock twice.
             let tick_start_nanos = elapsed_nanos(base);
+            let mut tick_loop = TickLoopReport::new(SystemTime::now());
+            let t_phase = Instant::now();
             let manager = &server.tick_rate_manager;
             let sprinting = manager.is_sprinting();
             let this_tick_nanos = if sprinting {
@@ -88,7 +90,9 @@ impl Ticker {
             schedule.next_tick_nanos += this_tick_nanos;
 
             manager.tick();
+            tick_loop.rate_manager = t_phase.elapsed();
 
+            let t_phase = Instant::now();
             let tick_number = server.tick_count.load(Ordering::Relaxed);
             if server.plugin_manager.has_handlers::<ServerTickStartEvent>() {
                 server.runtime.block_on(
@@ -97,29 +101,37 @@ impl Ticker {
                         .fire(server, &mut ServerTickStartEvent::new(tick_number)),
                 );
             }
+            tick_loop.start_event = t_phase.elapsed();
 
             let should_tick_game_tests = manager.runs_normally() || sprinting;
 
             if sprinting {
+                let t_phase = Instant::now();
                 manager.start_sprint_tick_work();
+                tick_loop.rate_manager += t_phase.elapsed();
                 server.tick();
 
+                let t_phase = Instant::now();
                 if manager.end_sprint_tick_work() {
                     manager.finish_tick_sprint(server);
                 }
+                tick_loop.rate_manager += t_phase.elapsed();
             } else {
                 server.tick();
             }
 
             if should_tick_game_tests {
+                let t_phase = Instant::now();
                 server.runtime.block_on(async {
                     drain_game_test_queue(server, &mut game_test_runner).await;
                     game_test_runner.tick().await;
                 });
+                tick_loop.game_tests = t_phase.elapsed();
             }
 
             let tick_duration_nanos = elapsed_nanos(base) - tick_start_nanos;
 
+            let t_phase = Instant::now();
             let tick_number = server.tick_count.load(Ordering::Relaxed);
             if server.plugin_manager.has_handlers::<ServerTickEndEvent>() {
                 server.runtime.block_on(server.plugin_manager.fire(
@@ -127,8 +139,9 @@ impl Ticker {
                     &mut ServerTickEndEvent::new(tick_number, tick_duration_nanos),
                 ));
             }
+            tick_loop.end_event = t_phase.elapsed();
 
-            server.update_tick_times(tick_duration_nanos);
+            server.update_tick_times(tick_duration_nanos, tick_loop);
 
             if STOP_INTERRUPT.is_cancelled() {
                 break 'ticker;
