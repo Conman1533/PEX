@@ -9,9 +9,13 @@ use pumpkin_core::{
     },
     server::Server,
 };
-use pumpkin_util::PermissionLvl;
+use pumpkin_util::{PermissionLvl, world_seed::Seed};
 use tokio::net::TcpListener;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+
+/// The tester world's seed, fixed so that survival stages can rely on its terrain and structures.
+/// Changing it means checking every stage's positions again.
+pub const TEST_SEED: Seed = Seed(5_212_026_031_000_017);
 
 /// Longer than a whole tester run. The bot tests don't read their bots' packets, so the bots never
 /// answer keep-alives, and the default 15 seconds kicks a bot after 30 silent seconds.
@@ -20,8 +24,9 @@ const BOT_KEEP_ALIVE_SECS: u64 = 60 * 60;
 pub async fn create_test_server(temp_dir: &tempfile::TempDir) -> Result<Arc<Server>, String> {
     let basic_config = BasicConfiguration {
         default_level_name: temp_dir.path().to_string_lossy().into_owned(),
-        allow_nether: false,
-        allow_end: false,
+        allow_nether: true,
+        allow_end: true,
+        seed: TEST_SEED,
         allow_chat_reports: false,
         op_permission_level: PermissionLvl::Four,
         ..Default::default()
