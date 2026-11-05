@@ -27,16 +27,9 @@ impl JavaClient {
             wrap_degrees(rotation.yaw) % 360.0,
             wrap_degrees(rotation.pitch),
         );
-        // Send the new position to tracking players only.
-        let entity_id = entity.entity_id;
-        // TODO: use `pumpkin_util::math::pack_degrees`.
-        let yaw = (entity.yaw.load() * 256.0 / 360.0).rem_euclid(256.0);
-        let pitch = (entity.pitch.load() * 256.0 / 360.0).rem_euclid(256.0);
-
+        // Bedrock watchers only; the entity tracker sends Java watchers the rotation and head
+        // rotation (`TrackedEntity::send_changes`).
         let world = entity.world.load_full();
-        let je_packet =
-            CUpdateEntityRot::new(entity_id.into(), yaw as u8, pitch as u8, rotation.ground);
-
         let pos = entity.pos.load();
 
         // MODE_ROTATION not used for other players -> AvatarEntity always sends
@@ -44,9 +37,6 @@ impl JavaClient {
         let be_packet =
             bedrock_move_player_packet(entity, pos, CMovePlayer::MODE_NORMAL, rotation.ground);
 
-        world.send_to_tracking_players_editioned(entity, &je_packet, &be_packet);
-
-        let je_packet = CHeadRot::new(entity_id.into(), yaw as u8);
-        world.send_to_tracking_players(entity, &je_packet);
+        world.send_to_tracking_players_bedrock(entity, &be_packet);
     }
 }

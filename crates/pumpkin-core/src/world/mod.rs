@@ -1338,6 +1338,21 @@ impl World {
             .messages_sent += 1;
     }
 
+    pub fn broadcast_packet_except_bedrock<B: BClientPacket>(
+        &self,
+        except: &[uuid::Uuid],
+        be_packet: &B,
+    ) {
+        let players = self.players.load();
+        let recipients = players.iter().filter_map(|p| match p.client.as_ref() {
+            ClientPlatform::Bedrock(be_client) if !except.contains(&p.gameprofile.id) => {
+                Some(be_client)
+            }
+            _ => None,
+        });
+        Self::broadcast_bedrock_grouped(be_packet, recipients);
+    }
+
     pub fn broadcast_packet_except_editioned<J: ClientPacket, B: BClientPacket>(
         &self,
         except: &[uuid::Uuid],

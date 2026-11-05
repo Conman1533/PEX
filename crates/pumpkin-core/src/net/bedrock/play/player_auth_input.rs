@@ -49,11 +49,8 @@ impl BedrockClient {
             if rot_changed {
                 entity.pitch.store(new_pitch);
                 entity.yaw.store(new_yaw);
+                entity.head_yaw.store(new_yaw);
             }
-
-            // TODO: use `pumpkin_util::math::pack_degrees`.
-            let je_yaw = (new_yaw * 256.0 / 360.0).rem_euclid(256.0);
-            let je_pitch = (new_pitch * 256.0 / 360.0).rem_euclid(256.0);
 
             let delta = pumpkin_util::math::vector3::Vector3::new(
                 new_pos.x - old_pos.x,
@@ -79,71 +76,9 @@ impl BedrockClient {
                 pumpkin_protocol::codec::var_ulong::VarULong(0),
             );
 
-            if pos_changed && delta.length_squared() >= 64.0 {
-                world.broadcast_packet_except(
-                    &[player.gameprofile.id],
-                    &pumpkin_protocol::java::client::play::CEntityPositionSync::new(
-                        player.entity_id().into(),
-                        new_pos,
-                        pumpkin_util::math::vector3::Vector3::new(0.0, 0.0, 0.0),
-                        je_yaw,
-                        je_pitch,
-                        on_ground,
-                    ),
-                );
-            } else if pos_changed && rot_changed {
-                world.broadcast_packet_except_editioned(
-                    &[player.gameprofile.id],
-                    &pumpkin_protocol::java::client::play::CUpdateEntityPosRot::new(
-                        player.entity_id().into(),
-                        pumpkin_util::math::vector3::Vector3::new(
-                            new_pos.x.mul_add(4096.0, -(old_pos.x * 4096.0)) as i16,
-                            new_pos.y.mul_add(4096.0, -(old_pos.y * 4096.0)) as i16,
-                            new_pos.z.mul_add(4096.0, -(old_pos.z * 4096.0)) as i16,
-                        ),
-                        je_yaw as u8,   // Use converted Java byte
-                        je_pitch as u8, // Use converted Java byte
-                        on_ground,
-                    ),
-                    &bedrock_move_packet,
-                );
-            } else if pos_changed {
-                world.broadcast_packet_except_editioned(
-                    &[player.gameprofile.id],
-                    &pumpkin_protocol::java::client::play::CUpdateEntityPos::new(
-                        player.entity_id().into(),
-                        pumpkin_util::math::vector3::Vector3::new(
-                            new_pos.x.mul_add(4096.0, -(old_pos.x * 4096.0)) as i16,
-                            new_pos.y.mul_add(4096.0, -(old_pos.y * 4096.0)) as i16,
-                            new_pos.z.mul_add(4096.0, -(old_pos.z * 4096.0)) as i16,
-                        ),
-                        on_ground,
-                    ),
-                    &bedrock_move_packet,
-                );
-            } else if rot_changed {
-                world.broadcast_packet_except_editioned(
-                    &[player.gameprofile.id],
-                    &pumpkin_protocol::java::client::play::CUpdateEntityRot::new(
-                        player.entity_id().into(),
-                        je_yaw as u8,   // Use converted Java byte
-                        je_pitch as u8, // Use converted Java byte
-                        on_ground,
-                    ),
-                    &bedrock_move_packet,
-                );
-            }
-
-            if rot_changed {
-                world.broadcast_packet_except(
-                    &[player.gameprofile.id],
-                    // Adjust to `CHeadRot` if that is what your crate currently calls it
-                    &pumpkin_protocol::java::client::play::CHeadRot::new(
-                        player.entity_id().into(),
-                        je_yaw as u8,
-                    ),
-                );
-            }
+            // Java watchers get this player's movement, rotation and head rotation from the
+            // entity tracker (`TrackedEntity::send_changes`).
+            world.broadcast_packet_except_bedrock(&[player.gameprofile.id], &bedrock_move_packet);
 
             if pos_changed {
                 chunker::update_position(player);

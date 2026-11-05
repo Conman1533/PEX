@@ -185,13 +185,17 @@ impl TrackedEntity {
         self.seen_by.read().contains(uuid)
     }
 
-    /// Vanilla `ServerEntity.sendChanges`. Non-player entities only.
+    /// Vanilla `ServerEntity.sendChanges`. For a player only the Java watchers are served here:
+    /// Bedrock watchers get the player's movement from its own movement packets, and the
+    /// player's velocity goes out through `flush_velocity`, which also reaches its own client.
     pub fn send_changes(&self, world: &World) {
         let entity = self.entity.get_entity();
-        self.send_bedrock_move(entity, world);
+        let is_player = self.entity.get_player().is_some();
+        if !is_player {
+            self.send_bedrock_move(entity, world);
+        }
         let tick = self.tick_count.fetch_add(1, Relaxed);
-        let needs_sync = entity.velocity_dirty.swap(false, Ordering::SeqCst);
-        // Head yaw stays live every tick, only position/rotation sync is throttled.
+        let needs_sync = !is_player && entity.velocity_dirty.swap(false, Ordering::SeqCst);
         if tick.is_multiple_of(self.update_interval.max(1))
             || needs_sync
             || entity.synched_data.is_dirty()
@@ -231,14 +235,17 @@ impl TrackedEntity {
                 }
                 self.was_riding.store(false, Relaxed);
             }
-        }
 
-        // Java `CHeadRot` is per-tick. Bedrock watchers of this entity get head yaw from
-        // `send_bedrock_move` (`MoveActorDelta` HAS_HEAD_YAW), not from this packet.
-        let head_yaw = pack_degrees(entity.head_yaw.load());
-        if head_yaw != entity.last_sent_head_yaw.load(Relaxed) {
-            self.send_to_tracking_players(&CHeadRot::new(VarInt(self.entity_id), head_yaw), world);
-            entity.last_sent_head_yaw.store(head_yaw, Relaxed);
+            // Vanilla sends `ClientboundRotateHeadPacket` inside the update check too. Bedrock
+            // watchers get head yaw from `send_bedrock_move` (`MoveActorDelta` HAS_HEAD_YAW).
+            let head_yaw = pack_degrees(entity.head_yaw.load());
+            if head_yaw != entity.last_sent_head_yaw.load(Relaxed) {
+                self.send_to_tracking_players(
+                    &CHeadRot::new(VarInt(self.entity_id), head_yaw),
+                    world,
+                );
+                entity.last_sent_head_yaw.store(head_yaw, Relaxed);
+            }
         }
     }
 
@@ -298,6 +305,13 @@ impl TrackedEntity {
         let diff = (velocity - entity.last_sent_velocity.load()).length_squared();
         if diff > 1.0e-7 || (diff > 0.0 && velocity.length_squared() == 0.0) {
             entity.last_sent_velocity.store(velocity);
+            if self.entity.get_player().is_some() {
+                self.send_to_tracking_players(
+                    &CEntityVelocity::new(VarInt(self.entity_id), velocity),
+                    world,
+                );
+                return;
+            }
             self.send_to_tracking_players_editioned(
                 &CEntityVelocity::new(VarInt(self.entity_id), velocity),
                 &CSetActorMotion {
@@ -1040,11 +1054,7 @@ impl EntityTracker {
 
         tracked.par_iter().for_each(|tracked| {
             let _guard = handle.enter();
-            if tracked.entity.get_player().is_none() {
-                tracked.send_changes(world);
-            } else if tracked.entity.get_entity().synched_data.is_dirty() {
-                tracked.entity.get_entity().send_dirty_entity_data();
-            }
+            tracked.send_changes(world);
         });
     }
 }

@@ -6,7 +6,9 @@ mod entity_interaction_range;
 mod entity_target_packets;
 mod login_and_movement;
 mod loot_tables;
+mod mob_head_rot_interval;
 mod player_actions;
+mod player_move_broadcast_interval;
 mod sheep_shearing;
 mod status_ping;
 mod teleport_confirm;
@@ -27,8 +29,17 @@ pub async fn run_bot_tests(
 ) -> Result<UnloadedChests, String> {
     status_ping::run_bot_status_ping_test(addr, summary_lines).await?;
 
-    let (mut bot1, bot2) =
+    let (mut bot1, mut bot2) =
         login_and_movement::run_login_and_movement_tests(server, addr, summary_lines).await?;
+
+    // Both bots are still at spawn here, so the second one tracks the first.
+    player_move_broadcast_interval::run_player_move_broadcast_interval_test(
+        server,
+        &mut bot1,
+        &mut bot2,
+        summary_lines,
+    )
+    .await?;
 
     teleport_confirm::run_teleport_confirm_tests(server, &mut bot1, summary_lines).await?;
 
@@ -58,6 +69,8 @@ pub async fn run_bot_tests(
 
     entity_target_packets::run_entity_target_packet_tests(server, addr, &mut bot1, summary_lines)
         .await?;
+
+    mob_head_rot_interval::run_mob_head_rot_interval_test(server, &mut bot1, summary_lines).await?;
 
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)
         .await?;
