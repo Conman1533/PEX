@@ -3240,6 +3240,7 @@ dependencies = [
  "bitflags 2.13.2",
  "bytes",
  "colored",
+ "criterion",
  "crossbeam",
  "dashmap",
  "ed25519-dalek",

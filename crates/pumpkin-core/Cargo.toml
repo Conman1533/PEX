@@ -122,8 +122,13 @@ rustc_version.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
+
+[[bench]]
+name = "chunk_packet"
+harness = false
 
 [lints]
 workspace = true

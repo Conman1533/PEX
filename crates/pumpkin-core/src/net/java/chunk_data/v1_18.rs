@@ -220,6 +220,9 @@ pub fn write_chunk_data(
             .lock()
             .map_err(|_| WritingError::Message("light_engine lock poisoned".into()))?;
         let num_sections = light_engine.sky_light.len();
+        // The fully lit sections at the top get neither mask bit and no array.
+        let sky_sections =
+            num_sections - super::light::fully_lit_top_sections(&light_engine.sky_light);
 
         let mut sky_light_empty_mask = 0u64;
         let mut block_light_empty_mask = 0u64;
@@ -234,7 +237,9 @@ pub fn write_chunk_data(
         for section_index in 0..num_sections {
             let bit_index = section_index + 1; // Offset by 1 for the below-world section
 
-            if light_engine.sky_light[section_index].to_array().is_some() {
+            if section_index >= sky_sections {
+                // No layer here: the client reads sky light 15.
+            } else if light_engine.sky_light[section_index].to_array().is_some() {
                 sky_light_mask |= 1 << bit_index;
             } else {
                 sky_light_empty_mask |= 1 << bit_index;
@@ -247,8 +252,11 @@ pub fn write_chunk_data(
             }
         }
 
-        // Bit num_sections+1 represents the section above the world (always empty)
-        sky_light_empty_mask |= 1 << (num_sections + 1);
+        // Bit num_sections+1 represents the section above the world. It's left out with the
+        // fully lit sections: an empty layer there would make the client read sky light 0 below it.
+        if sky_sections == num_sections {
+            sky_light_empty_mask |= 1 << (num_sections + 1);
+        }
         block_light_empty_mask |= 1 << (num_sections + 1);
 
         // Trust edges (1.18 - 1.19.4; removed in 1.20)
@@ -270,7 +278,7 @@ pub fn write_chunk_data(
 
         // Write Sky Light arrays
         write.write_var_int(&VarInt(sky_light_mask.count_ones() as i32))?;
-        for section_index in 0..num_sections {
+        for section_index in 0..sky_sections {
             if let Some(data) = light_engine.sky_light[section_index].to_array() {
                 write.write_var_int(&light_data_size)?;
                 write.write_slice(&data)?;
