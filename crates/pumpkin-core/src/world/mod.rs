@@ -618,7 +618,7 @@ impl World {
 
     pub async fn shutdown(&self) {
         let entities = self.entities.load_full();
-        self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions())
+        self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions(), false)
             .await;
 
         self.save_all_block_entities();
@@ -639,10 +639,13 @@ impl World {
     /// Writes `entities` into the saved data of the chunks they are in. A live chunk is
     /// rebuilt from scratch, so `snapshot_chunks` lists the live chunks that must be rewritten
     /// even when nothing is left in them; a chunk that never went live keeps its records.
+    /// With `unload`, the entities have left the world, so the snapshot chunks become dormant:
+    /// their records are now the only copy of those entities.
     async fn save_entities_by_chunk(
         &self,
         entities: &[Arc<dyn EntityBase>],
         snapshot_chunks: impl IntoIterator<Item = Vector2<i32>>,
+        unload: bool,
     ) {
         let mut groups: FxHashMap<Vector2<i32>, Vec<NbtCompound>> = FxHashMap::default();
         for entity in entities {
@@ -657,8 +660,12 @@ impl World {
                 .or_default()
                 .push(nbt);
         }
+        let mut unloaded = FxHashSet::default();
         for pos in snapshot_chunks {
             groups.entry(pos).or_default();
+            if unload {
+                unloaded.insert(pos);
+            }
         }
 
         for (pos, records) in groups {
@@ -670,15 +677,21 @@ impl World {
             } else {
                 self.level.get_entity_chunk(pos).await
             };
-            let live = chunk.live.load(Relaxed);
-            if !live && records.is_empty() {
-                continue;
-            }
             let mut data = chunk
                 .data
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
+            // Read under the lock: a chunk listed for unload twice (the next cleanup pass
+            // runs before the first one has dropped it) must not have the entities the first
+            // pass saved replaced by the nothing that is left in the world.
+            let live = chunk.live.load(Relaxed);
+            if !live && records.is_empty() {
+                continue;
+            }
             merge_entity_records(&mut data, live, records);
+            if unloaded.contains(&pos) {
+                chunk.live.store(false, Relaxed);
+            }
             drop(data);
             chunk.mark_dirty(true);
         }
@@ -4396,7 +4409,7 @@ impl World {
                     }
                 };
 
-                let Some((chunk_weak, first_load)) = recv_result else {
+                let Some((chunk_weak, _)) = recv_result else {
                     break;
                 };
 
@@ -4417,19 +4430,19 @@ impl World {
                     continue 'main;
                 }
 
-                if first_load {
-                    // First watcher: consume the serialized entities and make them
-                    // live. The live entity list becomes the single source of
-                    // truth, so the chunk's NBT is taken (cleared) to avoid keeping
-                    // a duplicate copy that would be re-appended on the next unload
-                    // and doubled on every reload.
-                    let entity_nbts = std::mem::take(
-                        &mut *chunk
-                            .data
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner),
-                    );
-                    chunk.live.store(true, Relaxed);
+                // The first watcher of a dormant chunk (fresh from disk, or unloaded but
+                // not yet dropped from memory) consumes the serialized entities and makes
+                // them live. The live entity list becomes the single source of truth, so
+                // the chunk's NBT is taken (cleared) to avoid keeping a duplicate copy that
+                // would be re-appended on the next unload and doubled on every reload.
+                let entity_nbts = {
+                    let mut data = chunk
+                        .data
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    (!chunk.live.swap(true, Relaxed)).then(|| std::mem::take(&mut *data))
+                };
+                if let Some(entity_nbts) = entity_nbts {
                     for entity_nbt in &entity_nbts {
                         let Some(id) = entity_nbt.get_string("id") else {
                             debug!("Entity has no ID");
@@ -5200,7 +5213,7 @@ impl World {
             new_entities
         });
 
-        self.save_entities_by_chunk(&entities_to_remove, chunks_set.iter().copied())
+        self.save_entities_by_chunk(&entities_to_remove, chunks_set.iter().copied(), true)
             .await;
 
         for entity in entities_to_remove {
@@ -7292,7 +7305,7 @@ impl World {
 
     pub async fn save(&self) {
         let entities = self.entities.load_full();
-        self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions())
+        self.save_entities_by_chunk(&entities, self.level.live_entity_chunk_positions(), false)
             .await;
 
         self.save_all_block_entities();
@@ -8275,6 +8288,47 @@ mod tests {
             assert!(world.get_entity_by_id(cow.get_entity().entity_id).is_none());
             world.level.shutdown().await;
         }
+        Ok(())
+    }
+    #[tokio::test]
+    async fn a_chunk_unloaded_twice_keeps_its_entities() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::entity::{Entity, ai::test_support::world, passive::cow::CowEntity};
+        use pumpkin_data::entity::EntityType;
+        use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
+        use std::sync::Arc;
+        use std::sync::atomic::Ordering::Relaxed;
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let pos = Vector2::new(0, 0);
+        world
+            .level
+            .get_entity_chunk(pos)
+            .await
+            .live
+            .store(true, Relaxed);
+        let cow = CowEntity::new(Entity::new(
+            world.clone(),
+            Vector3::new(0.5, 64.0, 0.5),
+            &EntityType::COW,
+        ));
+        world.entities.store(Arc::new(vec![cow]));
+
+        // Two cleanup passes list the chunk before either has dropped it: the second finds
+        // no entity left in the world.
+        world.remove_entities_in_chunks([pos]).await;
+        world.remove_entities_in_chunks([pos]).await;
+
+        let chunk = world.level.get_entity_chunk(pos).await;
+        let ids: Vec<String> = chunk
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .filter_map(|record| record.get_string("id").map(str::to_owned))
+            .collect();
+        assert_eq!(ids, ["minecraft:cow"]);
+        assert!(!chunk.live.load(Relaxed));
+        world.level.shutdown().await;
         Ok(())
     }
     #[tokio::test]
