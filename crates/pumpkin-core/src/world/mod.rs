@@ -178,6 +178,7 @@ pub mod entity_tracker;
 pub mod environment;
 pub mod natural_spawner;
 mod player_touch;
+mod saved_data;
 pub mod scoreboard;
 pub mod weather;
 
@@ -238,7 +239,8 @@ pub struct World {
     pub(crate) entity_index: Arc<EntityIndex>,
     island_schedule: std::sync::Mutex<entity_islands::Schedule>,
     /// The world's scoreboard, used for tracking scores, objectives, and display information.
-    pub scoreboard: std::sync::Mutex<Scoreboard>,
+    /// Shared by every dimension of the save, as vanilla keeps one scoreboard per server.
+    pub scoreboard: Arc<std::sync::Mutex<Scoreboard>>,
     /// The world's worldborder, defining the playable area and controlling its expansion or contraction.
     pub worldborder: std::sync::Mutex<Worldborder>,
     /// The world's time, including counting ticks for weather, time cycles, and statistics.
@@ -374,6 +376,10 @@ impl World {
                     &level.level_folder.dim_folder,
                 ))
             });
+        let worldborder = saved_data::load_world_border(&level.level_folder.dim_folder)
+            .unwrap_or_else(|| Worldborder::new(0.0, 0.0, 5.999_996_8E7, 0, 5, 300));
+        let forced_chunks = saved_data::load_forced_chunks(&level.level_folder.dim_folder);
+        let scoreboard = scoreboard::shared_scoreboard(&level.level_folder.root_folder);
 
         let custom_data_path = level
             .level_folder
@@ -391,6 +397,17 @@ impl World {
             NbtCompound::new()
         };
 
+        // Vanilla keeps one game time, day time and weather for the server; each world
+        // starts from the saved ones.
+        let (level_time, weather) = {
+            let info = level_info.load();
+            let mut level_time = LevelTime::new();
+            level_time.load_from(info.day_time, info.game_time);
+            let mut weather = Weather::new();
+            weather.load_from(&info);
+            (level_time, weather)
+        };
+
         Self {
             uuid: Uuid::new_v4(),
             level,
@@ -399,18 +416,11 @@ impl World {
             entities: ArcSwap::new(Arc::new(Vec::new())),
             entity_index: Arc::default(),
             island_schedule: std::sync::Mutex::default(),
-            scoreboard: std::sync::Mutex::new(Scoreboard::default()),
-            worldborder: std::sync::Mutex::new(Worldborder::new(
-                0.0,
-                0.0,
-                5.999_996_8E7,
-                0,
-                5,
-                300,
-            )),
-            level_time: std::sync::Mutex::new(LevelTime::new()),
+            scoreboard,
+            worldborder: std::sync::Mutex::new(worldborder),
+            level_time: std::sync::Mutex::new(level_time),
             dimension,
-            weather: std::sync::Mutex::new(Weather::new()),
+            weather: std::sync::Mutex::new(weather),
             block_registry,
             sea_level: generation_settings.sea_level,
             min_y: i32::from(generation_settings.shape.min_y),
@@ -425,7 +435,7 @@ impl World {
             navigation_change_sequence: std::sync::atomic::AtomicU64::new(0),
             tick_spawns: std::sync::Mutex::new(Vec::new()),
             active_chunk_tracker: std::sync::Mutex::new(ActiveChunkTracker::default()),
-            forced_chunks: std::sync::Mutex::new(FxHashSet::default()),
+            forced_chunks: std::sync::Mutex::new(forced_chunks),
             server,
             block_entities: DashMap::new(),
             pending_block_entity_migrations: crossbeam::queue::SegQueue::new(),
@@ -627,6 +637,7 @@ impl World {
 
         self.save_all_block_entities();
         self.save_dragon_fight();
+        self.save_saved_data();
 
         // Save portal POI to disk
         let save_result = self
@@ -639,6 +650,43 @@ impl World {
         }
 
         self.level.shutdown().await;
+    }
+
+    /// Writes this dimension's world border and forced chunks, and the overworld writes the
+    /// scoreboard, where vanilla keeps them.
+    fn save_saved_data(&self) {
+        let folder = &self.level.level_folder.dim_folder;
+        let saved = saved_data::save_world_border(
+            folder,
+            &self
+                .worldborder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        if let Err(e) = saved {
+            error!("Failed to save the world border: {e}");
+        }
+        let forced = self
+            .forced_chunks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Err(e) = saved_data::save_forced_chunks(folder, &forced) {
+            error!("Failed to save forced chunks: {e}");
+        }
+        // The scoreboard belongs to the save, so only the overworld writes it.
+        if self.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name {
+            let saved = scoreboard::save_scoreboard(
+                &self.level.level_folder.root_folder,
+                &self
+                    .scoreboard
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+            );
+            if let Err(e) = saved {
+                error!("Failed to save the scoreboard: {e}");
+            }
+        }
     }
 
     /// Writes `entities` into the saved data of the chunks they are in. A live chunk is
@@ -7350,6 +7398,7 @@ impl World {
 
         self.save_all_block_entities();
         self.save_dragon_fight();
+        self.save_saved_data();
 
         if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
             let _ = portal_poi.save_all();

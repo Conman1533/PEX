@@ -52,6 +52,28 @@ impl Weather {
         }
     }
 
+    /// The saved weather (vanilla `ServerLevel`'s constructor starts the levels from it).
+    pub fn load_from(&mut self, info: &pumpkin_world::world_info::LevelData) {
+        self.clear_weather_time = info.clear_weather_time.max(0);
+        self.rain_time = info.rain_time;
+        self.raining = info.raining;
+        self.thunder_time = info.thunder_time;
+        self.thundering = info.thundering;
+        self.rain_level = if info.raining { 1.0 } else { 0.0 };
+        self.old_rain_level = self.rain_level;
+        self.thunder_level = if info.thundering { 1.0 } else { 0.0 };
+        self.old_thunder_level = self.thunder_level;
+    }
+
+    /// Writes the live weather into the data saved to `weather.dat`.
+    pub const fn save_to(&self, info: &mut pumpkin_world::world_info::LevelData) {
+        info.clear_weather_time = self.clear_weather_time;
+        info.rain_time = self.rain_time;
+        info.raining = self.raining;
+        info.thunder_time = self.thunder_time;
+        info.thundering = self.thundering;
+    }
+
     pub fn set_weather_parameters(
         &mut self,
         world: &World,

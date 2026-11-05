@@ -124,6 +124,39 @@ pub fn ensure_minecraft_data_dir(level_folder: &Path) -> Result<PathBuf, WorldIn
     Ok(dir)
 }
 
+/// Reads the `data` compound of the vanilla saved-data file `name` in `<folder>/data/minecraft/`.
+#[must_use]
+pub fn read_data_file(folder: &Path, name: &str) -> Option<NbtCompound> {
+    let path = minecraft_data_dir(folder).join(name);
+    let file = File::open(&path).ok()?;
+    match read_gzip_compound_tag(file) {
+        Ok(root) => Some(root.get_compound("data").cloned().unwrap_or(root)),
+        Err(e) => {
+            warn!("Failed to read {}: {e}", path.display());
+            None
+        }
+    }
+}
+
+/// Writes `data` as the vanilla saved-data file `name` in `<folder>/data/minecraft/`. It goes
+/// through a temporary file, so a crash while writing keeps the old file.
+pub fn write_data_file(
+    folder: &Path,
+    name: &str,
+    data_version: i32,
+    data: NbtCompound,
+) -> Result<(), WorldInfoError> {
+    let dir = ensure_minecraft_data_dir(folder)?;
+    let tmp = dir.join(format!("{name}.tmp"));
+    let mut root = NbtCompound::new();
+    root.put_int("DataVersion", data_version);
+    root.put_compound("data", data);
+    pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, BufWriter::new(File::create(&tmp)?))
+        .map_err(|e| WorldInfoError::SerializationError(e.to_string()))?;
+    fs::rename(&tmp, dir.join(name))?;
+    Ok(())
+}
+
 pub fn read_weather(level_folder: &Path) -> WeatherData {
     let path = minecraft_data_dir(level_folder).join("weather.dat");
     if !path.exists() {
@@ -668,22 +701,6 @@ pub fn write_random_sequences_stub(
     let mut root = NbtCompound::new();
     root.put_int("DataVersion", data_version);
     root.put_compound("data", inner);
-
-    let file = File::create(&path)?;
-    pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, file)
-        .map_err(|e| WorldInfoError::SerializationError(e.to_string()))
-}
-
-pub fn write_scoreboard_stub(level_folder: &Path, data_version: i32) -> Result<(), WorldInfoError> {
-    let dir = ensure_minecraft_data_dir(level_folder)?;
-    let path = dir.join("scoreboard.dat");
-    if path.exists() {
-        return Ok(());
-    }
-
-    let mut root = NbtCompound::new();
-    root.put_int("DataVersion", data_version);
-    root.put_compound("data", NbtCompound::new());
 
     let file = File::create(&path)?;
     pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, file)

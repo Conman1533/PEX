@@ -100,6 +100,20 @@ pub struct LevelData {
     /// Persisted to `data/minecraft/weather.dat`.
     #[serde(rename = "clearWeatherTime", skip_serializing, default)]
     pub clear_weather_time: i32,
+
+    /// Game time, the world's age in ticks (vanilla `Time` in `level.dat`).
+    #[serde(rename = "Time", skip_serializing, default)]
+    pub game_time: i64,
+
+    /// The rest of the weather – persisted to `data/minecraft/weather.dat`.
+    #[serde(skip_serializing, default)]
+    pub rain_time: i32,
+    #[serde(skip_serializing, default)]
+    pub raining: bool,
+    #[serde(skip_serializing, default)]
+    pub thunder_time: i32,
+    #[serde(skip_serializing, default)]
+    pub thundering: bool,
 }
 
 const DEFAULT_BORDER_DAMAGE_PER_BLOCK: f64 = 0.2;
@@ -559,6 +573,11 @@ impl LevelData {
             world_gen_settings: WorldGenSettings::new(seed),
             day_time: 0,
             clear_weather_time: -1,
+            game_time: 0,
+            rain_time: 0,
+            raining: false,
+            thunder_time: 0,
+            thundering: false,
         }
     }
 

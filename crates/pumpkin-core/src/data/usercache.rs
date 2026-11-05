@@ -3,10 +3,11 @@ use std::cmp::Reverse;
 use std::{env, fs};
 
 use serde::{Deserialize, Serialize};
-use time::format_description::well_known::Rfc3339;
-use time::{Duration, OffsetDateTime};
+use time::{Date, Month, OffsetDateTime};
 use tracing::warn;
 use uuid::Uuid;
+
+use super::banlist_serializer::{format_date, parse_date};
 
 pub(super) const USER_CACHE_PATH: &str = "usercache.json";
 const USER_CACHE_MRU_LIMIT: usize = 1000;
@@ -71,7 +72,7 @@ impl UserCache {
             .map(|entry| UserCacheEntryDisk {
                 uuid: entry.uuid,
                 name: entry.name,
-                expires_on: format_cache_date(entry.expiration_date),
+                expires_on: format_date(entry.expiration_date),
             })
             .collect();
 
@@ -187,7 +188,7 @@ impl UserCache {
                 continue;
             };
 
-            let Ok(expiration_date) = OffsetDateTime::parse(expires_on, &Rfc3339) else {
+            let Ok(expiration_date) = parse_date(expires_on) else {
                 continue;
             };
 
@@ -203,14 +204,65 @@ impl UserCache {
     }
 }
 
-fn format_cache_date(date: OffsetDateTime) -> String {
-    date.format(&Rfc3339).unwrap_or_default()
-}
-
 fn is_expired(expiration_date: OffsetDateTime) -> bool {
     OffsetDateTime::now_utc() >= expiration_date
 }
 
 fn one_month_from_now() -> OffsetDateTime {
-    OffsetDateTime::now_utc() + Duration::days(30)
+    one_month_after(OffsetDateTime::now_utc())
+}
+
+/// Vanilla `ZonedDateTime.plusMonths(1)`: the same day next month, or that month's last day.
+fn one_month_after(date: OffsetDateTime) -> OffsetDateTime {
+    let (year, month) = match date.month() {
+        Month::December => (date.year() + 1, Month::January),
+        month => (date.year(), month.next()),
+    };
+    let day = date.day().min(month.length(year));
+    Date::from_calendar_date(year, month, day).map_or(date, |next| date.replace_date(next))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(year: i32, month: Month, day: u8) -> OffsetDateTime {
+        Date::from_calendar_date(year, month, day)
+            .unwrap()
+            .midnight()
+            .assume_utc()
+    }
+
+    #[test]
+    fn entries_expire_one_calendar_month_later() {
+        assert_eq!(
+            one_month_after(at(2026, Month::November, 4)),
+            at(2026, Month::December, 4)
+        );
+        assert_eq!(
+            one_month_after(at(2026, Month::December, 15)),
+            at(2027, Month::January, 15)
+        );
+        assert_eq!(
+            one_month_after(at(2027, Month::January, 31)),
+            at(2027, Month::February, 28)
+        );
+        assert_eq!(
+            one_month_after(at(2028, Month::January, 31)),
+            at(2028, Month::February, 29)
+        );
+    }
+
+    #[test]
+    fn the_disk_entry_uses_vanilla_keys_and_date_format() {
+        let entry = UserCacheEntryDisk {
+            uuid: Uuid::nil(),
+            name: "Notch".to_string(),
+            expires_on: format_date(at(2026, Month::December, 4)),
+        };
+        assert_eq!(
+            serde_json::to_string(&entry).unwrap(),
+            r#"{"uuid":"00000000-0000-0000-0000-000000000000","name":"Notch","expiresOn":"2026-12-04 00:00:00 +0000"}"#
+        );
+    }
 }

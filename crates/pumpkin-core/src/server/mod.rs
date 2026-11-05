@@ -423,6 +423,9 @@ impl Server {
         }
 
         server.worlds.store(Arc::new(worlds_vec));
+        // Vanilla `DedicatedServer.forceDifficulty`: the configured difficulty wins over the
+        // one in `level.dat` on every start, even when it is locked (hardcore stays Hard).
+        server.set_difficulty(server.basic_config.default_difficulty, true);
 
         info!("All worlds loaded successfully.");
 
@@ -532,9 +535,37 @@ impl Server {
     }
 
     pub fn save_world_info(&self) -> Result<(), WorldInfoError> {
-        let level_data = self.level_info.load();
+        let level_data = self.sync_level_info();
         self.world_info_writer
             .write_world_info(&level_data, &self.basic_config.get_world_path())
+    }
+
+    /// Copies the overworld's live time and weather into `level_info` for saving, as vanilla
+    /// keeps them in the level data itself.
+    fn sync_level_info(&self) -> Arc<LevelData> {
+        let mut data = (**self.level_info.load()).clone();
+        if let Some(overworld) = self
+            .worlds
+            .load()
+            .iter()
+            .find(|world| world.dimension == Dimension::OVERWORLD)
+        {
+            let time = overworld
+                .level_time
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            data.day_time = time.time_of_day;
+            data.game_time = time.world_age;
+            drop(time);
+            overworld
+                .weather
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .save_to(&mut data);
+        }
+        let data = Arc::new(data);
+        self.level_info.store(data.clone());
+        data
     }
 
     pub fn reload_datapacks(&self, server: &Arc<Self>) {
@@ -794,7 +825,7 @@ impl Server {
         for world in self.worlds.load().iter() {
             world.shutdown().await;
         }
-        let level_data = self.level_info.load();
+        let level_data = self.sync_level_info();
         // then lets save the world info
 
         if let Err(err) = self

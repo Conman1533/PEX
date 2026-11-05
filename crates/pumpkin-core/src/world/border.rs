@@ -1,3 +1,4 @@
+use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::java::client::play::{
     CInitializeWorldBorder, CSetBorderCenter, CSetBorderLerpSize, CSetBorderSize,
     CSetBorderWarningDelay, CSetBorderWarningDistance,
@@ -43,6 +44,46 @@ impl Worldborder {
             damage_per_block: 0.0,
             buffer: 0.0,
         }
+    }
+
+    /// Reads the `data` compound of vanilla's `world_border.dat`.
+    #[must_use]
+    pub fn from_nbt(data: &NbtCompound) -> Self {
+        let size = data.get_double("size").unwrap_or(5.999_996_8E7);
+        let mut border = Self::new(
+            data.get_double("center_x").unwrap_or(0.0),
+            data.get_double("center_z").unwrap_or(0.0),
+            size,
+            0,
+            data.get_int("warning_blocks").unwrap_or(5),
+            data.get_int("warning_time").unwrap_or(15),
+        );
+        border.damage_per_block = data.get_double("damage_per_block").unwrap_or(0.2) as f32;
+        border.buffer = data.get_double("safe_zone").unwrap_or(5.0) as f32;
+        // A border saved mid-lerp carries on towards its target for the time it had left.
+        let lerp_time = data.get_long("lerp_time").unwrap_or(0);
+        if lerp_time > 0 {
+            border.new_diameter = data.get_double("lerp_target").unwrap_or(size);
+            border.speed = lerp_time;
+        }
+        border
+    }
+
+    /// The `data` compound of vanilla's `world_border.dat`. PEX does not track how far a lerp
+    /// has run, so the border is saved at its target size.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        data.put_double("center_x", self.center_x);
+        data.put_double("center_z", self.center_z);
+        data.put_double("damage_per_block", f64::from(self.damage_per_block));
+        data.put_double("safe_zone", f64::from(self.buffer));
+        data.put_int("warning_blocks", self.warning_blocks);
+        data.put_int("warning_time", self.warning_time);
+        data.put_double("size", self.new_diameter);
+        data.put_long("lerp_time", 0);
+        data.put_double("lerp_target", self.new_diameter);
+        data
     }
 
     pub fn init_client(&self, client: &JavaClient) {
@@ -176,6 +217,38 @@ mod tests {
 
     fn centered_border(diameter: f64) -> Worldborder {
         Worldborder::new(0.0, 0.0, diameter, 0, 5, 300)
+    }
+
+    #[test]
+    fn the_border_survives_a_save_in_vanilla_fields() {
+        let mut border = Worldborder::new(120.5, -40.0, 900.0, 0, 7, 20);
+        border.damage_per_block = 0.5;
+        border.buffer = 3.0;
+
+        let data = border.to_nbt();
+        assert_eq!(data.get_double("size"), Some(900.0));
+        assert_eq!(data.get_long("lerp_time"), Some(0));
+        let loaded = Worldborder::from_nbt(&data);
+
+        assert_eq!(
+            (loaded.center_x, loaded.center_z, loaded.new_diameter),
+            (120.5, -40.0, 900.0)
+        );
+        assert_eq!((loaded.warning_blocks, loaded.warning_time), (7, 20));
+        assert_eq!((loaded.damage_per_block, loaded.buffer), (0.5, 3.0));
+        assert_eq!(loaded.speed, 0);
+    }
+
+    #[test]
+    fn a_border_saved_mid_lerp_resumes_towards_its_target() {
+        let mut data = Worldborder::new(0.0, 0.0, 100.0, 0, 5, 15).to_nbt();
+        data.put_long("lerp_time", 4000);
+        data.put_double("lerp_target", 20.0);
+
+        let loaded = Worldborder::from_nbt(&data);
+
+        assert_eq!((loaded.old_diameter, loaded.new_diameter), (100.0, 20.0));
+        assert_eq!(loaded.speed, 4000);
     }
 
     /// `find_safe_location` only falls through to the `clamp_block` fallback
