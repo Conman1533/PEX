@@ -41,6 +41,7 @@ impl DragonFireballEntity {
                 owner_id: None,
                 collides_with_projectiles: false,
                 has_hit: AtomicBool::new(false),
+                left_owner: AtomicBool::new(false),
                 gravity: 0.0,
             },
             acceleration_power: AtomicU64::new(INITIAL_ACCELERATION_POWER.to_bits()),
@@ -50,7 +51,7 @@ impl DragonFireballEntity {
     /// Vanilla `new DragonFireball(level, mob, direction)`.
     #[must_use]
     pub fn new_shot(entity: Entity, shooter: &Entity, direction: Vector3<f64>) -> Self {
-        let thrown = ThrownItemEntity::new(entity, shooter, 0.0);
+        let thrown = ThrownItemEntity::with_owner(entity, shooter, 0.0);
         let accel = INITIAL_ACCELERATION_POWER;
         thrown
             .entity

@@ -1,4 +1,5 @@
 use super::{Entity, EntityBase, living::LivingEntity};
+use crate::world::World;
 use pumpkin_data::BlockDirection;
 use pumpkin_data::entity::EntityType;
 use pumpkin_protocol::java::client::play::CEntityVelocity;
@@ -79,6 +80,8 @@ pub struct ThrownItemEntity {
     pub owner_id: Option<i32>,
     pub collides_with_projectiles: bool,
     pub has_hit: AtomicBool,
+    /// Vanilla `Projectile.leftOwner`: the owner can't be hit until this is set.
+    pub left_owner: AtomicBool,
     pub gravity: f64,
 }
 
@@ -87,12 +90,75 @@ impl ThrownItemEntity {
         let mut owner_pos = owner.pos.load();
         owner_pos.y += owner.get_eye_height() - 0.1;
         entity.set_pos(owner_pos);
+        Self::with_owner(entity, owner, gravity)
+    }
+
+    /// Owned projectile that keeps the position `entity` was created at. Vanilla's
+    /// `AbstractHurtingProjectile` shooters (ghast, blaze, wither, dragon) all `setPos`
+    /// the projectile themselves instead of using the owner's eye.
+    pub const fn with_owner(entity: Entity, owner: &Entity, gravity: f64) -> Self {
         Self {
             entity,
             owner_id: Some(owner.entity_id),
             collides_with_projectiles: false,
             has_hit: AtomicBool::new(false),
+            left_owner: AtomicBool::new(false),
             gravity,
+        }
+    }
+
+    /// Vanilla `Projectile.checkLeftOwner` / `isOutsideOwnerCollisionRange`.
+    fn check_left_owner(&self, world: &World) {
+        if self.left_owner.load(Ordering::Relaxed) {
+            return;
+        }
+        let Some(owner_id) = self.owner_id else {
+            self.left_owner.store(true, Ordering::Relaxed);
+            return;
+        };
+        let owner = world.get_entity_by_id(owner_id).or_else(|| {
+            world
+                .get_player_by_id(owner_id)
+                .map(|p| p as Arc<dyn EntityBase>)
+        });
+        let Some(owner) = owner else {
+            self.left_owner.store(true, Ordering::Relaxed);
+            return;
+        };
+        let velocity = self.entity.velocity.load();
+        let area = self
+            .entity
+            .bounding_box
+            .load()
+            .expand_towards(velocity.x, velocity.y, velocity.z)
+            .expand_all(1.0);
+        let root_id = owner.get_entity().root_vehicle_id();
+        let root = world
+            .get_entity_by_id(root_id)
+            .or_else(|| {
+                world
+                    .get_player_by_id(root_id)
+                    .map(|p| p as Arc<dyn EntityBase>)
+            })
+            .unwrap_or_else(|| owner.clone());
+        let mut group = vec![root.clone()];
+        let mut i = 0;
+        while i < group.len() {
+            let passengers = group[i]
+                .get_entity()
+                .passengers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            group.extend(passengers);
+            i += 1;
+        }
+        let touching = group
+            .iter()
+            .filter(|e| e.can_hit())
+            .any(|e| area.intersects(&e.get_entity().bounding_box.load()));
+        if !touching {
+            self.left_owner.store(true, Ordering::Relaxed);
         }
     }
 
@@ -156,6 +222,7 @@ impl ThrownItemEntity {
             );
         }
 
+        self.check_left_owner(&world);
         entity.update_last_pos();
 
         // Apply gravity and inertia
@@ -294,11 +361,23 @@ impl ThrownItemEntity {
             return true;
         }
 
-        // Skip owner for initial frames
-        if Some(other_ent.entity_id) == self.owner_id
-            && self_ent.tick_count.load(Ordering::Relaxed) < 5
+        // Vanilla `Projectile.canHitEntity`: nothing riding with the owner (the owner
+        // included) is hit before the projectile has left it.
+        if !self.left_owner.load(Ordering::Relaxed)
+            && let Some(owner_id) = self.owner_id
         {
-            return true;
+            let world = self_ent.world.load();
+            let owner_root = world
+                .get_entity_by_id(owner_id)
+                .map(|o| o.get_entity().root_vehicle_id())
+                .or_else(|| {
+                    world
+                        .get_player_by_id(owner_id)
+                        .map(|p| p.get_entity().root_vehicle_id())
+                });
+            if owner_root == Some(other_ent.root_vehicle_id()) {
+                return true;
+            }
         }
 
         // Projectiles should pass through lingering clouds
