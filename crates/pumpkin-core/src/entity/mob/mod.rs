@@ -918,22 +918,33 @@ impl MobEntity {
     ) -> bool {
         let entity = &self.living_entity.entity;
 
-        // If already leashed to player, right-clicking unleashes the mob
-        let currently_leashed = entity
+        let holder = entity
             .leashed_to
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some();
+            .clone();
 
-        if currently_leashed {
+        // Right-clicking a mob on your own lead unties it.
+        if let Some(holder) = &holder
+            && holder.get_entity().entity_id == player.entity_id()
+        {
             entity.unleash();
-            let lead_item =
-                pumpkin_data::item_stack::ItemStack::new(1, &pumpkin_data::item::Item::LEAD);
-            entity
-                .world
-                .load()
-                .drop_stack(&entity.block_pos.load(), lead_item);
+            if player.gamemode.load() != pumpkin_util::GameMode::Creative {
+                let lead_item =
+                    pumpkin_data::item_stack::ItemStack::new(1, &pumpkin_data::item::Item::LEAD);
+                entity
+                    .world
+                    .load()
+                    .drop_stack(&entity.block_pos.load(), lead_item);
+            }
+            self.play_lead_sound(pumpkin_data::sound::Sound::ItemLeadUntied);
             return true;
+        }
+        if holder
+            .as_ref()
+            .is_some_and(|holder| holder.get_player().is_some())
+        {
+            return false;
         }
 
         // If holding a lead, leash the mob to the player
@@ -948,11 +959,26 @@ impl MobEntity {
                 if player.gamemode.load() != pumpkin_util::GameMode::Creative {
                     item_stack.decrement(1);
                 }
+                self.play_lead_sound(pumpkin_data::sound::Sound::ItemLeadTied);
                 return true;
             }
         }
 
         false
+    }
+
+    /// Vanilla `Entity.playSound` for the lead sounds: skipped while silent.
+    fn play_lead_sound(&self, sound: pumpkin_data::sound::Sound) {
+        let entity = &self.living_entity.entity;
+        if !entity.is_silent() {
+            entity.world.load().play_sound_fine(
+                sound,
+                self.living_entity.sound_category(false),
+                &entity.pos.load(),
+                1.0,
+                1.0,
+            );
+        }
     }
 
     /// Vanilla `Mob.checkDespawn`.

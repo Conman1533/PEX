@@ -141,6 +141,14 @@ impl AgeableMob for MuleEntity {
 }
 
 impl Animal for MuleEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            pumpkin_data::sound::Sound::EntityMuleEat,
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
     }

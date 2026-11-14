@@ -144,6 +144,18 @@ impl AgeableMob for CamelEntity {
 }
 
 impl Animal for CamelEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            if self.husk {
+                pumpkin_data::sound::Sound::EntityCamelHuskEat
+            } else {
+                pumpkin_data::sound::Sound::EntityCamelEat
+            },
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(if self.husk {
             &tag::Item::MINECRAFT_CAMEL_HUSK_FOOD

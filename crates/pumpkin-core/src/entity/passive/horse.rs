@@ -186,6 +186,25 @@ pub fn horse_or_donkey_tamed(mob: &dyn Mob) -> Option<bool> {
 }
 
 impl Animal for HorseEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            if self
+                .get_mob_entity()
+                .living_entity
+                .entity
+                .age
+                .load(std::sync::atomic::Ordering::Relaxed)
+                < 0
+            {
+                pumpkin_data::sound::Sound::EntityBabyHorseEat
+            } else {
+                pumpkin_data::sound::Sound::EntityHorseEat
+            },
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
     }
