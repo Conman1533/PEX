@@ -2,17 +2,26 @@ use std::sync::{Arc, Weak};
 
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::effect::StatusEffect;
-use pumpkin_data::entity::EntityType;
+use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::actor_event::ActorEventID;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        escape_danger::EscapeDangerGoal, follow_mob::FollowMobGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        escape_danger::EscapeDangerGoal, follow_mob::FollowMobGoal, follow_owner::FollowOwnerGoal,
+        look_at_entity::LookAtEntityGoal, sit_when_ordered_to::SitWhenOrderedToGoal,
+        swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
+    passive::{
+        animal::Animal,
+        tamable::{TamableAnimal, TamableData},
+    },
     player::Player,
 };
 
@@ -25,12 +34,16 @@ const COOKIE_POISON_DURATION: i32 = 900;
 /// Wiki: <https://minecraft.wiki/w/Parrot>
 pub struct ParrotEntity {
     pub mob_entity: MobEntity,
+    pub tamable_data: TamableData,
 }
 
 impl ParrotEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
         let mob_entity = MobEntity::new(entity);
-        let parrot = Self { mob_entity };
+        let parrot = Self {
+            mob_entity,
+            tamable_data: TamableData::default(),
+        };
         let mob_arc = Arc::new(parrot);
         let mob_weak: Weak<dyn Mob> = {
             let mob_arc: Arc<dyn Mob> = mob_arc.clone();
@@ -46,6 +59,8 @@ impl ParrotEntity {
                 1,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
+            goal_selector.add_goal(2, Box::new(SitWhenOrderedToGoal::new()));
+            goal_selector.add_goal(2, FollowOwnerGoal::new(1.0, 5.0, 1.0));
             goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(3, Box::new(FollowMobGoal::new(1.0, 3.0, 7.0)));
         };
@@ -84,7 +99,82 @@ impl ParrotEntity {
     }
 }
 
+/// Vanilla `Parrot` is an `Animal` that never breeds: nothing is food and nothing can mate.
+impl Animal for ParrotEntity {
+    fn is_food(&self, _item_stack: &ItemStack) -> bool {
+        false
+    }
+
+    fn can_mate(&self, _partner: &dyn Mob) -> bool {
+        false
+    }
+
+    fn get_breed_offspring(
+        &self,
+        _world: &Arc<crate::world::World>,
+        _partner: &dyn Mob,
+    ) -> Option<Arc<dyn EntityBase>> {
+        None
+    }
+}
+
+impl TamableAnimal for ParrotEntity {
+    fn get_tamable_data(&self) -> &TamableData {
+        &self.tamable_data
+    }
+}
+
+impl ParrotEntity {
+    /// Vanilla `Parrot.mobInteract` with `parrot_food`: eaten, then a 1 in 10 chance to tame.
+    fn feed_seeds(&self, player: &Arc<Player>, item_stack: &mut ItemStack) {
+        item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+        let entity = self.get_entity();
+        let world = entity.world.load();
+        if !entity.silent.load(std::sync::atomic::Ordering::Relaxed) {
+            let mut random = self.get_random();
+            let pitch = 1.0 + (random.random::<f32>() - random.random::<f32>()) * 0.2;
+            world.play_sound_fine(
+                Sound::EntityParrotEat,
+                SoundCategory::Neutral,
+                &entity.pos.load(),
+                1.0,
+                pitch,
+            );
+        }
+        if self.get_random().random_range(0..10) == 0 {
+            TamableAnimal::tame(self, player.gameprofile.id);
+            world.send_entity_status(
+                entity,
+                EntityStatus::TamingSucceeded,
+                ActorEventID::TamingSucceeded,
+            );
+        } else {
+            world.send_entity_status(
+                entity,
+                EntityStatus::TamingFailed,
+                ActorEventID::TamingFailed,
+            );
+        }
+    }
+}
+
 impl Mob for ParrotEntity {
+    fn as_animal(&self) -> Option<&dyn Animal> {
+        Some(self)
+    }
+
+    fn as_tamable(&self) -> Option<&dyn TamableAnimal> {
+        Some(self)
+    }
+
+    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
+        self.write_tamable_nbt(nbt);
+    }
+
+    fn mob_read_nbt(&self, nbt: &NbtCompound) {
+        self.read_tamable_nbt(nbt);
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         // Vanilla `Parrot.getAmbient` also imitates a nearby monster one time in a thousand.
         Some(pumpkin_data::sound::Sound::EntityParrotAmbient)
@@ -104,14 +194,23 @@ impl Mob for ParrotEntity {
         &self.mob_entity
     }
 
+    /// Vanilla `Parrot.mobInteract`: seeds tame a wild parrot, the owner toggles sitting on a
+    /// perched (not flying) parrot, cookies kill it.
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        // Vanilla checks the poisonous food tag last, after taming, which isn't
-        // implemented yet. Nothing in `parrot_food` is also in
-        // `parrot_poisonous_food`, so the two branches can't be confused.
-        if !item_stack
-            .get_item()
-            .has_tag(&tag::Item::MINECRAFT_PARROT_POISONOUS_FOOD)
-        {
+        let item = item_stack.get_item();
+        if !self.is_tame() && item.has_tag(&tag::Item::MINECRAFT_PARROT_FOOD) {
+            self.feed_seeds(player, item_stack);
+            return true;
+        }
+        if !item.has_tag(&tag::Item::MINECRAFT_PARROT_POISONOUS_FOOD) {
+            let flying = !self
+                .get_entity()
+                .on_ground
+                .load(std::sync::atomic::Ordering::Relaxed);
+            if !flying && self.is_tame() && self.is_owned_by(&player.gameprofile.id) {
+                self.set_ordered_to_sit(!self.is_ordered_to_sit());
+                return true;
+            }
             return self
                 .mob_entity
                 .mob_interact(player, item_stack, self.can_be_leashed());
