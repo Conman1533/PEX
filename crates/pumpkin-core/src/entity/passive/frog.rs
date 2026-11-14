@@ -1,8 +1,9 @@
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicI32, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
+use pumpkin_data::Block;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::Sound;
@@ -14,13 +15,122 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
+        Controls, Goal, breed::BreedGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, move_to_block::MoveToBlockGoal, swim::SwimGoal,
         tempt::TemptGoal, wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     passive::animal::Animal,
     player::Player,
 };
+use crate::world::World;
+use pumpkin_util::math::position::BlockPos;
+use pumpkin_world::world::BlockFlags;
+
+/// Vanilla `fluid_tags/supports_frogspawn` is water.
+fn supports_frogspawn(world: &World, pos: &BlockPos) -> bool {
+    world.get_block(pos) == &Block::WATER
+}
+
+/// A frogspawn spot next to `below`, the block under a standing frog: water with air above.
+fn frogspawn_spot(world: &World, below: &BlockPos) -> Option<BlockPos> {
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .into_iter()
+        .find_map(|(dx, dz)| {
+            let side = BlockPos::new(below.0.x + dx, below.0.y, below.0.z + dz);
+            (supports_frogspawn(world, &side) && world.get_block_state(&side.up()).is_air())
+                .then(|| side.up())
+        })
+}
+
+/// Vanilla frog `LAY_SPAWN` activity: a pregnant frog walks to land beside water
+/// (`TryFindLandNearLiquid`, range 8) and lays frogspawn on the water
+/// (`TryLaySpawnOnFluidNearLand`).
+struct FrogLaySpawnGoal {
+    frog: Weak<FrogEntity>,
+    move_to_block: MoveToBlockGoal,
+}
+
+impl FrogLaySpawnGoal {
+    fn new(frog: Weak<FrogEntity>) -> Self {
+        let move_to_block = MoveToBlockGoal::new(
+            1.0,
+            8,
+            1,
+            Box::new(|world, pos| {
+                !world.get_block_state(&pos).is_air()
+                    && !supports_frogspawn(world, &pos)
+                    && world.get_block_state(&pos.up()).is_air()
+                    && frogspawn_spot(world, &pos).is_some()
+            }),
+        );
+        Self {
+            frog,
+            move_to_block,
+        }
+    }
+
+    fn pregnant(&self) -> bool {
+        self.frog
+            .upgrade()
+            .is_some_and(|frog| frog.pregnant.load(Ordering::Relaxed))
+    }
+}
+
+impl Goal for FrogLaySpawnGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        self.pregnant()
+            && mob.get_mob_entity().get_target().is_none()
+            && self.move_to_block.can_start(mob)
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        self.pregnant() && self.move_to_block.should_continue(mob)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        self.move_to_block.start(mob);
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.move_to_block.stop(mob);
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        self.move_to_block.tick(mob);
+        let entity = mob.get_entity();
+        if entity.is_in_water() || !entity.on_ground.load(Ordering::Relaxed) {
+            return;
+        }
+        let world = entity.world.load();
+        let below = entity.block_pos.load().down();
+        if let Some(spawn_pos) = frogspawn_spot(&world, &below) {
+            world.set_block_state(
+                &spawn_pos,
+                Block::FROGSPAWN.default_state.id,
+                BlockFlags::NOTIFY_ALL,
+            );
+            world.play_sound_fine(
+                Sound::EntityFrogLaySpawn,
+                pumpkin_data::sound::SoundCategory::Blocks,
+                &entity.pos.load(),
+                1.0,
+                1.0,
+            );
+            if let Some(frog) = self.frog.upgrade() {
+                frog.pregnant.store(false, Ordering::Relaxed);
+            }
+        }
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        true
+    }
+
+    fn controls(&self) -> Controls {
+        self.move_to_block.controls()
+    }
+}
 
 use pumpkin_data::frog_variant::FrogVariant;
 
@@ -32,6 +142,8 @@ pub struct FrogEntity {
     pub ageable_data: AgeableData,
     pub variant: AtomicI32,
     pub tongue_target_id: AtomicI32,
+    /// Vanilla `IS_PREGNANT` memory: set by breeding, cleared once frogspawn is laid.
+    pub pregnant: AtomicBool,
 }
 
 impl FrogEntity {
@@ -42,6 +154,7 @@ impl FrogEntity {
             ageable_data: AgeableData::default(),
             variant: AtomicI32::new(FrogVariant::Temperate.id() as i32),
             tongue_target_id: AtomicI32::new(-1),
+            pregnant: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(frog);
         let mob_weak: Weak<dyn Mob> = {
@@ -53,20 +166,25 @@ impl FrogEntity {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
+            // Vanilla `FrogAi` idle activity: AnimalMakeLove (0) outranks FollowTemptation (1),
+            // so a tempted frog in love still goes to its partner. Spawn laying is its own
+            // activity while pregnant.
+            goal_selector.add_goal(1, BreedGoal::new(1.0));
+            goal_selector.add_goal(1, Box::new(FrogLaySpawnGoal::new(Arc::downgrade(&mob_arc))));
             goal_selector.add_goal(
-                1,
+                2,
                 Box::new(TemptGoal::new(
                     1.0,
                     |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_FROG_FOOD),
                     false,
                 )),
             );
-            goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(3, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
-                3,
+                4,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(5, Box::new(RandomLookAroundGoal::default()));
         };
 
         mob_arc
@@ -96,6 +214,12 @@ impl AgeableMob for FrogEntity {
 impl Animal for FrogEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_FROG_FOOD)
+    }
+
+    /// Vanilla `Frog.spawnChildFromBreeding`: no baby, the frog becomes pregnant instead.
+    fn spawn_child_from_breeding(&self, world: &Arc<World>, partner: &dyn Mob) {
+        self.finalize_spawn_child_from_breeding(world, partner, None);
+        self.pregnant.store(true, Ordering::Relaxed);
     }
 
     fn play_eating_sound(&self) {
