@@ -33,6 +33,7 @@ mod bedrock_creative;
 mod biome;
 mod bitsets;
 mod block;
+mod block_sound;
 mod block_transformer;
 mod carver;
 mod cat_variant;
@@ -202,6 +203,7 @@ pub fn main() {
         ),
         (carver::build, "carver.rs"),
         (loot_table::build, "loot_table.rs"),
+        (block_sound::build, "block_sound.rs"),
         (map_color::build, "map_color.rs"),
         (map_decoration::build, "map_decoration.rs"),
         (dye_color::build, "dye_color.rs"),

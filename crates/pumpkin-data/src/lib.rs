@@ -483,6 +483,11 @@ pub mod villager;
 #[path = "generated/slot_ranges.rs"]
 pub mod slot_ranges;
 
+#[cfg(feature = "block_sound")]
+#[rustfmt::skip]
+#[path = "generated/block_sound.rs"]
+pub mod block_sound;
+
 #[cfg(feature = "map_color")]
 #[rustfmt::skip]
 #[path = "generated/map_color.rs"]
