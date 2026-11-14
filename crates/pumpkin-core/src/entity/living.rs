@@ -57,7 +57,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_protocol::java::client::play::{
-    CHurtAnimation, CSetPlayerInventory, CTakeItemEntity, CUpdateMobEffect,
+    CSetPlayerInventory, CTakeItemEntity, CUpdateMobEffect,
 };
 use pumpkin_protocol::{
     codec::item_stack_seralizer::ItemStackSerializer,
@@ -3521,12 +3521,12 @@ impl LivingEntity {
                 data: VarInt(0),
                 fire_at_position: None,
             };
-            let hurt_animation = CHurtAnimation::new(entity_id.into(), hurt_yaw);
-            world.send_to_tracking_players_and_self_editioned(
-                &self.entity,
-                &hurt_animation,
-                &hurt_event,
-            );
+            // Java viewers animate the hurt from the damage event below; vanilla
+            // `ServerPlayer.indicateDamage` sends the hurt animation to the hurt player only.
+            world.send_to_tracking_players_bedrock(&self.entity, &hurt_event);
+            if let Some(player) = caller.get_player() {
+                player.send_hurt_animation(hurt_yaw);
+            }
         }
 
         world.broadcast_damage_event(
