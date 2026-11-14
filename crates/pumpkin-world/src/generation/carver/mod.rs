@@ -20,7 +20,6 @@ use pumpkin_data::block_state::BlockState;
 use pumpkin_data::carver::{CarverAdditionalConfig, CarverConfig};
 #[cfg(test)]
 use pumpkin_data::dimension::Dimension;
-use pumpkin_data::fluid::Fluid;
 use pumpkin_data::material_rule::MaterialRule;
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
@@ -407,7 +406,8 @@ fn carve_top_material(
     {
         run.chunk.set_block_state(x, below_y, z, top_material);
 
-        schedule_fluid_tick_for_state(run.chunk, x, below_y, z, top_material);
+        run.chunk
+            .schedule_fluid_tick_for_state(x, below_y, z, top_material);
     }
 }
 
@@ -440,24 +440,11 @@ fn place_carved_block(
     run.chunk.set_block_state(pos.x, pos.y, pos.z, state);
 
     if overworld && should_schedule_fluid_update && state.is_liquid() {
-        schedule_fluid_tick_for_state(run.chunk, pos.x, pos.y, pos.z, state);
+        run.chunk
+            .schedule_fluid_tick_for_state(pos.x, pos.y, pos.z, state);
     }
 
     carve_top_material(run, pos.x, pos.y, pos.z, state, has_grass, overworld);
-}
-
-fn schedule_fluid_tick_for_state(
-    chunk: &mut ProtoChunk,
-    x: i32,
-    y: i32,
-    z: i32,
-    state: &'static BlockState,
-) {
-    if state.id == pumpkin_data::Block::WATER.default_state.id {
-        chunk.schedule_fluid_tick(x, y, z, &Fluid::WATER);
-    } else if state.id == pumpkin_data::Block::LAVA.default_state.id {
-        chunk.schedule_fluid_tick(x, y, z, &Fluid::LAVA);
-    }
 }
 
 #[cfg(test)]

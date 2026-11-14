@@ -95,6 +95,7 @@ impl<'a> NoiseHeightSampler<'a> {
                     densities.vein_sample(index).as_ref(),
                     &mut self.preliminary,
                 )
+                .0
                 .unwrap_or(self.generator.default_block);
             blocks.push(state);
         }
