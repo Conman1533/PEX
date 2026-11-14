@@ -1,11 +1,13 @@
+use pumpkin_data::BlockStateId;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::tracked_data;
-use pumpkin_data::{Block, BlockStateId};
+use pumpkin_data::world::WorldEvent;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_util::math::atomic_f32::AtomicF32;
+use pumpkin_util::math::boundingbox::BoundingBox;
 use pumpkin_util::math::boundingbox::EntityDimensions;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -678,6 +680,14 @@ impl EnderDragonEntity {
             0.06 * (dot * span + (1.0 - span)),
             Vector3::new(0.0, 0.0, -1.0),
         );
+        // Vanilla moves the dragon itself here (`move(SELF, ...)`, 0.8x while in a wall); the
+        // dragon skips the usual travel step so this is its only movement.
+        let in_wall = *self
+            .in_wall
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let step = entity.velocity.load();
+        entity.move_pos(if in_wall { step * 0.8 } else { step });
 
         let actual_vel = entity.velocity.load();
         let actual_dir = if actual_vel.length_squared() > 1e-6 {
@@ -736,39 +746,116 @@ impl EnderDragonEntity {
         }
     }
 
-    fn handle_player_collisions(&self) {
-        let world = self.mob_entity.living_entity.entity.world.load();
+    /// Living entities in `area` other than the dragon, minus creative and spectator players
+    /// (vanilla `EntitySelector.NO_CREATIVE_OR_SPECTATOR`).
+    fn living_in(&self, area: &BoundingBox) -> Vec<Arc<dyn EntityBase>> {
+        let entity = &self.mob_entity.living_entity.entity;
+        let world = entity.world.load();
+        let mut found: Vec<Arc<dyn EntityBase>> = world
+            .get_entities_at_box(area)
+            .into_iter()
+            .filter(|e| {
+                e.get_player().is_none()
+                    && e.get_entity().entity_id != entity.entity_id
+                    && e.get_living_entity().is_some()
+            })
+            .collect();
+        found.extend(
+            world
+                .get_players_at_box(area)
+                .into_iter()
+                .filter(|p| !p.is_creative() && !p.is_spectator())
+                .map(|p| p as Arc<dyn EntityBase>),
+        );
+        found
+    }
 
-        let dragon_bbox = self.mob_entity.living_entity.entity.bounding_box.load();
-        let xm = f64::midpoint(dragon_bbox.min.x, dragon_bbox.max.x);
-        let zm = f64::midpoint(dragon_bbox.min.z, dragon_bbox.max.z);
+    /// Vanilla `EnderDragon.knockBack`: wings push living entities away from the body, and hurt
+    /// them for 5 unless the dragon sits or they were just attacked.
+    fn knock_back(&self, targets: &[Arc<dyn EntityBase>]) {
+        let body = self.parts[2].entity.bounding_box.load();
+        let xm = f64::midpoint(body.min.x, body.max.x);
+        let zm = f64::midpoint(body.min.z, body.max.z);
+        let sitting = self.phase().is_sitting();
+        for target in targets {
+            let target_entity = target.get_entity();
+            let pos = target_entity.pos.load();
+            let xd = pos.x - xm;
+            let zd = pos.z - zm;
+            let dd = (xd * xd + zd * zd).max(0.1);
+            let velocity = target_entity.velocity.load();
+            target_entity.velocity.store(Vector3::new(
+                velocity.x + xd / dd * 4.0,
+                velocity.y + 0.2,
+                velocity.z + zd / dd * 4.0,
+            ));
+            target_entity.send_velocity();
+            // Vanilla gates on `lastHurtByMobTimestamp < tickCount - 2`.
+            let just_attacked = target.get_living_entity().is_some_and(|living| {
+                let last = living.last_attacked_time.load(Ordering::Relaxed);
+                last != 0 && target_entity.tick_count.load(Ordering::Relaxed) - last <= 2
+            });
+            if !sitting && !just_attacked {
+                target.damage_with_context(
+                    target.as_ref(),
+                    5.0,
+                    DamageType::MOB_ATTACK,
+                    None,
+                    Some(self),
+                    Some(self),
+                );
+            }
+        }
+    }
 
-        for player in world.players.load().iter() {
-            if player
-                .living_entity
+    /// Vanilla `EnderDragon.hurt(List)`: the head and neck bite for 10.
+    fn bite(&self, targets: &[Arc<dyn EntityBase>]) {
+        for target in targets {
+            target.damage_with_context(
+                target.as_ref(),
+                10.0,
+                DamageType::MOB_ATTACK,
+                None,
+                Some(self),
+                Some(self),
+            );
+        }
+    }
+
+    /// Vanilla wing knockback and head/neck damage, skipped while the dragon flinches
+    /// (`wasHurtRecently`, `hurtTime > 0`: the first half of the 20-tick hurt cooldown).
+    fn tick_part_contacts(&self) {
+        if self
+            .mob_entity
+            .living_entity
+            .hurt_cooldown
+            .load(Ordering::Relaxed)
+            > 10
+        {
+            return;
+        }
+        let wing_area = |part: usize| {
+            self.parts[part]
                 .entity
                 .bounding_box
                 .load()
-                .intersects(&dragon_bbox)
-            {
-                let player_pos = player.get_entity().pos.load();
-                let xd = player_pos.x - xm;
-                let zd = player_pos.z - zm;
-                let dd = (xd * xd + zd * zd).max(0.1);
-
-                player.living_entity.entity.apply_knockback(
-                    4.0,
-                    xd / dd,
-                    zd / dd,
-                    Some(&self.mob_entity.living_entity.entity),
-                );
-                player.get_entity().send_velocity();
-
-                if !self.phase().is_sitting() {
-                    player.damage(self, 5.0, DamageType::MOB_ATTACK);
-                }
-            }
-        }
+                .expand(4.0, 2.0, 4.0)
+                .shift(Vector3::new(0.0, -2.0, 0.0))
+        };
+        self.knock_back(&self.living_in(&wing_area(6)));
+        self.knock_back(&self.living_in(&wing_area(7)));
+        let head = self.parts[HEAD_PART]
+            .entity
+            .bounding_box
+            .load()
+            .expand_all(1.0);
+        self.bite(&self.living_in(&head));
+        let neck = self.parts[NECK_PART]
+            .entity
+            .bounding_box
+            .load()
+            .expand_all(1.0);
+        self.bite(&self.living_in(&neck));
     }
 
     /// Vanilla `EnderDragon.checkCrystals`: the nearest crystal heals 1 every 10 ticks, and the
@@ -818,30 +905,59 @@ impl EnderDragonEntity {
         }
     }
 
-    fn tick_block_breaking(&self) {
-        let phase_type = self.phase();
-        if phase_type.is_sitting() || phase_type == EnderDragonPhase::Dying {
-            return;
-        }
-
+    /// Vanilla `EnderDragon.checkWalls`: with mob griefing on, the dragon removes every block
+    /// that isn't `dragon_transparent` or `dragon_immune` in `bb`; anything left stops it.
+    fn check_walls(&self, bb: &BoundingBox) -> bool {
         let world = self.mob_entity.living_entity.entity.world.load();
-        let bbox = self.mob_entity.living_entity.entity.bounding_box.load();
-
-        let min = bbox.min_block_pos();
-        let max = bbox.max_block_pos();
-
-        for pos in BlockPos::iterate(min, max) {
+        let griefing = world.level_info.load().game_rules.mob_griefing;
+        let (x0, y0, z0) = (
+            bb.min.x.floor() as i32,
+            bb.min.y.floor() as i32,
+            bb.min.z.floor() as i32,
+        );
+        let (x1, y1, z1) = (
+            bb.max.x.floor() as i32,
+            bb.max.y.floor() as i32,
+            bb.max.z.floor() as i32,
+        );
+        let mut hit_wall = false;
+        let mut destroyed = false;
+        for pos in BlockPos::iterate(BlockPos::new(x0, y0, z0), BlockPos::new(x1, y1, z1)) {
+            let state = world.get_block_state(&pos);
+            if state.is_air() {
+                continue;
+            }
             let block = world.get_block(&pos);
-            if block != &Block::BEDROCK
-                && block != &Block::END_STONE
-                && block != &Block::OBSIDIAN
-                && block != &Block::IRON_BARS
-                && block != &Block::END_PORTAL
-                && block != &Block::END_PORTAL_FRAME
-            {
+            if block.has_tag(&tag::Block::MINECRAFT_DRAGON_TRANSPARENT) {
+                continue;
+            }
+            if griefing && !block.has_tag(&tag::Block::MINECRAFT_DRAGON_IMMUNE) {
                 world.set_block_state(&pos, BlockStateId::AIR, BlockFlags::NOTIFY_ALL);
+                destroyed = true;
+            } else {
+                hit_wall = true;
             }
         }
+        if destroyed {
+            let random_pos = BlockPos::new(
+                x0 + rand::random_range(0..=x1 - x0),
+                y0 + rand::random_range(0..=y1 - y0),
+                z0 + rand::random_range(0..=z1 - z0),
+            );
+            world.sync_world_event(WorldEvent::ParticlesDragonBlockBreak, random_pos, 0);
+        }
+        hit_wall
+    }
+
+    fn tick_walls(&self) {
+        let head = self.parts[HEAD_PART].entity.bounding_box.load();
+        let neck = self.parts[NECK_PART].entity.bounding_box.load();
+        let body = self.parts[2].entity.bounding_box.load();
+        let in_wall = self.check_walls(&head) | self.check_walls(&neck) | self.check_walls(&body);
+        *self
+            .in_wall
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = in_wall;
     }
 
     fn tick_parts(&self) {
@@ -961,18 +1077,6 @@ impl EnderDragonEntity {
         }
 
         let mut phase_type = self.phase();
-        // PEX's stand-in for vanilla `checkWalls` and wing knockback stays off near the portal.
-        let near_portal = phase_type.is_sitting()
-            || matches!(
-                phase_type,
-                EnderDragonPhase::LandingApproach
-                    | EnderDragonPhase::Landing
-                    | EnderDragonPhase::Takeoff
-            );
-        if !near_portal {
-            self.handle_player_collisions();
-            self.tick_block_breaking();
-        }
 
         // Vanilla ticks a phase that the current one switched to in the same tick.
         self.phase_manager.get(phase_type).do_server_tick(self);
@@ -997,6 +1101,8 @@ impl EnderDragonEntity {
         }
 
         self.tick_parts();
+        self.tick_part_contacts();
+        self.tick_walls();
     }
 }
 
@@ -1007,6 +1113,11 @@ impl Mob for EnderDragonEntity {
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         self.ai_step();
+    }
+
+    /// Vanilla `EnderDragon.aiStep` never calls the living travel step: `ai_step` moves it.
+    fn travel(&self, _caller: &dyn EntityBase) -> bool {
+        true
     }
 
     fn mob_init_data_tracker(&self) {
