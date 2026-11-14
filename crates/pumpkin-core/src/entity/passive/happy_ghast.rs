@@ -1,10 +1,13 @@
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicBool, AtomicI32, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering},
 };
 
+use pumpkin_data::data_component_impl::{EquipmentSlot, EquippableImpl};
 use pumpkin_data::entity::EntityType;
+use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -15,10 +18,13 @@ use crate::entity::{
         look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
         tempt::TemptGoal, wander_around::WanderAroundGoal,
     },
-    mob::{Mob, MobEntity},
+    mob::{Mob, MobEntity, equipment::is_equippable_in_slot},
     passive::animal::Animal,
     player::Player,
 };
+
+/// Vanilla `HappyGhast.canAddPassenger`: four riders at most.
+const MAX_PASSENGERS: usize = 4;
 
 /// Represents a Happy Ghast, a passive flying mob.
 ///
@@ -30,6 +36,8 @@ pub struct HappyGhastEntity {
     pub leash_holder_time: AtomicI32,
     pub is_leash_holder: AtomicBool,
     pub stays_still: AtomicBool,
+    /// Riders seen last tick, to run vanilla `removePassenger` side effects.
+    pub passenger_count: AtomicUsize,
 }
 
 impl HappyGhastEntity {
@@ -42,6 +50,7 @@ impl HappyGhastEntity {
             leash_holder_time: AtomicI32::new(0),
             is_leash_holder: AtomicBool::new(false),
             stays_still: AtomicBool::new(false),
+            passenger_count: AtomicUsize::new(0),
         };
         let mob_arc = Arc::new(happy_ghast);
         let mob_weak: Weak<dyn Mob> = {
@@ -101,6 +110,108 @@ impl HappyGhastEntity {
             pumpkin_data::tracked_data::happy_ghast::IS_LEASH_HOLDER,
             is_leash_holder,
         );
+    }
+
+    /// Vanilla `scanPlayerAboveGhast`: a player (not riding a happy ghast) standing on top.
+    fn scan_player_above_ghast(&self) -> bool {
+        let entity = self.get_entity();
+        let bb = entity.bounding_box.load();
+        let height = bb.max.y - bb.min.y;
+        let (min_x, max_x) = (bb.min.x - 1.0, bb.max.x + 1.0);
+        let (min_z, max_z) = (bb.min.z - 1.0, bb.max.z + 1.0);
+        let (min_y, max_y) = (bb.max.y - 1.0e-5, bb.max.y + height / 2.0);
+        entity.world.load().players.load().iter().any(|player| {
+            if player.is_spectator() {
+                return false;
+            }
+            let root = player.get_entity().get_vehicle().map_or_else(
+                || player.get_entity().pos.load(),
+                |v| v.get_entity().pos.load(),
+            );
+            if player
+                .get_entity()
+                .get_vehicle()
+                .is_some_and(|v| v.get_entity().entity_type == &EntityType::HAPPY_GHAST)
+            {
+                return false;
+            }
+            (min_x..max_x).contains(&root.x)
+                && (min_y..max_y).contains(&root.y)
+                && (min_z..max_z).contains(&root.z)
+        })
+    }
+
+    /// The harness's `equip_on_interact` (vanilla `Equippable.equipOnTarget`): into the body
+    /// slot of a live adult not already wearing one.
+    fn try_equip_harness(&self, item_stack: &mut ItemStack) -> bool {
+        let sound = {
+            let Some(equippable) = item_stack.get_data_component::<EquippableImpl>() else {
+                return false;
+            };
+            if !equippable.equip_on_interact || *equippable.slot != EquipmentSlot::BODY {
+                return false;
+            }
+            equippable.equip_sound.clone()
+        };
+        let entity = self.get_entity();
+        if !is_equippable_in_slot(entity.entity_type, item_stack, &EquipmentSlot::BODY)
+            || self.mob_entity.is_wearing_body_armor()
+            || !entity.is_alive()
+        {
+            return false;
+        }
+        let harness = item_stack.split(1);
+        self.mob_entity
+            .set_item_slot_and_drop_when_killed(&EquipmentSlot::BODY, harness);
+        entity
+            .world
+            .load()
+            .play_sound_event(&sound, SoundCategory::Neutral, &entity.pos.load());
+        true
+    }
+
+    /// Vanilla `doPlayerRide` plus the `addPassenger` side effects.
+    fn do_player_ride(&self, player: &Arc<Player>) {
+        let entity = self.get_entity();
+        let count = entity
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len();
+        if count >= MAX_PASSENGERS {
+            return;
+        }
+        let world = entity.world.load();
+        let (Some(vehicle), Some(passenger)) = (
+            world.get_entity_by_id(entity.entity_id),
+            world.get_player_by_id(player.entity_id()),
+        ) else {
+            return;
+        };
+        if count == 0 {
+            entity.play_sound(Sound::EntityHappyGhastHarnessGogglesDown);
+        }
+        entity.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
+        self.passenger_count.store(count + 1, Ordering::Relaxed);
+        if !self.scan_player_above_ghast() {
+            self.set_server_still_timeout(0);
+        } else if self.server_still_timeout.load(Ordering::Relaxed) > 10 {
+            self.set_server_still_timeout(10);
+        }
+    }
+
+    /// The first rider steers once harnessed and not holding still.
+    fn player_controller(&self) -> Option<Arc<dyn EntityBase>> {
+        if !self.mob_entity.is_wearing_body_armor() || self.is_on_still_timeout() {
+            return None;
+        }
+        self.get_entity()
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .first()
+            .filter(|passenger| passenger.get_player().is_some())
+            .cloned()
     }
 
     fn sync_stay_still_flag(&self) {
@@ -172,7 +283,47 @@ impl Mob for HappyGhastEntity {
         &self.mob_entity
     }
 
+    /// Vanilla `getControllingPassenger`: a player rider steers a harnessed ghast; otherwise
+    /// the usual mob rider rule.
+    fn mob_controlling_passenger(&self) -> Option<Arc<dyn EntityBase>> {
+        if let Some(player) = self.player_controller() {
+            return Some(player);
+        }
+        if self.mob_entity.is_no_ai() {
+            return None;
+        }
+        self.get_entity()
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .first()
+            .filter(|passenger| passenger.get_mob().is_some() && passenger.can_control_vehicle())
+            .cloned()
+    }
+
+    /// The steering player's client moves the ghast (vanilla `isControlledByLocalInstance` is
+    /// false on the server), so the server skips its own travel step meanwhile.
+    fn travel(&self, _caller: &dyn EntityBase) -> bool {
+        self.player_controller().is_some()
+    }
+
     fn mob_tick(&self, _caller: &dyn EntityBase) {
+        // Vanilla `removePassenger`: hold still for 10 ticks, goggles up once empty.
+        let riders = self
+            .get_entity()
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len();
+        let previous = self.passenger_count.swap(riders, Ordering::Relaxed);
+        if riders < previous {
+            self.set_server_still_timeout(10);
+            if riders == 0 {
+                self.get_entity()
+                    .play_sound(Sound::EntityHappyGhastHarnessGogglesUp);
+            }
+        }
+
         let leash_time = self.leash_holder_time.load(Ordering::Relaxed);
         if leash_time > 0 {
             self.leash_holder_time.fetch_sub(1, Ordering::Relaxed);
@@ -221,9 +372,22 @@ impl Mob for HappyGhastEntity {
         );
     }
 
+    /// Vanilla `HappyGhast.mobInteract`: a harness goes on, then a harnessed ghast is ridden
+    /// unless the player sneaks. Leads and name tags keep their own handling.
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         if self.is_baby() {
             return self.animal_interact(player, item_stack);
+        }
+        let item = item_stack.get_item();
+        if item == &Item::LEAD || item == &Item::NAME_TAG {
+            return self.animal_interact(player, item_stack);
+        }
+        if !item_stack.is_empty() && self.try_equip_harness(item_stack) {
+            return true;
+        }
+        if self.mob_entity.is_wearing_body_armor() && !player.get_entity().is_sneaking() {
+            self.do_player_ride(player);
+            return true;
         }
 
         self.animal_interact(player, item_stack)
