@@ -1557,6 +1557,22 @@ pub trait Mob: EntityBase + Send + Sync {
         );
     }
 
+    /// Vanilla `getSwimSplashSound`: `Monster` uses the hostile splash.
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .entity_type
+            .category
+            == &pumpkin_data::entity::MobCategory::MONSTER
+        {
+            pumpkin_data::sound::Sound::EntityHostileSplash
+        } else {
+            pumpkin_data::sound::Sound::EntityGenericSplash
+        }
+    }
+
     /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         None

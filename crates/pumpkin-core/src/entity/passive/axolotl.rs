@@ -230,6 +230,10 @@ impl Animal for AxolotlEntity {
 }
 
 impl Mob for AxolotlEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityAxolotlSplash
+    }
+
     fn swim_sound(&self) -> pumpkin_data::sound::Sound {
         pumpkin_data::sound::Sound::EntityAxolotlSwim
     }

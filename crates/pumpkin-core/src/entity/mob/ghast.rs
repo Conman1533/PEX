@@ -114,6 +114,10 @@ impl GhastEntity {
 }
 
 impl Mob for GhastEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSplash
+    }
+
     fn get_sound_volume(&self) -> f32 {
         5.0
     }

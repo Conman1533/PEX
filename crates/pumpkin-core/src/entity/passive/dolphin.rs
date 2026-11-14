@@ -96,6 +96,10 @@ impl DolphinEntity {
 }
 
 impl Mob for DolphinEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityDolphinSplash
+    }
+
     fn swim_sound(&self) -> pumpkin_data::sound::Sound {
         pumpkin_data::sound::Sound::EntityDolphinSwim
     }

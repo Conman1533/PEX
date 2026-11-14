@@ -301,6 +301,10 @@ impl ShulkerEntity {
 }
 
 impl Mob for ShulkerEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSplash
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         // Vanilla `Shulker.playAmbientSound`: silent while closed.
         (self.peek_amount.load(std::sync::atomic::Ordering::Relaxed) != 0)

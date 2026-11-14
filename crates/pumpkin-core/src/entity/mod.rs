@@ -1946,7 +1946,11 @@ impl Entity {
                 living.fall_distance.store(0.0);
             }
 
-            if !self.touching_water.load(Ordering::SeqCst) {
+            // Vanilla skips the splash on the entity's first tick (`firstTick`).
+            if !self.touching_water.load(Ordering::SeqCst)
+                && self.tick_count.load(Ordering::Relaxed) > 1
+            {
+                self.water_splash_sound(caller);
                 world.game_event(
                     pumpkin_data::game_event::GameEvent::Splash,
                     self.pos.load(),
@@ -2900,6 +2904,35 @@ impl Entity {
         if combination {
             muffled(block, state);
         }
+    }
+
+    /// The sound of vanilla `Entity.doWaterSplashEffect`: louder the faster the entity falls in,
+    /// with a high-speed variant past a quarter volume. Spectators and experience orbs are quiet.
+    fn water_splash_sound(&self, caller: &dyn EntityBase) {
+        if self.entity_type.id == EntityType::EXPERIENCE_ORB.id {
+            return;
+        }
+        let player = caller.get_player();
+        if player.is_some_and(|player| player.gamemode.load() == pumpkin_util::GameMode::Spectator)
+        {
+            return;
+        }
+        let motion = self.velocity.load();
+        let speed = ((motion.x * motion.x * 0.2 + motion.y * motion.y + motion.z * motion.z * 0.2)
+            .sqrt() as f32
+            * 0.2)
+            .min(1.0);
+        let high_speed = speed >= 0.25;
+        let sound = match (player.is_some(), high_speed) {
+            (true, true) => Sound::EntityPlayerSplashHighSpeed,
+            (true, false) => Sound::EntityPlayerSplash,
+            (false, true) => Sound::EntityGenericSplash,
+            (false, false) => caller
+                .get_mob()
+                .map_or(Sound::EntityGenericSplash, mob::Mob::swim_splash_sound),
+        };
+        let pitch = 1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.4;
+        self.play_movement_sound(caller, sound, speed, pitch);
     }
 
     /// Vanilla `Entity.waterSwimSound`: louder the faster the entity moves.
