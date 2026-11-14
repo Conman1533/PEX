@@ -79,6 +79,10 @@ impl VindicatorEntity {
 }
 
 impl Mob for VindicatorEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityVindicatorAmbient)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

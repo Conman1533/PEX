@@ -1875,6 +1875,18 @@ impl AgeableMob for VillagerEntity {
 }
 
 impl Mob for VillagerEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        if self.get_mob_entity().living_entity.entity.pose.load()
+            == pumpkin_data::entity::EntityPose::Sleeping
+        {
+            None
+        } else if self.is_trading.load(std::sync::atomic::Ordering::Relaxed) {
+            Some(pumpkin_data::sound::Sound::EntityVillagerTrade)
+        } else {
+            Some(pumpkin_data::sound::Sound::EntityVillagerAmbient)
+        }
+    }
+
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
     }

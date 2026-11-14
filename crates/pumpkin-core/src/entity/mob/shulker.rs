@@ -301,6 +301,12 @@ impl ShulkerEntity {
 }
 
 impl Mob for ShulkerEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Shulker.playAmbientSound`: silent while closed.
+        (self.peek_amount.load(std::sync::atomic::Ordering::Relaxed) != 0)
+            .then_some(pumpkin_data::sound::Sound::EntityShulkerAmbient)
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::None
     }

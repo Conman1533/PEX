@@ -114,6 +114,10 @@ impl GhastEntity {
 }
 
 impl Mob for GhastEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityGhastAmbient)
+    }
+
     fn swim_sound(&self) -> pumpkin_data::sound::Sound {
         pumpkin_data::sound::Sound::EntityGenericSwim
     }

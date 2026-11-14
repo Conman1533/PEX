@@ -130,6 +130,14 @@ impl ZoglinEntity {
 }
 
 impl Mob for ZoglinEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.get_mob_entity().get_target().is_some() {
+            pumpkin_data::sound::Sound::EntityZoglinAngry
+        } else {
+            pumpkin_data::sound::Sound::EntityZoglinAmbient
+        })
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityZoglinStep, 0.15)
     }

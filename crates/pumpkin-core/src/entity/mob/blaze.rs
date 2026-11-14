@@ -88,6 +88,10 @@ impl BlazeEntity {
 }
 
 impl Mob for BlazeEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityBlazeAmbient)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.entity
     }

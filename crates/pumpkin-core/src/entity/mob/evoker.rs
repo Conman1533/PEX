@@ -141,6 +141,10 @@ impl EvokerEntity {
 }
 
 impl Mob for EvokerEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityEvokerAmbient)
+    }
+
     fn as_patrolling_monster(&self) -> Option<&dyn PatrollingMonster> {
         Some(self)
     }

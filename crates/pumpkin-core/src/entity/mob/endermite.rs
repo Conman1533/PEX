@@ -57,6 +57,10 @@ impl EndermiteEntity {
 }
 
 impl Mob for EndermiteEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityEndermiteAmbient)
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }

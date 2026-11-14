@@ -217,6 +217,10 @@ impl Goal for SilverfishWakeUpFriendsGoal {
 }
 
 impl Mob for SilverfishEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntitySilverfishAmbient)
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }

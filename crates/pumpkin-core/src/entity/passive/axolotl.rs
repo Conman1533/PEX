@@ -235,6 +235,10 @@ impl Mob for AxolotlEntity {
     }
 
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Axolotl.playAmbientSound`: silent while playing dead.
+        if self.playing_dead.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
         Some(if self.get_entity().is_in_water() {
             pumpkin_data::sound::Sound::EntityAxolotlIdleWater
         } else {

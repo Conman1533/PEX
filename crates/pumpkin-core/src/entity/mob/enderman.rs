@@ -385,6 +385,14 @@ impl NeutralMob for EndermanEntity {
 }
 
 impl Mob for EndermanEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(if self.creepy.load(std::sync::atomic::Ordering::Relaxed) {
+            pumpkin_data::sound::Sound::EntityEndermanScream
+        } else {
+            pumpkin_data::sound::Sound::EntityEndermanAmbient
+        })
+    }
+
     fn as_neutral(&self) -> Option<&dyn NeutralMob> {
         Some(self)
     }

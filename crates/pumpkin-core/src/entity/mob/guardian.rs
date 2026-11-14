@@ -85,6 +85,16 @@ impl CustomSound for GuardianEntity {
 }
 
 impl Mob for GuardianEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(
+            if self.get_mob_entity().living_entity.entity.is_in_water() {
+                pumpkin_data::sound::Sound::EntityGuardianAmbient
+            } else {
+                pumpkin_data::sound::Sound::EntityGuardianAmbientLand
+            },
+        )
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }
