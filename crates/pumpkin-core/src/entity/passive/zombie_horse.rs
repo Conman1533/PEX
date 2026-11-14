@@ -137,6 +137,10 @@ impl Animal for ZombieHorseEntity {
 }
 
 impl Mob for ZombieHorseEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn step_sound_on(
         &self,
         world: &crate::world::World,

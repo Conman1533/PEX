@@ -27,7 +27,6 @@ use super::experience_orb::ExperienceOrbEntity;
 use super::{Entity, EntityBase, NBTStorageInit};
 use crate::block::OnLandedUponArgs;
 use crate::entity::NBTStorage;
-use crate::entity::ageable::AgeableMob;
 use crate::entity::attributes::AttributeInstance;
 use crate::entity::attributes::Modifier;
 use crate::entity::attributes::ModifierOperation;
@@ -259,10 +258,8 @@ impl LivingEntity {
     }
 
     pub(crate) fn get_pitch(&self) -> f32 {
-        let is_baby = self
-            .get_mob()
-            .and_then(|x| x.as_ageable())
-            .is_some_and(AgeableMob::is_baby);
+        // Vanilla `getVoicePitch` asks `isBaby`; ageable babies have a negative age.
+        let is_baby = self.entity.age.load(Relaxed) < 0;
 
         let mut rng = rand::rng();
         if is_baby {

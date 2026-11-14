@@ -1510,6 +1510,27 @@ pub trait Mob: EntityBase + Send + Sync {
         }
     }
 
+    /// Vanilla `getSoundVolume`.
+    fn get_sound_volume(&self) -> f32 {
+        1.0
+    }
+
+    /// Vanilla `LivingEntity.makeSound`: this mob's volume and voice pitch, nothing while silent.
+    fn make_sound(&self, sound: pumpkin_data::sound::Sound) {
+        let living = &self.get_mob_entity().living_entity;
+        let entity = &living.entity;
+        if entity.is_silent() {
+            return;
+        }
+        entity.world.load().play_sound_fine(
+            sound,
+            living.sound_category(false),
+            &entity.pos.load(),
+            self.get_sound_volume(),
+            living.get_pitch(),
+        );
+    }
+
     /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         None
@@ -2031,7 +2052,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         {
             self.reset_ambient_sound_time();
             if let Some(sound) = self.get_ambient_sound() {
-                mob_entity.living_entity.make_sound(sound);
+                self.make_sound(sound);
             }
         }
 

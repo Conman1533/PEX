@@ -35,6 +35,10 @@ impl SquidEntity {
 }
 
 impl Mob for SquidEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.4
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }

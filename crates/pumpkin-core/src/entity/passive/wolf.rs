@@ -243,6 +243,10 @@ impl NeutralMob for WolfEntity {
 }
 
 impl Mob for WolfEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.4
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(
             WolfSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))

@@ -151,6 +151,10 @@ impl Animal for MuleEntity {
 }
 
 impl Mob for MuleEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn step_sound_on(
         &self,
         world: &crate::world::World,

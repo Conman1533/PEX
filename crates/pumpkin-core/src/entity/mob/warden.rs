@@ -697,6 +697,10 @@ impl VibrationUser for WardenEntity {
 }
 
 impl Mob for WardenEntity {
+    fn get_sound_volume(&self) -> f32 {
+        4.0
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityWardenStep, 10.0)
     }

@@ -425,6 +425,10 @@ impl CustomSound for AllayEntity {
 }
 
 impl Mob for AllayEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.4
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Silent
     }

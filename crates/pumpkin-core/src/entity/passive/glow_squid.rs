@@ -24,6 +24,10 @@ impl GlowSquidEntity {
 }
 
 impl Mob for GlowSquidEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.4
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }

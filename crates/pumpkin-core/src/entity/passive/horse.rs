@@ -280,6 +280,10 @@ pub(crate) fn horse_step_sound(
 }
 
 impl Mob for HorseEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn step_sound_on(
         &self,
         world: &crate::world::World,

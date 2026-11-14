@@ -166,6 +166,10 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn step_sound_on(
         &self,
         _world: &crate::world::World,

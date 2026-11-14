@@ -283,6 +283,10 @@ impl Animal for LlamaEntity {
 }
 
 impl Mob for LlamaEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityLlamaStep, 0.15)
     }

@@ -207,6 +207,10 @@ impl BatEntity {
 }
 
 impl Mob for BatEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.1
+    }
+
     fn movement_emission(&self) -> crate::entity::MovementEmission {
         crate::entity::MovementEmission::Events
     }

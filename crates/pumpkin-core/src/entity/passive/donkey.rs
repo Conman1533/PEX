@@ -172,6 +172,10 @@ impl Animal for DonkeyEntity {
 }
 
 impl Mob for DonkeyEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
     fn step_sound_on(
         &self,
         world: &crate::world::World,

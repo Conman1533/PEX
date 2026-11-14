@@ -129,6 +129,21 @@ impl Animal for HappyGhastEntity {
 }
 
 impl Mob for HappyGhastEntity {
+    fn get_sound_volume(&self) -> f32 {
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .age
+            .load(std::sync::atomic::Ordering::Relaxed)
+            < 0
+        {
+            1.0
+        } else {
+            4.0
+        }
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Silent
     }
