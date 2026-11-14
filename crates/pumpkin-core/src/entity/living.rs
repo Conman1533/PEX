@@ -107,6 +107,8 @@ pub struct LivingEntity {
     pub jumping: AtomicBool,
     /// Vanilla `discardFriction`: `travelInAir` keeps the velocity as it is (breeze jumps).
     pub discard_friction: AtomicBool,
+    /// Vanilla `getStingerCount`: bee stingers stuck in the entity, synced for rendering.
+    pub stinger_count: AtomicI32,
 
     pub jumping_cooldown: AtomicU8,
 
@@ -317,6 +319,7 @@ impl LivingEntity {
             equipment_slots: Arc::new(build_equipment_slots()),
             jumping: AtomicBool::new(false),
             discard_friction: AtomicBool::new(false),
+            stinger_count: AtomicI32::new(0),
             jumping_cooldown: AtomicU8::new(0),
             climbing: AtomicBool::new(false),
             climbing_pos: AtomicCell::new(None),

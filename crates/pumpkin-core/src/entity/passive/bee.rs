@@ -3,10 +3,17 @@ use std::sync::{
     atomic::{AtomicI32, AtomicU8, Ordering},
 };
 
+use pumpkin_data::damage::DamageType;
+use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::potion::Effect;
+use pumpkin_data::sound::Sound;
 use pumpkin_data::tag::{self, Taggable};
+use pumpkin_data::tracked_data;
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::codec::var_int::VarInt;
+use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
@@ -309,14 +316,56 @@ impl Mob for BeeEntity {
         &self.mob_entity
     }
 
-    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+    fn custom_server_ai_step(&self, caller: &dyn EntityBase) {
+        // Vanilla: a stung bee rolls 1 in (1200 - ticks) every 5 ticks to die.
         if self.has_stung() {
             let time = self.time_since_sting.fetch_add(1, Ordering::Relaxed) + 1;
-            if time >= 1200 {
-                self.mob_entity.living_entity.set_health(0.0);
+            if time % 5 == 0
+                && self
+                    .get_random()
+                    .random_range(0..(1200 - time).clamp(1, 1200))
+                    == 0
+            {
+                let health = self.mob_entity.living_entity.health.load();
+                caller.damage(caller, health, DamageType::GENERIC);
             }
         }
         self.update_persistent_anger();
+    }
+
+    fn melee_damage_type(&self) -> DamageType {
+        DamageType::STING
+    }
+
+    /// Vanilla `Bee.doHurtTarget` after a landed sting: a stinger stuck in the target, poison
+    /// on normal (10 s) and hard (18 s), the stinger spent, anger dropped.
+    fn on_attack(&self, target: &dyn EntityBase) {
+        if let Some(living) = target.get_living_entity() {
+            let count = living.stinger_count.fetch_add(1, Ordering::Relaxed) + 1;
+            living.entity.set_synced_data(
+                tracked_data::living_entity::DATA_STINGER_COUNT_ID,
+                VarInt(count),
+            );
+            let poison_seconds = match self.get_entity().world.load().level_info.load().difficulty {
+                pumpkin_util::Difficulty::Normal => 10,
+                pumpkin_util::Difficulty::Hard => 18,
+                _ => 0,
+            };
+            if poison_seconds > 0 {
+                living.add_effect(Effect {
+                    effect_type: &StatusEffect::POISON,
+                    duration: poison_seconds * 20,
+                    amplifier: 0,
+                    ambient: false,
+                    show_particles: true,
+                    show_icon: true,
+                    blend: false,
+                });
+            }
+        }
+        self.set_has_stung(true);
+        self.stop_being_angry();
+        self.get_entity().play_sound(Sound::EntityBeeSting);
     }
 
     fn mob_init_data_tracker(&self) {

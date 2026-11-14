@@ -833,6 +833,16 @@ impl MobEntity {
     }
 
     pub fn try_attack(&self, caller: &dyn EntityBase, target: &dyn EntityBase) -> bool {
+        self.try_attack_with(caller, target, DamageType::MOB_ATTACK)
+    }
+
+    /// `try_attack` with the damage type of the mob's own `doHurtTarget` (a bee's `sting`).
+    pub fn try_attack_with(
+        &self,
+        caller: &dyn EntityBase,
+        target: &dyn EntityBase,
+        damage_type: DamageType,
+    ) -> bool {
         if self.living_entity.dead.load(Relaxed) {
             return false;
         }
@@ -844,7 +854,7 @@ impl MobEntity {
         let damaged = target.damage_with_context(
             target,
             attack_damage,
-            DamageType::MOB_ATTACK,
+            damage_type,
             None,
             Some(caller),
             Some(caller),
@@ -1432,6 +1442,11 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn on_attack(&self, _target: &dyn EntityBase) {}
+
+    /// Damage type of the mob's melee hit; vanilla `doHurtTarget` overrides pick another.
+    fn melee_damage_type(&self) -> DamageType {
+        DamageType::MOB_ATTACK
+    }
 
     // getArrow in vanilla, lets skeletons change the arrow before it's shot
     fn get_arrow(&self, arrow: ArrowEntity) -> ArrowEntity {
