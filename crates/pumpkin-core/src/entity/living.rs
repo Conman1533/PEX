@@ -282,7 +282,7 @@ impl LivingEntity {
             0.8
         };
         let mut max_health: f32 = 20.0; // Overridden by attribute base below
-        Self {
+        let living = Self {
             // Populate local attribute instances from the default registry and get initial vars
             attributes: {
                 let mut m = FxHashMap::default();
@@ -335,7 +335,18 @@ impl LivingEntity {
             water_movement_speed_multiplier,
             last_block_pos: AtomicCell::new(None),
             equipment_attribute_modifier_ids: std::sync::Mutex::new(FxHashMap::default()),
-        }
+        };
+        // Vanilla `LivingEntity`: `DATA_HEALTH_ID` defaults to 1, then the constructor sets
+        // the max health, so the spawn metadata carries it.
+        living
+            .entity
+            .synched_data
+            .define(tracked_data::living_entity::DATA_HEALTH_ID, 1.0f32);
+        living.entity.set_synced_data(
+            tracked_data::living_entity::DATA_HEALTH_ID,
+            living.health.load(),
+        );
+        living
     }
 
     /// Returns the entity that should receive kill credit for this entity's death.
