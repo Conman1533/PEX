@@ -2250,22 +2250,13 @@ impl LivingEntity {
             self.update_death_stats(&*dyn_self, killer);
 
             // Plays the death sound
-            world.play_sound_fine(
-                self.death_sound(&*dyn_self),
-                dyn_self
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or_else(
-                        || self.sound_category(dyn_self.get_player().is_some()),
-                        super::custom_sound::CustomSound::sound_category,
-                    ),
-                &self.entity.pos.load(),
-                dyn_self
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or(1.0, super::custom_sound::CustomSound::sound_volume),
-                self.get_pitch(),
-            );
+            // Vanilla `Player.getDeathSound`; the entity data has no player death sound.
+            let death_sound = if dyn_self.get_player().is_some() {
+                Sound::EntityPlayerDeath
+            } else {
+                self.death_sound(&*dyn_self)
+            };
+            self.play_voice_sound(&*dyn_self, death_sound);
             world.send_entity_status(&self.entity, EntityStatus::Death, ActorEventID::Death);
             let looting_level;
             let tool = if let Some(cause_ent) = cause {
@@ -2897,6 +2888,35 @@ impl LivingEntity {
         Self::death_sound_for_entity(self.entity.entity_type)
     }
 
+    /// Vanilla `LivingEntity.makeSound` for hurt and death sounds: the mob's volume and voice
+    /// pitch, nothing while silent. A player's own client plays theirs, so `Player.playSound`
+    /// sends it to everyone else.
+    fn play_voice_sound(&self, entity: &dyn EntityBase, sound: Sound) {
+        let world = self.entity.world.load();
+        let pos = self.entity.pos.load();
+        if let Some(player) = entity.get_player() {
+            world.play_sound_raw_expect(
+                player,
+                sound as u16,
+                SoundCategory::Players,
+                &pos,
+                1.0,
+                self.get_pitch(),
+            );
+            return;
+        }
+        if self.entity.is_silent() {
+            return;
+        }
+        let mob = entity.get_mob();
+        let category = mob.and_then(|mob| mob.as_custom_sound()).map_or_else(
+            || self.sound_category(false),
+            super::custom_sound::CustomSound::sound_category,
+        );
+        let volume = mob.map_or(1.0, super::mob::Mob::get_sound_volume);
+        world.play_sound_fine(sound, category, &pos, volume, self.get_pitch());
+    }
+
     fn hurt_sound(&self, entity: &dyn EntityBase) -> Sound {
         if let Some(sound_source) = entity.get_mob().and_then(|x| x.as_custom_sound())
             && let Some(audio) = sound_source.hurt_sound()
@@ -2905,6 +2925,18 @@ impl LivingEntity {
         }
 
         Self::hurt_sound_for_entity(self.entity.entity_type)
+    }
+}
+
+/// Vanilla `Player.getHurtSound`: the sound of the damage type's effects (`DamageEffects`).
+const fn player_hurt_sound(damage_type: &DamageType) -> Sound {
+    use pumpkin_data::damage::DamageEffects;
+    match damage_type.effects {
+        None | Some(DamageEffects::Hurt | DamageEffects::Thorns) => Sound::EntityPlayerHurt,
+        Some(DamageEffects::Drowning) => Sound::EntityPlayerHurtDrown,
+        Some(DamageEffects::Burning) => Sound::EntityPlayerHurtOnFire,
+        Some(DamageEffects::Poking) => Sound::EntityPlayerHurtSweetBerryBush,
+        Some(DamageEffects::Freezing) => Sound::EntityPlayerHurtFreeze,
     }
 }
 
@@ -3510,22 +3542,21 @@ impl LivingEntity {
             if let Some(sound) = caller.get_mob().and_then(|mob| mob.as_custom_sound()) {
                 sound.on_hurt_sound();
             }
-            world.play_sound_fine(
-                self.hurt_sound(caller),
-                caller
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or_else(
-                        || self.sound_category(caller.get_player().is_some()),
-                        super::custom_sound::CustomSound::sound_category,
-                    ),
-                &self.entity.pos.load(),
-                caller
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or(1.0, super::custom_sound::CustomSound::sound_volume),
-                self.get_pitch(),
-            );
+            let hurt_sound = if caller.get_player().is_some() {
+                player_hurt_sound(&damage_type)
+            } else {
+                self.hurt_sound(caller)
+            };
+            self.play_voice_sound(caller, hurt_sound);
+            // Vanilla `LivingEntity.playSecondaryHurtSound`, heard by everyone.
+            if damage_type == DamageType::THORNS {
+                let category = if caller.get_player().is_some() {
+                    SoundCategory::Players
+                } else {
+                    SoundCategory::Hostile
+                };
+                world.play_sound(Sound::EnchantThornsHit, category, &self.entity.pos.load());
+            }
 
             if let Some(source) = source
                 && !caller
