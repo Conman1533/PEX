@@ -5,8 +5,9 @@ use pumpkin_data::{Block, fluid::Fluid, tag};
 /// Check if a specific block can be replaced by fluid (based on block properties)
 #[must_use]
 pub fn can_be_replaced(block_state: &BlockState, block: &Block, fluid: &Fluid) -> bool {
-    // Waterlogged blocks should not be replaced by water
-    if block.is_waterlogged(block_state.id) {
+    // Waterloggable blocks are vanilla `LiquidBlockContainer`s, which a spreading fluid never
+    // replaces (`canHoldSpecificFluid`): flowing water and lava cannot be placed into them.
+    if block.is_waterloggable() {
         return false;
     }
 
