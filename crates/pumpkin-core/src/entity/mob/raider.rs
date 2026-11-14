@@ -268,6 +268,7 @@ impl Goal for ObtainRaidLeaderBannerGoal {
                     current_progress: pos,
                     destination: cand_pos,
                     speed: 1.15,
+                    reach_range: 1,
                 });
                 break;
             }
@@ -368,6 +369,7 @@ impl Goal for RaiderMoveThroughVillageGoal {
                 current_progress: pos,
                 destination: dest,
                 speed: self.speed_modifier,
+                reach_range: 1,
             });
         }
     }

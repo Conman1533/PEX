@@ -130,6 +130,7 @@ impl Goal for RangedAttackGoal {
                     current_progress: mob_pos,
                     destination: target_pos,
                     speed: self.speed_modifier,
+                    reach_range: 1,
                 });
             }
         }

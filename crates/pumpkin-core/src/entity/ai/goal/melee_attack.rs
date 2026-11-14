@@ -120,6 +120,7 @@ impl Goal for MeleeAttackGoal {
                 current_progress: mob.get_entity().pos.load(),
                 destination: target_pos,
                 speed: self.speed,
+                reach_range: 0,
             });
             self.last_target_position = Some(target_pos);
         }
@@ -177,6 +178,7 @@ impl Goal for MeleeAttackGoal {
                 current_progress: mob_pos,
                 destination: current_target_pos,
                 speed: self.speed,
+                reach_range: 0,
             });
             self.last_target_position = Some(current_target_pos);
             self.update_countdown_ticks = 4 + mob.get_random().random_range(0..7);

@@ -133,6 +133,7 @@ impl<M: MoveToTargetPos> MoveToTargetPosGoal<M> {
                 target.0.z as f64 + 0.5,
             ),
             speed: self.speed,
+            reach_range: 1,
         });
     }
 }
@@ -208,6 +209,7 @@ impl<M: MoveToTargetPos> Goal for MoveToTargetPosGoal<M> {
                         target.0.z as f64 + 0.5,
                     ),
                     speed: self.speed,
+                    reach_range: 1,
                 });
             }
         }

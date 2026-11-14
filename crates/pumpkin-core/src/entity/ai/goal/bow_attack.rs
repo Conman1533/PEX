@@ -220,6 +220,7 @@ impl Goal for BowAttackGoal {
                     current_progress: mob_pos,
                     destination: target_pos,
                     speed: self.speed,
+                    reach_range: 1,
                 });
                 self.strafing_time = -1;
             }

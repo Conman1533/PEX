@@ -253,6 +253,8 @@ pub struct NavigatorGoal {
     pub current_progress: Vector3<f64>,
     pub destination: Vector3<f64>,
     pub speed: f64,
+    /// Vanilla `reachRange`: how many blocks (Manhattan) short of the destination a path may end.
+    pub reach_range: i32,
 }
 
 impl NavigatorGoal {
@@ -266,6 +268,7 @@ impl NavigatorGoal {
             current_progress,
             destination,
             speed,
+            reach_range: 1,
         }
     }
 }
@@ -771,7 +774,7 @@ impl PathNavigation {
             self.has_pending_path = false;
             if let Some(goal) = self.current_goal {
                 // Vanilla moveTo(Path): an equivalent route keeps the installed path and its progress.
-                match self.create_path(entity, goal.destination, 1) {
+                match self.create_path(entity, goal.destination, goal.reach_range) {
                     Some(path) if path.same_as(self.path.as_ref()) => {}
                     path => self.path = path,
                 }
