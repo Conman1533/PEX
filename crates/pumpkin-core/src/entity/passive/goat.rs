@@ -214,6 +214,10 @@ impl Animal for GoatEntity {
 }
 
 impl Mob for GoatEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityGoatStep, 0.15)
+    }
+
     fn finalize_spawn(
         &self,
         _world: &Arc<World>,

@@ -303,6 +303,10 @@ impl CustomSound for CubeMobEntity {
 }
 
 impl Mob for CubeMobEntity {
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSwim
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

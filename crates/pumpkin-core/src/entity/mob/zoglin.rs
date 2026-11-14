@@ -130,6 +130,10 @@ impl ZoglinEntity {
 }
 
 impl Mob for ZoglinEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityZoglinStep, 0.15)
+    }
+
     fn mob_metadata(&self) -> Option<MobMetadata> {
         self.is_baby().then(|| MobMetadata::new().baby(true))
     }

@@ -110,6 +110,23 @@ impl Animal for StriderEntity {
 }
 
 impl Mob for StriderEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(
+            if self
+                .mob_entity
+                .living_entity
+                .entity
+                .touching_lava
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
+                pumpkin_data::sound::Sound::EntityStriderStepLava
+            } else {
+                pumpkin_data::sound::Sound::EntityStriderStep
+            },
+            1.0,
+        )
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         // Vanilla also keeps quiet while tempted, which the goal does not expose here.
         (!self.is_panicking()).then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)

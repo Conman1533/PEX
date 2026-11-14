@@ -297,6 +297,10 @@ impl Animal for SheepEntity {
 }
 
 impl Mob for SheepEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntitySheepStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntitySheepAmbient)
     }

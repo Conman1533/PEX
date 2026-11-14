@@ -308,6 +308,10 @@ impl Animal for ArmadilloEntity {
 }
 
 impl Mob for ArmadilloEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityArmadilloStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         (!self.is_scared()).then_some(pumpkin_data::sound::Sound::EntityArmadilloAmbient)
     }

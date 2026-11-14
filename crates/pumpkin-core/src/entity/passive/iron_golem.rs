@@ -143,6 +143,10 @@ impl NeutralMob for IronGolemEntity {
 }
 
 impl Mob for IronGolemEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityIronGolemStep, 1.0)
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

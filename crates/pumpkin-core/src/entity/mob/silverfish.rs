@@ -217,6 +217,10 @@ impl Goal for SilverfishWakeUpFriendsGoal {
 }
 
 impl Mob for SilverfishEntity {
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::Events
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.entity
     }

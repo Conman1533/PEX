@@ -24,6 +24,14 @@ impl TropicalFishEntity {
 }
 
 impl Mob for TropicalFishEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Silent
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityFishSwim
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntityTropicalFishAmbient)
     }

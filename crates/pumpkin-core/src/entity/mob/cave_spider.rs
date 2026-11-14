@@ -63,6 +63,10 @@ impl CaveSpiderEntity {
 }
 
 impl Mob for CaveSpiderEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntitySpiderStep, 0.15)
+    }
+
     fn finalize_spawn(
         &self,
         world: &Arc<crate::world::World>,

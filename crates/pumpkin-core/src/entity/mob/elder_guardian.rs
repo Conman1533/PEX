@@ -55,6 +55,10 @@ impl ElderGuardianEntity {
 }
 
 impl Mob for ElderGuardianEntity {
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::Events
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

@@ -110,6 +110,10 @@ impl NeutralMob for ZombifiedPiglinEntity {
 }
 
 impl Mob for ZombifiedPiglinEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityZombieStep, 0.15)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

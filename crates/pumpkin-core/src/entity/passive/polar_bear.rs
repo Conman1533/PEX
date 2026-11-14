@@ -138,6 +138,10 @@ impl NeutralMob for PolarBearEntity {
 }
 
 impl Mob for PolarBearEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityPolarBearStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.is_baby() {
             pumpkin_data::sound::Sound::EntityPolarBearAmbientBaby

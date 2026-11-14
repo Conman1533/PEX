@@ -40,6 +40,17 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering};
 use std::sync::{Arc, LazyLock};
 use uuid::Uuid;
 
+/// A mob's own step sound (vanilla `playStepSound` overrides that ignore the block).
+#[derive(Clone, Copy, Debug)]
+pub enum StepSound {
+    /// The block's step sound (vanilla `Entity.playStepSound`).
+    Block,
+    /// No step sound at all.
+    Silent,
+    /// This sound at this volume and pitch 1.
+    Sound(pumpkin_data::sound::Sound, f32),
+}
+
 pub mod bat;
 pub mod blaze;
 pub mod breeze;
@@ -1454,6 +1465,49 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn get_mob_y_velocity_drag(&self) -> Option<f64> {
         None
+    }
+
+    /// Vanilla `Entity.getMovementEmission`: whether walking plays step sounds, emits step
+    /// vibrations, or both.
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::All
+    }
+
+    /// Vanilla `playStepSound` for mobs whose step does not depend on the block.
+    fn mob_step_sound(&self) -> StepSound {
+        StepSound::Block
+    }
+
+    /// Vanilla `playStepSound`: the sound, volume and pitch of one step on `state` at `pos`,
+    /// or `None` for a silent step.
+    fn step_sound_on(
+        &self,
+        _world: &World,
+        _pos: &BlockPos,
+        block: &'static Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        match self.mob_step_sound() {
+            StepSound::Block => Some(crate::entity::block_step_sound(block, state)),
+            StepSound::Silent => None,
+            StepSound::Sound(sound, volume) => Some((sound, volume, 1.0)),
+        }
+    }
+
+    /// Vanilla `getSwimSound`: `Monster` uses the hostile splash.
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .entity_type
+            .category
+            == &pumpkin_data::entity::MobCategory::MONSTER
+        {
+            pumpkin_data::sound::Sound::EntityHostileSwim
+        } else {
+            pumpkin_data::sound::Sound::EntityGenericSwim
+        }
     }
 
     /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.

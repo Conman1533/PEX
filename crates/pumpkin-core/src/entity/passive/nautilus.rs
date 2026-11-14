@@ -374,6 +374,14 @@ impl AgeableMob for NautilusEntity {
 }
 
 impl Mob for NautilusEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Silent
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        self.get_swim_sound()
+    }
+
     fn get_ambient_sound(&self) -> Option<Sound> {
         let under_water = self.get_entity().is_under_water();
         if self.zombie {

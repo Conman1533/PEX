@@ -96,6 +96,10 @@ impl DolphinEntity {
 }
 
 impl Mob for DolphinEntity {
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityDolphinSwim
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.get_entity().is_in_water() {
             pumpkin_data::sound::Sound::EntityDolphinAmbientWater

@@ -301,6 +301,14 @@ impl ShulkerEntity {
 }
 
 impl Mob for ShulkerEntity {
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::None
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSwim
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

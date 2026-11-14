@@ -170,6 +170,10 @@ impl AgeableMob for HoglinEntity {
 }
 
 impl Mob for HoglinEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityHoglinStep, 0.15)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

@@ -57,6 +57,10 @@ impl EndermiteEntity {
 }
 
 impl Mob for EndermiteEntity {
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::Events
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

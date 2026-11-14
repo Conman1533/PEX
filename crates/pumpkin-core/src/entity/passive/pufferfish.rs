@@ -217,6 +217,14 @@ impl PufferfishEntity {
 }
 
 impl Mob for PufferfishEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Silent
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityFishSwim
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

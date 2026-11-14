@@ -42,6 +42,14 @@ impl CodEntity {
 }
 
 impl Mob for CodEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Silent
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityFishSwim
+    }
+
     fn as_bucketable(&self) -> Option<&dyn Bucketable> {
         Some(self)
     }

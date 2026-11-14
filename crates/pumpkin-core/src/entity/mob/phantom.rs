@@ -175,6 +175,10 @@ impl PhantomEntity {
 }
 
 impl Mob for PhantomEntity {
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSwim
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

@@ -166,6 +166,27 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
+    fn step_sound_on(
+        &self,
+        _world: &crate::world::World,
+        _pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        let sand = block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CAMEL_SAND_STEP_SOUND_BLOCKS);
+        let _ = state;
+        Some(match (self.husk, sand) {
+            (true, true) => (
+                pumpkin_data::sound::Sound::EntityCamelHuskStepSand,
+                0.4,
+                1.0,
+            ),
+            (true, false) => (pumpkin_data::sound::Sound::EntityCamelHuskStep, 0.4, 1.0),
+            (false, true) => (pumpkin_data::sound::Sound::EntityCamelStepSand, 1.0, 1.0),
+            (false, false) => (pumpkin_data::sound::Sound::EntityCamelStep, 1.0, 1.0),
+        })
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.husk {
             Sound::EntityCamelHuskAmbient

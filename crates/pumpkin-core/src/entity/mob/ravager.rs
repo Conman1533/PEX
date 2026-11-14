@@ -77,6 +77,10 @@ impl RavagerEntity {
 }
 
 impl Mob for RavagerEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityRavagerStep, 0.15)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

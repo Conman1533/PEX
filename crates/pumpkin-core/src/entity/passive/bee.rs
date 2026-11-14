@@ -250,6 +250,10 @@ impl LookControlTrait for BeeLookControl {
 }
 
 impl Mob for BeeEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Silent
+    }
+
     fn omnidirectional_air_mover(&self) -> bool {
         true
     }

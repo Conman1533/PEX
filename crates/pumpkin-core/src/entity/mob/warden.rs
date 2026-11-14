@@ -697,6 +697,10 @@ impl VibrationUser for WardenEntity {
 }
 
 impl Mob for WardenEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityWardenStep, 10.0)
+    }
+
     /// Vanilla `Warden.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

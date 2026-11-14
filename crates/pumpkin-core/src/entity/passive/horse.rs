@@ -234,7 +234,62 @@ impl Animal for HorseEntity {
     }
 }
 
+/// Vanilla `AbstractHorse.playStepSound` while not ridden at a gallop: wood steps on wooden
+/// blocks, otherwise the plain (or baby) horse step, both at the block's volume and pitch,
+/// and snow layers on top count as the block. Nothing in liquids.
+pub(crate) fn horse_step_sound(
+    mob: &dyn Mob,
+    world: &World,
+    pos: &pumpkin_util::math::position::BlockPos,
+    block: &'static pumpkin_data::Block,
+    state: &'static pumpkin_data::BlockState,
+) -> Option<(Sound, f32, f32)> {
+    use pumpkin_data::block_sound::BlockSoundType;
+    if state.is_liquid() {
+        return None;
+    }
+    let (above_block, above_state) = world.get_block_and_state(&pos.up());
+    let sound_type = if above_block.id == pumpkin_data::BlockId::SNOW {
+        BlockSoundType::of(above_block.id, above_state.id)
+    } else {
+        BlockSoundType::of(block.id, state.id)
+    };
+    let wood = matches!(
+        sound_type.place_sound,
+        Sound::BlockWoodPlace
+            | Sound::BlockNetherWoodPlace
+            | Sound::BlockStemPlace
+            | Sound::BlockCherryWoodPlace
+            | Sound::BlockBambooWoodPlace
+    );
+    let sound = if wood {
+        Sound::EntityHorseStepWood
+    } else if mob
+        .get_mob_entity()
+        .living_entity
+        .entity
+        .age
+        .load(Ordering::Relaxed)
+        < 0
+    {
+        Sound::EntityBabyHorseStep
+    } else {
+        Sound::EntityHorseStep
+    };
+    Some((sound, sound_type.volume * 0.15, sound_type.pitch))
+}
+
 impl Mob for HorseEntity {
+    fn step_sound_on(
+        &self,
+        world: &crate::world::World,
+        pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        crate::entity::passive::horse::horse_step_sound(self, world, pos, block, state)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.is_baby() {
             pumpkin_data::sound::Sound::EntityBabyHorseAmbient

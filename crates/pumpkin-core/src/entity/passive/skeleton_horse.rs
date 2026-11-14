@@ -123,6 +123,31 @@ impl Animal for SkeletonHorseEntity {
 }
 
 impl Mob for SkeletonHorseEntity {
+    fn step_sound_on(
+        &self,
+        world: &crate::world::World,
+        pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        crate::entity::passive::horse::horse_step_sound(self, world, pos, block, state)
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        // Vanilla also counts gallops in water while ridden; riders are not simulated here.
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .on_ground
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseStepWater
+        } else {
+            pumpkin_data::sound::Sound::EntitySkeletonHorseSwim
+        }
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.get_entity().is_submerged_in_water() {
             pumpkin_data::sound::Sound::EntitySkeletonHorseAmbientWater
