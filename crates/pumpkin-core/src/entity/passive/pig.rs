@@ -175,6 +175,20 @@ impl Animal for PigEntity {
 }
 
 impl Mob for PigEntity {
+    /// Vanilla `Pig.finalizeSpawn` rolls a random sound variant.
+    fn finalize_spawn(
+        &self,
+        _world: &Arc<World>,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        let sound_variants = PigSoundVariant::ALL;
+        self.set_sound_variant(
+            sound_variants[self.get_random().random_range(0..sound_variants.len())],
+        );
+        self.mob_entity.finalize_spawn_base();
+        group_data
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(
             PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))

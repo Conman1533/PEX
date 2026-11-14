@@ -217,6 +217,10 @@ impl Animal for WolfEntity {
             if let Some(variant) = WolfVariant::all().iter().find(|v| v.id() == variant_id) {
                 puppy.set_variant(*variant);
             }
+            let sound_variants = WolfSoundVariant::ALL;
+            puppy.set_sound_variant(
+                sound_variants[self.get_random().random_range(0..sound_variants.len())],
+            );
             if self.is_tame() {
                 puppy.set_owner(self.get_owner());
                 TamableAnimal::set_tame(puppy, true);
@@ -243,6 +247,20 @@ impl NeutralMob for WolfEntity {
 }
 
 impl Mob for WolfEntity {
+    /// Vanilla `Wolf.finalizeSpawn` rolls a random sound variant.
+    fn finalize_spawn(
+        &self,
+        _world: &Arc<World>,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        let sound_variants = WolfSoundVariant::ALL;
+        self.set_sound_variant(
+            sound_variants[self.get_random().random_range(0..sound_variants.len())],
+        );
+        self.mob_entity.finalize_spawn_base();
+        group_data
+    }
+
     fn get_sound_volume(&self) -> f32 {
         0.4
     }
