@@ -1058,7 +1058,7 @@ impl LivingEntity {
     }
 
     // canBeAffected, with the mob overrides folded in
-    fn can_be_affected(&self, effect: &Effect) -> bool {
+    pub(crate) fn can_be_affected(&self, effect: &Effect) -> bool {
         let entity_type = self.entity.entity_type;
         if (entity_type == &EntityType::WITHER_SKELETON || entity_type == &EntityType::WITHER)
             && effect.effect_type == &StatusEffect::WITHER
