@@ -27,11 +27,17 @@ use pumpkin_world::world::BlockFlags;
 use crate::{
     entity::{
         Entity, EntityBase,
-        ai::goal::{
-            look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
-            revenge::RevengeGoal,
+        ai::{
+            control::flying_move_control::FlyingMoveControl,
+            goal::{
+                Controls, Goal, active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
+                look_at_entity::LookAtEntityGoal, ranged_attack::RangedAttackGoal,
+                revenge::RevengeGoal, water_avoiding_random_flying::WaterAvoidingRandomFlyingGoal,
+            },
+            pathfinder::Navigator,
+            target_predicate::TargetPredicate,
         },
-        mob::{Mob, MobEntity},
+        mob::{Mob, MobEntity, RangedAttackMob},
         projectile::wither_skull::WitherSkullEntity,
     },
     world::{
@@ -41,6 +47,43 @@ use crate::{
 };
 
 const INVULNERABLE_TICKS: i32 = 220;
+/// Vanilla `WitherBoss.TARGETING_CONDITIONS` range.
+const HEAD_TARGET_RANGE: f64 = 20.0;
+
+/// Vanilla `WitherBoss.LIVING_ENTITY_SELECTOR`: anything but the wither's friends.
+fn is_wither_prey(target: &crate::entity::living::LivingEntity) -> bool {
+    !target
+        .entity
+        .entity_type
+        .has_tag(&tag::EntityType::MINECRAFT_WITHER_FRIENDS)
+}
+
+/// Vanilla `WitherBoss.WitherDoNothingGoal`: holds every control while the wither charges up.
+struct WitherDoNothingGoal {
+    wither: Weak<WitherEntity>,
+}
+
+impl WitherDoNothingGoal {
+    fn invulnerable(&self) -> bool {
+        self.wither
+            .upgrade()
+            .is_some_and(|wither| wither.get_invulnerable_ticks() > 0)
+    }
+}
+
+impl Goal for WitherDoNothingGoal {
+    fn can_start(&mut self, _mob: &dyn Mob) -> bool {
+        self.invulnerable()
+    }
+
+    fn should_continue(&mut self, _mob: &dyn Mob) -> bool {
+        self.invulnerable()
+    }
+
+    fn controls(&self) -> Controls {
+        Controls::MOVE | Controls::JUMP | Controls::LOOK
+    }
+}
 
 pub struct WitherEntity {
     pub mob_entity: MobEntity,
@@ -49,7 +92,7 @@ pub struct WitherEntity {
     pub next_head_update: [AtomicI32; 2],
     pub idle_head_updates: [AtomicI32; 2],
     pub alternative_targets: [AtomicI32; 3],
-    pub main_attack_timer: AtomicI32,
+
     pub bossbar_uuid: Uuid,
     pub bossbar_players: Mutex<Vec<Uuid>>,
     bossbar_progress: AtomicCell<f32>,
@@ -58,7 +101,20 @@ pub struct WitherEntity {
 
 impl WitherEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
+        let mut mob_entity = MobEntity::new(entity);
+        // Vanilla: FlyingMoveControl(10, false) and a FlyingPathNavigation that can float.
+        *mob_entity
+            .move_control
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Box::new(FlyingMoveControl::new(10, false));
+        let navigator = mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *navigator = Navigator::flying();
+        navigator.set_can_open_doors(false);
+        navigator.set_can_float(true);
         let wither = Self {
             mob_entity,
             invulnerable_ticks: AtomicI32::new(0),
@@ -66,7 +122,7 @@ impl WitherEntity {
             next_head_update: [AtomicI32::new(0), AtomicI32::new(0)],
             idle_head_updates: [AtomicI32::new(0), AtomicI32::new(0)],
             alternative_targets: [AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)],
-            main_attack_timer: AtomicI32::new(0),
+
             bossbar_uuid: Uuid::new_v4(),
             bossbar_players: Mutex::new(Vec::new()),
             bossbar_progress: AtomicCell::new(1.0),
@@ -81,7 +137,22 @@ impl WitherEntity {
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
             let target_selector = &mob_arc.mob_entity.target_selector;
+            let ranged_weak: Weak<dyn RangedAttackMob> = {
+                let ranged_arc: Arc<dyn RangedAttackMob> = mob_arc.clone();
+                Arc::downgrade(&ranged_arc)
+            };
 
+            goal_selector.add_goal(
+                0,
+                Box::new(WitherDoNothingGoal {
+                    wither: Arc::downgrade(&mob_arc),
+                }),
+            );
+            goal_selector.add_goal(
+                2,
+                Box::new(RangedAttackGoal::new(ranged_weak, 1.0, 40, 20.0)),
+            );
+            goal_selector.add_goal(5, Box::new(WaterAvoidingRandomFlyingGoal::new(1.0)));
             goal_selector.add_goal(
                 6,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
@@ -89,6 +160,13 @@ impl WitherEntity {
             goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
 
             target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
+            // Vanilla NearestAttackableTargetGoal(LivingEntity, 0, false, false, LIVING_ENTITY_SELECTOR).
+            target_selector.add_goal(
+                2,
+                ActiveTargetGoal::predicated(&mob_arc.mob_entity, 0, false, |target, _| {
+                    is_wither_prey(target)
+                }),
+            );
         };
 
         mob_arc
@@ -182,7 +260,7 @@ impl WitherEntity {
         self.mob_entity.living_entity.entity.pos.load().z + (angle.sin() as f64) * 1.3
     }
 
-    pub fn perform_ranged_attack(
+    pub fn shoot_skull(
         &self,
         head: usize,
         target_x: f64,
@@ -342,41 +420,30 @@ impl WitherEntity {
         }
     }
 
-    fn tick_main_head_attack(&self) {
+    /// Vanilla `TARGETING_CONDITIONS`: combat targeting within 20 blocks, line of sight required.
+    fn head_target_candidates(&self, caller: &dyn EntityBase) -> Vec<i32> {
         let entity = &self.mob_entity.living_entity.entity;
-        let wither_pos = entity.pos.load();
-        if let Some(target) = self.mob_entity.get_target() {
-            if target.get_entity().is_alive() {
-                let target_pos = target.get_entity().pos.load();
-                self.set_alternative_target(0, target.get_entity().entity_id);
-
-                // Main head attack
-                let dist_sq = (wither_pos - target_pos).length_squared();
-                if dist_sq <= 400.0 {
-                    let attack_timer = self.main_attack_timer.load(Ordering::Relaxed);
-                    if attack_timer <= 0 {
-                        self.main_attack_timer.store(40, Ordering::Relaxed);
-                        let dangerous = rand::random_range(0.0..1.0) < 0.001;
-                        let eye_h = target.get_entity().get_eye_height();
-                        self.perform_ranged_attack(
-                            0,
-                            target_pos.x,
-                            target_pos.y + eye_h * 0.5,
-                            target_pos.z,
-                            dangerous,
-                        );
-                    } else {
-                        self.main_attack_timer
-                            .store(attack_timer - 1, Ordering::Relaxed);
-                    }
-                }
-            } else {
-                self.set_alternative_target(0, 0);
-                self.mob_entity.set_target(None);
-            }
-        } else {
-            self.set_alternative_target(0, 0);
-        }
+        let world = entity.world.load();
+        let mut conditions =
+            TargetPredicate::create_attackable().set_base_max_distance(HEAD_TARGET_RANGE);
+        conditions.set_predicate(|target, _| is_wither_prey(target));
+        let search_box = entity.bounding_box.load().expand(20.0, 8.0, 20.0);
+        let mut ids: Vec<i32> = world
+            .get_entities_at_box(&search_box)
+            .into_iter()
+            .filter(|e| {
+                e.get_player().is_none() && conditions.test(&world, Some(caller), e.as_ref())
+            })
+            .map(|e| e.get_entity().entity_id)
+            .collect();
+        ids.extend(
+            world
+                .get_players_at_box(&search_box)
+                .into_iter()
+                .filter(|p| conditions.test(&world, Some(caller), p.as_ref()))
+                .map(|p| p.entity_id()),
+        );
+        ids
     }
 
     fn tick_wither_lifecycle(&self) -> bool {
@@ -398,7 +465,7 @@ impl WitherEntity {
     }
 
     #[expect(clippy::too_many_lines)]
-    fn tick_wither(&self) {
+    fn tick_wither(&self, caller: &dyn EntityBase) {
         let entity = &self.mob_entity.living_entity.entity;
         let world = entity.world.load();
         let invul = self.get_invulnerable_ticks();
@@ -433,7 +500,6 @@ impl WitherEntity {
             }
         } else {
             let living = &self.mob_entity.living_entity;
-            self.tick_main_head_attack();
 
             // Side heads attack logic
             let difficulty = world.level_info.load().difficulty;
@@ -454,26 +520,27 @@ impl WitherEntity {
                             wither_pos.y + rand::random_range(-5.0..5.0),
                             wither_pos.z + rand::random_range(-10.0..10.0),
                         );
-                        self.perform_ranged_attack(i, xt, yt, zt, true);
+                        self.shoot_skull(i, xt, yt, zt, true);
                         self.idle_head_updates[i - 1].store(0, Ordering::Relaxed);
                     }
 
                     let head_target_id = self.get_alternative_target(i);
                     if head_target_id > 0 {
-                        let head_target = world.get_entity_by_id(head_target_id);
+                        let head_target = world.get_entity_by_id(head_target_id).or_else(|| {
+                            world
+                                .get_player_by_id(head_target_id)
+                                .map(|p| p as Arc<dyn EntityBase>)
+                        });
                         if let Some(target) = head_target {
                             let t_pos = target.get_entity().pos.load();
-                            if target.get_entity().is_alive()
+                            if target.get_living_entity().is_some()
+                                && target.get_entity().is_alive()
+                                && self.can_attack(target.as_ref())
                                 && (wither_pos - t_pos).length_squared() <= 900.0
+                                && self.has_line_of_sight(target.get_entity())
                             {
                                 let eye_h = target.get_entity().get_eye_height();
-                                self.perform_ranged_attack(
-                                    i,
-                                    t_pos.x,
-                                    t_pos.y + eye_h * 0.5,
-                                    t_pos.z,
-                                    false,
-                                );
+                                self.shoot_skull(i, t_pos.x, t_pos.y + eye_h * 0.5, t_pos.z, false);
                                 let next_delay = 40 + rand::random_range(0..20);
                                 self.next_head_update[i - 1]
                                     .store(tick_count + next_delay, Ordering::Relaxed);
@@ -485,28 +552,20 @@ impl WitherEntity {
                             self.set_alternative_target(i, 0);
                         }
                     } else {
-                        let search_box = entity.bounding_box.load().expand(20.0, 8.0, 20.0);
-                        let entities = world.get_entities_at_box(&search_box);
-                        let candidates: Vec<_> = entities
-                            .into_iter()
-                            .filter(|e| {
-                                e.get_entity().entity_id != entity.entity_id
-                                    && e.get_living_entity().is_some()
-                                    && e.get_entity().is_alive()
-                                    && !e
-                                        .get_entity()
-                                        .entity_type
-                                        .has_tag(&tag::EntityType::MINECRAFT_WITHER_FRIENDS)
-                            })
-                            .collect();
-
+                        let candidates = self.head_target_candidates(caller);
                         if !candidates.is_empty() {
                             let idx = rand::random_range(0..candidates.len());
-                            self.set_alternative_target(i, candidates[idx].get_entity().entity_id);
+                            self.set_alternative_target(i, candidates[idx]);
                         }
                     }
                 }
             }
+
+            let main_target = self
+                .mob_entity
+                .get_target()
+                .map_or(0, |target| target.get_entity().entity_id);
+            self.set_alternative_target(0, main_target);
 
             // Block destruction
             let destroy_tick = self.destroy_blocks_tick.load(Ordering::Relaxed);
@@ -570,6 +629,22 @@ impl WitherEntity {
     }
 }
 
+impl RangedAttackMob for WitherEntity {
+    /// Vanilla `performRangedAttack(LivingEntity, float)`: the main head, 0.1% blue skulls.
+    fn perform_ranged_attack(&self, target: &Arc<dyn EntityBase>, _power: f32) {
+        let target_entity = target.get_entity();
+        let pos = target_entity.pos.load();
+        let dangerous = rand::random::<f32>() < 0.001;
+        self.shoot_skull(
+            0,
+            pos.x,
+            pos.y + target_entity.get_eye_height() * 0.5,
+            pos.z,
+            dangerous,
+        );
+    }
+}
+
 impl Mob for WitherEntity {
     fn on_removed(&self) {
         self.remove_all_bossbar(&self.get_entity().world.load());
@@ -609,8 +684,8 @@ impl Mob for WitherEntity {
         }
     }
 
-    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
-        self.tick_wither();
+    fn custom_server_ai_step(&self, caller: &dyn EntityBase) {
+        self.tick_wither(caller);
     }
 
     fn pre_damage(&self, damage_type: DamageType, source: Option<&dyn EntityBase>) -> bool {
