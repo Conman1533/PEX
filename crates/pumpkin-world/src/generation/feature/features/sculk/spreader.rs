@@ -23,9 +23,9 @@ pub const MAX_CURSORS: usize = 32;
 pub const MAX_CHARGE: u16 = 1000;
 /// Maximum chessboard distance from origin before a cursor is discarded.
 const MAX_CURSOR_DISTANCE: i32 = 1024;
-/// Squared XZ radius limit during world generation: cursors are discarded
-/// once `dx² + dz² >= 225` (15 blocks from the origin).
-const WORLD_GEN_RADIUS_SQ: i64 = 225;
+/// Squared XZ distance from the origin a world-gen cursor may move to
+/// (vanilla `MAX_WORLDGEN_SPREAD` of 12).
+const MAX_WORLDGEN_SPREAD_SQ: i64 = 144;
 
 /// Configuration values extracted from [`SculkSpreader`] so that cursor
 /// updates do not require borrowing the spreader while iterating.
@@ -331,35 +331,35 @@ impl ChargeCursor {
         if self.charge == 0 {
             // On discharge only sculk veins remove faces; every other
             // block type is a no-op.
-            if current_id == BlockId::SCULK_VEIN {
-                VeinRules::on_discharged(level, self.pos);
-            }
+            Self::discharge(level, self.pos, current_state);
             return;
         }
 
         // Attempt movement.
-        if let Some(new_pos) = Self::valid_movement_position(level, self.pos, random) {
-            if current_id == BlockId::SCULK_VEIN {
-                VeinRules::on_discharged(level, self.pos);
-            }
+        let new_state = if let Some(new_pos) = Self::valid_movement_position(
+            level,
+            self.pos,
+            random,
+            origin_pos,
+            config.is_world_generation,
+        ) {
+            Self::discharge(level, self.pos, current_state);
             self.pos = new_pos;
+            level.sculk_get(self.pos)
+        } else if config.is_world_generation {
+            // A world-gen cursor with nowhere to go is spent.
+            Self::discharge(level, self.pos, current_state);
+            self.charge = 0;
+            return;
+        } else {
+            current_state
+        };
 
-            // World-gen radius limit (XZ only): `dx² + dz² >= 225`.
-            if config.is_world_generation {
-                let dx = (self.pos.0.x - origin_pos.0.x) as i64;
-                let dz = (self.pos.0.z - origin_pos.0.z) as i64;
-                if dx * dx + dz * dz >= WORLD_GEN_RADIUS_SQ {
-                    self.charge = 0;
-                    return;
-                }
-            }
-
-            // Update faces from the new position's block.
-            if let Some(state) = level.sculk_get(self.pos) {
-                let id = state.to_block_id();
-                if is_sculk_behaviour(id) {
-                    self.faces = Some(Self::available_faces(state, id));
-                }
+        // Update faces from the block the cursor now sits on.
+        if let Some(state) = new_state {
+            let id = state.to_block_id();
+            if is_sculk_behaviour(id) {
+                self.faces = Some(Self::available_faces(state, id));
             }
         }
 
@@ -369,6 +369,17 @@ impl ChargeCursor {
         self.decay_delay =
             Self::update_decay_delay(self.decay_delay, is_sculk_behaviour(current_id));
         self.update_delay = 1; // spread delay is always a single tick
+    }
+
+    /// Runs the discharge behaviour of the block the cursor was on. Only
+    /// sculk veins do anything, and they use the state read before the
+    /// charge was spent, like vanilla, even if the block changed since.
+    fn discharge(level: &mut dyn SculkLevel, pos: BlockPos, state: Option<BlockStateId>) {
+        if let Some(state) = state
+            && state.to_block_id() == BlockId::SCULK_VEIN
+        {
+            VeinRules::on_discharged(level, pos, state);
+        }
     }
 
     /// Determines how much charge is consumed this tick, dispatching on
@@ -516,6 +527,8 @@ impl ChargeCursor {
         level: &dyn SculkLevel,
         pos: BlockPos,
         random: &mut RandomGenerator,
+        origin_pos: BlockPos,
+        is_world_generation: bool,
     ) -> Option<BlockPos> {
         let mut result = None;
 
@@ -529,6 +542,13 @@ impl ChargeCursor {
         for &idx in &order {
             let offset = NON_CORNER_NEIGHBOURS[idx as usize];
             let neighbour = pos.offset(offset);
+            if is_world_generation {
+                let dx = i64::from(origin_pos.0.x - neighbour.0.x);
+                let dz = i64::from(origin_pos.0.z - neighbour.0.z);
+                if dx * dx + dz * dz > MAX_WORLDGEN_SPREAD_SQ {
+                    continue;
+                }
+            }
 
             let Some(state) = level.sculk_get(neighbour) else {
                 continue;
@@ -737,7 +757,7 @@ mod tests {
         level.set_id(pos.up(), Block::SCULK_SENSOR.default_state.id);
         let mut random = RandomGenerator::Legacy(LegacyRand::from_seed(1));
         assert_eq!(
-            ChargeCursor::valid_movement_position(&level, pos, &mut random),
+            ChargeCursor::valid_movement_position(&level, pos, &mut random, pos, false),
             None,
         );
     }
@@ -755,7 +775,7 @@ mod tests {
         level.set_id(pos.east(), Block::SCULK.default_state.id);
         let mut random = RandomGenerator::Legacy(LegacyRand::from_seed(1));
         assert_eq!(
-            ChargeCursor::valid_movement_position(&level, pos, &mut random),
+            ChargeCursor::valid_movement_position(&level, pos, &mut random, pos, false),
             Some(pos.up()),
         );
     }
@@ -769,7 +789,7 @@ mod tests {
         level.set_id(pos.east(), Block::SCULK.default_state.id);
         let mut random = RandomGenerator::Legacy(LegacyRand::from_seed(1));
         assert_eq!(
-            ChargeCursor::valid_movement_position(&level, pos, &mut random),
+            ChargeCursor::valid_movement_position(&level, pos, &mut random, pos, false),
             Some(pos.east()),
         );
     }
