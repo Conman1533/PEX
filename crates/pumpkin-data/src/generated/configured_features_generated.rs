@@ -1746,7 +1746,48 @@ fn build_configured_features()
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::DripstoneCluster,
         ConfiguredFeature::DripstoneCluster(
-            crate::generation::feature::features::drip_stone::cluster::DripstoneClusterFeature {},
+            crate::generation::feature::features::drip_stone::cluster::DripstoneClusterFeature {
+                blocks: crate::generation::feature::features::drip_stone::SpeleothemBlocks {
+                    base_block: &pumpkin_data::Block::DRIPSTONE_BLOCK,
+                    pointed_block: &pumpkin_data::Block::POINTED_DRIPSTONE,
+                    replaceable_blocks:
+                        pumpkin_data::tag::Block::MINECRAFT_DRIPSTONE_REPLACEABLE_BLOCKS,
+                },
+                floor_to_ceiling_search_range: 12i32,
+                height: IntProvider::Object(NormalIntProvider::Uniform(UniformIntProvider {
+                    min_inclusive: 3i32,
+                    max_inclusive: 6i32,
+                })),
+                radius: IntProvider::Object(NormalIntProvider::Uniform(UniformIntProvider {
+                    min_inclusive: 2i32,
+                    max_inclusive: 8i32,
+                })),
+                max_stalagmite_stalactite_height_diff: 1i32,
+                height_deviation: 3i32,
+                speleothem_block_layer_thickness: IntProvider::Object(NormalIntProvider::Uniform(
+                    UniformIntProvider {
+                        min_inclusive: 2i32,
+                        max_inclusive: 4i32,
+                    },
+                )),
+                density: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(
+                            0.3f32, 0.7f32,
+                        ),
+                    ),
+                ),
+                wetness: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::ClampedNormal(
+                        pumpkin_util::math::float_provider::ClampedNormalFloatProvider::new(
+                            0.1f32, 0.3f32, 0.1f32, 0.9f32,
+                        ),
+                    ),
+                ),
+                chance_of_speleothem_at_max_distance_from_center: 0.1f32,
+                max_distance_from_edge_affecting_chance_of_speleothem: 3i32,
+                max_distance_from_center_affecting_height_bias: 8i32,
+            },
         ),
     );
     map.insert(
@@ -2877,7 +2918,48 @@ fn build_configured_features()
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::LargeDripstone,
         ConfiguredFeature::LargeDripstone(
-            crate::generation::feature::features::drip_stone::large::LargeDripstoneFeature {},
+            crate::generation::feature::features::drip_stone::large::LargeDripstoneFeature {
+                replaceable_blocks:
+                    pumpkin_data::tag::Block::MINECRAFT_DRIPSTONE_REPLACEABLE_BLOCKS,
+                floor_to_ceiling_search_range: 30i32,
+                column_radius: IntProvider::Object(NormalIntProvider::Clamped(
+                    ClampedIntProvider {
+                        source: Box::new(IntProvider::Object(NormalIntProvider::Uniform(
+                            UniformIntProvider {
+                                min_inclusive: 3i32,
+                                max_inclusive: 19i32,
+                            },
+                        ))),
+                        min_inclusive: 3i32,
+                        max_inclusive: 16i32,
+                    },
+                )),
+                height_scale: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(0.4f32, 2f32),
+                    ),
+                ),
+                max_column_radius_to_cave_height_ratio: 0.33f32,
+                stalactite_bluntness: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(
+                            0.3f32, 0.9f32,
+                        ),
+                    ),
+                ),
+                stalagmite_bluntness: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(0.4f32, 1f32),
+                    ),
+                ),
+                wind_speed: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(0f32, 0.3f32),
+                    ),
+                ),
+                min_radius_for_wind: 4i32,
+                min_bluntness_for_wind: 0.6f32,
+            },
         ),
     );
     map.insert(
@@ -3713,101 +3795,7 @@ fn build_configured_features()
         ),
     );
     map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: Pine , ConfiguredFeature :: Tree (Box :: new (TreeFeature { trunk_provider : BlockStateProvider :: Simple (SimpleStateProvider { state : { let mut props = std :: collections :: HashMap :: new () ; props . insert ("axis" . to_string () , "y" . to_string ()) ; BlockStateCodec { name : & pumpkin_data :: Block :: SPRUCE_LOG , properties : Some (props) , } . get_state () } }) , trunk_placer : TrunkPlacer { base_height : 6u8 , height_rand_a : 4u8 , height_rand_b : 0u8 , r#type : TrunkType :: Straight (StraightTrunkPlacer) , } , foliage_provider : BlockStateProvider :: Simple (SimpleStateProvider { state : { let mut props = std :: collections :: HashMap :: new () ; props . insert ("distance" . to_string () , "7" . to_string ()) ; props . insert ("persistent" . to_string () , "false" . to_string ()) ; props . insert ("waterlogged" . to_string () , "false" . to_string ()) ; BlockStateCodec { name : & pumpkin_data :: Block :: SPRUCE_LEAVES , properties : Some (props) , } . get_state () } }) , foliage_placer : FoliagePlacer { radius : IntProvider :: Constant (1i32) , offset : IntProvider :: Constant (1i32) , r#type : FoliageType :: Pine (PineFoliagePlacer { height : IntProvider :: Object (NormalIntProvider :: Uniform (UniformIntProvider { min_inclusive : 3i32 , max_inclusive : 4i32 })) }) } , minimum_size : FeatureSize { min_clipped_height : None , r#type : FeatureSizeType :: TwoLayersFeatureSize (TwoLayersFeatureSize { limit : 2u8 , lower_size : 0u8 , upper_size : 2u8 , }) } , ignore_vines : true , below_trunk_provider : BlockStateProvider :: Rule (RuleBasedBlockStateProvider { fallback : None , rules : vec ! [BlockStateRule { if_true : BlockPredicate :: Not (NotBlockPredicate { predicate : Box :: new (BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_CANNOT_REPLACE_BELOW_TREE_TRUNK , })) , }) , then : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: DIRT . default_state }) }] , }) , decorators : vec ! [] , root_placer : None , }))) ;
-    map.insert(
-        pumpkin_data::configured_feature::ConfiguredFeature::PointedDripstone,
-        ConfiguredFeature::SimpleRandomSelector(SimpleRandomFeature {
-            features: vec![
-                PlacedFeature {
-                    feature: Feature::Inlined(Box::new(ConfiguredFeature::PointedDripstone(
-                        SmallDripstoneFeature {
-                            taller_dripstone: 0.2f32,
-                            directional_spread: 0.7f32,
-                            spread_radius2: 0.5f32,
-                            spread_radius3: 0.5f32,
-                        },
-                    ))),
-                    placement: vec![
-                        PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier {
-                            direction_of_search: BlockDirection::Down,
-                            target_condition: BlockPredicate::Solid(SolidBlockPredicate {
-                                offset: OffsetBlocksBlockPredicate { offset: None },
-                            }),
-                            allowed_search_condition: Some(BlockPredicate::AnyOf(
-                                AnyOfBlockPredicate {
-                                    predicates: vec![
-                                        BlockPredicate::MatchingBlockTag(
-                                            MatchingBlockTagPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                tag: pumpkin_data::tag::Block::MINECRAFT_AIR,
-                                            },
-                                        ),
-                                        BlockPredicate::MatchingBlocks(
-                                            MatchingBlocksBlockPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                blocks: MatchingBlocksWrapper::Single(
-                                                    "minecraft:water".to_string(),
-                                                ),
-                                            },
-                                        ),
-                                    ],
-                                },
-                            )),
-                            max_steps: 12i32,
-                        }),
-                        PlacementModifier::Offset(OffsetPlacementModifier {
-                            x: IntProvider::Constant(0i32),
-                            y: IntProvider::Constant(1i32),
-                            z: IntProvider::Constant(0i32),
-                        }),
-                    ],
-                },
-                PlacedFeature {
-                    feature: Feature::Inlined(Box::new(ConfiguredFeature::PointedDripstone(
-                        SmallDripstoneFeature {
-                            taller_dripstone: 0.2f32,
-                            directional_spread: 0.7f32,
-                            spread_radius2: 0.5f32,
-                            spread_radius3: 0.5f32,
-                        },
-                    ))),
-                    placement: vec![
-                        PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier {
-                            direction_of_search: BlockDirection::Up,
-                            target_condition: BlockPredicate::Solid(SolidBlockPredicate {
-                                offset: OffsetBlocksBlockPredicate { offset: None },
-                            }),
-                            allowed_search_condition: Some(BlockPredicate::AnyOf(
-                                AnyOfBlockPredicate {
-                                    predicates: vec![
-                                        BlockPredicate::MatchingBlockTag(
-                                            MatchingBlockTagPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                tag: pumpkin_data::tag::Block::MINECRAFT_AIR,
-                                            },
-                                        ),
-                                        BlockPredicate::MatchingBlocks(
-                                            MatchingBlocksBlockPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                blocks: MatchingBlocksWrapper::Single(
-                                                    "minecraft:water".to_string(),
-                                                ),
-                                            },
-                                        ),
-                                    ],
-                                },
-                            )),
-                            max_steps: 12i32,
-                        }),
-                        PlacementModifier::Offset(OffsetPlacementModifier {
-                            x: IntProvider::Constant(0i32),
-                            y: IntProvider::Constant(-1i32),
-                            z: IntProvider::Constant(0i32),
-                        }),
-                    ],
-                },
-            ],
-        }),
-    );
+    map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: PointedDripstone , ConfiguredFeature :: SimpleRandomSelector (SimpleRandomFeature { features : vec ! [PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: PointedDripstone (SmallDripstoneFeature { blocks : crate :: generation :: feature :: features :: drip_stone :: SpeleothemBlocks { base_block : & pumpkin_data :: Block :: DRIPSTONE_BLOCK , pointed_block : & pumpkin_data :: Block :: POINTED_DRIPSTONE , replaceable_blocks : pumpkin_data :: tag :: Block :: MINECRAFT_DRIPSTONE_REPLACEABLE_BLOCKS , } , taller_dripstone : 0.2f32 , directional_spread : 0.7f32 , spread_radius2 : 0.5f32 , spread_radius3 : 0.5f32 , }))) , placement : vec ! [PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : Some (BlockPredicate :: AnyOf (AnyOfBlockPredicate { predicates : vec ! [BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_AIR , }) , BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , })] , })) , max_steps : 12i32 }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (1i32) , z : IntProvider :: Constant (0i32) })] , } , PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: PointedDripstone (SmallDripstoneFeature { blocks : crate :: generation :: feature :: features :: drip_stone :: SpeleothemBlocks { base_block : & pumpkin_data :: Block :: DRIPSTONE_BLOCK , pointed_block : & pumpkin_data :: Block :: POINTED_DRIPSTONE , replaceable_blocks : pumpkin_data :: tag :: Block :: MINECRAFT_DRIPSTONE_REPLACEABLE_BLOCKS , } , taller_dripstone : 0.2f32 , directional_spread : 0.7f32 , spread_radius2 : 0.5f32 , spread_radius3 : 0.5f32 , }))) , placement : vec ! [PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Up , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : Some (BlockPredicate :: AnyOf (AnyOfBlockPredicate { predicates : vec ! [BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_AIR , }) , BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , })] , })) , max_steps : 12i32 }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 1i32) , z : IntProvider :: Constant (0i32) })] , }] , })) ;
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::Pumpkin,
         ConfiguredFeature::SimpleBlock(SimpleBlockFeature {
@@ -4513,105 +4501,46 @@ fn build_configured_features()
             ],
         }),
     );
-    map.insert(
-        pumpkin_data::configured_feature::ConfiguredFeature::SulfurSpike,
-        ConfiguredFeature::SimpleRandomSelector(SimpleRandomFeature {
-            features: vec![
-                PlacedFeature {
-                    feature: Feature::Inlined(Box::new(ConfiguredFeature::PointedDripstone(
-                        SmallDripstoneFeature {
-                            taller_dripstone: 0.2f32,
-                            directional_spread: 0.7f32,
-                            spread_radius2: 0.5f32,
-                            spread_radius3: 0.5f32,
-                        },
-                    ))),
-                    placement: vec![
-                        PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier {
-                            direction_of_search: BlockDirection::Down,
-                            target_condition: BlockPredicate::Solid(SolidBlockPredicate {
-                                offset: OffsetBlocksBlockPredicate { offset: None },
-                            }),
-                            allowed_search_condition: Some(BlockPredicate::AnyOf(
-                                AnyOfBlockPredicate {
-                                    predicates: vec![
-                                        BlockPredicate::MatchingBlockTag(
-                                            MatchingBlockTagPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                tag: pumpkin_data::tag::Block::MINECRAFT_AIR,
-                                            },
-                                        ),
-                                        BlockPredicate::MatchingBlocks(
-                                            MatchingBlocksBlockPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                blocks: MatchingBlocksWrapper::Single(
-                                                    "minecraft:water".to_string(),
-                                                ),
-                                            },
-                                        ),
-                                    ],
-                                },
-                            )),
-                            max_steps: 12i32,
-                        }),
-                        PlacementModifier::Offset(OffsetPlacementModifier {
-                            x: IntProvider::Constant(0i32),
-                            y: IntProvider::Constant(1i32),
-                            z: IntProvider::Constant(0i32),
-                        }),
-                    ],
-                },
-                PlacedFeature {
-                    feature: Feature::Inlined(Box::new(ConfiguredFeature::PointedDripstone(
-                        SmallDripstoneFeature {
-                            taller_dripstone: 0.2f32,
-                            directional_spread: 0.7f32,
-                            spread_radius2: 0.5f32,
-                            spread_radius3: 0.5f32,
-                        },
-                    ))),
-                    placement: vec![
-                        PlacementModifier::EnvironmentScan(EnvironmentScanPlacementModifier {
-                            direction_of_search: BlockDirection::Up,
-                            target_condition: BlockPredicate::Solid(SolidBlockPredicate {
-                                offset: OffsetBlocksBlockPredicate { offset: None },
-                            }),
-                            allowed_search_condition: Some(BlockPredicate::AnyOf(
-                                AnyOfBlockPredicate {
-                                    predicates: vec![
-                                        BlockPredicate::MatchingBlockTag(
-                                            MatchingBlockTagPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                tag: pumpkin_data::tag::Block::MINECRAFT_AIR,
-                                            },
-                                        ),
-                                        BlockPredicate::MatchingBlocks(
-                                            MatchingBlocksBlockPredicate {
-                                                offset: OffsetBlocksBlockPredicate { offset: None },
-                                                blocks: MatchingBlocksWrapper::Single(
-                                                    "minecraft:water".to_string(),
-                                                ),
-                                            },
-                                        ),
-                                    ],
-                                },
-                            )),
-                            max_steps: 12i32,
-                        }),
-                        PlacementModifier::Offset(OffsetPlacementModifier {
-                            x: IntProvider::Constant(0i32),
-                            y: IntProvider::Constant(-1i32),
-                            z: IntProvider::Constant(0i32),
-                        }),
-                    ],
-                },
-            ],
-        }),
-    );
+    map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: SulfurSpike , ConfiguredFeature :: SimpleRandomSelector (SimpleRandomFeature { features : vec ! [PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: PointedDripstone (SmallDripstoneFeature { blocks : crate :: generation :: feature :: features :: drip_stone :: SpeleothemBlocks { base_block : & pumpkin_data :: Block :: SULFUR , pointed_block : & pumpkin_data :: Block :: SULFUR_SPIKE , replaceable_blocks : pumpkin_data :: tag :: Block :: MINECRAFT_SULFUR_SPIKE_REPLACEABLE_BLOCKS , } , taller_dripstone : 0.2f32 , directional_spread : 0.7f32 , spread_radius2 : 0.5f32 , spread_radius3 : 0.5f32 , }))) , placement : vec ! [PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : Some (BlockPredicate :: AnyOf (AnyOfBlockPredicate { predicates : vec ! [BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_AIR , }) , BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , })] , })) , max_steps : 12i32 }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (1i32) , z : IntProvider :: Constant (0i32) })] , } , PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: PointedDripstone (SmallDripstoneFeature { blocks : crate :: generation :: feature :: features :: drip_stone :: SpeleothemBlocks { base_block : & pumpkin_data :: Block :: SULFUR , pointed_block : & pumpkin_data :: Block :: SULFUR_SPIKE , replaceable_blocks : pumpkin_data :: tag :: Block :: MINECRAFT_SULFUR_SPIKE_REPLACEABLE_BLOCKS , } , taller_dripstone : 0.2f32 , directional_spread : 0.7f32 , spread_radius2 : 0.5f32 , spread_radius3 : 0.5f32 , }))) , placement : vec ! [PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Up , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : Some (BlockPredicate :: AnyOf (AnyOfBlockPredicate { predicates : vec ! [BlockPredicate :: MatchingBlockTag (MatchingBlockTagPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , tag : pumpkin_data :: tag :: Block :: MINECRAFT_AIR , }) , BlockPredicate :: MatchingBlocks (MatchingBlocksBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } , blocks : MatchingBlocksWrapper :: Single ("minecraft:water" . to_string ()) , })] , })) , max_steps : 12i32 }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 1i32) , z : IntProvider :: Constant (0i32) })] , }] , })) ;
     map.insert(
         pumpkin_data::configured_feature::ConfiguredFeature::SulfurSpikeCluster,
         ConfiguredFeature::DripstoneCluster(
-            crate::generation::feature::features::drip_stone::cluster::DripstoneClusterFeature {},
+            crate::generation::feature::features::drip_stone::cluster::DripstoneClusterFeature {
+                blocks: crate::generation::feature::features::drip_stone::SpeleothemBlocks {
+                    base_block: &pumpkin_data::Block::SULFUR,
+                    pointed_block: &pumpkin_data::Block::SULFUR_SPIKE,
+                    replaceable_blocks:
+                        pumpkin_data::tag::Block::MINECRAFT_SULFUR_SPIKE_REPLACEABLE_BLOCKS,
+                },
+                floor_to_ceiling_search_range: 12i32,
+                height: IntProvider::Object(NormalIntProvider::Uniform(UniformIntProvider {
+                    min_inclusive: 1i32,
+                    max_inclusive: 4i32,
+                })),
+                radius: IntProvider::Object(NormalIntProvider::Uniform(UniformIntProvider {
+                    min_inclusive: 2i32,
+                    max_inclusive: 8i32,
+                })),
+                max_stalagmite_stalactite_height_diff: 1i32,
+                height_deviation: 3i32,
+                speleothem_block_layer_thickness: IntProvider::Object(NormalIntProvider::Uniform(
+                    UniformIntProvider {
+                        min_inclusive: 2i32,
+                        max_inclusive: 4i32,
+                    },
+                )),
+                density: pumpkin_util::math::float_provider::FloatProvider::Object(
+                    pumpkin_util::math::float_provider::NormalFloatProvider::Uniform(
+                        pumpkin_util::math::float_provider::UniformFloatProvider::new(
+                            0.3f32, 0.7f32,
+                        ),
+                    ),
+                ),
+                wetness: pumpkin_util::math::float_provider::FloatProvider::Constant(0f32),
+                chance_of_speleothem_at_max_distance_from_center: 0.1f32,
+                max_distance_from_edge_affecting_chance_of_speleothem: 3i32,
+                max_distance_from_center_affecting_height_bias: 8i32,
+            },
         ),
     );
     map . insert (pumpkin_data :: configured_feature :: ConfiguredFeature :: SulfurSpring , ConfiguredFeature :: WeightedRandomSelector (WeightedRandomFeature { features : vec ! [WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Sequence (SequenceFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: TUFF . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Count (CountPlacementModifier { count : IntProvider :: Constant (64i32) }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 7i32 , max_inclusive : 7i32 , plateau : 0i32 })) , y : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 3i32 , max_inclusive : 3i32 , plateau : 0i32 })) , z : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 7i32 , max_inclusive : 7i32 , plateau : 0i32 })) }) , PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : None , max_steps : 4i32 }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Template (TemplateFeature { templates : vec ! [Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_small_1" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_small_2" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_small_3" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_small_4" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , }] , processors : std :: sync :: Arc :: from ([]) , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 7i32) , z : IntProvider :: Constant (0i32) })] , })] , }))) , placement : vec ! [] , }) , weight : 200i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Sequence (SequenceFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: TUFF . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Count (CountPlacementModifier { count : IntProvider :: Constant (80i32) }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 8i32 , max_inclusive : 8i32 , plateau : 0i32 })) , y : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 3i32 , max_inclusive : 3i32 , plateau : 0i32 })) , z : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 8i32 , max_inclusive : 8i32 , plateau : 0i32 })) }) , PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : None , max_steps : 4i32 }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Template (TemplateFeature { templates : vec ! [Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_medium_1" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_medium_2" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_medium_3" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , }] , processors : std :: sync :: Arc :: from ([]) , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 7i32) , z : IntProvider :: Constant (0i32) })] , })] , }))) , placement : vec ! [] , }) , weight : 90i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Sequence (SequenceFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: TUFF . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Count (CountPlacementModifier { count : IntProvider :: Constant (96i32) }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 9i32 , max_inclusive : 9i32 , plateau : 0i32 })) , y : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 3i32 , max_inclusive : 3i32 , plateau : 0i32 })) , z : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 9i32 , max_inclusive : 9i32 , plateau : 0i32 })) }) , PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : None , max_steps : 4i32 }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Template (TemplateFeature { templates : vec ! [Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_large_1" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , } , Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_large_2" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , }] , processors : std :: sync :: Arc :: from ([]) , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 7i32) , z : IntProvider :: Constant (0i32) })] , })] , }))) , placement : vec ! [] , }) , weight : 20i32 } , WeightedRandomFeatureEntry { feature : PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Sequence (SequenceFeature { features : vec ! [PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: SimpleBlock (SimpleBlockFeature { to_place : BlockStateProvider :: Simple (SimpleStateProvider { state : pumpkin_data :: Block :: TUFF . default_state }) , schedule_tick : None , }))) , placement : vec ! [PlacementModifier :: Count (CountPlacementModifier { count : IntProvider :: Constant (128i32) }) , PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 10i32 , max_inclusive : 10i32 , plateau : 0i32 })) , y : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 3i32 , max_inclusive : 3i32 , plateau : 0i32 })) , z : IntProvider :: Object (NormalIntProvider :: Trapezoid (TrapezoidIntProvider { min_inclusive : - 10i32 , max_inclusive : 10i32 , plateau : 0i32 })) }) , PlacementModifier :: EnvironmentScan (EnvironmentScanPlacementModifier { direction_of_search : BlockDirection :: Down , target_condition : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) , allowed_search_condition : None , max_steps : 4i32 }) , PlacementModifier :: BlockPredicateFilter (BlockFilterPlacementModifier { predicate : BlockPredicate :: Solid (SolidBlockPredicate { offset : OffsetBlocksBlockPredicate { offset : None } }) })] , }) , PlacedFeatureWrapper :: Direct (PlacedFeature { feature : Feature :: Inlined (Box :: new (ConfiguredFeature :: Template (TemplateFeature { templates : vec ! [Weighted { data : TemplateEntry { template : "minecraft:spring/sulfur_spring_extra_large_1" , rotations : vec ! [pumpkin_data :: Rotation :: None , pumpkin_data :: Rotation :: Clockwise90 , pumpkin_data :: Rotation :: Rotate180 , pumpkin_data :: Rotation :: CounterClockwise90] } , weight : 1i32 , }] , processors : std :: sync :: Arc :: from ([]) , }))) , placement : vec ! [PlacementModifier :: Offset (OffsetPlacementModifier { x : IntProvider :: Constant (0i32) , y : IntProvider :: Constant (- 7i32) , z : IntProvider :: Constant (0i32) })] , })] , }))) , placement : vec ! [] , }) , weight : 5i32 }] , total_weight : 315i32 , })) ;
