@@ -450,6 +450,18 @@ pub static EQUIPMENT_REGISTRY: LazyLock<HashMap<&'static str, MobEquipmentDef>> 
             },
         );
 
+        // ─── Vex ───
+        m.insert(
+            "vex",
+            MobEquipmentDef {
+                entity_type: "vex",
+                weapon: WeaponConfig::Always(&Item::IRON_SWORD),
+                armor: ArmorConfig::None,
+                enchanted: true,
+                can_pick_up_loot: false,
+            },
+        );
+
         m
     });
 
@@ -847,6 +859,12 @@ pub fn equip_mob_on_spawn(mob: &dyn EntityBase, world: &Arc<crate::world::World>
 
     for (slot, stack, drop_chance) in changes_with_drops {
         equipment.put(&slot, stack.clone());
+        // Vanilla `Vex.populateDefaultEquipmentSlots`: the sword never drops.
+        let drop_chance = if entity_name == "vex" {
+            0.0
+        } else {
+            drop_chance
+        };
         drop_chances.insert(slot.clone(), drop_chance);
         equipment_changes.push((slot, stack));
     }
