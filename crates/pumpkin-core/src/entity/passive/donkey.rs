@@ -1,6 +1,8 @@
 use crate::entity::passive::animal::create_offspring;
 use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
-use crate::entity::passive::horse::{HorseEntity, can_parent, horse_or_donkey_tamed};
+use crate::entity::passive::horse::{
+    HorseEntity, can_parent, handle_horse_eating, horse_or_donkey_tamed,
+};
 use crate::world::World;
 use std::sync::{
     Arc, Weak,
@@ -273,6 +275,22 @@ impl Mob for DonkeyEntity {
                 ent.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
                 return true;
             }
+        }
+
+        if self.is_food(item_stack) {
+            let used = handle_horse_eating(
+                self,
+                &self.temper,
+                self.is_tame(),
+                false,
+                Sound::EntityDonkeyEat,
+                player,
+                item_stack.get_item(),
+            );
+            if used {
+                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            }
+            return used;
         }
 
         self.animal_interact(player, item_stack)

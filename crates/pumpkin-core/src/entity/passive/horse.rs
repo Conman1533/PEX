@@ -185,6 +185,93 @@ pub fn horse_or_donkey_tamed(mob: &dyn Mob) -> Option<bool> {
         })
 }
 
+/// Vanilla `AbstractHorse.handleEating`, or `Llama.handleEating` when `llama`.
+///
+/// The food heals, ages a foal and calms an untamed animal, and only a tamed adult falls in love.
+/// Plays the eating sound and returns whether the food was used.
+pub fn handle_horse_eating(
+    mob: &dyn Mob,
+    temper: &AtomicI32,
+    tamed: bool,
+    llama: bool,
+    eat_sound: Sound,
+    player: &Arc<Player>,
+    item: &'static Item,
+) -> bool {
+    let (heal, age_up, temper_gain, can_love): (f32, i32, i32, bool) = if llama {
+        if item == &Item::WHEAT {
+            (2.0, 10, 3, false)
+        } else if item == &Item::HAY_BLOCK {
+            (10.0, 90, 6, true)
+        } else {
+            (0.0, 0, 0, false)
+        }
+    } else if item == &Item::WHEAT {
+        (2.0, 20, 3, false)
+    } else if item == &Item::SUGAR {
+        (1.0, 30, 3, false)
+    } else if item == &Item::HAY_BLOCK {
+        (20.0, 180, 0, false)
+    } else if item == &Item::APPLE {
+        (3.0, 60, 3, false)
+    } else if item == &Item::RED_MUSHROOM {
+        (3.0, 0, 3, false)
+    } else if item == &Item::CARROT {
+        (3.0, 60, 3, false)
+    } else if item == &Item::GOLDEN_CARROT {
+        (4.0, 60, 5, true)
+    } else if item == &Item::GOLDEN_APPLE || item == &Item::ENCHANTED_GOLDEN_APPLE {
+        (10.0, 240, 10, true)
+    } else {
+        (0.0, 0, 0, false)
+    };
+
+    let living = &mob.get_mob_entity().living_entity;
+    let entity = &living.entity;
+    let mut used = false;
+    if can_love
+        && tamed
+        && entity.age.load(Ordering::Relaxed) == 0
+        && let Some(animal) = mob.as_animal()
+        && animal.can_fall_in_love()
+    {
+        used = true;
+        animal.set_in_love(Some(player));
+    }
+    if heal > 0.0 && living.health.load() < living.get_max_health() {
+        living.heal(heal);
+        used = true;
+    }
+    if age_up > 0
+        && let Some(ageable) = mob.as_ageable()
+        && ageable.can_age_up()
+    {
+        ageable.age_up(age_up, false);
+        used = true;
+    }
+    let max_temper = if llama { 30 } else { 100 };
+    let current = temper.load(Ordering::Relaxed);
+    if temper_gain > 0 && (used || !tamed) && current < max_temper {
+        temper.store(
+            (current + temper_gain).clamp(0, max_temper),
+            Ordering::Relaxed,
+        );
+        used = true;
+    }
+    if used && !entity.silent.load(Ordering::Relaxed) {
+        let mut rng = mob.get_random();
+        let pitch = 1.0 + (rng.random::<f32>() - rng.random::<f32>()) * 0.2;
+        entity.world.load().play_sound_fine(
+            eat_sound,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            1.0,
+            pitch,
+        );
+    }
+    used
+}
+
 impl Animal for HorseEntity {
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
@@ -327,6 +414,22 @@ impl Mob for HorseEntity {
                 ent.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
                 return true;
             }
+        }
+
+        if self.is_food(item_stack) {
+            let used = handle_horse_eating(
+                self,
+                &self.temper,
+                self.is_tame(),
+                false,
+                Sound::EntityHorseEat,
+                player,
+                item_stack.get_item(),
+            );
+            if used {
+                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            }
+            return used;
         }
 
         self.animal_interact(player, item_stack)
