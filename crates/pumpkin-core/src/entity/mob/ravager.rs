@@ -1,11 +1,13 @@
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
-use pumpkin_data::entity::EntityType;
-use pumpkin_data::sound::Sound;
+use pumpkin_data::entity::{EntityStatus, EntityType};
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 
 use crate::entity::{
-    Entity,
+    Entity, EntityBase,
     ai::goal::{
         active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, swim::SwimGoal,
@@ -24,6 +26,8 @@ use crate::entity::{
 pub struct RavagerEntity {
     pub mob_entity: MobEntity,
     pub raider_data: RaiderData,
+    /// Vanilla `attackTick`: the ravager stands still while its bite plays out.
+    attack_tick: AtomicI32,
 }
 
 impl RavagerEntity {
@@ -33,6 +37,7 @@ impl RavagerEntity {
         let ravager = Self {
             mob_entity,
             raider_data: RaiderData::default(),
+            attack_tick: AtomicI32::new(0),
         };
         let mob_arc = Arc::new(ravager);
         let mob_weak: Weak<dyn Mob> = {
@@ -83,6 +88,36 @@ impl Mob for RavagerEntity {
 
     fn is_allowed_in_peaceful(&self) -> bool {
         false
+    }
+
+    fn is_mob_immobile(&self) -> bool {
+        self.mob_entity.living_entity.is_dead_or_dying()
+            || self.attack_tick.load(Ordering::Relaxed) > 0
+    }
+
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let tick = self.attack_tick.load(Ordering::Relaxed);
+        if tick > 0 {
+            self.attack_tick.store(tick - 1, Ordering::Relaxed);
+        }
+    }
+
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {
+        self.attack_tick.store(10, Ordering::Relaxed);
+        let entity = &self.mob_entity.living_entity.entity;
+        let world = entity.world.load();
+        world.send_entity_status(
+            entity,
+            EntityStatus::StartAttacking,
+            ActorEventID::StartAttacking,
+        );
+        world.play_sound_fine(
+            Sound::EntityRavagerAttack,
+            SoundCategory::Hostile,
+            &entity.pos.load(),
+            1.0,
+            1.0,
+        );
     }
 
     fn as_patrolling_monster(&self) -> Option<&dyn PatrollingMonster> {

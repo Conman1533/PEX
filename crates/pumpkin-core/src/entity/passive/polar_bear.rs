@@ -1,10 +1,11 @@
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::sound::Sound;
 use pumpkin_data::tag;
 use pumpkin_nbt::compound::NbtCompound;
 
@@ -40,6 +41,7 @@ pub struct PolarBearEntity {
     pub ageable_data: AgeableData,
     pub neutral_data: NeutralData,
     pub standing: AtomicBool,
+    warning_sound_ticks: AtomicI32,
 }
 
 impl PolarBearEntity {
@@ -50,6 +52,7 @@ impl PolarBearEntity {
             ageable_data: AgeableData::default(),
             neutral_data: NeutralData::default(),
             standing: AtomicBool::new(false),
+            warning_sound_ticks: AtomicI32::new(0),
         };
         let mob_arc = Arc::new(polar_bear);
         let mob_weak: Weak<dyn Mob> = {
@@ -61,7 +64,10 @@ impl PolarBearEntity {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(MeleeAttackGoal::new(1.25, true)));
+            goal_selector.add_goal(
+                1,
+                Box::new(MeleeAttackGoal::new(1.25, true).warning_with(polar_bear_warning)),
+            );
             goal_selector.add_goal(
                 1,
                 EscapeDangerGoal::new(2.0).with_panic_causes(|mob| {
@@ -110,12 +116,37 @@ impl PolarBearEntity {
     }
 
     pub fn set_standing(&self, standing: bool) {
-        self.standing.store(standing, Ordering::Relaxed);
+        if self.standing.swap(standing, Ordering::Relaxed) == standing {
+            return;
+        }
         let entity = self.get_entity();
         entity.set_synced_data(
             pumpkin_data::tracked_data::polar_bear::DATA_STANDING_ID,
             standing,
         );
+    }
+}
+
+impl PolarBearEntity {
+    /// Vanilla `PolarBear.playWarningSound`: at most every 2 seconds.
+    pub fn play_warning_sound(&self) {
+        if self.warning_sound_ticks.load(Ordering::Relaxed) <= 0 {
+            self.mob_entity
+                .living_entity
+                .make_sound(Sound::EntityPolarBearWarning);
+            self.warning_sound_ticks.store(40, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Stand-up warning of vanilla `PolarBearMeleeAttackGoal`.
+fn polar_bear_warning(mob: &dyn Mob, standing: bool) {
+    let Some(bear) = mob.cast_any().downcast_ref::<PolarBearEntity>() else {
+        return;
+    };
+    bear.set_standing(standing);
+    if standing {
+        bear.play_warning_sound();
     }
 }
 
@@ -156,6 +187,13 @@ impl Mob for PolarBearEntity {
 
     fn as_neutral(&self) -> Option<&dyn NeutralMob> {
         Some(self)
+    }
+
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let ticks = self.warning_sound_ticks.load(Ordering::Relaxed);
+        if ticks > 0 {
+            self.warning_sound_ticks.store(ticks - 1, Ordering::Relaxed);
+        }
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {

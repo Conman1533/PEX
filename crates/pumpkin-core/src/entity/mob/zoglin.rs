@@ -2,9 +2,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
 use pumpkin_data::attributes::Attributes;
-use pumpkin_data::entity::EntityType;
+use pumpkin_data::entity::{EntityStatus, EntityType};
+use pumpkin_data::sound::Sound;
 use pumpkin_data::tracked_data;
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::math::boundingbox::EntityDimensions;
 
 use crate::entity::{
@@ -165,6 +167,22 @@ impl Mob for ZoglinEntity {
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         self.set_baby(nbt.get_bool("IsBaby").unwrap_or(false));
+    }
+
+    fn melee_attack_interval(&self) -> i32 {
+        if self.is_baby() { 15 } else { 40 }
+    }
+
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {
+        let entity = &self.mob_entity.living_entity.entity;
+        entity.world.load().send_entity_status(
+            entity,
+            EntityStatus::StartAttacking,
+            ActorEventID::StartAttacking,
+        );
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityZoglinAttack);
     }
 
     fn on_attack(&self, target: &dyn EntityBase) {

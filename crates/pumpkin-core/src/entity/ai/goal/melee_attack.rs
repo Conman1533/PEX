@@ -1,5 +1,6 @@
 use super::{Controls, Goal};
 
+use crate::entity::EntityBase;
 use crate::entity::ai::goal::revenge::MobFilter;
 use crate::entity::ai::pathfinder::NavigatorGoal;
 use crate::entity::mob::Mob;
@@ -8,6 +9,9 @@ use pumpkin_util::math::vector3::Vector3;
 use rand::RngExt;
 
 const MAX_ATTACK_TIME: i64 = 20;
+
+/// Called with `true` while the mob rears up before a bite and `false` when it drops back.
+pub type StandUpWarning = fn(&dyn Mob, bool);
 
 pub struct MeleeAttackGoal {
     goal_control: Controls,
@@ -23,6 +27,7 @@ pub struct MeleeAttackGoal {
     last_update_time: i64,
     last_target_position: Option<Vector3<f64>>,
     gate: Option<MobFilter>,
+    warning: Option<StandUpWarning>,
 }
 
 impl MeleeAttackGoal {
@@ -39,6 +44,23 @@ impl MeleeAttackGoal {
             last_update_time: 0,
             last_target_position: None,
             gate: None,
+            warning: None,
+        }
+    }
+
+    /// Vanilla `PolarBear.PolarBearMeleeAttackGoal`: rear up as a warning while the target is
+    /// close but out of reach, and bite without a swing.
+    #[must_use]
+    pub const fn warning_with(mut self, warning: StandUpWarning) -> Self {
+        self.warning = Some(warning);
+        self
+    }
+
+    fn attack(mob: &dyn Mob, target: &dyn EntityBase) {
+        mob.before_melee_attack(target);
+        let damaged = mob.get_mob_entity().try_attack(mob.get_entity(), target);
+        if damaged {
+            mob.on_attack(target);
         }
     }
 
@@ -139,6 +161,9 @@ impl Goal for MeleeAttackGoal {
         }
 
         mob.get_mob_entity().set_attacking(false);
+        if let Some(warning) = self.warning {
+            warning(mob, false);
+        }
 
         // Vanilla: this.mob.getNavigation().stop()
         mob.get_mob_entity().steered().navigator().stop();
@@ -191,11 +216,39 @@ impl Goal for MeleeAttackGoal {
 
         self.cooldown = (self.cooldown - 1).max(0);
 
-        if self.cooldown <= 0
+        let can_attack = self.cooldown <= 0
+            && mob.can_melee_attack()
             && mob.get_mob_entity().is_in_attack_range(target.as_ref())
-            && mob.has_line_of_sight(target.get_entity())
-        {
-            self.cooldown = self.get_max_cooldown();
+            && mob.has_line_of_sight(target.get_entity());
+        let max_cooldown = self.get_tick_count(mob.melee_attack_interval());
+
+        if let Some(warning) = self.warning {
+            if can_attack {
+                self.cooldown = max_cooldown;
+                Self::attack(mob, target.as_ref());
+                warning(mob, false);
+            } else {
+                let reach = f64::from(target.get_entity().width()) + 3.0;
+                let dist_sq = mob
+                    .get_entity()
+                    .pos
+                    .load()
+                    .squared_distance_to_vec(&current_target_pos);
+                if dist_sq < reach * reach {
+                    if self.cooldown <= 0 {
+                        warning(mob, false);
+                        self.cooldown = max_cooldown;
+                    }
+                    if self.cooldown <= 10 {
+                        warning(mob, true);
+                    }
+                } else {
+                    self.cooldown = max_cooldown;
+                    warning(mob, false);
+                }
+            }
+        } else if can_attack {
+            self.cooldown = max_cooldown;
 
             // Iron golem animation plays on every swing, even when blocked
             if let Some(golem) = mob.as_iron_golem() {
@@ -203,12 +256,7 @@ impl Goal for MeleeAttackGoal {
             }
 
             mob.get_mob_entity().living_entity.swing_hand();
-            let damaged = mob
-                .get_mob_entity()
-                .try_attack(mob.get_entity(), target.as_ref());
-            if damaged {
-                mob.on_attack(target.as_ref());
-            }
+            Self::attack(mob, target.as_ref());
         }
     }
 
