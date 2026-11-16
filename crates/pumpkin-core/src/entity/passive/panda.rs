@@ -1,14 +1,16 @@
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicI32, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU8, Ordering},
 };
 
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::codec::var_int::VarInt;
+use pumpkin_util::math::position::BlockPos;
 use rand::RngExt;
 
 use crate::entity::{
@@ -16,8 +18,9 @@ use crate::entity::{
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
         breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        tempt::TemptGoal, wander_around::WanderAroundGoal,
+        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
+        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal, tempt::TemptGoal,
+        wander_around::WanderAroundGoal,
     },
     mob::{Mob, MobEntity},
     passive::animal::Animal,
@@ -125,6 +128,10 @@ pub struct PandaEntity {
     pub eat_counter: AtomicI32,
     pub sneeze_counter: AtomicI32,
     pub unhappy_counter: AtomicI32,
+    /// Vanilla `PandaBreedGoal.unhappyCooldown`, as a game time.
+    unhappy_cooldown: AtomicI64,
+    /// Vanilla `didBite`: a panda that is not aggressive bites back once, then calms down.
+    did_bite: AtomicBool,
 }
 
 impl PandaEntity {
@@ -141,6 +148,8 @@ impl PandaEntity {
             eat_counter: AtomicI32::new(0),
             sneeze_counter: AtomicI32::new(0),
             unhappy_counter: AtomicI32::new(0),
+            unhappy_cooldown: AtomicI64::new(0),
+            did_bite: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(panda);
         let mob_weak: Weak<dyn Mob> = {
@@ -157,7 +166,11 @@ impl PandaEntity {
                 EscapeDangerGoal::new(2.0)
                     .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES),
             );
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
+            goal_selector.add_goal(
+                2,
+                BreedGoal::new(1.0).with_precondition(panda_can_breed_here),
+            );
+            goal_selector.add_goal(3, Box::new(MeleeAttackGoal::new(1.2, true)));
             goal_selector.add_goal(
                 4,
                 Box::new(TemptGoal::new(
@@ -174,6 +187,13 @@ impl PandaEntity {
             goal_selector.add_goal(13, Box::new(FollowParentGoal::new(1.25)));
             goal_selector.add_goal(14, Box::new(WanderAroundGoal::water_avoiding(1.0)));
         };
+
+        // Vanilla `PandaHurtByTargetGoal`. Its alerting only reaches aggressive pandas, which is
+        // not modelled, so no others are alerted.
+        mob_arc.mob_entity.target_selector.add_goal(
+            1,
+            Box::new(RevengeGoal::new(true).continuing_while(panda_keeps_grudge)),
+        );
 
         mob_arc
     }
@@ -263,6 +283,57 @@ impl PandaEntity {
     pub fn set_rolling(&self, val: bool) {
         self.set_flag(FLAG_ROLL, val);
     }
+
+    pub fn set_unhappy_counter(&self, value: i32) {
+        self.unhappy_counter.store(value, Ordering::Relaxed);
+        self.get_entity().set_synced_data(
+            pumpkin_data::tracked_data::panda::UNHAPPY_COUNTER,
+            VarInt(value),
+        );
+    }
+
+    /// Vanilla `PandaBreedGoal.canFindBamboo`: bamboo within 7 blocks across and 2 up.
+    fn can_find_bamboo(&self) -> bool {
+        let entity = self.get_entity();
+        let world = entity.world.load();
+        let origin = entity.block_pos.load();
+        (0..3).any(|dy| {
+            (-7..=7).any(|dx| {
+                (-7..=7).any(|dz| {
+                    let pos = BlockPos::new(origin.0.x + dx, origin.0.y + dy, origin.0.z + dz);
+                    pumpkin_data::Block::from_state_id(world.get_block_state(&pos).id).id
+                        == pumpkin_data::Block::BAMBOO.id
+                })
+            })
+        })
+    }
+}
+
+/// Vanilla `PandaBreedGoal.canUse`: no breeding while unhappy, and none without bamboo nearby,
+/// which makes the panda unhappy (at most every 600 ticks).
+fn panda_can_breed_here(mob: &dyn Mob) -> bool {
+    let Some(panda) = mob.cast_any().downcast_ref::<PandaEntity>() else {
+        return true;
+    };
+    if panda.unhappy_counter.load(Ordering::Relaxed) != 0 {
+        return false;
+    }
+    if panda.can_find_bamboo() {
+        return true;
+    }
+    let now = panda.get_entity().world.load().get_world_age();
+    if panda.unhappy_cooldown.load(Ordering::Relaxed) <= now {
+        panda.set_unhappy_counter(32);
+        panda.unhappy_cooldown.store(now + 600, Ordering::Relaxed);
+    }
+    false
+}
+
+/// Vanilla `PandaHurtByTargetGoal.canContinueToUse`: done after one bite.
+fn panda_keeps_grudge(mob: &dyn Mob) -> bool {
+    mob.cast_any()
+        .downcast_ref::<PandaEntity>()
+        .is_none_or(|panda| !panda.did_bite.load(Ordering::Relaxed))
 }
 
 impl AgeableMob for PandaEntity {
@@ -350,5 +421,46 @@ impl Mob for PandaEntity {
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         self.animal_interact(player, item_stack)
+    }
+
+    /// Vanilla `Panda.playAttackSound`.
+    fn on_attack(&self, _target: &dyn EntityBase) {
+        let entity = self.get_entity();
+        entity.world.load().play_sound_fine(
+            Sound::EntityPandaBite,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            1.0,
+            1.0,
+        );
+    }
+
+    /// Vanilla `Panda.doHurtTarget`.
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {
+        if self.get_variant() != PandaGene::Aggressive {
+            self.did_bite.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Vanilla `Panda.tick`: the grudge ends with the target, and an unhappy panda complains
+    /// twice with the cant-breed sound.
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        if self.mob_entity.get_target().is_none() {
+            self.did_bite.store(false, Ordering::Relaxed);
+        }
+        let counter = self.unhappy_counter.load(Ordering::Relaxed);
+        if counter > 0 {
+            if counter == 29 || counter == 14 {
+                let entity = self.get_entity();
+                entity.world.load().play_sound_fine(
+                    Sound::EntityPandaCantBreed,
+                    SoundCategory::Neutral,
+                    &entity.pos.load(),
+                    1.0,
+                    1.0,
+                );
+            }
+            self.set_unhappy_counter(counter - 1);
+        }
     }
 }

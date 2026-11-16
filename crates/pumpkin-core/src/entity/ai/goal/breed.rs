@@ -13,6 +13,7 @@ pub struct BreedGoal {
     speed: f64,
     partner: Option<Arc<dyn EntityBase>>,
     love_time: i32,
+    precondition: Option<fn(&dyn Mob) -> bool>,
 }
 
 impl BreedGoal {
@@ -22,7 +23,15 @@ impl BreedGoal {
             speed,
             partner: None,
             love_time: 0,
+            precondition: None,
         })
+    }
+
+    /// An extra check once a partner is found, like vanilla `PandaBreedGoal`'s bamboo search.
+    #[must_use]
+    pub fn with_precondition(mut self: Box<Self>, check: fn(&dyn Mob) -> bool) -> Box<Self> {
+        self.precondition = Some(check);
+        self
     }
 
     /// Vanilla `BreedGoal.getFreePartner`: the closest animal this one can mate with that is not
@@ -104,6 +113,9 @@ impl Goal for BreedGoal {
             return false;
         }
         self.partner = Self::get_free_partner(mob);
+        if self.partner.is_some() && self.precondition.is_some_and(|check| !check(mob)) {
+            self.partner = None;
+        }
         self.partner.is_some()
     }
 
