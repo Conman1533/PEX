@@ -220,6 +220,7 @@ impl Animal for WolfEntity {
             if self.is_tame() {
                 puppy.set_owner(self.get_owner());
                 TamableAnimal::set_tame(puppy, true);
+                puppy.apply_taming_side_effects();
                 puppy.set_collar_color(get_mixed_color(
                     self.get_collar_color(),
                     partner.get_collar_color(),
@@ -233,6 +234,17 @@ impl Animal for WolfEntity {
 impl TamableAnimal for WolfEntity {
     fn get_tamable_data(&self) -> &TamableData {
         &self.tamable_data
+    }
+
+    /// Vanilla `Wolf.applyTamingSideEffects`: a tamed wolf has 40 health.
+    fn apply_taming_side_effects(&self) {
+        let living = &self.mob_entity.living_entity;
+        if self.is_tame() {
+            living.set_attribute_base(&pumpkin_data::attributes::Attributes::MAX_HEALTH, 40.0);
+            living.set_health(40.0);
+        } else {
+            living.set_attribute_base(&pumpkin_data::attributes::Attributes::MAX_HEALTH, 8.0);
+        }
     }
 }
 
