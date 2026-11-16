@@ -26,6 +26,7 @@ use crate::entity::ai::goal::{Controls, Goal, ParentHandle, active_target::Activ
 use crate::entity::ai::pathfinder::node::PathType;
 use crate::entity::ai::pathfinder::{Navigator, NavigatorGoal};
 use crate::entity::ai::util::default_random_pos;
+use crate::entity::custom_sound::CustomSound;
 use crate::entity::living::LivingEntity;
 use crate::entity::mob::zombie::ZombieEntityBase;
 use crate::entity::projectile::arrow::ArrowPickup;
@@ -279,6 +280,10 @@ impl Mob for DrownedEntity {
         entity.velocity.store(entity.velocity.load() * 0.9);
     }
 
+    fn as_custom_sound(&self) -> Option<&dyn CustomSound> {
+        Some(self)
+    }
+
     fn mob_is_pushed_by_fluids(&self) -> bool {
         !self.get_entity().is_swimming()
     }
@@ -389,6 +394,30 @@ impl MoveControlTrait for DrownedMoveControl {
 
     fn has_wanted(&self) -> bool {
         MoveControlTrait::has_wanted(&self.inner)
+    }
+}
+
+impl CustomSound for DrownedEntity {
+    /// Vanilla `Drowned.getHurtSound`.
+    fn hurt_sound(&self) -> Option<Sound> {
+        Some(if self.get_entity().is_in_water() {
+            Sound::EntityDrownedHurtWater
+        } else {
+            Sound::EntityDrownedHurt
+        })
+    }
+
+    /// Vanilla `Drowned.getDeathSound`.
+    fn death_sound(&self) -> Option<Sound> {
+        Some(if self.get_entity().is_in_water() {
+            Sound::EntityDrownedDeathWater
+        } else {
+            Sound::EntityDrownedDeath
+        })
+    }
+
+    fn sound_category(&self) -> SoundCategory {
+        SoundCategory::Hostile
     }
 }
 

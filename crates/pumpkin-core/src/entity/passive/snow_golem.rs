@@ -173,8 +173,11 @@ impl Mob for SnowGolemEntity {
             self.set_has_pumpkin(false);
             let pos = entity.pos.load();
             world.play_sound(Sound::EntitySnowGolemShear, SoundCategory::Players, &pos);
+            // Vanilla `spawnAtLocation(..., getEyeHeight())`.
+            let drop_pos =
+                pumpkin_util::math::vector3::Vector3::new(pos.x, entity.get_eye_y(), pos.z);
             let item_entity = Arc::new(ItemEntity::new(
-                Entity::new(world.clone(), pos, &EntityType::ITEM),
+                Entity::new(world.clone(), drop_pos, &EntityType::ITEM),
                 ItemStack::new(1, &Item::CARVED_PUMPKIN),
             ));
             world.spawn_entity(item_entity);
