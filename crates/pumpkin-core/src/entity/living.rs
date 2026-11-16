@@ -2793,10 +2793,19 @@ impl LivingEntity {
             .map(|(damage_type, _)| damage_type)
     }
 
+    /// Vanilla `getLastHurtByMob`: the entity id behind the last hit, kept for 100 ticks.
+    #[must_use]
+    pub fn get_last_hurt_by_id(&self) -> Option<i32> {
+        let stamp = self.last_damage_stamp.load(Relaxed);
+        let attacker = self.last_damage_attacker.load(Relaxed);
+        (attacker != 0 && self.entity.world.load().get_world_age() - stamp <= 100)
+            .then_some(attacker)
+    }
+
     /// Vanilla `getLastDamageSource`: the last damage type and the entity id of its causing
     /// entity (0 when none), forgotten after 40 ticks.
     pub fn get_last_damage_source(&self) -> Option<(DamageType, i32)> {
-        let stamp = self.last_damage_stamp.load(Ordering::Relaxed);
+        let stamp = self.last_damage_stamp.load(Relaxed);
         let mut last = self
             .last_damage_type
             .lock()
