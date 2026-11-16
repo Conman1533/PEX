@@ -1,5 +1,5 @@
 use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
-use crate::entity::passive::horse::can_parent;
+use crate::entity::passive::horse::{can_parent, handle_horse_eating};
 use crate::entity::passive::trader_llama::TraderLlamaEntity;
 use std::sync::{
     Arc, Weak,
@@ -86,6 +86,8 @@ pub struct LlamaEntity {
     pub has_chest: AtomicBool,
     pub temper: AtomicI32,
     pub owner: AtomicCell<Option<Uuid>>,
+    /// Vanilla `didSpit`: ends the revenge target after one spit.
+    pub did_spit: AtomicBool,
 }
 
 impl LlamaEntity {
@@ -105,6 +107,7 @@ impl LlamaEntity {
             has_chest: AtomicBool::new(false),
             temper: AtomicI32::new(0),
             owner: AtomicCell::new(None),
+            did_spit: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(llama);
         let mob_weak: Weak<dyn Mob> = {
@@ -147,7 +150,10 @@ impl LlamaEntity {
             );
             goal_selector.add_goal(9, Box::new(RandomLookAroundGoal::default()));
 
-            target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
+            target_selector.add_goal(
+                1,
+                Box::new(RevengeGoal::new(true).continuing_while(llama_keeps_grudge)),
+            );
             target_selector.add_goal(
                 2,
                 ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::WOLF, true),
@@ -247,6 +253,7 @@ impl LlamaEntity {
 
         let spit_arc: Arc<dyn EntityBase> = Arc::new(spit);
         world.spawn_entity(spit_arc);
+        self.did_spit.store(true, Ordering::Relaxed);
     }
 }
 
@@ -254,6 +261,22 @@ impl AgeableMob for LlamaEntity {
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }
+}
+
+/// Vanilla `LlamaHurtByTargetGoal.canContinueToUse`: a llama gives up on its attacker once it
+/// has spat at it.
+#[must_use]
+pub fn llama_keeps_grudge(mob: &dyn Mob) -> bool {
+    let did_spit = mob
+        .cast_any()
+        .downcast_ref::<LlamaEntity>()
+        .map(|llama| &llama.did_spit)
+        .or_else(|| {
+            mob.cast_any()
+                .downcast_ref::<TraderLlamaEntity>()
+                .map(|llama| &llama.did_spit)
+        });
+    !did_spit.is_some_and(|flag| flag.swap(false, Ordering::Relaxed))
 }
 
 /// Whether `mob` is a tamed llama or trader llama, `None` when it is neither.
@@ -403,6 +426,22 @@ impl Mob for LlamaEntity {
                 ent.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
                 return true;
             }
+        }
+
+        if self.is_food(item_stack) {
+            let used = handle_horse_eating(
+                self,
+                &self.temper,
+                self.is_tame(),
+                true,
+                Sound::EntityLlamaEat,
+                player,
+                item_stack.get_item(),
+            );
+            if used {
+                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            }
+            return used;
         }
 
         self.animal_interact(player, item_stack)
