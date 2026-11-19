@@ -27,28 +27,27 @@ pub mod vein;
 ///
 /// Every offset in the 3×3×3 cube that shares at least one zero-axis
 /// (i.e. is NOT a corner) and is not the centre itself.
+/// The 18 neighbours that share a face or an edge, in vanilla's
+/// `BlockPos.betweenClosed` order (x fastest, then y, then z). Cursors
+/// shuffle this list, so the order decides where they move.
 pub const NON_CORNER_NEIGHBOURS: [Vector3<i32>; 18] = [
-    // Face-adjacent — 6
+    Vector3::new(0, -1, -1),
+    Vector3::new(-1, 0, -1),
+    Vector3::new(0, 0, -1),
+    Vector3::new(1, 0, -1),
+    Vector3::new(0, 1, -1),
+    Vector3::new(-1, -1, 0),
+    Vector3::new(0, -1, 0),
+    Vector3::new(1, -1, 0),
     Vector3::new(-1, 0, 0),
     Vector3::new(1, 0, 0),
-    Vector3::new(0, -1, 0),
-    Vector3::new(0, 1, 0),
-    Vector3::new(0, 0, -1),
-    Vector3::new(0, 0, 1),
-    // Edge-adjacent (same Y plane) — 4
-    Vector3::new(-1, 0, -1),
-    Vector3::new(-1, 0, 1),
-    Vector3::new(1, 0, -1),
-    Vector3::new(1, 0, 1),
-    // Edge-adjacent (vertical X) — 4
-    Vector3::new(-1, -1, 0),
     Vector3::new(-1, 1, 0),
-    Vector3::new(1, -1, 0),
+    Vector3::new(0, 1, 0),
     Vector3::new(1, 1, 0),
-    // Edge-adjacent (vertical Z) — 4
-    Vector3::new(0, -1, -1),
     Vector3::new(0, -1, 1),
-    Vector3::new(0, 1, -1),
+    Vector3::new(-1, 0, 1),
+    Vector3::new(0, 0, 1),
+    Vector3::new(1, 0, 1),
     Vector3::new(0, 1, 1),
 ];
 

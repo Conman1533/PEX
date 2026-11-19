@@ -101,7 +101,7 @@ impl VeinRules {
                 if let Some(vs) = level.sculk_get(vein_pos)
                     && vs.to_block_id() == BlockId::SCULK_VEIN
                 {
-                    Self::on_discharged(level, vein_pos);
+                    Self::on_discharged(level, vein_pos, vs);
                 }
             }
             return true;
@@ -186,10 +186,10 @@ impl VeinRules {
     }
 
     /// Removes vein faces left unsupported when charge runs out.
-    pub fn on_discharged(level: &mut dyn SculkLevel, pos: BlockPos) {
-        let Some(state) = level.sculk_get(pos) else {
-            return;
-        };
+    ///
+    /// `state` is the vein state the caller read, which vanilla uses even
+    /// when the block at `pos` has changed since.
+    pub fn on_discharged(level: &mut dyn SculkLevel, pos: BlockPos, state: BlockStateId) {
         if state.to_block_id() != BlockId::SCULK_VEIN {
             return;
         }
@@ -299,8 +299,9 @@ impl VeinRules {
         any
     }
 
-    /// Checks whether a vein may spread into the target position.
-    fn can_spread_into(
+    /// Checks whether a vein may spread into the target position (vanilla
+    /// `SculkVeinSpreaderConfig.stateCanBeReplaced`).
+    pub fn can_spread_into(
         level: &dyn SculkLevel,
         source_pos: BlockPos,
         placement_pos: BlockPos,
@@ -534,7 +535,7 @@ mod tests {
         let pos = BlockPos::new(0, 60, 0);
         let waterlogged = VeinRules::with_waterlogged(Block::SCULK_VEIN.default_state.id, true);
         view.sculk_set(pos, BlockState::from_id(waterlogged));
-        VeinRules::on_discharged(&mut view, pos);
+        VeinRules::on_discharged(&mut view, pos, waterlogged);
         assert!(
             view.sculk_get(pos)
                 .is_some_and(|s| s.to_block_id() == BlockId::WATER)
