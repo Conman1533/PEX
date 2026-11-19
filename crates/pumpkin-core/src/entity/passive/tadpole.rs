@@ -137,9 +137,17 @@ impl Mob for TadpoleEntity {
                     return false;
                 }
             }
-            item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            if !entity.is_alive() {
+                return false;
+            }
             let pos = entity.pos.load();
             world.play_sound(Sound::ItemBucketFillTadpole, SoundCategory::Neutral, &pos);
+            crate::item::items::bucket::fill_mob_bucket_stack(
+                item_stack,
+                player,
+                &Item::TADPOLE_BUCKET,
+                self,
+            );
             entity.remove();
             return true;
         }

@@ -1,3 +1,4 @@
+use crate::entity::ai::goal::run_around_like_crazy::{RideTamable, RunAroundLikeCrazyGoal};
 use crate::entity::passive::animal::create_offspring;
 use crate::entity::passive::donkey::DonkeyEntity;
 use crate::world::World;
@@ -50,6 +51,8 @@ pub struct HorseEntity {
     pub flags: AtomicU8,
     pub temper: AtomicI32,
     pub owner: AtomicCell<Option<Uuid>>,
+    /// Vanilla `standCounter`: ticks spent rearing.
+    pub stand_counter: AtomicI32,
 }
 
 impl HorseEntity {
@@ -67,6 +70,7 @@ impl HorseEntity {
             flags: AtomicU8::new(0),
             temper: AtomicI32::new(0),
             owner: AtomicCell::new(None),
+            stand_counter: AtomicI32::new(0),
         };
         let mob_arc = Arc::new(horse);
         let mob_weak: Weak<dyn Mob> = {
@@ -79,6 +83,11 @@ impl HorseEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, EscapeDangerGoal::new(1.2));
+            let ride_weak: Weak<dyn RideTamable> = {
+                let ride_arc: Arc<dyn RideTamable> = mob_arc.clone();
+                Arc::downgrade(&ride_arc)
+            };
+            goal_selector.add_goal(1, Box::new(RunAroundLikeCrazyGoal::new(ride_weak, 1.2)));
             goal_selector.add_goal(2, BreedGoal::new(1.0));
             goal_selector.add_goal(
                 3,
@@ -234,7 +243,45 @@ impl Animal for HorseEntity {
     }
 }
 
+impl RideTamable for HorseEntity {
+    fn is_ride_tamed(&self) -> bool {
+        self.is_tame()
+    }
+
+    fn temper(&self) -> &AtomicI32 {
+        &self.temper
+    }
+
+    fn tame_with_name(&self, player: &Player) {
+        self.owner.store(Some(player.gameprofile.id));
+        self.set_tame(true);
+    }
+
+    /// Vanilla `makeMad`: rear up (`standIfPossible`) with the angry sound.
+    fn make_mad(&self) {
+        if !self.has_flag(FLAG_STANDING) {
+            self.stand_counter.store(1, Ordering::Relaxed);
+            self.set_flag(FLAG_STANDING, true);
+            self.get_entity()
+                .play_sound(pumpkin_data::sound::Sound::EntityHorseAngry);
+        }
+    }
+}
+
 impl Mob for HorseEntity {
+    /// Vanilla `AbstractHorse.aiStep`: rearing ends after 20 ticks.
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let stand = self.stand_counter.load(Ordering::Relaxed);
+        if stand > 0 {
+            if stand + 1 > 20 {
+                self.stand_counter.store(0, Ordering::Relaxed);
+                self.set_flag(FLAG_STANDING, false);
+            } else {
+                self.stand_counter.store(stand + 1, Ordering::Relaxed);
+            }
+        }
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.is_baby() {
             pumpkin_data::sound::Sound::EntityBabyHorseAmbient

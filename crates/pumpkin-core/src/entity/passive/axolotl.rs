@@ -318,11 +318,36 @@ impl Mob for AxolotlEntity {
                     return false;
                 }
             }
-            item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            if !entity.is_alive() {
+                return false;
+            }
             let pos = entity.pos.load();
             world.play_sound(Sound::ItemBucketFillAxolotl, SoundCategory::Neutral, &pos);
+            crate::item::items::bucket::fill_mob_bucket_stack(
+                item_stack,
+                player,
+                &Item::AXOLOTL_BUCKET,
+                self,
+            );
             entity.remove();
             return true;
+        }
+
+        // Vanilla `Axolotl.usePlayerItem`: feeding a bucket of tropical fish leaves the water.
+        if item == &Item::TROPICAL_FISH_BUCKET {
+            let mut fed = item_stack.clone();
+            let consumed = self.animal_interact(player, &mut fed);
+            if consumed && fed.item_count < item_stack.item_count {
+                crate::item::items::bucket::give_filled_bucket_stack(
+                    item_stack,
+                    player,
+                    ItemStack::new(1, &Item::WATER_BUCKET),
+                    true,
+                );
+            } else {
+                *item_stack = fed;
+            }
+            return consumed;
         }
 
         self.animal_interact(player, item_stack)

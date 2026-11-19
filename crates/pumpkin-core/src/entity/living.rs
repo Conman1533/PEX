@@ -105,6 +105,10 @@ pub struct LivingEntity {
     pub equipment_slots: Arc<FxHashMap<usize, EquipmentSlot>>,
 
     pub jumping: AtomicBool,
+    /// Vanilla `discardFriction`: `travelInAir` keeps the velocity as it is (breeze jumps).
+    pub discard_friction: AtomicBool,
+    /// Vanilla `getStingerCount`: bee stingers stuck in the entity, synced for rendering.
+    pub stinger_count: AtomicI32,
 
     pub jumping_cooldown: AtomicU8,
 
@@ -314,6 +318,8 @@ impl LivingEntity {
             equipment_drop_chances: Arc::new(std::sync::Mutex::new(FxHashMap::default())),
             equipment_slots: Arc::new(build_equipment_slots()),
             jumping: AtomicBool::new(false),
+            discard_friction: AtomicBool::new(false),
+            stinger_count: AtomicI32::new(0),
             jumping_cooldown: AtomicU8::new(0),
             climbing: AtomicBool::new(false),
             climbing_pos: AtomicCell::new(None),
@@ -1722,7 +1728,10 @@ impl LivingEntity {
             // if below world's bottom y then -0.1, else 0.0
         }
 
-        // If entity has no drag: store velo and return
+        if self.discard_friction.load(Relaxed) {
+            self.entity.velocity.store(velo);
+            return;
+        }
 
         velo.x *= friction;
 

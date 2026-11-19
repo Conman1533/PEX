@@ -402,6 +402,18 @@ pub static EQUIPMENT_REGISTRY: LazyLock<HashMap<&'static str, MobEquipmentDef>> 
             },
         );
 
+        // ─── Parched ───
+        m.insert(
+            "parched",
+            MobEquipmentDef {
+                entity_type: "parched",
+                weapon: WeaponConfig::Always(&Item::BOW),
+                armor: ArmorConfig::Vanilla,
+                enchanted: true,
+                can_pick_up_loot: true,
+            },
+        );
+
         // ─── Wither Skeleton ───
         m.insert(
             "wither_skeleton",
@@ -432,6 +444,19 @@ pub static EQUIPMENT_REGISTRY: LazyLock<HashMap<&'static str, MobEquipmentDef>> 
             MobEquipmentDef {
                 entity_type: "pillager",
                 weapon: WeaponConfig::Always(&Item::CROSSBOW),
+                armor: ArmorConfig::None,
+                enchanted: false,
+                can_pick_up_loot: false,
+            },
+        );
+
+        // ─── Illusioner ───
+        // Vanilla `Illusioner.finalizeSpawn` only puts a bow in the main hand.
+        m.insert(
+            "illusioner",
+            MobEquipmentDef {
+                entity_type: "illusioner",
+                weapon: WeaponConfig::Always(&Item::BOW),
                 armor: ArmorConfig::None,
                 enchanted: false,
                 can_pick_up_loot: false,

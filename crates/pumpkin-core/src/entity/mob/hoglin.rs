@@ -3,7 +3,9 @@ use std::sync::{Arc, Weak};
 
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::entity::EntityType;
+use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::vector3::Vector3;
 
@@ -11,12 +13,14 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
+        active_target::ActiveTargetGoal, breed::BreedGoal, look_around::RandomLookAroundGoal,
         look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
         swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     living::LivingEntity,
     mob::{Mob, MobEntity},
+    passive::animal::Animal,
+    player::Player,
 };
 use crate::world::World;
 
@@ -80,6 +84,8 @@ impl HoglinEntity {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
+            // Vanilla's hoglin brain runs AnimalMakeLove in its idle activity.
+            goal_selector.add_goal(2, BreedGoal::new(1.0));
             goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.0, true)));
             goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(
@@ -169,6 +175,13 @@ impl AgeableMob for HoglinEntity {
     }
 }
 
+impl Animal for HoglinEntity {
+    /// Vanilla `Hoglin.isFood`: the `hoglin_food` tag (crimson fungus).
+    fn is_food(&self, item_stack: &ItemStack) -> bool {
+        item_stack.item.has_tag(&tag::Item::MINECRAFT_HOGLIN_FOOD)
+    }
+}
+
 impl Mob for HoglinEntity {
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
@@ -176,6 +189,21 @@ impl Mob for HoglinEntity {
 
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
+    }
+
+    fn as_animal(&self) -> Option<&dyn Animal> {
+        Some(self)
+    }
+
+    /// Vanilla `Hoglin.mobInteract`: `Animal.mobInteract`, and a hoglin that took the item stays.
+    fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
+        let consumed = self.animal_interact(player, item_stack);
+        if consumed {
+            self.mob_entity
+                .persistence_required
+                .store(true, Ordering::Relaxed);
+        }
+        consumed
     }
 
     fn is_allowed_in_peaceful(&self) -> bool {

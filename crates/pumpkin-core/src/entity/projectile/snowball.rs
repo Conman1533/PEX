@@ -27,6 +27,7 @@ impl SnowballEntity {
             owner_id: None,
             collides_with_projectiles: false,
             has_hit: AtomicBool::new(false),
+            left_owner: AtomicBool::new(false),
             gravity: GRAVITY,
         };
 

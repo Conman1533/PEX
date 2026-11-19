@@ -24,6 +24,7 @@ impl SmallFireballEntity {
             owner_id: None,
             collides_with_projectiles: false,
             has_hit: AtomicBool::new(false),
+            left_owner: AtomicBool::new(false),
             gravity: GRAVITY,
         };
 
@@ -32,7 +33,7 @@ impl SmallFireballEntity {
 
     #[must_use]
     pub fn new_shot(entity: Entity, shooter: &Entity, direction: Vector3<f64>) -> Self {
-        let thrown = ThrownItemEntity::new(entity, shooter, GRAVITY);
+        let thrown = ThrownItemEntity::with_owner(entity, shooter, GRAVITY);
         let accel = INITIAL_ACCELERATION_POWER;
         thrown
             .entity

@@ -39,6 +39,7 @@ impl FireballEntity {
             owner_id: None,
             collides_with_projectiles: false,
             has_hit: AtomicBool::new(false),
+            left_owner: AtomicBool::new(false),
             gravity: 0.0,
         };
 
@@ -52,7 +53,7 @@ impl FireballEntity {
 
     #[must_use]
     pub fn new_shot(entity: Entity, shooter: &Entity, direction: Vector3<f64>) -> Self {
-        let thrown = ThrownItemEntity::new(entity, shooter, 0.0);
+        let thrown = ThrownItemEntity::with_owner(entity, shooter, 0.0);
         let accel = INITIAL_ACCELERATION_POWER;
         let vel = direction.normalize().multiply(accel, accel, accel);
         thrown.entity.velocity.store(vel);
@@ -76,6 +77,7 @@ impl FireballEntity {
             owner_id: None,
             collides_with_projectiles: false,
             has_hit: AtomicBool::new(false),
+            left_owner: AtomicBool::new(false),
             gravity: 0.0,
         };
         let vel = direction.normalize().multiply(

@@ -125,7 +125,8 @@ pub(crate) fn get_empty_success_item(item: ItemStack, player: &Player) -> ItemSt
     }
 }
 
-fn give_filled_bucket_stack(
+/// Vanilla `ItemUtils.createFilledResult`.
+pub(crate) fn give_filled_bucket_stack(
     stack: &mut ItemStack,
     player: &Player,
     mut filled: ItemStack,
@@ -165,7 +166,9 @@ pub(crate) fn fill_bucket_stack(stack: &mut ItemStack, player: &Player, item: &'
     give_filled_bucket_stack(stack, player, ItemStack::new(1, item), true);
 }
 
-fn fill_mob_bucket_stack(
+/// Vanilla `Bucketable.bucketMobPickup`'s bucket: the mob's data saved into a filled bucket,
+/// handed to the player.
+pub(crate) fn fill_mob_bucket_stack(
     stack: &mut ItemStack,
     player: &Player,
     item: &'static Item,
