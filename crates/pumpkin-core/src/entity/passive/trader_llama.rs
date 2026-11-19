@@ -259,6 +259,14 @@ impl AgeableMob for TraderLlamaEntity {
 }
 
 impl Animal for TraderLlamaEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            pumpkin_data::sound::Sound::EntityLlamaEat,
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_LLAMA_FOOD)
     }
@@ -272,6 +280,14 @@ impl Animal for TraderLlamaEntity {
 }
 
 impl Mob for TraderLlamaEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityLlamaStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntityLlamaAmbient)
     }

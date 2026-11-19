@@ -247,6 +247,17 @@ impl MooshroomEntity {
 }
 
 impl Mob for MooshroomEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.4
+    }
+
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(
+            pumpkin_data::cow_sound_variant::CowSoundVariant::Classic.step_sound(self.is_baby()),
+            0.15,
+        )
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(
             pumpkin_data::cow_sound_variant::CowSoundVariant::Classic.ambient_sound(self.is_baby()),

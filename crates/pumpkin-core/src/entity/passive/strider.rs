@@ -103,6 +103,14 @@ impl AgeableMob for StriderEntity {
 }
 
 impl Animal for StriderEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            pumpkin_data::sound::Sound::EntityStriderEat,
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_STRIDER_FOOD)
             || item_stack.item == &Item::WARPED_FUNGUS
@@ -110,9 +118,32 @@ impl Animal for StriderEntity {
 }
 
 impl Mob for StriderEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(
+            if self
+                .mob_entity
+                .living_entity
+                .entity
+                .touching_lava
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
+                pumpkin_data::sound::Sound::EntityStriderStepLava
+            } else {
+                pumpkin_data::sound::Sound::EntityStriderStep
+            },
+            1.0,
+        )
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
-        // Vanilla also keeps quiet while tempted, which the goal does not expose here.
-        (!self.is_panicking()).then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)
+        (!self.is_panicking() && !self.is_tempted())
+            .then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)
+    }
+
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        if self.is_tempted() && rand::random_range(0..140) == 0 {
+            self.make_sound(pumpkin_data::sound::Sound::EntityStriderHappy);
+        }
     }
 
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
@@ -194,6 +225,15 @@ impl Mob for StriderEntity {
         }
 
         self.animal_interact(player, item_stack)
+    }
+}
+
+impl StriderEntity {
+    /// Vanilla `isBeingTempted`: following a player who holds warped fungus.
+    fn is_tempted(&self) -> bool {
+        self.mob_entity
+            .goals_selector
+            .is_running::<crate::entity::ai::goal::tempt::TemptGoal>()
     }
 }
 

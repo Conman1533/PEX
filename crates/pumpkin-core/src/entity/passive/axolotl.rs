@@ -230,7 +230,19 @@ impl Animal for AxolotlEntity {
 }
 
 impl Mob for AxolotlEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityAxolotlSplash
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityAxolotlSwim
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Axolotl.playAmbientSound`: silent while playing dead.
+        if self.playing_dead.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
         Some(if self.get_entity().is_in_water() {
             pumpkin_data::sound::Sound::EntityAxolotlIdleWater
         } else {

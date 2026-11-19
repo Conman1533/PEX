@@ -193,6 +193,10 @@ impl CustomSound for CopperGolemEntity {
 }
 
 impl Mob for CopperGolemEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(self.step_sound(), 1.0)
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

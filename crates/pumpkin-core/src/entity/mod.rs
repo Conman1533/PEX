@@ -14,6 +14,7 @@ use living::LivingEntity;
 use player::Player;
 use pumpkin_data::BlockState;
 use pumpkin_data::biome::Biome;
+use pumpkin_data::block_sound::BlockSoundType;
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::dimension::Dimension;
 use pumpkin_data::entity::EntityStatus;
@@ -182,6 +183,37 @@ pub const fn entity_type_to_bedrock_identifier(entity_type: &EntityType) -> &'st
     } else {
         entity_type.resource_name
     }
+}
+
+/// Vanilla `Entity.MovementEmission`: what walking emits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MovementEmission {
+    None,
+    Events,
+    All,
+}
+
+impl MovementEmission {
+    #[must_use]
+    pub const fn emits_sounds(self) -> bool {
+        matches!(self, Self::All)
+    }
+
+    #[must_use]
+    pub const fn emits_events(self) -> bool {
+        matches!(self, Self::Events | Self::All)
+    }
+}
+
+/// Vanilla `Entity.playStepSound`: the block's step sound at 0.15 of its volume.
+#[must_use]
+pub fn block_step_sound(block: &Block, state: &BlockState) -> (Sound, f32, f32) {
+    let sound_type = BlockSoundType::of(block.id, state.id);
+    (
+        sound_type.step_sound,
+        sound_type.volume * 0.15,
+        sound_type.pitch,
+    )
 }
 
 pub trait EntityBase: Send + Sync + std::any::Any {
@@ -877,6 +909,9 @@ pub struct Entity {
     /// `Entity.moveDist` and `Entity.nextStep`: walked distance and when the next step falls.
     pub move_dist: AtomicCell<f32>,
     pub next_step: AtomicCell<f32>,
+    /// `Entity.crystalSoundIntensity` and `lastCrystalSoundPlayTick`: amethyst chimes.
+    crystal_sound_intensity: AtomicCell<f32>,
+    last_crystal_sound_play_tick: AtomicI32,
     /// Indicates whether the entity is sprinting
     pub sprinting: AtomicBool,
     /// Indicates whether the entity is swimming
@@ -1134,6 +1169,8 @@ impl Entity {
             sneaking: AtomicBool::new(false),
             move_dist: AtomicCell::new(0.0),
             next_step: AtomicCell::new(1.0),
+            crystal_sound_intensity: AtomicCell::new(0.0),
+            last_crystal_sound_play_tick: AtomicI32::new(0),
             swimming: AtomicBool::new(false),
             invisible: AtomicBool::new(false),
             glowing: AtomicBool::new(false),
@@ -1909,7 +1946,11 @@ impl Entity {
                 living.fall_distance.store(0.0);
             }
 
-            if !self.touching_water.load(Ordering::SeqCst) {
+            // Vanilla skips the splash on the entity's first tick (`firstTick`).
+            if !self.touching_water.load(Ordering::SeqCst)
+                && self.tick_count.load(Ordering::Relaxed) > 1
+            {
+                self.water_splash_sound(caller);
                 world.game_event(
                     pumpkin_data::game_event::GameEvent::Splash,
                     self.pos.load(),
@@ -2624,21 +2665,46 @@ impl Entity {
         self.sneaking.store(sneaking, Relaxed);
         self.set_flag(Flag::Sneaking, sneaking);
     }
-    /// The game event half of vanilla `Entity.applyMovementEmissionAndPlaySound`: every step's
-    /// worth of walking (horizontal distance x 0.6, or total distance while climbing) emits a
-    /// `step` vibration with the block walked on, or `swim` in water.
+    /// Vanilla `getMovementEmission`: flying or sneaking players are quiet, mobs choose.
+    fn movement_emission(&self, caller: &dyn EntityBase, on_ground: bool) -> MovementEmission {
+        let Some(player) = caller.get_player() else {
+            return caller
+                .get_mob()
+                .map_or(MovementEmission::All, mob::Mob::movement_emission);
+        };
+        let flying = player
+            .abilities
+            .lock()
+            .is_ok_and(|abilities| abilities.flying);
+        if flying || (on_ground && self.is_sneaking()) {
+            MovementEmission::None
+        } else {
+            MovementEmission::All
+        }
+    }
+
+    /// Vanilla `Entity.applyMovementEmissionAndPlaySound`: every step's worth of walking
+    /// (horizontal distance x 0.6, or total distance while climbing) plays a step sound and
+    /// emits a `step` vibration with the block walked on, or swims in water.
+    #[expect(clippy::too_many_lines)]
     pub fn emit_movement_events(&self, caller: &dyn EntityBase, movement: Vector3<f64>) {
         if self.vehicle.lock().is_ok_and(|vehicle| vehicle.is_some()) {
             return;
         }
+        let on_ground = self.on_ground.load(Ordering::Relaxed);
+        let emission = self.movement_emission(caller, on_ground);
+        if emission == MovementEmission::None {
+            return;
+        }
         let world = self.world.load_full();
-        let supporting = self
-            .get_supporting_block_pos()
-            .unwrap_or_else(|| self.block_pos.load().down());
+        let supporting_pos = self.get_supporting_block_pos();
+        let supporting = supporting_pos.unwrap_or_else(|| self.block_pos.load().down());
         let (block, state) = world.get_block_and_state(&supporting);
-        let climbing = block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CLIMBABLE)
-            || block.id == pumpkin_data::BlockId::POWDER_SNOW;
-        let moved = if climbing {
+        let climbable = |block: &Block| {
+            block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CLIMBABLE)
+                || block.id == pumpkin_data::BlockId::POWDER_SNOW
+        };
+        let moved = if climbable(block) {
             movement.length() as f32 * 0.6
         } else {
             movement.x.hypot(movement.z) as f32 * 0.6
@@ -2648,7 +2714,6 @@ impl Entity {
         if move_dist <= self.next_step.load() {
             return;
         }
-        let on_ground = self.on_ground.load(Ordering::Relaxed);
         let source = crate::world::vibration::entity_handle(&world, caller);
         if state.is_air() {
             if !on_ground
@@ -2673,22 +2738,241 @@ impl Entity {
             }
             return;
         }
-        if (on_ground || climbing || (self.is_sneaking() && movement.y == 0.0))
-            && !self.is_swimming()
-        {
+        // Vanilla `getOnPosLegacy`: sounds come from the block 0.2 below the feet, unless the
+        // supporting block is a fence, wall or gate.
+        let pos = self.pos.load();
+        let effect_pos = match supporting_pos {
+            Some(supporting_pos)
+                if !block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_FENCES)
+                    && !block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_WALLS)
+                    && !block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_FENCE_GATES) =>
+            {
+                BlockPos::new(
+                    supporting_pos.0.x,
+                    (pos.y - 0.2).floor() as i32,
+                    supporting_pos.0.z,
+                )
+            }
+            Some(supporting_pos) => supporting_pos,
+            None => BlockPos::new(
+                pos.x.floor() as i32,
+                (pos.y - 0.2).floor() as i32,
+                pos.z.floor() as i32,
+            ),
+        };
+        let only_effect = effect_pos == supporting;
+        let (effect_block, effect_state) = if only_effect {
+            (block, state)
+        } else {
+            world.get_block_and_state(&effect_pos)
+        };
+        let sneaking_still = self.is_sneaking() && movement.y == 0.0;
+        let swimming = self.is_swimming();
+        let steps_on = |block: &Block, state: &BlockState| {
+            !state.is_air() && !swimming && (on_ground || climbable(block) || sneaking_still)
+        };
+        let motion = if caller.get_player().is_some() {
+            movement
+        } else {
+            self.velocity.load()
+        };
+        let mut stepped = false;
+        if steps_on(effect_block, effect_state) {
+            stepped = true;
+            if emission.emits_sounds() {
+                self.walking_step_sound(
+                    caller,
+                    &world,
+                    &effect_pos,
+                    effect_block,
+                    effect_state,
+                    motion,
+                );
+            }
+            if only_effect {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Step,
+                    pos,
+                    crate::world::vibration::GameEventContext::of(
+                        source.clone(),
+                        Some(effect_state.id),
+                    ),
+                );
+            }
+        }
+        if !only_effect && steps_on(block, state) {
+            stepped = true;
+            if emission.emits_events() {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Step,
+                    pos,
+                    crate::world::vibration::GameEventContext::of(source.clone(), Some(state.id)),
+                );
+            }
+        }
+        if stepped {
             self.next_step.store(move_dist.floor() + 1.0);
-            world.game_event(
-                pumpkin_data::game_event::GameEvent::Step,
-                self.pos.load(),
-                crate::world::vibration::GameEventContext::of(source, Some(state.id)),
-            );
         } else if self.touching_water.load(Ordering::SeqCst) {
             self.next_step.store(move_dist.floor() + 1.0);
-            world.game_event(
-                pumpkin_data::game_event::GameEvent::Swim,
-                self.pos.load(),
-                crate::world::vibration::GameEventContext::of(source, None),
+            if emission.emits_sounds() {
+                self.water_swim_sound(caller, motion);
+            }
+            if emission.emits_events() {
+                world.game_event(
+                    pumpkin_data::game_event::GameEvent::Swim,
+                    pos,
+                    crate::world::vibration::GameEventContext::of(source, None),
+                );
+            }
+        }
+    }
+
+    /// Vanilla `Entity.walkingStepSound`: the step itself, then an amethyst chime at most once
+    /// a second on crystal blocks.
+    fn walking_step_sound(
+        &self,
+        caller: &dyn EntityBase,
+        world: &World,
+        pos: &BlockPos,
+        block: &'static Block,
+        state: &'static BlockState,
+        motion: Vector3<f64>,
+    ) {
+        if caller.get_player().is_some() {
+            self.player_step_sound(caller, world, pos, block, state, motion);
+        } else {
+            let step = caller.get_mob().map_or_else(
+                || Some(block_step_sound(block, state)),
+                |mob| mob.step_sound_on(world, pos, block, state),
             );
+            if let Some((sound, volume, pitch)) = step {
+                self.play_movement_sound(caller, sound, volume, pitch);
+            }
+        }
+        let tick = self.tick_count.load(Ordering::Relaxed);
+        let last = self.last_crystal_sound_play_tick.load(Ordering::Relaxed);
+        if block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CRYSTAL_SOUND_BLOCKS)
+            && tick >= last + 20
+        {
+            let decay = 0.997f64.powi(tick - last) as f32;
+            let intensity = (self.crystal_sound_intensity.load() * decay + 0.07).min(1.0);
+            self.crystal_sound_intensity.store(intensity);
+            let pitch = 0.5 + intensity * rand::random::<f32>() * 1.2;
+            let volume = 0.1 + intensity * 1.2;
+            self.play_movement_sound(caller, Sound::BlockAmethystBlockChime, volume, pitch);
+            self.last_crystal_sound_play_tick
+                .store(tick, Ordering::Relaxed);
+        }
+    }
+
+    /// Vanilla `Player.playStepSound`: swimming plus a muffled step in water, carpets and
+    /// snow layers above the block instead of it, and both for combination blocks.
+    fn player_step_sound(
+        &self,
+        caller: &dyn EntityBase,
+        world: &World,
+        pos: &BlockPos,
+        block: &'static Block,
+        state: &'static BlockState,
+        motion: Vector3<f64>,
+    ) {
+        let muffled = |block: &Block, state: &BlockState| {
+            let sound_type = BlockSoundType::of(block.id, state.id);
+            self.play_movement_sound(
+                caller,
+                sound_type.step_sound,
+                sound_type.volume * 0.05,
+                sound_type.pitch * 0.8,
+            );
+        };
+        if self.is_in_water() {
+            self.water_swim_sound(caller, motion);
+            muffled(block, state);
+            return;
+        }
+        let (above_block, above_state) = world.get_block_and_state(&pos.up());
+        let combination =
+            above_block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_COMBINATION_STEP_SOUND_BLOCKS);
+        let (sound, volume, pitch) = if combination
+            || above_block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_INSIDE_STEP_SOUND_BLOCKS)
+        {
+            block_step_sound(above_block, above_state)
+        } else {
+            block_step_sound(block, state)
+        };
+        self.play_movement_sound(caller, sound, volume, pitch);
+        if combination {
+            muffled(block, state);
+        }
+    }
+
+    /// The sound of vanilla `Entity.doWaterSplashEffect`: louder the faster the entity falls in,
+    /// with a high-speed variant past a quarter volume. Spectators and experience orbs are quiet.
+    fn water_splash_sound(&self, caller: &dyn EntityBase) {
+        if self.entity_type.id == EntityType::EXPERIENCE_ORB.id {
+            return;
+        }
+        let player = caller.get_player();
+        if player.is_some_and(|player| player.gamemode.load() == pumpkin_util::GameMode::Spectator)
+        {
+            return;
+        }
+        let motion = self.velocity.load();
+        let speed = ((motion.x * motion.x * 0.2 + motion.y * motion.y + motion.z * motion.z * 0.2)
+            .sqrt() as f32
+            * 0.2)
+            .min(1.0);
+        let high_speed = speed >= 0.25;
+        let sound = match (player.is_some(), high_speed) {
+            (true, true) => Sound::EntityPlayerSplashHighSpeed,
+            (true, false) => Sound::EntityPlayerSplash,
+            (false, true) => Sound::EntityGenericSplash,
+            (false, false) => caller
+                .get_mob()
+                .map_or(Sound::EntityGenericSplash, mob::Mob::swim_splash_sound),
+        };
+        let pitch = 1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.4;
+        self.play_movement_sound(caller, sound, speed, pitch);
+    }
+
+    /// Vanilla `Entity.waterSwimSound`: louder the faster the entity moves.
+    fn water_swim_sound(&self, caller: &dyn EntityBase, motion: Vector3<f64>) {
+        let speed = ((motion.x * motion.x * 0.2 + motion.y * motion.y + motion.z * motion.z * 0.2)
+            .sqrt() as f32
+            * 0.35)
+            .min(1.0);
+        let sound = if caller.get_player().is_some() {
+            Sound::EntityPlayerSwim
+        } else {
+            caller
+                .get_mob()
+                .map_or(Sound::EntityGenericSwim, mob::Mob::swim_sound)
+        };
+        let pitch = 1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.4;
+        self.play_movement_sound(caller, sound, speed, pitch);
+    }
+
+    /// Vanilla `Entity.playSound`, skipped for silent entities, and `Player.playSound`, which
+    /// leaves the player out because their own client plays it.
+    fn play_movement_sound(&self, caller: &dyn EntityBase, sound: Sound, volume: f32, pitch: f32) {
+        let world = self.world.load();
+        let pos = self.pos.load();
+        if let Some(player) = caller.get_player() {
+            world.play_sound_raw_expect(
+                player,
+                sound as u16,
+                SoundCategory::Players,
+                &pos,
+                volume,
+                pitch,
+            );
+        } else if !self.is_silent() {
+            let category = caller
+                .get_living_entity()
+                .map_or(SoundCategory::Neutral, |living| {
+                    living.sound_category(false)
+                });
+            world.play_sound_fine(sound, category, &pos, volume, pitch);
         }
     }
 

@@ -646,6 +646,10 @@ impl RangedAttackMob for WitherEntity {
 }
 
 impl Mob for WitherEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityWitherAmbient)
+    }
+
     fn on_removed(&self) {
         self.remove_all_bossbar(&self.get_entity().world.load());
     }

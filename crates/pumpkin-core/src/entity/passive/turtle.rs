@@ -302,6 +302,19 @@ impl Animal for TurtleEntity {
 }
 
 impl Mob for TurtleEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        let sound = if self.is_baby() {
+            pumpkin_data::sound::Sound::EntityTurtleShambleBaby
+        } else {
+            pumpkin_data::sound::Sound::EntityTurtleShamble
+        };
+        crate::entity::mob::StepSound::Sound(sound, 0.15)
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityTurtleSwim
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         let entity = self.get_entity();
         (!entity.is_in_water() && entity.on_ground.load(Ordering::Relaxed) && !self.is_baby())

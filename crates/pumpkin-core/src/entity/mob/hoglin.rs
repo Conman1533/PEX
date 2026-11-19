@@ -183,6 +183,24 @@ impl Animal for HoglinEntity {
 }
 
 impl Mob for HoglinEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `HoglinAi.getSoundForActivity`; PEX hoglins run goals, so fighting is having a
+        // target. Avoiding piglins and repellents is not simulated.
+        Some(
+            if self.is_converting(&self.get_mob_entity().living_entity.entity.world.load()) {
+                pumpkin_data::sound::Sound::EntityHoglinRetreat
+            } else if self.get_mob_entity().get_target().is_some() {
+                pumpkin_data::sound::Sound::EntityHoglinAngry
+            } else {
+                pumpkin_data::sound::Sound::EntityHoglinAmbient
+            },
+        )
+    }
+
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityHoglinStep, 0.15)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

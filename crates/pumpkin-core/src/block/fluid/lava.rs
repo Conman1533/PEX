@@ -267,6 +267,11 @@ impl FlowingFluid for FlowingLava {
         world.level_info.load().game_rules.lava_source_conversion
     }
 
+    /// Vanilla `LavaFluid.beforeDestroyingBlock`: a fizz instead of drops.
+    fn before_destroying_block(&self, world: &Arc<World>, pos: &BlockPos) {
+        world.sync_world_event(WorldEvent::LavaFizz, *pos, 0);
+    }
+
     fn spread_to(&self, world: &Arc<World>, fluid: &Fluid, pos: &BlockPos, state_id: BlockStateId) {
         let new_props = FlowingFluidProperties::from_state_id(state_id, fluid);
         let current_state_id = world.get_block_state_id(pos);

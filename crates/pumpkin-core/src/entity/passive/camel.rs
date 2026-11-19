@@ -144,6 +144,18 @@ impl AgeableMob for CamelEntity {
 }
 
 impl Animal for CamelEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            if self.husk {
+                pumpkin_data::sound::Sound::EntityCamelHuskEat
+            } else {
+                pumpkin_data::sound::Sound::EntityCamelEat
+            },
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(if self.husk {
             &tag::Item::MINECRAFT_CAMEL_HUSK_FOOD
@@ -166,6 +178,31 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
+    fn step_sound_on(
+        &self,
+        _world: &crate::world::World,
+        _pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        let sand = block.has_tag(&pumpkin_data::tag::Block::MINECRAFT_CAMEL_SAND_STEP_SOUND_BLOCKS);
+        let _ = state;
+        Some(match (self.husk, sand) {
+            (true, true) => (
+                pumpkin_data::sound::Sound::EntityCamelHuskStepSand,
+                0.4,
+                1.0,
+            ),
+            (true, false) => (pumpkin_data::sound::Sound::EntityCamelHuskStep, 0.4, 1.0),
+            (false, true) => (pumpkin_data::sound::Sound::EntityCamelStepSand, 1.0, 1.0),
+            (false, false) => (pumpkin_data::sound::Sound::EntityCamelStep, 1.0, 1.0),
+        })
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(if self.husk {
             Sound::EntityCamelHuskAmbient

@@ -137,6 +137,20 @@ impl Animal for ZombieHorseEntity {
 }
 
 impl Mob for ZombieHorseEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
+    fn step_sound_on(
+        &self,
+        world: &crate::world::World,
+        pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        crate::entity::passive::horse::horse_step_sound(self, world, pos, block, state)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntityZombieHorseAmbient)
     }

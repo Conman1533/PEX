@@ -210,6 +210,7 @@ impl Goal for LongDistancePatrolGoal {
                 current_progress: pos,
                 destination: patrol_target.to_f64(),
                 speed,
+                reach_range: 1,
             });
         }
     }

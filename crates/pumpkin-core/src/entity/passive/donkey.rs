@@ -154,6 +154,14 @@ impl AgeableMob for DonkeyEntity {
 }
 
 impl Animal for DonkeyEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            pumpkin_data::sound::Sound::EntityDonkeyEat,
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
     }
@@ -217,6 +225,20 @@ impl Mob for DonkeyEntity {
                 self.stand_counter.store(stand + 1, Ordering::Relaxed);
             }
         }
+    }
+
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
+    fn step_sound_on(
+        &self,
+        world: &crate::world::World,
+        pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        crate::entity::passive::horse::horse_step_sound(self, world, pos, block, state)
     }
 
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {

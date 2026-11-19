@@ -40,6 +40,17 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering};
 use std::sync::{Arc, LazyLock};
 use uuid::Uuid;
 
+/// A mob's own step sound (vanilla `playStepSound` overrides that ignore the block).
+#[derive(Clone, Copy, Debug)]
+pub enum StepSound {
+    /// The block's step sound (vanilla `Entity.playStepSound`).
+    Block,
+    /// No step sound at all.
+    Silent,
+    /// This sound at this volume and pitch 1.
+    Sound(pumpkin_data::sound::Sound, f32),
+}
+
 pub mod bat;
 pub mod blaze;
 pub mod breeze;
@@ -917,22 +928,33 @@ impl MobEntity {
     ) -> bool {
         let entity = &self.living_entity.entity;
 
-        // If already leashed to player, right-clicking unleashes the mob
-        let currently_leashed = entity
+        let holder = entity
             .leashed_to
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some();
+            .clone();
 
-        if currently_leashed {
+        // Right-clicking a mob on your own lead unties it.
+        if let Some(holder) = &holder
+            && holder.get_entity().entity_id == player.entity_id()
+        {
             entity.unleash();
-            let lead_item =
-                pumpkin_data::item_stack::ItemStack::new(1, &pumpkin_data::item::Item::LEAD);
-            entity
-                .world
-                .load()
-                .drop_stack(&entity.block_pos.load(), lead_item);
+            if player.gamemode.load() != pumpkin_util::GameMode::Creative {
+                let lead_item =
+                    pumpkin_data::item_stack::ItemStack::new(1, &pumpkin_data::item::Item::LEAD);
+                entity
+                    .world
+                    .load()
+                    .drop_stack(&entity.block_pos.load(), lead_item);
+            }
+            self.play_lead_sound(pumpkin_data::sound::Sound::ItemLeadUntied);
             return true;
+        }
+        if holder
+            .as_ref()
+            .is_some_and(|holder| holder.get_player().is_some())
+        {
+            return false;
         }
 
         // If holding a lead, leash the mob to the player
@@ -947,11 +969,26 @@ impl MobEntity {
                 if player.gamemode.load() != pumpkin_util::GameMode::Creative {
                     item_stack.decrement(1);
                 }
+                self.play_lead_sound(pumpkin_data::sound::Sound::ItemLeadTied);
                 return true;
             }
         }
 
         false
+    }
+
+    /// Vanilla `Entity.playSound` for the lead sounds: skipped while silent.
+    fn play_lead_sound(&self, sound: pumpkin_data::sound::Sound) {
+        let entity = &self.living_entity.entity;
+        if !entity.is_silent() {
+            entity.world.load().play_sound_fine(
+                sound,
+                self.living_entity.sound_category(false),
+                &entity.pos.load(),
+                1.0,
+                1.0,
+            );
+        }
     }
 
     /// Vanilla `Mob.checkDespawn`.
@@ -1469,6 +1506,86 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn get_mob_y_velocity_drag(&self) -> Option<f64> {
         None
+    }
+
+    /// Vanilla `Entity.getMovementEmission`: whether walking plays step sounds, emits step
+    /// vibrations, or both.
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::All
+    }
+
+    /// Vanilla `playStepSound` for mobs whose step does not depend on the block.
+    fn mob_step_sound(&self) -> StepSound {
+        StepSound::Block
+    }
+
+    /// Vanilla `playStepSound`: the sound, volume and pitch of one step on `state` at `pos`,
+    /// or `None` for a silent step.
+    fn step_sound_on(
+        &self,
+        _world: &World,
+        _pos: &BlockPos,
+        block: &'static Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        match self.mob_step_sound() {
+            StepSound::Block => Some(crate::entity::block_step_sound(block, state)),
+            StepSound::Silent => None,
+            StepSound::Sound(sound, volume) => Some((sound, volume, 1.0)),
+        }
+    }
+
+    /// Vanilla `getSwimSound`: `Monster` uses the hostile splash.
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .entity_type
+            .category
+            == &pumpkin_data::entity::MobCategory::MONSTER
+        {
+            pumpkin_data::sound::Sound::EntityHostileSwim
+        } else {
+            pumpkin_data::sound::Sound::EntityGenericSwim
+        }
+    }
+
+    /// Vanilla `getSoundVolume`.
+    fn get_sound_volume(&self) -> f32 {
+        1.0
+    }
+
+    /// Vanilla `LivingEntity.makeSound`: this mob's volume and voice pitch, nothing while silent.
+    fn make_sound(&self, sound: pumpkin_data::sound::Sound) {
+        let living = &self.get_mob_entity().living_entity;
+        let entity = &living.entity;
+        if entity.is_silent() {
+            return;
+        }
+        entity.world.load().play_sound_fine(
+            sound,
+            living.sound_category(false),
+            &entity.pos.load(),
+            self.get_sound_volume(),
+            living.get_pitch(),
+        );
+    }
+
+    /// Vanilla `getSwimSplashSound`: `Monster` uses the hostile splash.
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        if self
+            .get_mob_entity()
+            .living_entity
+            .entity
+            .entity_type
+            .category
+            == &pumpkin_data::entity::MobCategory::MONSTER
+        {
+            pumpkin_data::sound::Sound::EntityHostileSplash
+        } else {
+            pumpkin_data::sound::Sound::EntityGenericSplash
+        }
     }
 
     /// Vanilla `Mob.getAmbientSound`, silent unless the mob overrides it.
@@ -1992,7 +2109,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
         {
             self.reset_ambient_sound_time();
             if let Some(sound) = self.get_ambient_sound() {
-                mob_entity.living_entity.make_sound(sound);
+                self.make_sound(sound);
             }
         }
 

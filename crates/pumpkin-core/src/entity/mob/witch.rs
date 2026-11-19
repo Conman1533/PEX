@@ -181,6 +181,10 @@ impl WitchEntity {
 }
 
 impl Mob for WitchEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityWitchAmbient)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

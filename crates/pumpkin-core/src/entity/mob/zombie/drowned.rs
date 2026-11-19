@@ -251,6 +251,24 @@ impl RangedAttackMob for DrownedEntity {
 }
 
 impl Mob for DrownedEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(
+            if self.get_mob_entity().living_entity.entity.is_in_water() {
+                pumpkin_data::sound::Sound::EntityDrownedAmbientWater
+            } else {
+                pumpkin_data::sound::Sound::EntityDrownedAmbient
+            },
+        )
+    }
+
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityDrownedStep, 0.15)
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityDrownedSwim
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.entity.mob_entity
     }

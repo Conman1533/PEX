@@ -1107,6 +1107,14 @@ impl EnderDragonEntity {
 }
 
 impl Mob for EnderDragonEntity {
+    fn get_sound_volume(&self) -> f32 {
+        5.0
+    }
+
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        Some(pumpkin_data::sound::Sound::EntityEnderDragonAmbient)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

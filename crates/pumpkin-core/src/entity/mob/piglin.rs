@@ -987,6 +987,10 @@ impl PiglinEntity {
 }
 
 impl Mob for PiglinEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityPiglinStep, 0.15)
+    }
+
     fn mob_metadata(&self) -> Option<MobMetadata> {
         self.is_baby().then(|| MobMetadata::new().baby(true))
     }

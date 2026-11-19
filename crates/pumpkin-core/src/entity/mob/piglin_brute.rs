@@ -165,6 +165,22 @@ impl PiglinBruteEntity {
 }
 
 impl Mob for PiglinBruteEntity {
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `AbstractPiglin.playAmbientSound` plays only while idle, which for a brute
+        // means not fighting.
+        self.get_mob_entity()
+            .get_target()
+            .is_none()
+            .then_some(pumpkin_data::sound::Sound::EntityPiglinBruteAmbient)
+    }
+
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(
+            pumpkin_data::sound::Sound::EntityPiglinBruteStep,
+            0.15,
+        )
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }

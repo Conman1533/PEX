@@ -223,6 +223,7 @@ impl Goal for RangedCrossbowAttackGoal {
                         current_progress: mob_pos,
                         destination: target_pos,
                         speed: move_speed,
+                        reach_range: 1,
                     });
                 self.update_path_delay = 20 + rand::random_range(0..20);
             }

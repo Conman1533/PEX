@@ -280,6 +280,10 @@ impl Animal for PandaEntity {
 }
 
 impl Mob for PandaEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityPandaStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(match self.get_variant() {
             PandaGene::Aggressive => pumpkin_data::sound::Sound::EntityPandaAggressiveAmbient,

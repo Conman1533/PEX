@@ -195,6 +195,25 @@ pub fn horse_or_donkey_tamed(mob: &dyn Mob) -> Option<bool> {
 }
 
 impl Animal for HorseEntity {
+    fn play_eating_sound(&self) {
+        crate::entity::passive::animal::play_eating_sound(
+            self,
+            if self
+                .get_mob_entity()
+                .living_entity
+                .entity
+                .age
+                .load(std::sync::atomic::Ordering::Relaxed)
+                < 0
+            {
+                pumpkin_data::sound::Sound::EntityBabyHorseEat
+            } else {
+                pumpkin_data::sound::Sound::EntityHorseEat
+            },
+            1.0 + (rand::random::<f32>() - rand::random::<f32>()) * 0.2,
+        );
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack.item.has_tag(&tag::Item::MINECRAFT_HORSE_FOOD)
     }
@@ -268,6 +287,51 @@ impl RideTamable for HorseEntity {
     }
 }
 
+/// Vanilla `AbstractHorse.playStepSound` while not ridden at a gallop: wood steps on wooden
+/// blocks, otherwise the plain (or baby) horse step, both at the block's volume and pitch,
+/// and snow layers on top count as the block. Nothing in liquids.
+pub(crate) fn horse_step_sound(
+    mob: &dyn Mob,
+    world: &World,
+    pos: &pumpkin_util::math::position::BlockPos,
+    block: &'static pumpkin_data::Block,
+    state: &'static pumpkin_data::BlockState,
+) -> Option<(Sound, f32, f32)> {
+    use pumpkin_data::block_sound::BlockSoundType;
+    if state.is_liquid() {
+        return None;
+    }
+    let (above_block, above_state) = world.get_block_and_state(&pos.up());
+    let sound_type = if above_block.id == pumpkin_data::BlockId::SNOW {
+        BlockSoundType::of(above_block.id, above_state.id)
+    } else {
+        BlockSoundType::of(block.id, state.id)
+    };
+    let wood = matches!(
+        sound_type.place_sound,
+        Sound::BlockWoodPlace
+            | Sound::BlockNetherWoodPlace
+            | Sound::BlockStemPlace
+            | Sound::BlockCherryWoodPlace
+            | Sound::BlockBambooWoodPlace
+    );
+    let sound = if wood {
+        Sound::EntityHorseStepWood
+    } else if mob
+        .get_mob_entity()
+        .living_entity
+        .entity
+        .age
+        .load(Ordering::Relaxed)
+        < 0
+    {
+        Sound::EntityBabyHorseStep
+    } else {
+        Sound::EntityHorseStep
+    };
+    Some((sound, sound_type.volume * 0.15, sound_type.pitch))
+}
+
 impl Mob for HorseEntity {
     /// Vanilla `AbstractHorse.aiStep`: rearing ends after 20 ticks.
     fn mob_tick(&self, _caller: &dyn EntityBase) {
@@ -280,6 +344,20 @@ impl Mob for HorseEntity {
                 self.stand_counter.store(stand + 1, Ordering::Relaxed);
             }
         }
+    }
+
+    fn get_sound_volume(&self) -> f32 {
+        0.8
+    }
+
+    fn step_sound_on(
+        &self,
+        world: &crate::world::World,
+        pos: &pumpkin_util::math::position::BlockPos,
+        block: &'static pumpkin_data::Block,
+        state: &'static pumpkin_data::BlockState,
+    ) -> Option<(pumpkin_data::sound::Sound, f32, f32)> {
+        crate::entity::passive::horse::horse_step_sound(self, world, pos, block, state)
     }
 
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {

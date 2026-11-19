@@ -21,6 +21,10 @@ impl StraySkeletonEntity {
 }
 
 impl Mob for StraySkeletonEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityStrayStep, 0.15)
+    }
+
     fn get_mob_entity(&self) -> &MobEntity {
         &self.entity.mob_entity
     }

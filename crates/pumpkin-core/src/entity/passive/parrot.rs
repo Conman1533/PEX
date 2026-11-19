@@ -175,6 +175,10 @@ impl Mob for ParrotEntity {
         self.read_tamable_nbt(nbt);
     }
 
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(pumpkin_data::sound::Sound::EntityParrotStep, 0.15)
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         // Vanilla `Parrot.getAmbient` also imitates a nearby monster one time in a thousand.
         Some(pumpkin_data::sound::Sound::EntityParrotAmbient)

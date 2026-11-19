@@ -194,6 +194,15 @@ impl Animal for ChickenEntity {
 }
 
 impl Mob for ChickenEntity {
+    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
+        crate::entity::mob::StepSound::Sound(
+            ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
+                .unwrap_or_default()
+                .step_sound(self.is_baby()),
+            0.15,
+        )
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         let sound_variant =
             ChickenSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))

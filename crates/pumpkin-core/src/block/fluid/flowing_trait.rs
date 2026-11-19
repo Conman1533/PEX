@@ -37,6 +37,19 @@ pub trait FlowingFluid: Send + Sync {
     }
 
     fn get_max_flow_distance(&self, world: &World) -> i32;
+
+    /// Vanilla `WaterFluid.beforeDestroyingBlock`: the washed-away block drops its loot, with no
+    /// break particles or sound.
+    fn before_destroying_block(&self, world: &Arc<World>, pos: &BlockPos) {
+        let (block, state) = world.get_block_and_state(pos);
+        let params = crate::world::loot::LootContextParameters {
+            world: Some(world),
+            block_state: Some(state),
+            position: Some(pos.to_f64()),
+            ..Default::default()
+        };
+        crate::block::drop_loot(world, block, pos, true, &params);
+    }
     fn can_convert_to_source(&self, world: &Arc<World>) -> bool;
 
     /// Returns true if `state_id` represents the given fluid — either as a direct fluid state
@@ -333,10 +346,10 @@ pub trait FlowingFluid: Send + Sync {
                 }
             }
         } else {
-            // Replace non-fluid blocks
+            // Vanilla `FlowingFluid.spreadTo` replaces the block without breaking it.
             let block = world.get_block(pos);
             if block.id != Block::AIR.id {
-                world.break_block(pos, None, BlockFlags::NOTIFY_ALL);
+                self.before_destroying_block(world, pos);
             }
         }
 

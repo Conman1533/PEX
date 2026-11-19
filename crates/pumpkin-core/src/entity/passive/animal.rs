@@ -222,6 +222,21 @@ pub trait Animal: Mob {
     }
 }
 
+/// An animal's eating sound at full volume, skipped while it is silent.
+pub fn play_eating_sound(mob: &dyn Mob, sound: pumpkin_data::sound::Sound, pitch: f32) {
+    let living = &mob.get_mob_entity().living_entity;
+    if living.entity.is_silent() {
+        return;
+    }
+    living.entity.world.load().play_sound_fine(
+        sound,
+        living.sound_category(false),
+        &living.entity.pos.load(),
+        1.0,
+        pitch,
+    );
+}
+
 /// The base vanilla `Animal.canMate`: another mob of the same type, both in love.
 #[must_use]
 pub fn animal_can_mate(animal: &MobEntity, partner: &dyn Mob) -> bool {

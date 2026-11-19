@@ -27,7 +27,6 @@ use super::experience_orb::ExperienceOrbEntity;
 use super::{Entity, EntityBase, NBTStorageInit};
 use crate::block::OnLandedUponArgs;
 use crate::entity::NBTStorage;
-use crate::entity::ageable::AgeableMob;
 use crate::entity::attributes::AttributeInstance;
 use crate::entity::attributes::Modifier;
 use crate::entity::attributes::ModifierOperation;
@@ -58,7 +57,7 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_protocol::codec::var_int::VarInt;
 use pumpkin_protocol::java::client::play::{
-    CHurtAnimation, CSetPlayerInventory, CTakeItemEntity, CUpdateMobEffect,
+    CSetPlayerInventory, CTakeItemEntity, CUpdateMobEffect,
 };
 use pumpkin_protocol::{
     codec::item_stack_seralizer::ItemStackSerializer,
@@ -263,10 +262,8 @@ impl LivingEntity {
     }
 
     pub(crate) fn get_pitch(&self) -> f32 {
-        let is_baby = self
-            .get_mob()
-            .and_then(|x| x.as_ageable())
-            .is_some_and(AgeableMob::is_baby);
+        // Vanilla `getVoicePitch` asks `isBaby`; ageable babies have a negative age.
+        let is_baby = self.entity.age.load(Relaxed) < 0;
 
         let mut rng = rand::rng();
         if is_baby {
@@ -286,7 +283,7 @@ impl LivingEntity {
             0.8
         };
         let mut max_health: f32 = 20.0; // Overridden by attribute base below
-        Self {
+        let living = Self {
             // Populate local attribute instances from the default registry and get initial vars
             attributes: {
                 let mut m = FxHashMap::default();
@@ -341,7 +338,18 @@ impl LivingEntity {
             water_movement_speed_multiplier,
             last_block_pos: AtomicCell::new(None),
             equipment_attribute_modifier_ids: std::sync::Mutex::new(FxHashMap::default()),
-        }
+        };
+        // Vanilla `LivingEntity`: `DATA_HEALTH_ID` defaults to 1, then the constructor sets
+        // the max health, so the spawn metadata carries it.
+        living
+            .entity
+            .synched_data
+            .define(tracked_data::living_entity::DATA_HEALTH_ID, 1.0f32);
+        living.entity.set_synced_data(
+            tracked_data::living_entity::DATA_HEALTH_ID,
+            living.health.load(),
+        );
+        living
     }
 
     /// Returns the entity that should receive kill credit for this entity's death.
@@ -1056,7 +1064,7 @@ impl LivingEntity {
     }
 
     // canBeAffected, with the mob overrides folded in
-    fn can_be_affected(&self, effect: &Effect) -> bool {
+    pub(crate) fn can_be_affected(&self, effect: &Effect) -> bool {
         let entity_type = self.entity.entity_type;
         if (entity_type == &EntityType::WITHER_SKELETON || entity_type == &EntityType::WITHER)
             && effect.effect_type == &StatusEffect::WITHER
@@ -2251,22 +2259,13 @@ impl LivingEntity {
             self.update_death_stats(&*dyn_self, killer);
 
             // Plays the death sound
-            world.play_sound_fine(
-                self.death_sound(&*dyn_self),
-                dyn_self
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or_else(
-                        || self.sound_category(dyn_self.get_player().is_some()),
-                        super::custom_sound::CustomSound::sound_category,
-                    ),
-                &self.entity.pos.load(),
-                dyn_self
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or(1.0, super::custom_sound::CustomSound::sound_volume),
-                self.get_pitch(),
-            );
+            // Vanilla `Player.getDeathSound`; the entity data has no player death sound.
+            let death_sound = if dyn_self.get_player().is_some() {
+                Sound::EntityPlayerDeath
+            } else {
+                self.death_sound(&*dyn_self)
+            };
+            self.play_voice_sound(&*dyn_self, death_sound);
             world.send_entity_status(&self.entity, EntityStatus::Death, ActorEventID::Death);
             let looting_level;
             let tool = if let Some(cause_ent) = cause {
@@ -2898,6 +2897,35 @@ impl LivingEntity {
         Self::death_sound_for_entity(self.entity.entity_type)
     }
 
+    /// Vanilla `LivingEntity.makeSound` for hurt and death sounds: the mob's volume and voice
+    /// pitch, nothing while silent. A player's own client plays theirs, so `Player.playSound`
+    /// sends it to everyone else.
+    fn play_voice_sound(&self, entity: &dyn EntityBase, sound: Sound) {
+        let world = self.entity.world.load();
+        let pos = self.entity.pos.load();
+        if let Some(player) = entity.get_player() {
+            world.play_sound_raw_expect(
+                player,
+                sound as u16,
+                SoundCategory::Players,
+                &pos,
+                1.0,
+                self.get_pitch(),
+            );
+            return;
+        }
+        if self.entity.is_silent() {
+            return;
+        }
+        let mob = entity.get_mob();
+        let category = mob.and_then(|mob| mob.as_custom_sound()).map_or_else(
+            || self.sound_category(false),
+            super::custom_sound::CustomSound::sound_category,
+        );
+        let volume = mob.map_or(1.0, super::mob::Mob::get_sound_volume);
+        world.play_sound_fine(sound, category, &pos, volume, self.get_pitch());
+    }
+
     fn hurt_sound(&self, entity: &dyn EntityBase) -> Sound {
         if let Some(sound_source) = entity.get_mob().and_then(|x| x.as_custom_sound())
             && let Some(audio) = sound_source.hurt_sound()
@@ -2906,6 +2934,18 @@ impl LivingEntity {
         }
 
         Self::hurt_sound_for_entity(self.entity.entity_type)
+    }
+}
+
+/// Vanilla `Player.getHurtSound`: the sound of the damage type's effects (`DamageEffects`).
+const fn player_hurt_sound(damage_type: &DamageType) -> Sound {
+    use pumpkin_data::damage::DamageEffects;
+    match damage_type.effects {
+        None | Some(DamageEffects::Hurt | DamageEffects::Thorns) => Sound::EntityPlayerHurt,
+        Some(DamageEffects::Drowning) => Sound::EntityPlayerHurtDrown,
+        Some(DamageEffects::Burning) => Sound::EntityPlayerHurtOnFire,
+        Some(DamageEffects::Poking) => Sound::EntityPlayerHurtSweetBerryBush,
+        Some(DamageEffects::Freezing) => Sound::EntityPlayerHurtFreeze,
     }
 }
 
@@ -3490,12 +3530,12 @@ impl LivingEntity {
                 data: VarInt(0),
                 fire_at_position: None,
             };
-            let hurt_animation = CHurtAnimation::new(entity_id.into(), hurt_yaw);
-            world.send_to_tracking_players_and_self_editioned(
-                &self.entity,
-                &hurt_animation,
-                &hurt_event,
-            );
+            // Java viewers animate the hurt from the damage event below; vanilla
+            // `ServerPlayer.indicateDamage` sends the hurt animation to the hurt player only.
+            world.send_to_tracking_players_bedrock(&self.entity, &hurt_event);
+            if let Some(player) = caller.get_player() {
+                player.send_hurt_animation(hurt_yaw);
+            }
         }
 
         world.broadcast_damage_event(
@@ -3511,22 +3551,21 @@ impl LivingEntity {
             if let Some(sound) = caller.get_mob().and_then(|mob| mob.as_custom_sound()) {
                 sound.on_hurt_sound();
             }
-            world.play_sound_fine(
-                self.hurt_sound(caller),
-                caller
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or_else(
-                        || self.sound_category(caller.get_player().is_some()),
-                        super::custom_sound::CustomSound::sound_category,
-                    ),
-                &self.entity.pos.load(),
-                caller
-                    .get_mob()
-                    .and_then(|mob| mob.as_custom_sound())
-                    .map_or(1.0, super::custom_sound::CustomSound::sound_volume),
-                self.get_pitch(),
-            );
+            let hurt_sound = if caller.get_player().is_some() {
+                player_hurt_sound(&damage_type)
+            } else {
+                self.hurt_sound(caller)
+            };
+            self.play_voice_sound(caller, hurt_sound);
+            // Vanilla `LivingEntity.playSecondaryHurtSound`, heard by everyone.
+            if damage_type == DamageType::THORNS {
+                let category = if caller.get_player().is_some() {
+                    SoundCategory::Players
+                } else {
+                    SoundCategory::Hostile
+                };
+                world.play_sound(Sound::EnchantThornsHit, category, &self.entity.pos.load());
+            }
 
             if let Some(source) = source
                 && !caller

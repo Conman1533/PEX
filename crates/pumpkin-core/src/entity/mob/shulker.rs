@@ -301,6 +301,24 @@ impl ShulkerEntity {
 }
 
 impl Mob for ShulkerEntity {
+    fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSplash
+    }
+
+    fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
+        // Vanilla `Shulker.playAmbientSound`: silent while closed.
+        (self.peek_amount.load(std::sync::atomic::Ordering::Relaxed) != 0)
+            .then_some(pumpkin_data::sound::Sound::EntityShulkerAmbient)
+    }
+
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::None
+    }
+
+    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
+        pumpkin_data::sound::Sound::EntityGenericSwim
+    }
+
     /// Vanilla `AbstractGolem.removeWhenFarAway`.
     fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
         false

@@ -51,6 +51,7 @@ default = [
     "slot_ranges",
     "bedrock_creative",
     "bedrock_biome",
+    "block_sound",
     "map_color",
     "map_decoration",
     "dye_color",
@@ -105,6 +106,7 @@ painting_variant = []
 test_instance = []
 trial_spawner = []
 block_transformer = ["block", "sound", "world", "tag"]
+block_sound = ["sound"]
 map_color = []
 map_decoration = []
 dye_color = []

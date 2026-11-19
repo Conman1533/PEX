@@ -207,6 +207,14 @@ impl BatEntity {
 }
 
 impl Mob for BatEntity {
+    fn get_sound_volume(&self) -> f32 {
+        0.1
+    }
+
+    fn movement_emission(&self) -> crate::entity::MovementEmission {
+        crate::entity::MovementEmission::Events
+    }
+
     fn mob_init_data_tracker(&self) {
         let entity = self.get_entity();
         let flags: u8 = if self.is_roosting() { ROOSTING_FLAG } else { 0 };
