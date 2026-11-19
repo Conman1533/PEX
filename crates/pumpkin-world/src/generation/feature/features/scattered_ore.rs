@@ -62,6 +62,8 @@ impl ScatteredOreFeature {
     fn get_random_offset(random: &mut RandomGenerator, max_dist: i32) -> i32 {
         let f1 = random.next_f32();
         let f2 = random.next_f32();
-        ((f1 - f2) * max_dist as f32).round() as i32
+        // Vanilla `Math.round(float)`: the nearest integer with halves rounded up, unlike
+        // `f32::round`. Adding 0.5 in f64 is exact, so values just below a half stay below it.
+        (f64::from((f1 - f2) * max_dist as f32) + 0.5).floor() as i32
     }
 }

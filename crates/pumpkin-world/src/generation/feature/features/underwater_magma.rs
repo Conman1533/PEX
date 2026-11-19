@@ -1,10 +1,11 @@
 use crate::generation::proto_chunk::GenerationCache;
-use pumpkin_data::{Block, BlockDirection, BlockState};
+use pumpkin_data::{Block, BlockDirection, BlockId, BlockStateId, HorizontalFacingExt};
 use pumpkin_util::{
     math::position::BlockPos,
     random::{RandomGenerator, RandomImpl},
 };
 
+/// Vanilla `UnderwaterMagmaFeature`: magma blocks around the floor under a column of water.
 pub struct UnderwaterMagmaFeature {
     /// vertical search limit from origin for a water column floor
     pub floor_search_range: i32,
@@ -15,62 +16,56 @@ pub struct UnderwaterMagmaFeature {
 }
 
 impl UnderwaterMagmaFeature {
-    /// Find the Y coordinate of a solid floor beneath a water column at the origin's XZ.
+    /// Vanilla `getFloorY`: `Column.scan` of the water column at the origin. The origin itself
+    /// has to be water; the floor is the first non-water block below it within the search range.
     fn get_floor_y<T: GenerationCache>(&self, chunk: &T, origin: BlockPos) -> Option<i32> {
-        let x = origin.0.x;
-        let z = origin.0.z;
-
-        // Drop down until water found
-        for dy in 0..=self.floor_search_range {
-            let check_y = origin.0.y - dy;
-            let pos = BlockPos::new(x, check_y, z);
-            let state_id = GenerationCache::get_block_state(chunk, &pos.0).to_block_id();
-
-            if state_id == Block::WATER {
-                // Sink to first non-water block below the column
-                let mut floor_y = check_y - 1;
-                loop {
-                    let floor_pos = BlockPos::new(x, floor_y, z);
-                    let floor_id =
-                        GenerationCache::get_block_state(chunk, &floor_pos.0).to_block_id();
-                    if floor_id != Block::WATER {
-                        return Some(floor_y);
-                    }
-                    if (check_y - floor_y) > self.floor_search_range {
-                        break;
-                    }
-                    floor_y -= 1;
-                }
-            }
+        let (x, z) = (origin.0.x, origin.0.z);
+        let is_water = |y: i32| {
+            GenerationCache::get_block_state(chunk, &BlockPos::new(x, y, z).0).to_block_id()
+                == BlockId::WATER
+        };
+        let mut y = origin.0.y;
+        if !is_water(y) {
+            return None;
         }
-        None
+        let mut i = 1;
+        while i < self.floor_search_range && is_water(y) {
+            y -= 1;
+            i += 1;
+        }
+        (!is_water(y)).then_some(y)
     }
 
-    /// Check if a block can host magma
-    fn is_valid_placement<T: GenerationCache>(chunk: &T, target: &BlockPos) -> bool {
-        // Reject water/air or unsupported blocks
-        let target_id = GenerationCache::get_block_state(chunk, &target.0).to_block_id();
-        if target_id == Block::WATER || target_id == Block::AIR {
+    /// Vanilla `isValidPlacement`: not water or air, and covered by full faces below and on
+    /// all four sides.
+    fn is_valid_placement<T: GenerationCache>(chunk: &T, target: BlockPos) -> bool {
+        let state = GenerationCache::get_block_state(chunk, &target.0);
+        if state.to_block_id() == BlockId::WATER || state.to_state().is_air() {
             return false;
         }
-
-        // Below must be solid
         let below = target.offset(BlockDirection::Down.to_offset());
-        let below_id = GenerationCache::get_block_state(chunk, &below.0).to_block_id();
-        if below_id == Block::WATER || below_id == Block::AIR {
+        if Self::is_visible_from_outside(chunk, below, BlockDirection::Up) {
             return false;
         }
-
-        // No open horizontal faces
-        for dir in &BlockDirection::horizontal() {
+        for dir in BlockDirection::horizontal_worldgen() {
             let neighbour = target.offset(dir.to_offset());
-            let n_id = GenerationCache::get_block_state(chunk, &neighbour.0).to_block_id();
-            if n_id == Block::WATER || n_id == Block::AIR {
+            if Self::is_visible_from_outside(chunk, neighbour, dir.to_block_direction().opposite())
+            {
                 return false;
             }
         }
-
         true
+    }
+
+    /// Vanilla `isVisibleFromOutside`: the face of `pos` towards the target is not a full face
+    /// occluder. A block that cannot occlude has an empty face occlusion shape.
+    fn is_visible_from_outside<T: GenerationCache>(
+        chunk: &T,
+        pos: BlockPos,
+        covered_direction: BlockDirection,
+    ) -> bool {
+        let state: BlockStateId = GenerationCache::get_block_state(chunk, &pos.0);
+        !(state.can_occlude() && state.is_side_solid(covered_direction))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -83,38 +78,29 @@ impl UnderwaterMagmaFeature {
         random: &mut RandomGenerator,
         pos: BlockPos,
     ) -> bool {
-        // Locate floor; abort if none
         let Some(floor_y) = self.get_floor_y(chunk, pos) else {
             return false;
         };
 
-        let floor_pos = BlockPos::new(pos.0.x, floor_y, pos.0.z);
-
-        // Sample a cube around the floor, placing magma with probability and validity checks
+        // Vanilla walks the box with `BlockPos.betweenClosedStream`: x fastest, then y, then z,
+        // drawing one random float per position before the validity check.
         let mut placed = 0i32;
         let r = self.placement_radius;
-
-        for dx in -r..=r {
+        for dz in -r..=r {
             for dy in -r..=r {
-                for dz in -r..=r {
+                for dx in -r..=r {
                     if random.next_f32() >= self.placement_probability {
                         continue;
                     }
-
-                    let target_pos =
-                        BlockPos::new(floor_pos.0.x + dx, floor_pos.0.y + dy, floor_pos.0.z + dz);
-
-                    if !Self::is_valid_placement(chunk, &target_pos) {
+                    let target_pos = BlockPos::new(pos.0.x + dx, floor_y + dy, pos.0.z + dz);
+                    if !Self::is_valid_placement(chunk, target_pos) {
                         continue;
                     }
-
-                    let magma_state = BlockState::from_id(Block::MAGMA_BLOCK.default_state.id);
-                    chunk.set_block_state(&target_pos.0, magma_state);
+                    chunk.set_block_state(&target_pos.0, Block::MAGMA_BLOCK.default_state);
                     placed += 1;
                 }
             }
         }
-
         placed > 0
     }
 }

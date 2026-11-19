@@ -34,12 +34,14 @@ impl OreFeature {
     ) -> bool {
         let f = random.next_f32() * f32::consts::PI;
         let g = self.size as f32 / 8.0f32;
-        let i = f32::midpoint(self.size as f32 / 16.0f32 * 2.0, 1.0).ceil() as i32;
+        let i = ((self.size as f32 / 16.0f32).mul_add(2.0, 1.0) / 2.0).ceil() as i32;
 
-        let d = pos.0.x as f64 + f.sin() as f64 * g as f64;
-        let e = pos.0.x as f64 - f.sin() as f64 * g as f64;
-        let h = pos.0.z as f64 + f.cos() as f64 * g as f64; // Use f.cos() for Math.cos(f)
-        let j = pos.0.z as f64 - f.cos() as f64 * g as f64;
+        // Vanilla `Math.sin(dir)`: the float angle widened to double, so the sine is a double.
+        let (sin, cos) = f64::from(f).sin_cos();
+        let d = f64::from(pos.0.x) + sin * f64::from(g);
+        let e = f64::from(pos.0.x) - sin * f64::from(g);
+        let h = f64::from(pos.0.z) + cos * f64::from(g);
+        let j = f64::from(pos.0.z) - cos * f64::from(g);
 
         let l = pos.0.y as f64 + random.next_bounded_i32(3) as f64 - 2.0;
         let m = pos.0.y as f64 + random.next_bounded_i32(3) as f64 - 2.0;
@@ -90,12 +92,17 @@ impl OreFeature {
             let e = lerp(f as f64, start_y, end_y);
             let g = lerp(f as f64, start_z, end_z);
             let h = random.next_f64() * j as f64 / 16.0;
-            let l = f32::midpoint(((f32::consts::PI * f).sin() + 1.0) * h as f32, 1.0);
+            // Vanilla `((Mth.sin(PI * step) + 1.0F) * ss + 1.0) / 2.0`: the table sine as a float,
+            // the rest in double (`midpoint` is exactly `(a + b) / 2` in this range).
+            let l = f64::midpoint(
+                f64::from(pumpkin_util::math::sin(f32::consts::PI * f) + 1.0) * h,
+                1.0,
+            );
 
             ds[k as usize * 4] = d;
             ds[k as usize * 4 + 1] = e;
             ds[k as usize * 4 + 2] = g;
-            ds[k as usize * 4 + 3] = l as f64;
+            ds[k as usize * 4 + 3] = l;
         }
 
         for k in 0..(j - 1) {
