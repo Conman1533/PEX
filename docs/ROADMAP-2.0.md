@@ -4,9 +4,46 @@ Assessed at: `300621c3e5b7a9f5eef70af8c6c8ec5dad8b5e96` (`alpha`, committed 2026
 
 This is a fresh skeleton on branch `roadmap-2.0-v2`. The earlier roadmap is still `docs/ROADMAP-2.0.md` on `alpha` and on branch `roadmap-2.0`.
 
+Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still the newest commit). See [Status on 2026-11-19](#status-on-2026-11-19) and the "Status (2026-11-19)" line on each piece it touches.
+
+## Status on 2026-11-19
+
+Checked against `alpha` at `466d2af9d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+
+| Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
+| :-- | --: | --: | --: | --: | :-- |
+| G0 Shared tooling | 5 | 3 | 0 | 2 | |
+| G1 Mob AI | 45 | 3 | 2 | 40 | |
+| G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
+| G3 Config | 10 | 3 | 0 | 7 | |
+| G4 Offline UUIDs | 6 | 0 | 1 | 5 | |
+| G5 Redstone | 16 | 1 | 0 | 15 | |
+| G6 Survival | 26 | 6 | 7 | 12 | G6-26 dropped (no code) |
+| G7 Worlds | 32 | 4 | 4 | 24 | |
+| G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
+| G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
+| G10 Releases | 10 | 2 | 0 | 8 | |
+| Total | 196 | 32 | 14 | 135 | 15 |
+
+Pushed but not on `alpha` (all off `466d2af9d`, each waiting for Neon's OK to merge):
+
+- `fix/broken-mob-mechanics` (12 commits, 2026-11-14): the 15 broken mobs from the 2026-11-13 parity check (blaze and ghast fireballs, wind charges, breeze, guardians, illusioner and parched, wither, dragon movement, bee stings, hoglin, frog and turtle breeding, parrot and horse taming, happy ghast, axolotl and tadpole buckets). Goal 1.
+- `fix/systemic-mob-parity` (13 commits, 2026-11-14): spawn health in metadata, step, swim and ambient sounds, sound variants, mob sound volume and pitch, hurt sounds to other players, `/effect` on any living entity, melee pathing, fluid spreading. Goal 1.
+- `fix/wrong-mob-behaviours` (15 commits, 2026-11-16): warden roar, sniff and sonic boom, vex and evoker, dolphin treasure, sniffer, panda, camel, rabbit, parrot, armadillo, llama spit, axolotls, tamed wolf health, horse food, goat and copper golem panic. Goal 1.
+- `fix/worldgen-fluid-ticks`, `fix/ore-placement`, `fix/sculk-worldgen`, `fix/speleothem-worldgen` (2026-11-14 to 2026-11-15): world generation parity. No goal of this roadmap covers world generation; they are parity fixes outside it.
+
+What holds 2.0 back:
+
+1. GitHub Actions: the newest run on the repository is from 2026-10-14 (D0-1's support ticket). G0-01, G0-02 and Goal 10's release pieces wait on it.
+2. Decisions: this file records no answers after 2026-10-31, so 21 are open and 6 more partly or except a sub-question. D7-1 and D7-4 hold 11 Goal 7 pieces.
+3. The proofs: 14 pieces have their code on `alpha` but not the test their Done when asks for.
+4. `alpha` fails GameTest `scaffolding_distance_and_collapse`, as it has since before this roadmap.
+
 ## Order of work
 
 A piece can start once every piece in its "Depends on" line is on `alpha` and its decisions are answered. Among the pieces that can start, take them in this order.
+
+On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02, G6-03, G7-03, G7-04 and G9-01 are left. So the next work is step 1 (decisions and the support ticket), landing the waiting branches above, the missing proofs, and then step 4.
 
 1. Answer the open decisions that hold the most work. The table below has all of them.
    - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
@@ -38,6 +75,8 @@ A piece can start once every piece in its "Depends on" line is on `alpha` and it
 ## Decisions for Neon
 
 Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. Neon answered D0-1, D1-2, D1-3, D3-2, D6-1, D6-3 and D7-6 the same day. That leaves 18 answered, 2 answered except a sub-question, 4 partly answered and 21 open.
+
+No answers were recorded after 2026-10-31, so the counts above still hold on 2026-11-19.
 
 | ID | Question | Status | Pieces waiting |
 | :-- | :-- | :-- | :-- |
@@ -165,6 +204,7 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 - Needs decision: D0-1
 - Done when: a push to `alpha` shows up in `gh run list -R Conman1533/PEX -b alpha` for `rust.yml` and `typos.yml`, and the format, machete, clippy, test and gametest jobs of that run pass.
 - Needed by: G0-02, G2-02, G2-03, G7-03, G8-12, G9-13, G10-04, G10-05, G10-08, and the Proofs of Goals 1, 3, 4, 6 and 7.
+- Status (2026-11-19): still waiting. As of 2026-11-19 the newest Actions run on the repository is from 2026-10-14, so none of the alpha pushes since then ran on GitHub. G0-05 covers Linux CI meanwhile.
 
 #### G0-02 Dual-run job in CI
 
@@ -193,6 +233,7 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 
   - Open for Neon: the three-run Paper row leaves out Paper run 2, whose P95 (14.57 ms) was about 10% below the other three, while the machine was as quiet as in the other runs. With it the spread is 11.8%, over this piece's 10% bar. The likely cause is the explorer bot: `survbot.py` picks its heading with an unseeded `random`, so it walks into different, newly generated terrain each run (in Paper run 2 it went 644 blocks toward +Z, where no other run went). Either keep the three-run row, or seed the explorer in mc-gameplay-bench and rerun Paper.
   - What stands out, for Goal 9: PEX's P95 is about 23 ms in every 100-tick window against Paper's 16.3 ms while the P50s match, so the tail is steady rather than a few spikes. PEX has ticks of 100 to 300 ms exactly every 6,000 ticks (the 5-minute autosave and player save), with almost none of that time inside the world tick. PEX sends about 1.4 times Paper's bytes per bot-hour, and peaks at about a fifth of Paper's memory. Network bytes vary between runs (PEX 409 to 494 MiB, Paper 309 to 346 MiB), for the same explorer reason.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G0-04 Gameplay benchmark runs in CT 117
 
@@ -202,6 +243,7 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 - Needs decision: none
 - Done when: a 5-minute run with 8 bots against PEX and Paper in CT 117 writes a report with CPU, memory, network and tick P50/P95/P99 for both servers, and every builder and miner bot has confirmed placements or breaks above zero.
 - Needed by: G0-03.
+- Status (2026-11-19): done in mc-gameplay-bench (`fix/no-docker`, 1cb4d83, plus `feat/seeded-bots`, cd8c066, which seeds the explorer bot); G0-03 used it.
 
 #### G0-05 Interim CI timer in CT 117
 
@@ -211,6 +253,7 @@ Paths are relative to the repository root. `crates/pumpkin-core/src/` is shorten
 - Needs decision: none
 - Done when: a push to `alpha` has a finished `summary.txt` for that commit within 60 minutes (a run took about 17 minutes on 2026-10-27), a second timer run on the same commit starts nothing, and the timer survives a reboot of CT 117.
 - Needed by: the Linux CI jobs until G0-01 lands, and the nightly survival stages (D6-3).
+- Status (2026-11-19): live since 2026-11-01: `pex-ci-alpha.timer` in CT 117 runs `/srv/pex/tools/ci-alpha.sh` on each new alpha commit and nightly at 03:00 UTC, results in `/srv/pex/ci/alpha/finished`. The reboot part of the Done when was not re-checked for this update.
 
 ### Decisions
 
@@ -407,6 +450,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `test/mob-test-helpers`
 - Needs decision: none.
 - Done when: `pumpkin:zombie_targets_survival_mock_player` passes and fails with the zombie's player target goal removed; both entries of `MOCK_PLAYER_TEST_IDS` pass inside the normal batch.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G1-02 Parity table refresh and wiring test
 - Scope: replace the 90 "not audited" rows of `docs/MOB-PARITY.md` with the table above; add a unit test that every mob type in `entities.json` gets a `MobEntity` from `from_type`. Out: fixing the two missing types.
@@ -593,6 +637,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Done when: unit tests `dragon_phase_round_trips_through_nbt` and `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass.
 - Result (2026-11-03): branch `fix/ender-dragon-phases` at `db3c10c9f`, pushed, PR draft in CT 117 `/srv/pex/pr-drafts/fix-ender-dragon-phases.md`. Vanilla phase ids, `SittingScanning`, `DATA_PHASE` synced and saved, a `DRAGON_FIREBALL` entity with its breath cloud, crystal breaks reported to the dragon. Tests `dragon_phase_round_trips_through_nbt`, `strafe_phase_shoots_dragon_fireball` and GameTest `pumpkin:dragon_fireball_leaves_breath_cloud` pass; local CI clean except the known scaffolding GameTest. Not done: the cloud has no owner (kill credit goes to the cloud). The play test in the End is Neon's. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): the dragon ran vanilla's cycle (holding pattern, landing approach, landing, sitting scanning on the exit portal, takeoff), strafed and shot a Dragon Fireball that left breath clouds. It also found G1-45 (the dragon despawned about 40 s after each spawn; alpha's bug, shown up by the new flight paths) and G6-24. Not checked: a crystal break making the dragon strafe.
 - Needed by: G6-19 and G6-20 (an End fight that plays like vanilla).
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Merged together with `feat/dragon-fight`.
 
 #### G1-28 Hoglin
 - Scope: HoglinAi, HOGLIN_SPECIFIC_SENSOR, repellent avoidance, breeding. Out: zoglin conversion changes.
@@ -629,6 +674,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-camels`
 - Needs decision: D1-1.
 - Done when: `pumpkin:camel_follows_cactus` and `pumpkin:husk_rider_steers_camel_husk_to_target` pass.
+- Status (2026-11-19): partly built by `feat/water-mob-ai` (on `alpha` since 2026-11-05): the camel husk is a camel that eats rabbit feet and never breeds, and natural husk groups sometimes ride one (unit tests `camel_husk_is_a_camel_that_eats_rabbit_feet_and_never_breeds`, `a_natural_husk_group_sometimes_rides_a_camel_husk`). Camel AI and both named GameTests are still missing. `fix/wrong-mob-behaviours` (pushed 2026-11-16, not on `alpha`) adds vanilla camel speeds and random sitting.
 
 #### G1-33 Sniffer
 - Scope: SnifferAi in place of the `transition_to` state machine. Out: sniffer egg hatching.
@@ -657,6 +703,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-nautilus`
 - Needs decision: D1-1.
 - Done when: `pumpkin:nautilus_follows_tempting_player` and `pumpkin:zombie_nautilus_charges_survival_player` pass.
+- Status (2026-11-19): built by `feat/water-mob-ai` (on `alpha` since 2026-11-05): nautilus AI, the charge (dash) attack and the zombie nautilus as goal ports, with unit tests `the_dash_runs_at_the_target_then_waits`, `zombie_nautilus_is_a_nautilus_that_is_never_a_baby` and `zombie_nautilus_variant_survives_a_save`. Not done: the two GameTests in the Done when.
 
 #### G1-37 Allay and happy ghast
 - Scope: allay audit and GameTest; HappyGhastAi with its 3 goals, BabyFlyingPathNavigation and FlyingMoveControl. Out: harness riding.
@@ -722,6 +769,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: none.
 - Done when: in the End with a survival player 30 to 60 blocks from the dragon for 5 minutes, the dragon keeps its UUID and the fight spawns no second dragon.
 - Result (2026-11-04): found in the G1-27 play test: the dragon vanished about 40 s after each spawn, with no death or log, and the fight spawned a new one 1200 ticks later. The cause is the generic random despawn (a `MONSTER` with no non-spectator player within 32 blocks); alpha has it too but its dragon circles close to the portal. Branch at `3875ccfd7`, pushed, PR draft `/srv/pex/pr-drafts/fix-ender-dragon-never-despawns.md`: a `Mob::checks_despawn` hook, false for the dragon. Play test on the integration build: one dragon for 5 minutes, 30 polls. No automated test (needs a survival player in the End).
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Merged as part of `feat/dragon-fight`.
 
 ### Proof
 
@@ -811,6 +859,7 @@ Start from: what native-plugins/ exposes and how plugins load; everything WASM v
 - Needs decision: none
 - Done when: a new unit test in `plugin/mod.rs` (for example `handlers_run_in_priority_order`) registers blocking and non-blocking handlers at all five priorities out of order, through both paths, and sees them called Lowest to Highest with blocking first; a testbot run (PORTING_GUIDE §8.4) with PEXGuard and PEXProtect loaded shows a non-member's block break inside a region refused, and `/co` inspect on that block still shows its history.
 - Result (2026-11-03): branch `fix/plugin-event-priority` at `34e032fc4`, pushed, PR draft `/srv/pex/pr-drafts/fix-plugin-event-priority.md`. `handlers_run_in_priority_order` fails on alpha and passes on the branch; the testbot run with PEXGuard and PEXProtect refused Bob's break in a region and `/co inspect` still showed the history. GameTest stopped at the `bot:entity_interaction_range` flake twice, so the GameTests after it didn't run on this branch.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G2-02 Automated native plugin load test
 
@@ -1203,6 +1252,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
     - `out_of_range_view_distance_uses_the_default`: 0 and 65 both give 16 with a warning and no panic.
     - `syntax_error_stops_with_line_and_column`.
   - Boot test (debug build, scratch directory): `tps = "fast"` reaches "Server is now running." with one warning. A missing `]` exits 1 with the position and creates no world folder.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. The D3-1 two-key sub-question is still open, so `online_mode` without `encryption` behaves as before.
 
 #### G3-02 Warn about unknown keys
 
@@ -1218,6 +1268,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - `unknown_key_is_reported_by_full_path`: a typo under `[networking.java]` gives one warning with the full path.
   - `optional_and_aliased_keys_are_known`: a file with `favicon_path`, `keep-alive-time`, `[commands.overrides.tp]`, `[plugins.overrides.x.environment]`, `telemetry.server_name` and an Anvil `[world.chunk.compression]` gives no warning.
   - The generated file and the migrated 1.2.0 fixture give no warning. Until G3-03 lands, the 1.0.0 and 1.1.0 fixtures give exactly one, for `world.chunk.write_in_place`.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G3-03 First config migration removes dead keys
 
@@ -1236,6 +1287,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - New `inline_chunk_table_loses_write_in_place`.
   - G3-02 reports no unknown key on any fixture.
 - Needed by: G3-10, and Goal 2 for removing the Wasm-only `[plugins]` keys.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G3-04 Save pumpkin.toml safely
 
@@ -1475,6 +1527,7 @@ Format and place of the lists, outside the migration:
 - Branch: fix/usercache-vanilla-format
 - Needs decision: none
 - Done when: unit tests in `usercache.rs` and `banlist_serializer.rs` load a `usercache.json` and a `banned-players.json` written by a vanilla 26.3 server (bytes in the test) with every entry, write dates byte-identical to vanilla's, and still load the files PEX 1.2.0 wrote; the vanilla-file tests fail on alpha.
+- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): ban and usercache dates are written in vanilla's format and older forms still load (`dates_are_written_like_vanilla_and_old_forms_still_read`, `the_disk_entry_uses_vanilla_keys_and_date_format`, `entries_expire_one_calendar_month_later`). Not done: tests on files written by a vanilla 26.3 server, byte for byte, and on files PEX 1.2.0 wrote.
 
 #### G4-06 Server lists in vanilla's place
 
@@ -1611,6 +1664,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Needs decision: none
 - Done when: new unit tests `loaded_ticks_keep_saved_order`, `overdue_ticks_run_first` and `ticks_over_cap_run_next_tick` pass, and each fails on alpha.
 - Result (2026-11-04): branch `fix/tick-scheduler-order` at `766add8b0`, pushed, PR draft `/srv/pex/pr-drafts/fix-tick-scheduler-order.md`. Loaded ticks are numbered from `-n` like `LevelChunkTicks.unpack` and saved in sub-tick order, overdue ticks sort first (`OrderedTick::overdue`, vanilla's trigger tick), and block and fluid ticks stop at 65536 a game tick with the rest carried over. `loaded_ticks_keep_saved_order`, `overdue_ticks_run_first` and `saved_order_round_trips` fail on alpha's scheduler and pass; `ticks_over_cap_run_next_tick` passes (alpha has no cap to test). Local CI clean except the known scaffolding GameTest.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G5-05 Block and fluid ticks run in vanilla order
 
@@ -1802,6 +1856,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: test/tester-all-dimensions
 - Needs decision: D6-2
 - Done when: `cargo run -p pumpkin-tester` passes with the new setup, and the PR lists tester wall time and peak RSS before and after, 3 runs each.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G6-02 Read a zero LpVec3 like vanilla
 
@@ -1810,6 +1865,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/lpvec3-zero-read
 - Needs decision: none
 - Done when: a test in `codec/lp_vector_3d.rs` decodes vanilla's bytes for a zero vector followed by another field and reads that field (it fails on alpha), and the bot reads `CSpawnEntity` in full.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G6-03 Bot actions for the later stages
 
@@ -1827,6 +1883,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: its bot tests (commit `f85846200`) pass in `pumpkin-tester` on alpha, including an attack on an entity that just died not kicking the bot.
 - Result (2026-11-04): rebased onto alpha as `fix/attack-packet-parity-v2` at `40fe41bc7` (a new branch, because force-pushing the old one was refused), pushed, PR draft `/srv/pex/pr-drafts/fix-attack-packet-parity-v2.md`. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): a survival player hit the perched dragon 8 times: no kick, and no damage, as expected until G6-16.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Landed as `fix/attack-packet-parity-v2` (the rebase of the original branch).
 
 #### G6-05 Attack cooldown from the attack_speed attribute
 
@@ -1835,6 +1892,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/attack-cooldown-parity
 - Needs decision: none
 - Done when: new `bot_tests/attack_cooldown.rs` passes: a punch 5 ticks after the last attack deals the full base damage, a punch after 2 ticks deals `getAttackStrengthScale`'s reduced amount, `attribute <bot> minecraft:attack_speed base set 8` halves the delay, and changing `tps` in the config doesn't change it.
+- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): the attack strength delay comes from `attack_speed` (unit test `attack_strength_delay_is_twenty_ticks_over_attack_speed`). Not done: `bot_tests/attack_cooldown.rs`.
 
 #### G6-06 Stage: iron tools
 
@@ -1867,6 +1925,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/spawner-spawn-rules
 - Needs decision: none
 - Done when: new `bot_tests/spawners.rs` passes: a zombie spawner next to a torch spawns nothing (vanilla `Monster.checkMonsterSpawnRules` only skips light for trial spawners), nothing spawns on Peaceful, a custom name in SpawnData reaches the mob, and a blaze spawner in a lit fortress room still spawns (blazes use `checkAnyLightMonsterSpawnRules`).
+- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): a vanilla `BaseSpawner` with light rules, custom spawn rules and SpawnData/SpawnPotentials saved (unit tests for the saved data and spawn eggs). Not done: `bot_tests/spawners.rs`.
 
 #### G6-10 Structure spawn overrides
 
@@ -1891,6 +1950,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/piglin-barter-loot-table
 - Needs decision: D6-4
 - Done when: a test bartering until it gets one shows the enchanted book carries Soul Speed and the potions Fire Resistance (both fail on alpha).
+- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): bartering rolls the loot table, with `enchant_randomly` and `set_potion`. Unit test `bartering_rolls_the_loot_table` checks the book carries Soul Speed; the Fire Resistance potion check from the Done when is not in it. D6-4 is still open.
 
 #### G6-13 Stage: ender pearls
 
@@ -1907,6 +1967,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/ender-eye-parity
 - Needs decision: none
 - Done when: new `bot_tests/end_portal_frame.rs` passes: a comparator next to a filled frame reads 15, a block inside the ring drops as an item when the last eye goes in, a bot standing on the frame gets a teleport up onto the eye (vanilla `Block.pushEntitiesUp`), and an eye thrown right after startup flies instead of doing nothing.
+- Status (2026-11-19): partly built by `feat/survival-basics` (on `alpha` since 2026-11-05): eye of ender and end portal changes. Not done: `bot_tests/end_portal_frame.rs`; the comparator reading and pushing a player up onto the eye were not checked for this update.
 
 #### G6-15 Stage: stronghold
 
@@ -1923,6 +1984,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-damage-parts
 - Needs decision: none
 - Done when: new `bot_tests/dragon_damage.rs` passes in the End: a hit on the head id lowers health by the full damage, a body hit by `damage / 4 + min(damage, 1)`, the bot isn't kicked, an arrow hits a part, `damage` without a player source leaves health alone, and destroying the healing crystal costs 10.
+- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): dragon parts in the world, body hits for a quarter plus one, projectiles hit the parts, only player and dragon damage types hurt it (unit tests `parts_resolve_by_id_with_their_own_sizes`, `body_parts_take_a_quarter_plus_one`, `projectiles_find_the_parts_not_the_dragon`, `only_players_and_dragon_damage_types_hurt_it`). Not done: `bot_tests/dragon_damage.rs` in the End.
 
 #### G6-17 Dragon death sequence
 
@@ -1931,6 +1993,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-death-sequence
 - Needs decision: none
 - Done when: new `bot_tests/dragon_death.rs` passes: after `damage <dragon> 1000 minecraft:player_attack by <bot>` the dragon exists for 200 ticks, then the exit portal holds `end_portal` blocks, the egg sits on the podium, one gateway exists and the XP orbs add up to 12,000; the same test with `kill` instead of `damage`, on a fresh world, opens the portal at once.
+- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): a killing blow in flight keeps the dragon at one health for 200 ticks, `kill` removes it at once, and the fight places the exit portal, the egg, a gateway and 12,000 XP (unit tests `killing_blow_in_flight_keeps_one_health_and_dies_over_200_ticks`, `kill_removes_the_dragon_at_once`). Not done: `bot_tests/dragon_death.rs`.
 
 #### G6-18 Credits and respawn after the End
 
@@ -1947,6 +2010,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-fight-saved-data
 - Needs decision: none
 - Done when: a test in `core/world/dragon_fight.rs` reads an `ender_dragon_fight.dat` written by vanilla 26.3 and writes the same fields back; a boot test (kill the dragon, `stop`, start) finds no new dragon and the same gateways; a fight stopped mid-way comes back with the same dragon and health.
+- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): `ender_dragon_fight.dat` in the End's `data/minecraft/` (unit tests `fight_round_trips_through_its_saved_data_file`, `missing_fight_file_starts_a_new_fight`). Not done: reading a file written by vanilla 26.3, and the kill, stop and start boot test.
 
 #### G6-20 Stage: the End and the dragon
 
@@ -1980,6 +2044,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: `stronghold_rings_without_a_job_do_not_deadlock_chunk_workers` passes, and a real client teleported into the End on a fresh world sees the island within seconds.
 - Result (2026-11-04): found in the wave 3 play test: on alpha `da26d84ef` the client stayed on "Loading terrain..." in the End and `stop` hung; a backtrace showed every End `ChunkGen` worker waiting in `OnceLock::initialize` and one of them running the initializer's `par_iter`, which had picked up another chunk's job. Branch at `0d9894d4f`, pushed, PR draft `/srv/pex/pr-drafts/fix-stronghold-rings-deadlock.md`. The test hung in 2 of 3 runs with the fix reverted and passes with it; the End loads in the real client.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Merged as part of `feat/dragon-fight`.
 
 #### G6-24 The dragon's boss bar stays after leaving the End
 
@@ -1989,6 +2054,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: a real client that teleports from the End to the overworld loses the "Ender Dragon" bar within a second and gets it back on return.
 - Result (2026-11-04): found in the wave 3 play test, on alpha too. Branch at `8846177dd`, pushed, PR draft `/srv/pex/pr-drafts/fix-dragon-bossbar-after-leaving-end.md`. Play test on the integration build: gone in the overworld within 4 s, back in the End.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Merged as part of `feat/dragon-fight`.
 
 #### G6-25 Blocks in the open air render unlit
 
@@ -1998,6 +2064,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: a unit test places a block into an empty section above the terrain and reads sky light 15 on its top face and the vanilla values around it, the patches don't appear at spawn on the play-test seed, and a real client shows the platform and pillars lit.
 - Result (2026-11-04): seen in the wave 3 play test on alpha `da26d84ef` and on the integration build alike, in a world PEX generated, so it is not G7-32; F3 read sky 0 on top of the platform under open sky. Two causes: the pump writer saved light only for `Full` containers, so the `Empty(15)` sections above the terrain came back from disk as `Empty(0)` (every chunk that unloads and loads again, pump being the default format); and `propagate_sky_light_decrease` neither darkened nor relit a neighbor exactly as bright as the removed light, so the column under a new block stayed at 8 instead of vanilla's 14. Branch `fix/open-air-sky-light` at `c88859e7d`: the pump writer uses `to_array` like the Anvil one, and the decrease relights from every neighbor it doesn't darken (`SkyLightEngine.propagateDecrease`). Tests `uniform_light_survives_a_pump_save` and `sky_light_refills_under_a_block_in_open_air` fail with either fix reverted and pass. Chunks already saved without those arrays stay dark until G7-32's rule (a missing sky array above the topmost stored one loads as 15) also covers the pump loader. Real client: the black patches after leaving and coming back, and the black platform filled after a reload, are gone on the branch (both reproduced on alpha). The decrease fix in the real client: a stone at y 190 over open ground reads 14 below it right after placing and, after reconnecting, in the server data at y 189 and 175, as on vanilla 26.3 with the same client; alpha reads 7 and 11 right after and 0 after reconnecting. Local CI (`/srv/pex/ci/fix-open-air-sky-light/20261104-034705`) failed only on the known scaffolding GameTest. Pushed.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G6-26 A block in the open air casts a black shadow on the client
 
@@ -2103,6 +2170,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: test/world-fixture-26-3
 - Needs decision: none
 - Done when: the script rebuilds the world from an empty folder, `mca_check.py` passes on it, and its manifest names at least one entry for every row of the table above.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G7-02 World tree diff
 
@@ -2111,6 +2179,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: test/nbt-tree-diff
 - Needs decision: none
 - Done when: two copies of G7-01's world compare equal, and a scratch change to one chest item shows as one diff with its full NBT path.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G7-03 PEX round trip of the fixture
 
@@ -2167,6 +2236,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/wide-tick-delays
 - Needs decision: none
 - Done when: a unit test loads ticks with `t = 300` and `t = -5`, runs the overdue one on the first tick and saves the other with its remaining delay; a frogspawn hatches between 3600 and 12000 ticks.
+- Status (2026-11-19): built by `feat/long-tick-delays` (on `alpha` since 2026-11-05): `i32` delays with a far-tick list, pump format v2, and vanilla frogspawn and sniffer egg timers (unit tests `overdue_ticks_save_a_negative_delay_and_load_ahead`, `a_long_delay_runs_on_time_through_skips` and four more). The unit part of the Done when looks covered; a frogspawn hatching in game is not checked.
 
 #### G7-10 Block entity changes survive their chunk unloading
 
@@ -2176,6 +2246,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Needs decision: D7-6
 - Done when: the branch's `unloading_a_chunk_writes_its_live_block_entities_into_it` passes on alpha, and a bot test (hopper line into a chest, bot leaves, chunk unloads, `stop`) finds the items in the saved chest. G6-06 and G6-22 wait on this.
 - Result (2026-11-04): rebased onto alpha as `fix/flush-block-entities-before-unload-v2` at `6f813bb60`, keeping endercreepern64's commit `d92366d60` (the old branch's tip is theirs, so it is left as it is), pushed, PR draft `/srv/pex/pr-drafts/fix-flush-block-entities-before-unload-v2.md`. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): a chest of 64 items by a hopper kept all 64 across three unload and reload trips. Alpha didn't lose items in that scenario either, so the unit tests remain the evidence for the bug.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Landed as `fix/flush-block-entities-before-unload-v2`.
 
 #### G7-11 POI files in vanilla's format
 
@@ -2208,6 +2279,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/persist-time-weather
 - Needs decision: none
 - Done when: a boot test runs `time set 6000` and `weather thunder 3000`, restarts and finds both; vanilla on that save shows the same time and weather.
+- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): time and weather are saved (unit test `time_and_weather_survive_a_save`). Not done: the restart boot test and the vanilla check.
 
 #### G7-15 Scoreboard saved data
 
@@ -2216,6 +2288,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/scoreboard-saved-data
 - Needs decision: D7-4
 - Done when: objectives, scores and teams from G7-01's world survive PEX and come back in vanilla, and ones made in PEX survive a restart.
+- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): a shared `scoreboard.dat` in vanilla fields (unit tests `the_scoreboard_survives_a_save_in_vanilla_fields`, `every_dimension_of_a_save_shares_one_scoreboard`). Not done: the round trip through vanilla with G7-01's world. D7-4 is still open.
 
 #### G7-16 Map saved data
 
@@ -2232,6 +2305,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/border-tickets-saved-data
 - Needs decision: D7-4
 - Done when: a border and forced chunks set in vanilla are in place in PEX and the reverse, each after a restart.
+- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): `world_border.dat` and `chunk_tickets.dat` in vanilla fields (unit tests `the_border_survives_a_save_in_vanilla_fields`, `a_border_saved_mid_lerp_resumes_towards_its_target`, `forced_chunks_round_trip_and_keep_other_tickets`, `no_file_is_written_without_forced_chunks`). Not done: the vanilla-to-PEX and PEX-to-vanilla checks. D7-4 is still open.
 
 #### G7-18 Raids saved data
 
@@ -2352,6 +2426,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/missing-sky-light-load
 - Needs decision: none
 - Done when: a unit test loads a vanilla-saved chunk from the base world (`/srv/pex/bins/base-world-262`, which has 117 such chunks in `r.0.0`) and reads sky light 15 in its top sections and the vanilla values below; the chunk packet for it carries no empty sky layers above the terrain. Found in G9-07 (2026-11-03): at 229 of 599 positions in the G9-01 count run alpha marked those sky layers empty where Paper sent none.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 ### Proof
 
@@ -2500,6 +2575,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
 - Branch: feat/bedrock-upstream-gameplay
 - Needs decision: none. If D8-2 picks full upstream merges and one lands first, this piece shrinks to its Done when on the merged tree.
 - Done when: `cargo nextest run -p pumpkin-core -p pumpkin-inventory -p pumpkin-protocol` passes, including #4397's `net::bedrock` tests; `bot:entity_interaction_range` (`tools/pumpkin-tester/src/bot_tests/entity_interaction_range.rs`) still passes; a boot test with Bedrock on logs no new WARN or ERROR.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G8-03 Bedrock 1.26.60 (protocol 2225)
 
@@ -2508,6 +2584,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
 - Branch: feat/bedrock-26-60
 - Needs decision: none (same note as G8-02 on D8-2)
 - Done when: `accepts_only_the_current_bedrock_protocol` asserts 2225; the status and LAN discovery tests report 1.26.60 and 2225; a 1.26.60 client joins a local debug build by IP and through LAN discovery, reaches spawn and sees terrain (human check with a capture until G8-11 automates it).
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G8-04 Bounds on Bedrock item stack slots
 
@@ -2516,6 +2593,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
 - Branch: fix/bedrock-slot-bounds
 - Needs decision: none
 - Done when: test `hotbar_slot_out_of_range_maps_to_none` in `net/bedrock/play/item_stack_request.rs` covers hotbar slot ids 9 to 255 on the player screen and on a chest screen, and fails or panics on alpha.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. A real 1.26.60 client join and inventory play test are still to do.
 
 #### G8-05 Bounded NetherNet and chunk cache memory
 
@@ -2766,6 +2844,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Branch: feat/tick-phase-metrics
 - Needs decision: none
 - Done when: a unit test in `core/server/metrics.rs` checks `summary_line`'s P50, P95 and P99 against a hand-computed window, and in a 30-minute `/srv/pex/tools/localbench.sh` run with `slow_tick_ms = 20`, `unattributed` stays under 10% of `total` on every logged tick.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G9-03 Tick spike breakdown against Paper's P95
 
@@ -2783,6 +2862,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Needs decision: none
 - Done when: a new tester bot test `bot:player_move_broadcast_interval` has bot A send one position packet per server tick for 40 ticks while bot B watches, and B receives 19 to 21 movement packets for A and no `CHeadRot` while A's yaw is fixed (40 and 40 before the fix). A G9-01 rerun shows movement packets per bot-hour within 10% of Paper's. A human checks with two real clients that other players still move smoothly.
 - Result (2026-11-03): branch `fix/player-move-tracking` at `7fa4deb50`, stacked on G9-05, pushed, PR draft `/srv/pex/pr-drafts/fix-player-move-tracking.md`. `bot:player_move_broadcast_interval`: 21 movement packets and no `CHeadRot` in 40 ticks with the fix, 40 and 40 with alpha's server code. Local CI clean except the known scaffolding GameTest (two clippy lints fixed after the run, clippy rerun clean). Not measured: movement packets per bot-hour against Paper (needs G9-01). The two-client check is Neon's. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): cows on a platform followed a moving, turning, jumping, sneaking and teleporting player and turned their heads to follow on the other client. Early runs where the walking player died falling through a just-filled platform were the test script; alpha does the same.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G9-05 Mob head rotation on the update interval
 
@@ -2792,6 +2872,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Needs decision: none
 - Done when: a new tester bot test `bot:mob_head_rot_interval` keeps a pig with AI next to a bot for 300 ticks and the bot receives at most 100 `CHeadRot` for it, plus one per `CSetEntityMetadata` or `CEntityVelocity` it also received (the test fails before the fix), and a G9-01 rerun shows `rotate_head` bytes per bot-hour within 10% of Paper's.
 - Result (2026-11-03): branch `fix/head-rot-interval` at `dec4f1d12`, pushed, PR draft `/srv/pex/pr-drafts/fix-head-rot-interval.md`. `bot:mob_head_rot_interval` (pig turning without walking, 301 ticks): 86 `CHeadRot` with 3 velocity packets on the branch; 147 with 18 velocity packets on alpha, over its limit of 119. Not measured: `rotate_head` bytes per bot-hour against Paper (needs G9-01). Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): cows on a platform followed a moving, turning, jumping, sneaking and teleporting player and turned their heads to follow on the other client. Early runs where the walking player died falling through a just-filled platform were the test script; alpha does the same.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G9-06 Held chunks are not sent again on republish
 
@@ -2810,6 +2891,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Needs decision: none
 - Done when: the median decompressed bytes per position are within 5% of Paper's, or the PR explains the rest; the new bench shows encode time no worse; a human checks lighting on those chunks with a real client.
 - Result (2026-11-03): branch `perf/chunk-packet-size`. The fully lit sky arrays at the top of a column are left out of both light encoders (the chunk packet writes its light in `v1_18.rs`, not through `light.rs`). On a region PEX saved, the chunk packet bench gives 45,109,884 bytes against alpha's 63,579,378 (-29.0%, median 44,307 against 64,830 per chunk), with encode time no worse (85.5 and 78.7 ms against 87.8 and 88.4 ms). Applied to alpha's G9-01 packets the rule gives a median of 0.946 of Paper's bytes per position. Waiting on a human lighting check. Found G7-32. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): lighting looked the same as alpha at six viewpoints. Black, unlit spots seen on both builds (blocks placed in the open air, chunk-aligned patches of new terrain) are G6-25, not this branch.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G9-08 Default network compression level
 
@@ -2827,6 +2909,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Needs decision: none
 - Done when: a unit test shows that an edit to a cached chunk changes its encoded payload; a G9-03 rerun shows the players phase's share of slow ticks at least halved, with mean tick and P95 no worse over 2 runs; a human joins with a real client and sees no missing chunks or entities.
 - Result (2026-11-03): branch `perf/chunk-encode-off-tick`, stacked on G9-10. Chunk packets are encoded once per chunk change on the background pool and shared between players; the unit test is in. Not met: the players phase's share of slow time stays at 3.2% (alpha 3.3%), because in the G9-03 workload that phase is 0.5 ms a tick to begin with. Mean tick and P95 no worse than G9-10 alone (14.00 against 14.05 ms, 23.55 against 23.61 ms). Neon decides whether the shared cache is worth keeping without a tick gain. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): six 300-block teleports into new terrain and back, and a second player relogging, showed full terrain within 6 s every time, no missing chunks, no WARN or ERROR.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. It does not meet its Done when: the players phase is about 3% of slow-tick time on alpha, so there was nothing to halve.
 
 #### G9-10 Background work off the tick's Rayon pool
 
@@ -2836,6 +2919,7 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
 - Needs decision: none
 - Done when: a G9-03 rerun shows the matching cause under 10% of slow ticks, mean tick and P95 are no worse over 2 runs, and the `chunk_io` bench in `pumpkin-world` moves less than 5%.
 - Result (2026-11-03): branch `perf/tick-rayon-pool`. Autosave ticks no longer wait for region writes in the global pool: 0.03 to 1.35 ms queued against 177 to 241 ms on alpha, max tick 69 to 86 ms against 213 to 257 ms. Region reads overlap 3.5 to 4.1% of slow ticks (alpha 4.5%). Mean tick and P95 within noise in the one clean pair (14.05 against 13.96 ms, 23.61 against 23.33 ms); the other B run was contended by CI builds. The `chunk_io` bench doesn't use either pool; its single runs moved up to 24% (faster), which the branch can't cause. Real-client play test (2026-11-04, by the agent on a ThinkPad, two accounts, integration build of all wave 3 branches on alpha `da26d84ef`): six 300-block teleports into new terrain and back, and a second player relogging, showed full terrain within 6 s every time, no missing chunks, no WARN or ERROR.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G9-11 Gameplay benchmark in the repository
 
@@ -2972,6 +3056,7 @@ Hardware:
 - Branch: ci/pin-toolchain
 - Needs decision: none
 - Done when: `rustup show active-toolchain` in the checkout prints `1.99.1-x86_64-unknown-linux-gnu (overridden by ...)`; `grep -nE '\bcargo (build|clippy|nextest|test|run|install|ndk)' .github/workflows/*.yml | grep -v -- --locked` prints nothing; `actionlint` passes; `local-ci.sh --full` on the branch gives the same results as on alpha.
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges.
 
 #### G10-02 Check the vanilla jar the build downloads
 
@@ -2980,6 +3065,7 @@ Hardware:
 - Branch: fix/datapack-jar-hash
 - Needs decision: none
 - Done when: with `PUMPKIN_MINECRAFT_SERVER_JAR` pointing at a copy of the jar with one byte changed, `cargo build --locked -p pumpkin-data` fails with an error naming the expected and actual SHA-1; an `assets/datapack/` whose marker names another version is extracted again (build warning line); `nix build .#default` still passes (CI `nix.yml` after G0-01, or any host with Nix).
+- Status (2026-11-19): on `alpha` since the 2026-11-05 merges. The nix build is untested.
 
 #### G10-03 Release build script with path-independent output
 
