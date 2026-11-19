@@ -1299,11 +1299,6 @@ impl VillagerEntity {
         let entity = self.get_entity();
         self.unhappy_counter.store(40, Ordering::Relaxed);
         entity.set_synced_data(tracked_data::villager::UNHAPPY_COUNTER, VarInt(40));
-        entity.world.load().send_entity_status(
-            entity,
-            pumpkin_data::entity::EntityStatus::VillagerAngry,
-            ActorEventID::VillagerAngry,
-        );
         entity.play_sound(pumpkin_data::sound::Sound::EntityVillagerNo);
     }
 
@@ -2304,6 +2299,16 @@ impl Mob for VillagerEntity {
         let Some(player) = source.cast_any().downcast_ref::<Player>() else {
             return;
         };
+
+        // Vanilla `Villager.setLastHurtByMob`: angry particles when a player hurts it.
+        let entity = self.get_entity();
+        if entity.is_alive() {
+            entity.world.load().send_entity_status(
+                entity,
+                pumpkin_data::entity::EntityStatus::VillagerAngry,
+                ActorEventID::VillagerAngry,
+            );
+        }
 
         if let Ok(mut gossips) = self.gossips.try_lock() {
             let value = gossips

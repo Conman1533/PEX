@@ -145,8 +145,12 @@ pub trait TamableAnimal: Animal {
 
     fn tame(&self, player_id: Uuid) {
         self.set_tame(true);
+        self.apply_taming_side_effects();
         self.set_owner(Some(player_id));
     }
+
+    /// Vanilla `applyTamingSideEffects`: runs when the animal is tamed or bred tame, not on load.
+    fn apply_taming_side_effects(&self) {}
 
     fn spawn_taming_particles(&self, success: bool) {
         use pumpkin_data::particle::Particle;

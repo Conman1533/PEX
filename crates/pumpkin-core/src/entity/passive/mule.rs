@@ -1,5 +1,5 @@
 use crate::entity::ai::goal::run_around_like_crazy::{RideTamable, RunAroundLikeCrazyGoal};
-use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
+use crate::entity::passive::horse::{HORSE_AMBIENT_SOUND_INTERVAL, handle_horse_eating};
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -321,6 +321,22 @@ impl Mob for MuleEntity {
                 ent.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
                 return true;
             }
+        }
+
+        if self.is_food(item_stack) {
+            let used = handle_horse_eating(
+                self,
+                &self.temper,
+                self.is_tame(),
+                false,
+                Sound::EntityMuleEat,
+                player,
+                item_stack.get_item(),
+            );
+            if used {
+                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            }
+            return used;
         }
 
         self.animal_interact(player, item_stack)

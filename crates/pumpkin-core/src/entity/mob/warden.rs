@@ -4,10 +4,12 @@ use std::sync::{
 };
 
 use pumpkin_data::{
+    attributes::Attributes,
     damage::DamageType,
     effect::StatusEffect,
     entity::{EntityPose, EntityStatus, EntityType},
     game_event::GameEvent,
+    particle::Particle,
     potion::Effect,
     sound::{Sound, SoundCategory},
     tag::{self, Tag},
@@ -18,6 +20,7 @@ use pumpkin_util::{
     GameMode,
     math::{position::BlockPos, vector3::Vector3},
 };
+use rand::RngExt;
 use uuid::Uuid;
 
 use crate::entity::{
@@ -258,8 +261,37 @@ impl AngerManagement {
     }
 }
 
+/// Vanilla `WardenAi.ROAR_DURATION`.
+const ROAR_DURATION: i32 = 84;
+/// Vanilla `Roar.TICKS_BEFORE_PLAYING_ROAR_SOUND`.
+const ROAR_SOUND_DELAY: i32 = 25;
+/// Vanilla `Roar.ROAR_ANGER_INCREASE`.
+const ROAR_ANGER_INCREASE: i32 = 20;
+/// Vanilla `SonicBoom.DURATION` and `TICKS_BEFORE_PLAYING_SOUND`.
+const SONIC_BOOM_DURATION: i32 = 60;
+const SONIC_BOOM_FIRE_TICK: i32 = 34;
+/// Vanilla `SonicBoom.COOLDOWN`, also set by every melee hit.
+const SONIC_BOOM_COOLDOWN: i32 = 40;
+/// Vanilla `WardenAi.SNIFFING_DURATION` (ceil 83.2).
+const SNIFFING_DURATION: i32 = 84;
+/// Vanilla `Warden.increaseAngerAt(entity)` default.
+const DEFAULT_ANGER_INCREASE: i32 = 35;
+/// Vanilla `NearestLivingEntitySensor` radius used for `NEAREST_ATTACKABLE`.
+const NEAREST_ATTACKABLE_RANGE: f64 = 24.0;
+/// Vanilla `WardenAi.MELEE_ATTACK_COOLDOWN`.
+const MELEE_ATTACK_COOLDOWN: i32 = 18;
+
 pub struct WardenEntity {
     pub mob_entity: MobEntity,
+    /// Ticks left in the roar; vanilla `Roar` runs before every fight.
+    roar_ticks: AtomicI32,
+    roar_target: Mutex<Option<Arc<dyn EntityBase>>>,
+    /// Ticks left while charging a sonic boom.
+    sonic_ticks: AtomicI32,
+    sonic_cooldown: AtomicI32,
+    /// Ticks left in a sniff (vanilla `Sniffing`).
+    sniff_ticks: AtomicI32,
+    sniff_cooldown: AtomicI32,
     emerge_ticks: Arc<AtomicI32>,
     pub vibration: Mutex<VibrationData>,
     pub anger: Mutex<AngerManagement>,
@@ -371,6 +403,12 @@ impl WardenEntity {
         let warden = Self {
             mob_entity,
             emerge_ticks: emerge_ticks.clone(),
+            roar_ticks: AtomicI32::new(0),
+            roar_target: Mutex::new(None),
+            sonic_ticks: AtomicI32::new(0),
+            sonic_cooldown: AtomicI32::new(0),
+            sniff_ticks: AtomicI32::new(0),
+            sniff_cooldown: AtomicI32::new(0),
             vibration: Mutex::new(VibrationData::new()),
             anger: Mutex::new(AngerManagement::new()),
             vibration_cooldown: AtomicI32::new(0),
@@ -525,14 +563,16 @@ impl WardenEntity {
             .set_anger(target_uuid, is_player, event.new_anger);
         self.sync_client_anger_level();
 
-        if AngerLevel::by_anger(new_anger).is_angry() {
-            let current_target = self.mob_entity.get_target();
-            let switch = current_target
-                .as_ref()
-                .is_none_or(|cur| is_player && cur.get_player().is_none());
-            if switch {
-                self.mob_entity.set_target(Some(target.clone()));
-            }
+        // Vanilla `Warden.increaseAngerAt`: anger at a player drops a non-player target, and the
+        // warden then roars at whoever it is angriest at before fighting (`mob_tick`).
+        if is_player
+            && AngerLevel::by_anger(new_anger).is_angry()
+            && self
+                .mob_entity
+                .get_target()
+                .is_some_and(|current| current.get_player().is_none())
+        {
+            self.mob_entity.set_target(None);
         }
 
         if play_sound && self.get_entity().pose.load() != EntityPose::Roaring {
@@ -544,6 +584,277 @@ impl WardenEntity {
                 10.0,
                 1.0,
             );
+        }
+    }
+
+    /// Vanilla `Warden.closerThan(entity, horizontal, vertical)`.
+    fn closer_than(&self, target: &dyn EntityBase, horizontal: f64, vertical: f64) -> bool {
+        let pos = self.get_entity().pos.load();
+        let other = target.get_entity().pos.load();
+        let (dx, dz) = (other.x - pos.x, other.z - pos.z);
+        dx * dx + dz * dz < horizontal * horizontal && (other.y - pos.y).abs() < vertical
+    }
+
+    fn is_roaring(&self) -> bool {
+        self.roar_ticks.load(Ordering::Relaxed) > 0
+    }
+
+    /// Vanilla `NEAREST_ATTACKABLE`, players only.
+    fn nearest_attackable(&self, world: &World) -> Option<Arc<dyn EntityBase>> {
+        world
+            .get_nearest_player(
+                self.get_entity().pos.load(),
+                NEAREST_ATTACKABLE_RANGE,
+                |player| self.can_target_entity(player.as_ref()),
+            )
+            .map(|player| player as Arc<dyn EntityBase>)
+    }
+
+    /// Vanilla `Roar.start`.
+    fn start_roar(&self, target: &Arc<dyn EntityBase>) {
+        self.end_sniffing();
+        self.mob_entity.steered().navigator().stop();
+        let target_pos = target.get_entity().pos.load();
+        self.mob_entity
+            .look_control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .look_at_with_range(
+                target_pos.x,
+                target.get_entity().get_eye_y(),
+                target_pos.z,
+                180.0,
+                90.0,
+            );
+        self.get_entity().set_pose(EntityPose::Roaring);
+        self.roar_ticks.store(ROAR_DURATION, Ordering::Relaxed);
+        *self
+            .roar_target
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(target.clone());
+        self.increase_anger_at(Some(target), ROAR_ANGER_INCREASE, false);
+    }
+
+    /// Vanilla `Roar.tick` and `Roar.stop`: the roar sound after 25 ticks, the fight after 84.
+    fn tick_roar(&self) {
+        let ticks = self.roar_ticks.load(Ordering::Relaxed);
+        if ticks <= 0 {
+            return;
+        }
+        let ticks = ticks - 1;
+        self.roar_ticks.store(ticks, Ordering::Relaxed);
+        let entity = self.get_entity();
+        if ROAR_DURATION - ticks == ROAR_SOUND_DELAY {
+            entity.world.load().play_sound_fine(
+                Sound::EntityWardenRoar,
+                SoundCategory::Hostile,
+                &entity.pos.load(),
+                3.0,
+                1.0,
+            );
+        }
+        if ticks == 0 {
+            if entity.pose.load() == EntityPose::Roaring {
+                entity.set_pose(EntityPose::Standing);
+            }
+            let target = self
+                .roar_target
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(target) = target.filter(|target| self.can_target_entity(target.as_ref())) {
+                self.set_attack_target(target);
+            }
+        }
+    }
+
+    /// Vanilla `Warden.setAttackTarget`: ends any roar and holds the sonic boom back for 200
+    /// ticks.
+    fn set_attack_target(&self, target: Arc<dyn EntityBase>) {
+        *self
+            .roar_target
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        if self.roar_ticks.swap(0, Ordering::Relaxed) > 0 {
+            let entity = self.get_entity();
+            if entity.pose.load() == EntityPose::Roaring {
+                entity.set_pose(EntityPose::Standing);
+            }
+        }
+        // The fight activity cuts a sniff short.
+        if self.sniff_ticks.load(Ordering::Relaxed) > 0 {
+            self.end_sniffing();
+        }
+        self.mob_entity.set_target(Some(target));
+        self.sonic_cooldown.store(200, Ordering::Relaxed);
+    }
+
+    fn end_sniffing(&self) {
+        self.sniff_ticks.store(0, Ordering::Relaxed);
+        let entity = self.get_entity();
+        if entity.pose.load() == EntityPose::Sniffing {
+            entity.set_pose(EntityPose::Standing);
+        }
+    }
+
+    /// Vanilla `TryToSniff` and `Sniffing`: with nobody to fight and nothing to investigate, the
+    /// warden stops to sniff now and then, and gets angry at a player close by.
+    fn tick_sniffing(&self, world: &World) {
+        let cooldown = self.sniff_cooldown.load(Ordering::Relaxed);
+        if cooldown > 0 {
+            self.sniff_cooldown.store(cooldown - 1, Ordering::Relaxed);
+        }
+        let ticks = self.sniff_ticks.load(Ordering::Relaxed);
+        if ticks > 0 {
+            self.sniff_ticks.store(ticks - 1, Ordering::Relaxed);
+            if ticks == 1 {
+                self.end_sniffing();
+                if let Some(target) = self.nearest_attackable(world) {
+                    if self.closer_than(target.as_ref(), 6.0, 20.0) {
+                        self.increase_anger_at(Some(&target), DEFAULT_ANGER_INCREASE, true);
+                    }
+                    let no_disturbance = self
+                        .disturbance_pos
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .is_none();
+                    if no_disturbance {
+                        self.set_disturbance_location(target.get_entity().block_pos.load());
+                    }
+                }
+            }
+            return;
+        }
+        let entity = self.get_entity();
+        let idle = cooldown <= 1
+            && !self.is_roaring()
+            && !self.is_digging_or_emerging()
+            && entity.pose.load() == EntityPose::Standing
+            && self.mob_entity.get_target().is_none()
+            && self
+                .disturbance_pos
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_none();
+        if idle && self.nearest_attackable(world).is_some() {
+            self.sniff_ticks.store(SNIFFING_DURATION, Ordering::Relaxed);
+            self.sniff_cooldown
+                .store(rand::rng().random_range(100..=200), Ordering::Relaxed);
+            self.mob_entity.steered().navigator().stop();
+            entity.set_pose(EntityPose::Sniffing);
+            world.play_sound_fine(
+                Sound::EntityWardenSniff,
+                SoundCategory::Hostile,
+                &entity.pos.load(),
+                5.0,
+                1.0,
+            );
+        }
+    }
+
+    /// Vanilla `SonicBoom`: a 3-second charge at a target within 15 blocks across and 20 up,
+    /// firing after 34 ticks.
+    fn tick_sonic_boom(&self, world: &World) {
+        let cooldown = self.sonic_cooldown.load(Ordering::Relaxed);
+        if cooldown > 0 {
+            self.sonic_cooldown.store(cooldown - 1, Ordering::Relaxed);
+        }
+        let target = self.mob_entity.get_target();
+        let entity = self.get_entity();
+        let ticks = self.sonic_ticks.load(Ordering::Relaxed);
+        if ticks > 0 {
+            let ticks = ticks - 1;
+            self.sonic_ticks.store(ticks, Ordering::Relaxed);
+            if let Some(target) = &target {
+                let target_pos = target.get_entity().pos.load();
+                self.mob_entity
+                    .look_control
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .look_at_with_range(target_pos.x, target_pos.y, target_pos.z, 10.0, 40.0);
+            }
+            if SONIC_BOOM_DURATION - ticks == SONIC_BOOM_FIRE_TICK
+                && let Some(target) = target.filter(|target| {
+                    self.can_target_entity(target.as_ref())
+                        && self.closer_than(target.as_ref(), 15.0, 20.0)
+                })
+            {
+                self.fire_sonic_boom(world, &target);
+            }
+            if ticks == 0 {
+                self.sonic_cooldown
+                    .store(SONIC_BOOM_COOLDOWN, Ordering::Relaxed);
+            }
+            return;
+        }
+        if cooldown <= 1
+            && !self.is_roaring()
+            && target.is_some_and(|target| {
+                self.can_target_entity(target.as_ref())
+                    && self.closer_than(target.as_ref(), 15.0, 20.0)
+            })
+        {
+            self.sonic_ticks
+                .store(SONIC_BOOM_DURATION, Ordering::Relaxed);
+            world.send_entity_status(entity, EntityStatus::SonicCharge, ActorEventID::None);
+            world.play_sound_fine(
+                Sound::EntityWardenSonicCharge,
+                SoundCategory::Hostile,
+                &entity.pos.load(),
+                3.0,
+                1.0,
+            );
+        }
+    }
+
+    fn fire_sonic_boom(&self, world: &World, target: &Arc<dyn EntityBase>) {
+        let entity = self.get_entity();
+        // Vanilla `EntityAttachment.WARDEN_CHEST` is 1.6 blocks up.
+        let source = entity.pos.load() + Vector3::new(0.0, 1.6, 0.0);
+        let delta = target.get_entity().get_eye_pos() - source;
+        let length = delta.length();
+        if length <= 0.0 {
+            return;
+        }
+        let normal = delta * (1.0 / length);
+        let steps = length.floor() as i32 + 7;
+        for i in 1..steps {
+            world.spawn_particle(
+                source + normal * f64::from(i),
+                Vector3::new(0.0, 0.0, 0.0),
+                0.0,
+                1,
+                Particle::SonicBoom,
+            );
+        }
+        world.play_sound_fine(
+            Sound::EntityWardenSonicBoom,
+            SoundCategory::Hostile,
+            &entity.pos.load(),
+            3.0,
+            1.0,
+        );
+        let Some(warden) = world.get_entity_by_id(entity.entity_id) else {
+            return;
+        };
+        if target.damage_with_context(
+            target.as_ref(),
+            10.0,
+            DamageType::SONIC_BOOM,
+            None,
+            Some(warden.as_ref()),
+            Some(warden.as_ref()),
+        ) {
+            let resistance = target.get_living_entity().map_or(0.0, |living| {
+                living.get_attribute_value(&Attributes::KNOCKBACK_RESISTANCE)
+            });
+            let vertical = 0.5 * (1.0 - resistance);
+            let horizontal = 2.5 * (1.0 - resistance);
+            target.get_entity().add_velocity(Vector3::new(
+                normal.x * horizontal,
+                normal.y * vertical,
+                normal.z * horizontal,
+            ));
         }
     }
 
@@ -756,6 +1067,15 @@ impl Mob for WardenEntity {
             AngerLevel::ANGRY_THRESHOLD + 20,
             false,
         );
+        // Vanilla `Warden.hurtServer`: hit directly with nobody to fight, it turns on the attacker
+        // at once, without roaring.
+        if self.mob_entity.get_target().is_none()
+            && let Some(attacker) = attacker_arc.filter(|attacker| {
+                attacker.get_living_entity().is_some() && self.can_target_entity(attacker.as_ref())
+            })
+        {
+            self.set_attack_target(attacker);
+        }
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
@@ -798,27 +1118,75 @@ impl Mob for WardenEntity {
             self.sync_client_anger_level();
         }
 
+        self.tick_roar();
         if self.get_anger_level().is_angry() {
-            if self
-                .mob_entity
-                .get_target()
+            let target = self.mob_entity.get_target();
+            if target
                 .as_ref()
-                .is_none_or(|t| !self.can_target_entity(t.as_ref()))
+                .is_some_and(|t| !self.can_target_entity(t.as_ref()))
+            {
+                self.mob_entity.set_target(None);
+            }
+            // Vanilla `SetRoarTarget`: no fight starts without a roar first.
+            if self.mob_entity.get_target().is_none()
+                && !self.is_roaring()
+                && !self.is_digging_or_emerging()
             {
                 let next_target = self
                     .anger
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .active_entity(&world, self);
-                self.mob_entity.set_target(next_target);
+                if let Some(next_target) = next_target {
+                    self.start_roar(&next_target);
+                }
             }
         } else if self.mob_entity.get_target().is_some() {
             self.mob_entity.set_target(None);
         }
+        self.tick_sniffing(&world);
+        self.tick_sonic_boom(&world);
     }
 
     fn mob_init_data_tracker(&self) {
         self.sync_client_anger_level();
+    }
+
+    /// Roaring and sniffing warden stand still, as no vanilla movement runs in those activities.
+    fn is_mob_immobile(&self) -> bool {
+        self.mob_entity.living_entity.is_dead_or_dying()
+            || self.is_roaring()
+            || self.sniff_ticks.load(Ordering::Relaxed) > 0
+    }
+
+    fn melee_attack_interval(&self) -> i32 {
+        MELEE_ATTACK_COOLDOWN
+    }
+
+    fn can_melee_attack(&self) -> bool {
+        self.sonic_ticks.load(Ordering::Relaxed) == 0 && !self.is_roaring()
+    }
+
+    /// Vanilla `Warden.doHurtTarget`.
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {
+        let entity = self.get_entity();
+        let world = entity.world.load();
+        world.send_entity_status(
+            entity,
+            EntityStatus::StartAttacking,
+            ActorEventID::StartAttacking,
+        );
+        let mut rng = self.get_random();
+        let pitch = (rng.random::<f32>() - rng.random::<f32>()) * 0.2 + 1.0;
+        world.play_sound_fine(
+            Sound::EntityWardenAttackImpact,
+            SoundCategory::Hostile,
+            &entity.pos.load(),
+            10.0,
+            pitch,
+        );
+        self.sonic_cooldown
+            .store(SONIC_BOOM_COOLDOWN, Ordering::Relaxed);
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {

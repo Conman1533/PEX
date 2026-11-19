@@ -4,7 +4,10 @@ use std::sync::atomic::Ordering;
 
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::attributes::Attributes;
+use pumpkin_data::damage::DamageType;
 use pumpkin_data::entity::EntityStatus;
+use pumpkin_data::particle::Particle;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -64,8 +67,50 @@ impl Mob for SquidEntity {
         SquidMovement::travel(self, caller)
     }
 
+    /// Vanilla `Squid.hurtServer`: inks when an attacker hurts it.
+    fn on_damage(&self, _damage_type: DamageType, source: Option<&dyn EntityBase>) {
+        if source.is_some() {
+            spawn_ink(self, Sound::EntitySquidSquirt, Particle::SquidInk);
+        }
+    }
+
     fn mob_is_pushed_by_fluids(&self) -> bool {
         false
+    }
+}
+
+/// Vanilla `Squid.spawnInk`: a squirt and a cloud of ink shot out under the squid.
+pub fn spawn_ink(mob: &dyn Mob, sound: Sound, particle: Particle) {
+    let living = &mob.get_mob_entity().living_entity;
+    let entity = &living.entity;
+    let world = entity.world.load();
+    let pos = entity.pos.load();
+    world.play_sound_fine(sound, SoundCategory::Neutral, &pos, 0.4, living.get_pitch());
+
+    // Vanilla `rotateVector`: `xRot` by the body pitch, then `yRot` by minus the body yaw.
+    let (pitch_sin, pitch_cos) = f64::from(entity.pitch.load().to_radians()).sin_cos();
+    let (yaw_sin, yaw_cos) = f64::from(-entity.body_yaw.load().to_radians()).sin_cos();
+    let rotate = |v: Vector3<f64>| {
+        let y = v.y * pitch_cos + v.z * pitch_sin;
+        let z = v.z * pitch_cos - v.y * pitch_sin;
+        Vector3::new(v.x * yaw_cos + z * yaw_sin, y, z * yaw_cos - v.x * yaw_sin)
+    };
+    let origin = pos + rotate(Vector3::new(0.0, -1.0, 0.0));
+    let mut rng = mob.get_random();
+    for _ in 0..30 {
+        let dir = rotate(Vector3::new(
+            f64::from(rng.random::<f32>()) * 0.6 - 0.3,
+            -1.0,
+            f64::from(rng.random::<f32>()) * 0.6 - 0.3,
+        ));
+        let offset = dir * f64::from(0.3 + rng.random::<f32>() * 2.0);
+        world.spawn_particle(
+            Vector3::new(origin.x, origin.y + 0.5, origin.z),
+            Vector3::new(offset.x as f32, offset.y as f32, offset.z as f32),
+            0.1,
+            0,
+            particle,
+        );
     }
 }
 

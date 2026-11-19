@@ -2,11 +2,12 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
 use pumpkin_data::attributes::Attributes;
-use pumpkin_data::entity::EntityType;
+use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_util::math::vector3::Vector3;
 
 use crate::entity::{
@@ -268,6 +269,22 @@ impl Mob for HoglinEntity {
         } else {
             self.time_in_overworld.store(0, Ordering::Relaxed);
         }
+    }
+
+    fn melee_attack_interval(&self) -> i32 {
+        if self.is_baby() { 15 } else { 40 }
+    }
+
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {
+        let entity = &self.mob_entity.living_entity.entity;
+        entity.world.load().send_entity_status(
+            entity,
+            EntityStatus::StartAttacking,
+            ActorEventID::StartAttacking,
+        );
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityHoglinAttack);
     }
 
     fn on_attack(&self, target: &dyn EntityBase) {

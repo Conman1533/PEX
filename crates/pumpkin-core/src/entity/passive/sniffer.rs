@@ -1,7 +1,7 @@
 use crate::entity::passive::animal::animal_can_mate;
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicI32, Ordering},
+    atomic::{AtomicI32, AtomicI64, Ordering},
 };
 
 use pumpkin_data::entity::{EntityStatus, EntityType};
@@ -20,10 +20,12 @@ use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal,
+        Controls, Goal, GoalReach, breed::BreedGoal, escape_danger::EscapeDangerGoal,
+        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal, to_goal_ticks,
         wander_around::WanderAroundGoal,
     },
+    ai::{pathfinder::NavigatorGoal, util::land_random_pos},
     item::ItemEntity,
     mob::{Mob, MobEntity},
     passive::animal::Animal,
@@ -33,6 +35,11 @@ use crate::world::World;
 
 pub const SNIFFER_BABY_START_AGE: i32 = -48000;
 pub const DIGGING_DROP_SEED_OFFSET_TICKS: i32 = 120;
+/// Vanilla `SnifferAi.SNIFFING_COOLDOWN_TICKS`, after a finished dig.
+const SNIFFING_COOLDOWN_TICKS: i64 = 9600;
+/// How often the idle sniffer starts scenting or sniffing. Vanilla rolls them as two of its
+/// idle choices, each taking a second or two.
+const SNIFF_CHOICE_INTERVAL: i32 = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
@@ -76,6 +83,8 @@ pub struct SnifferEntity {
     pub state: AtomicI32,
     pub drop_seed_at_tick: AtomicI32,
     pub explored_positions: std::sync::Mutex<Vec<BlockPos>>,
+    /// Vanilla `SNIFF_COOLDOWN`, as the game time it ends.
+    sniff_cooldown_until: AtomicI64,
 }
 
 impl SnifferEntity {
@@ -87,6 +96,7 @@ impl SnifferEntity {
             state: AtomicI32::new(SnifferState::Idling.id()),
             drop_seed_at_tick: AtomicI32::new(0),
             explored_positions: std::sync::Mutex::new(Vec::new()),
+            sniff_cooldown_until: AtomicI64::new(0),
         };
         let mob_arc = Arc::new(sniffer);
         let mob_weak: Weak<dyn Mob> = {
@@ -98,17 +108,20 @@ impl SnifferEntity {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
+            // Vanilla `SnifferAi`: `AnimalPanic(2.0)` in the core activity.
+            goal_selector.add_goal(0, EscapeDangerGoal::new(2.0).lasting());
             goal_selector.add_goal(1, BreedGoal::new(1.0));
             goal_selector.add_goal(
                 2,
                 Box::new(TemptGoal::new(
-                    1.2,
+                    1.25,
                     |_, stack| stack.get_item().has_tag(&tag::Item::MINECRAFT_SNIFFER_FOOD),
                     false,
                 )),
             );
             goal_selector.add_goal(3, Box::new(FollowParentGoal::new(1.1)));
             goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(4, Box::new(SnifferSniffGoal::default()));
             goal_selector.add_goal(
                 5,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
@@ -255,6 +268,27 @@ impl SnifferEntity {
         !explored.contains(&pos)
     }
 
+    /// Vanilla `Sniffer.canSniff`.
+    #[must_use]
+    pub fn can_sniff(&self) -> bool {
+        let entity = self.get_entity();
+        !self.is_panicking()
+            && !entity.is_in_water()
+            && !self.mob_entity.is_in_love()
+            && entity.on_ground.load(Ordering::Relaxed)
+            && entity.get_vehicle().is_none()
+            && !entity.is_leashed()
+    }
+
+    /// Vanilla `Sniffer.calculateDigPosition`, without the reachable-path check.
+    fn calculate_dig_position(&self) -> Option<BlockPos> {
+        (0..5).find_map(|idx| {
+            let pos = land_random_pos::get_pos(self, 10 + 2 * idx, 3)?;
+            let block = BlockPos::floored(pos.x, pos.y, pos.z).down();
+            self.can_dig_at(block).then_some(block)
+        })
+    }
+
     fn store_explored_position(&self, pos: BlockPos) {
         let mut explored = self
             .explored_positions
@@ -290,6 +324,183 @@ impl SnifferEntity {
                 &head_pos,
             );
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum SniffPhase {
+    #[default]
+    Scenting,
+    Sniffing,
+    Searching,
+    Digging,
+    Rising,
+    Happy,
+}
+
+/// Vanilla `SnifferAi`'s idle scenting and its sniff, search, dig, rise and feel-happy cycle,
+/// in one goal.
+#[derive(Default)]
+struct SnifferSniffGoal {
+    phase: SniffPhase,
+    ticks: i32,
+    done: bool,
+}
+
+impl SnifferSniffGoal {
+    fn sniffer(mob: &dyn Mob) -> Option<&SnifferEntity> {
+        mob.cast_any().downcast_ref::<SnifferEntity>()
+    }
+
+    fn finish(&mut self, sniffer: &SnifferEntity) {
+        sniffer.transition_to(SnifferState::Idling);
+        self.done = true;
+    }
+}
+
+impl Goal for SnifferSniffGoal {
+    fn tick_reach(&self, _mob: &dyn Mob, running: bool) -> Option<GoalReach> {
+        Some(GoalReach {
+            speed: if running { 1.25 } else { 0.0 },
+            ..GoalReach::default()
+        })
+    }
+
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        let Some(sniffer) = Self::sniffer(mob) else {
+            return false;
+        };
+        if !sniffer.can_sniff()
+            || mob
+                .get_random()
+                .random_range(0..to_goal_ticks(SNIFF_CHOICE_INTERVAL))
+                != 0
+        {
+            return false;
+        }
+        let now = sniffer.get_entity().world.load().get_world_age();
+        let can_sniff_out =
+            !sniffer.is_baby() && now >= sniffer.sniff_cooldown_until.load(Ordering::Relaxed);
+        self.phase = if can_sniff_out && mob.get_random().random::<bool>() {
+            SniffPhase::Sniffing
+        } else {
+            SniffPhase::Scenting
+        };
+        self.ticks = mob.get_random().random_range(40..=80);
+        self.done = false;
+        true
+    }
+
+    fn should_continue(&mut self, _mob: &dyn Mob) -> bool {
+        !self.done
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        true
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        let Some(sniffer) = Self::sniffer(mob) else {
+            return;
+        };
+        mob.get_mob_entity().steered().navigator().stop();
+        sniffer.transition_to(if self.phase == SniffPhase::Sniffing {
+            SnifferState::Sniffing
+        } else {
+            SnifferState::Scenting
+        });
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        if let Some(sniffer) = Self::sniffer(mob)
+            && sniffer.get_state() != SnifferState::Idling
+        {
+            sniffer.transition_to(SnifferState::Idling);
+        }
+        if self.phase == SniffPhase::Searching {
+            mob.get_mob_entity().steered().navigator().stop();
+        }
+        self.done = false;
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let Some(sniffer) = Self::sniffer(mob) else {
+            self.done = true;
+            return;
+        };
+        self.ticks -= 1;
+        match self.phase {
+            SniffPhase::Scenting | SniffPhase::Happy => {
+                if self.ticks <= 0 {
+                    self.finish(sniffer);
+                }
+            }
+            SniffPhase::Sniffing => {
+                if !sniffer.can_sniff() {
+                    self.finish(sniffer);
+                } else if self.ticks <= 0 {
+                    sniffer.transition_to(SnifferState::Idling);
+                    match sniffer.calculate_dig_position() {
+                        Some(dig_pos) => {
+                            self.phase = SniffPhase::Searching;
+                            self.ticks = 600;
+                            sniffer.transition_to(SnifferState::Searching);
+                            let pos = sniffer.get_entity().pos.load();
+                            let target = Vector3::new(
+                                f64::from(dig_pos.0.x) + 0.5,
+                                f64::from(dig_pos.0.y) + 1.0,
+                                f64::from(dig_pos.0.z) + 0.5,
+                            );
+                            mob.get_mob_entity()
+                                .steered()
+                                .navigator()
+                                .set_progress(NavigatorGoal::new(pos, target, 1.25));
+                        }
+                        None => self.done = true,
+                    }
+                }
+            }
+            SniffPhase::Searching => {
+                if !sniffer.can_sniff() {
+                    self.finish(sniffer);
+                } else if self.ticks <= 0 || mob.is_navigator_idle() {
+                    if sniffer.can_dig() {
+                        mob.get_mob_entity().steered().navigator().stop();
+                        self.phase = SniffPhase::Digging;
+                        self.ticks = mob.get_random().random_range(160..=180);
+                        sniffer.transition_to(SnifferState::Digging);
+                    } else {
+                        self.finish(sniffer);
+                    }
+                }
+            }
+            SniffPhase::Digging => {
+                if !sniffer.can_dig() || sniffer.mob_entity.is_in_love() {
+                    self.finish(sniffer);
+                } else if self.ticks <= 0 {
+                    let now = sniffer.get_entity().world.load().get_world_age();
+                    sniffer
+                        .sniff_cooldown_until
+                        .store(now + SNIFFING_COOLDOWN_TICKS, Ordering::Relaxed);
+                    self.phase = SniffPhase::Rising;
+                    self.ticks = 40;
+                    sniffer.transition_to(SnifferState::Rising);
+                }
+            }
+            SniffPhase::Rising => {
+                if self.ticks <= 0 {
+                    sniffer.transition_to(SnifferState::Idling);
+                    sniffer.on_digging_complete(true);
+                    self.phase = SniffPhase::Happy;
+                    self.ticks = mob.get_random().random_range(40..=100);
+                    sniffer.transition_to(SnifferState::FeelingHappy);
+                }
+            }
+        }
+    }
+
+    fn controls(&self) -> Controls {
+        Controls::MOVE
     }
 }
 
@@ -403,23 +614,9 @@ impl Mob for SnifferEntity {
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let state = self.get_state();
-        match state {
-            SnifferState::Searching => {
-                let entity = self.get_entity();
-                let world = entity.world.load();
-                let ticks = world.get_world_age();
-                if ticks % 20 == 0 {
-                    world.play_sound(
-                        Sound::EntitySnifferSearching,
-                        SoundCategory::Neutral,
-                        &entity.pos.load(),
-                    );
-                }
-            }
-            SnifferState::Digging => {
-                self.drop_seed();
-            }
-            _ => {}
+        // Vanilla plays the searching sound on the client only.
+        if state == SnifferState::Digging {
+            self.drop_seed();
         }
     }
 

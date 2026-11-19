@@ -2,12 +2,13 @@ use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::tag::{self, Tag, Taggable};
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
+use rand::RngExt;
 use std::sync::atomic::Ordering::Relaxed;
 
 use super::{Controls, Goal, GoalReach};
 use crate::entity::ai::goal::follow_owner::FollowOwnerGoal;
 use crate::entity::ai::goal::try_find_water::TryFindWaterGoal;
-use crate::entity::ai::util::default_random_pos;
+use crate::entity::ai::util::{default_random_pos, land_random_pos};
 use crate::entity::{ai::pathfinder::NavigatorGoal, mob::Mob};
 
 const WATER_SEARCH_XZ: i32 = 5;
@@ -27,6 +28,8 @@ pub struct EscapeDangerGoal {
     panic_causes: PanicCauses,
     teleport_to_owner: bool,
     seek_water_xz: Option<i32>,
+    lasting: bool,
+    ticks_left: i32,
 }
 
 impl EscapeDangerGoal {
@@ -40,6 +43,8 @@ impl EscapeDangerGoal {
             panic_causes: |_| &tag::DamageType::MINECRAFT_PANIC_CAUSES,
             teleport_to_owner: false,
             seek_water_xz: None,
+            lasting: false,
+            ticks_left: 0,
         })
     }
 
@@ -61,6 +66,14 @@ impl EscapeDangerGoal {
     #[must_use]
     pub fn seeking_water(mut self: Box<Self>, xz_dist: i32) -> Box<Self> {
         self.seek_water_xz = Some(xz_dist);
+        self
+    }
+
+    /// Vanilla brain `AnimalPanic`: panics for 100 to 120 ticks and runs to a new spot each time
+    /// it gets where it was going, instead of stopping after one run like `PanicGoal`.
+    #[must_use]
+    pub fn lasting(mut self: Box<Self>) -> Box<Self> {
+        self.lasting = true;
         self
     }
 
@@ -155,12 +168,23 @@ impl Goal for EscapeDangerGoal {
             return true;
         }
 
+        if self.lasting {
+            self.target = land_random_pos::get_pos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE);
+            return true;
+        }
         self.target = Self::find_random_position(mob);
         self.target.is_some()
     }
 
     fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        if self.lasting {
+            return self.ticks_left > 0;
+        }
         !mob.is_navigator_idle()
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        self.lasting
     }
 
     fn start(&mut self, mob: &dyn Mob) {
@@ -171,15 +195,32 @@ impl Goal for EscapeDangerGoal {
                 .navigator()
                 .set_progress(NavigatorGoal::new(pos, target, self.speed));
         }
+        if self.lasting {
+            self.ticks_left = mob.get_random().random_range(100..=120);
+        }
         self.running = true;
     }
 
     fn stop(&mut self, _mob: &dyn Mob) {
         self.target = None;
         self.running = false;
+        self.ticks_left = 0;
     }
 
     fn tick(&mut self, mob: &dyn Mob) {
+        if self.lasting {
+            self.ticks_left -= 1;
+            if mob.is_navigator_idle()
+                && let Some(target) =
+                    land_random_pos::get_pos(mob, HORIZONTAL_RANGE, VERTICAL_RANGE)
+            {
+                let pos = mob.get_mob_entity().living_entity.entity.pos.load();
+                mob.get_mob_entity()
+                    .steered()
+                    .navigator()
+                    .set_progress(NavigatorGoal::new(pos, target, self.speed));
+            }
+        }
         if !self.teleport_to_owner {
             return;
         }

@@ -5,10 +5,9 @@ use crate::entity::projectile::splash_potion::extinguish_fire_if_water_potion;
 use crate::{
     entity::{Entity, EntityBase, projectile::ThrownItemEntity},
     server::Server,
+    world::World,
 };
-use pumpkin_data::entity::EntityStatus;
 use pumpkin_data::item_stack::ItemStack;
-use pumpkin_protocol::bedrock::server::actor_event::ActorEventID;
 use pumpkin_protocol::java::client::play::CWorldEvent;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector2::{Vector2, to_chunk_pos};
@@ -62,6 +61,35 @@ impl LingeringPotionEntity {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *write = item_stack;
     }
+
+    /// Vanilla `AbstractThrownPotion.onHit`: the splash particles in the potion colour (opaque
+    /// ARGB, as `PotionContents.getColor`) and, unless silent, the matching shatter sound.
+    fn broadcast_impact(
+        &self,
+        world: &World,
+        block_pos: BlockPos,
+        event_id: i32,
+        color: i32,
+        has_instant: bool,
+    ) {
+        let chunk_pos = to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z));
+        let opaque = color | i32::from_be_bytes([0xFF, 0, 0, 0]);
+        world.broadcast_to_chunk(
+            chunk_pos,
+            &CWorldEvent::new(event_id, block_pos, opaque, false),
+        );
+        if !self
+            .get_entity()
+            .silent
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let sound_event = if has_instant { 1054 } else { 1053 };
+            world.broadcast_to_chunk(
+                chunk_pos,
+                &CWorldEvent::new(sound_event, block_pos, 0, false),
+            );
+        }
+    }
 }
 
 impl EntityBase for LingeringPotionEntity {
@@ -108,9 +136,6 @@ impl EntityBase for LingeringPotionEntity {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-
-        // Play impact particles
-        world.send_entity_status(self.get_entity(), EntityStatus::Death, ActorEventID::Death);
 
         let effects = crate::item::potion::PotionContents::read_potion_effects(&stack);
 
@@ -170,11 +195,7 @@ impl EntityBase for LingeringPotionEntity {
             hit_pos.y.floor() as i32,
             hit_pos.z.floor() as i32,
         ));
-        let chunk_pos = to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z));
-        world.broadcast_to_chunk(
-            chunk_pos,
-            &CWorldEvent::new(event_id, block_pos, color, false),
-        );
+        self.broadcast_impact(&world, block_pos, event_id, color, has_instant);
 
         // Spawn and configure an `AreaEffectCloud` entity
         extinguish_fire_if_water_potion(&world, hit_pos, &stack);

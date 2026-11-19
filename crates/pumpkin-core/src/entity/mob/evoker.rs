@@ -11,9 +11,11 @@ use pumpkin_util::math::vector3::Vector3;
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        Controls, Goal, active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        Controls, Goal, active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
+        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
+        wander_around::WanderAroundGoal,
     },
+    mob::vex::VexEntity,
     mob::{
         Mob, MobEntity,
         patrol::{PatrolData, PatrollingMonster},
@@ -81,6 +83,14 @@ impl EvokerEntity {
 
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, Box::new(EvokerCastingSpellGoal::new(mob_weak.clone())));
+            goal_selector.add_goal(
+                2,
+                Box::new(AvoidEntityGoal::new(&EntityType::PLAYER, 8.0, 0.6, 1.0)),
+            );
+            goal_selector.add_goal(
+                3,
+                Box::new(AvoidEntityGoal::new(&EntityType::CREAKING, 8.0, 0.6, 1.0)),
+            );
             goal_selector.add_goal(2, Box::new(ObtainRaidLeaderBannerGoal));
             goal_selector.add_goal(3, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
             goal_selector.add_goal(3, Box::new(PathfindToRaidGoal::default()));
@@ -472,18 +482,27 @@ impl Goal for EvokerSummonSpellGoal {
             evoker_ent.play_sound(Sound::EntityEvokerCastSpell);
 
             let world = evoker_ent.world.load();
-            let evoker_pos = evoker_ent.pos.load();
+            let block_pos = evoker_ent.block_pos.load();
+            let owner: Arc<dyn EntityBase> = evoker.clone();
 
             for _ in 0..3 {
-                let offset_x = (rand::random::<i32>() % 5 - 2) as f64;
-                let offset_z = (rand::random::<i32>() % 5 - 2) as f64;
+                let pos = block_pos.offset(Vector3::new(
+                    rand::random_range(0..5) - 2,
+                    1,
+                    rand::random_range(0..5) - 2,
+                ));
                 let spawn_pos = Vector3::new(
-                    evoker_pos.x + offset_x,
-                    evoker_pos.y + 1.0,
-                    evoker_pos.z + offset_z,
+                    f64::from(pos.0.x) + 0.5,
+                    f64::from(pos.0.y),
+                    f64::from(pos.0.z) + 0.5,
                 );
 
                 let vex = from_type(&EntityType::VEX, spawn_pos, &world, Uuid::new_v4());
+                if let Some(summoned) = vex.cast_any().downcast_ref::<VexEntity>() {
+                    summoned.set_owner(&owner);
+                    summoned.set_bound_origin(Some(pos));
+                    summoned.set_limited_life(20 * (30 + rand::random_range(0..90)));
+                }
                 world.spawn_entity(vex);
             }
         }

@@ -466,6 +466,14 @@ impl Goal for SwoopMovementGoal {
                 target.as_ref(),
             );
             phantom.set_movement_type(PhantomMovementType::Circle);
+            let entity = &phantom.mob_entity.living_entity.entity;
+            if !entity.silent.load(Ordering::Relaxed) {
+                entity.world.load().sync_world_event(
+                    pumpkin_data::world::WorldEvent::SoundPhantomBite,
+                    entity.block_pos.load(),
+                    0,
+                );
+            }
         } else if phantom
             .mob_entity
             .living_entity

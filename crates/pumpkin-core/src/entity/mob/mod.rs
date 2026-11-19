@@ -1485,6 +1485,22 @@ pub trait Mob: EntityBase + Send + Sync {
         DamageType::MOB_ATTACK
     }
 
+    /// Ticks `MeleeAttackGoal` waits between swings. Vanilla's goal uses 20; brain mobs such as
+    /// hoglins and zoglins attack through `MeleeAttack.create(40)` (15 for babies).
+    fn melee_attack_interval(&self) -> i32 {
+        20
+    }
+
+    /// Start of vanilla `doHurtTarget`, run whether or not the hit lands: attack events and
+    /// sounds.
+    fn before_melee_attack(&self, _target: &dyn EntityBase) {}
+
+    /// Whether `MeleeAttackGoal` may swing now. Vanilla brain mobs block melee with
+    /// `ATTACK_COOLING_DOWN`, which the warden sets while charging a sonic boom.
+    fn can_melee_attack(&self) -> bool {
+        true
+    }
+
     // getArrow in vanilla, lets skeletons change the arrow before it's shot
     fn get_arrow(&self, arrow: ArrowEntity) -> ArrowEntity {
         arrow

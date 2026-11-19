@@ -146,13 +146,6 @@ impl EntityBase for SplashPotionEntity {
             .clone();
         extinguish_fire_if_water_potion(&world, hit_pos, &stack);
 
-        // Send impact entity status (plays break particles)
-        world.send_entity_status(
-            self.get_entity(),
-            pumpkin_data::entity::EntityStatus::Death,
-            pumpkin_protocol::bedrock::server::actor_event::ActorEventID::Death,
-        );
-
         let effects = crate::item::potion::PotionContents::read_potion_effects(&stack);
 
         // Calculate color: custom_color if present, else blend of effects, else default water color
@@ -208,10 +201,24 @@ impl EntityBase for SplashPotionEntity {
             hit_pos.y.floor() as i32,
             hit_pos.z.floor() as i32,
         ));
+        // Vanilla `PotionContents.getColor` is opaque ARGB.
+        let color = color | i32::from_be_bytes([0xFF, 0, 0, 0]);
+        let chunk_pos = to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z));
         world.broadcast_to_chunk(
-            to_chunk_pos(&Vector2::new(block_pos.0.x, block_pos.0.z)),
+            chunk_pos,
             &CWorldEvent::new(event_id, block_pos, color, false),
         );
+        if !self
+            .get_entity()
+            .silent
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let sound_event = if has_instant { 1054 } else { 1053 };
+            world.broadcast_to_chunk(
+                chunk_pos,
+                &CWorldEvent::new(sound_event, block_pos, 0, false),
+            );
+        }
 
         // If no effects, just splash (like water bottles)
         if effects.is_empty() {

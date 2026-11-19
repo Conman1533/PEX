@@ -15,8 +15,9 @@ use crate::entity::{
     ai::goal::{
         escape_danger::EscapeDangerGoal, follow_mob::FollowMobGoal, follow_owner::FollowOwnerGoal,
         look_at_entity::LookAtEntityGoal, sit_when_ordered_to::SitWhenOrderedToGoal,
-        swim::SwimGoal, wander_around::WanderAroundGoal,
+        swim::SwimGoal, water_avoiding_random_flying::WaterAvoidingRandomFlyingGoal,
     },
+    ai::{control::flying_move_control::FlyingMoveControl, pathfinder::Navigator},
     mob::{Mob, MobEntity},
     passive::{
         animal::Animal,
@@ -39,7 +40,21 @@ pub struct ParrotEntity {
 
 impl ParrotEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
+        let mut mob_entity = MobEntity::new(entity);
+        // Vanilla `Parrot`: `FlyingMoveControl(10, false)` and a `FlyingPathNavigation` that
+        // floats.
+        *mob_entity
+            .move_control
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Box::new(FlyingMoveControl::new(10, false));
+        let navigator = mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *navigator = Navigator::flying();
+        navigator.set_can_open_doors(false);
+        navigator.set_can_float(true);
         let parrot = Self {
             mob_entity,
             tamable_data: TamableData::default(),
@@ -61,7 +76,7 @@ impl ParrotEntity {
             );
             goal_selector.add_goal(2, Box::new(SitWhenOrderedToGoal::new()));
             goal_selector.add_goal(2, FollowOwnerGoal::new(1.0, 5.0, 1.0));
-            goal_selector.add_goal(2, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(2, Box::new(WaterAvoidingRandomFlyingGoal::new(1.0)));
             goal_selector.add_goal(3, Box::new(FollowMobGoal::new(1.0, 3.0, 7.0)));
         };
 
@@ -187,6 +202,21 @@ impl Mob for ParrotEntity {
     /// Vanilla `Animal.getAmbientSoundInterval`; parrots are animals there.
     fn get_ambient_sound_interval(&self) -> i32 {
         crate::entity::mob::ANIMAL_AMBIENT_SOUND_INTERVAL
+    }
+
+    /// Vanilla `Parrot.calculateFlapping`: flapping slows the fall.
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let entity = &self.mob_entity.living_entity.entity;
+        let velocity = entity.velocity.load();
+        if !entity.on_ground.load(std::sync::atomic::Ordering::Relaxed) && velocity.y < 0.0 {
+            entity
+                .velocity
+                .store(pumpkin_util::math::vector3::Vector3::new(
+                    velocity.x,
+                    velocity.y * 0.6,
+                    velocity.z,
+                ));
+        }
     }
 
     /// Vanilla `Animal.removeWhenFarAway`: parrots are animals there, unlike in Pumpkin.

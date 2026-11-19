@@ -93,6 +93,19 @@ impl BatEntity {
         }
     }
 
+    /// Vanilla: stop resting and send `SOUND_BAT_LIFTOFF` unless silent.
+    fn take_off(&self, world: &World) {
+        self.set_roosting(false);
+        let entity = &self.mob_entity.living_entity.entity;
+        if !entity.silent.load(Relaxed) {
+            world.sync_world_event(
+                pumpkin_data::world::WorldEvent::SoundBatLiftoff,
+                entity.block_pos.load(),
+                0,
+            );
+        }
+    }
+
     fn tick_roosting(&self, world: &World, above_pos: &BlockPos, pos: &Vector3<f64>) {
         let entity = &self.mob_entity.living_entity.entity;
         let above_state = world.get_block_state(above_pos);
@@ -109,24 +122,10 @@ impl BatEntity {
                 .get_closest_player(*pos, CLOSE_PLAYER_DISTANCE)
                 .is_some()
             {
-                self.set_roosting(false);
-                world.play_sound_fine(
-                    Sound::EntityBatTakeoff,
-                    SoundCategory::Ambient,
-                    pos,
-                    0.1,
-                    0.95,
-                );
+                self.take_off(world);
             }
         } else {
-            self.set_roosting(false);
-            world.play_sound_fine(
-                Sound::EntityBatTakeoff,
-                SoundCategory::Ambient,
-                pos,
-                0.1,
-                0.95,
-            );
+            self.take_off(world);
         }
     }
 
@@ -282,17 +281,9 @@ impl Mob for BatEntity {
     }
 
     fn on_damage(&self, _damage_type: DamageType, _source: Option<&dyn EntityBase>) {
+        // Vanilla `Bat.hurtServer` wakes it without a sound.
         if self.is_roosting() {
             self.set_roosting(false);
-            let entity = &self.mob_entity.living_entity.entity;
-            let pos = entity.pos.load();
-            entity.world.load().play_sound_fine(
-                Sound::EntityBatTakeoff,
-                SoundCategory::Ambient,
-                &pos,
-                0.1,
-                0.95,
-            );
         }
     }
 }

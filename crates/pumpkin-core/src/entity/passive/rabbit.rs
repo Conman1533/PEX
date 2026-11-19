@@ -2,19 +2,24 @@ use crate::entity::passive::animal::create_offspring;
 use crate::world::World;
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicI32, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
-use pumpkin_data::entity::EntityType;
+use crossbeam::atomic::AtomicCell;
+use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_protocol::codec::var_int::VarInt;
+use pumpkin_util::math::{vector3::Vector3, wrap_degrees};
 use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
+    ai::control::{Control, MoveControlTrait, move_control::MoveControl},
     ai::goal::{
         active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal, breed::BreedGoal,
         climb_on_top_of_powder_snow::ClimbOnTopOfPowderSnowGoal, escape_danger::EscapeDangerGoal,
@@ -77,6 +82,14 @@ pub struct RabbitEntity {
     pub ageable_data: AgeableData,
     pub variant: AtomicI32,
     pub more_carrot_ticks: AtomicI32,
+    /// Vanilla `jumpDelayTicks`: the pause after landing before the next hop.
+    jump_delay_ticks: AtomicI32,
+    was_on_ground: AtomicBool,
+    /// Vanilla `jumping`: mid-hop, so the move control may push the rabbit along.
+    hopping: AtomicBool,
+    /// Vanilla `RabbitMoveControl.nextJumpSpeed`.
+    next_jump_speed: AtomicCell<f64>,
+    wanted: AtomicCell<Vector3<f64>>,
 }
 
 impl RabbitEntity {
@@ -88,8 +101,21 @@ impl RabbitEntity {
             ageable_data: AgeableData::default(),
             variant: AtomicI32::new(variant.id()),
             more_carrot_ticks: AtomicI32::new(0),
+            jump_delay_ticks: AtomicI32::new(0),
+            was_on_ground: AtomicBool::new(false),
+            hopping: AtomicBool::new(false),
+            next_jump_speed: AtomicCell::new(0.0),
+            wanted: AtomicCell::new(Vector3::default()),
         };
         let mob_arc = Arc::new(rabbit);
+        *mob_arc
+            .mob_entity
+            .move_control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Box::new(RabbitMoveControl {
+            rabbit: Arc::downgrade(&mob_arc),
+            inner: MoveControl::default(),
+        });
         let mob_weak: Weak<dyn Mob> = {
             let mob_arc: Arc<dyn Mob> = mob_arc.clone();
             Arc::downgrade(&mob_arc)
@@ -199,7 +225,143 @@ impl Animal for RabbitEntity {
     }
 }
 
+impl RabbitEntity {
+    /// Vanilla `Rabbit.startJumping` followed by `jumpFromGround`.
+    fn hop(&self) {
+        self.hopping.store(true, Ordering::Relaxed);
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        let world = entity.world.load();
+        let pos = entity.pos.load();
+        let wanted = self.wanted.load();
+
+        // Vanilla `facePoint`.
+        let yaw =
+            wrap_degrees(((wanted.z - pos.z).atan2(wanted.x - pos.x).to_degrees() as f32) - 90.0);
+        entity.yaw.store(yaw);
+
+        let mut rng = self.get_random();
+        let pitch = ((rng.random::<f32>() - rng.random::<f32>()) * 0.2 + 1.0) * 0.8;
+        world.play_sound_fine(
+            Sound::EntityRabbitJump,
+            SoundCategory::Neutral,
+            &pos,
+            1.0,
+            pitch,
+        );
+
+        // Vanilla `Rabbit.getJumpPower`.
+        let speed = self.next_jump_speed.load();
+        let mut base = if speed <= 0.6 { 0.2 } else { 0.3 };
+        let path_up = self
+            .mob_entity
+            .navigator
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get_path()
+            .and_then(|path| path.get_next_entity_pos(entity.width()))
+            .is_some_and(|next| next.y > pos.y + 0.5);
+        if path_up || entity.horizontal_collision.load(Ordering::Relaxed) || wanted.y > pos.y + 0.5
+        {
+            base = 0.5;
+        }
+        let mut velocity = entity.velocity.load();
+        velocity.y = living.get_jump_velocity(base / 0.42).max(velocity.y);
+        if speed > 0.0 && velocity.x * velocity.x + velocity.z * velocity.z < 0.01 {
+            // Vanilla `moveRelative(0.1, (0, 1.5 or 0.5, 1))`.
+            let input = Vector3::new(0.0, if self.is_baby() { 0.5 } else { 1.5 }, 1.0);
+            let push = input * (0.1 / input.length());
+            let (sin, cos) = f64::from(yaw.to_radians()).sin_cos();
+            velocity += Vector3::new(-push.z * sin, push.y, push.z * cos);
+        }
+        entity.velocity.store(velocity);
+        entity
+            .velocity_dirty
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        world.send_entity_status(entity, EntityStatus::Jump, ActorEventID::Jump);
+    }
+}
+
+/// Vanilla `Rabbit.RabbitMoveControl`: stands still on the ground between hops.
+struct RabbitMoveControl {
+    rabbit: Weak<RabbitEntity>,
+    inner: MoveControl,
+}
+
+impl Control for RabbitMoveControl {}
+
+impl MoveControlTrait for RabbitMoveControl {
+    fn tick(&mut self, mob: &dyn Mob) {
+        if let Some(rabbit) = self.rabbit.upgrade() {
+            let on_ground = rabbit.get_entity().on_ground.load(Ordering::Relaxed);
+            if on_ground && !rabbit.hopping.load(Ordering::Relaxed) {
+                self.inner.speed_modifier = 0.0;
+            } else if MoveControlTrait::has_wanted(&self.inner) {
+                self.inner.speed_modifier = rabbit.next_jump_speed.load();
+            }
+        }
+        self.inner.tick(mob);
+    }
+
+    fn set_wanted_position(&mut self, x: f64, y: f64, z: f64, speed_modifier: f64) {
+        let mut speed = speed_modifier;
+        if let Some(rabbit) = self.rabbit.upgrade() {
+            if rabbit.get_entity().is_in_water() {
+                speed = 1.5;
+            }
+            rabbit.wanted.store(Vector3::new(x, y, z));
+            if speed > 0.0 {
+                rabbit.next_jump_speed.store(speed);
+            }
+        }
+        MoveControlTrait::set_wanted_position(&mut self.inner, x, y, z, speed);
+    }
+
+    fn strafe(&mut self, forward: f32, right: f32) {
+        self.inner.strafe(forward, right);
+    }
+
+    fn has_wanted(&self) -> bool {
+        MoveControlTrait::has_wanted(&self.inner)
+    }
+}
+
 impl Mob for RabbitEntity {
+    /// Vanilla `Rabbit.customServerAiStep`: rabbits get about in hops, each after a landing
+    /// delay.
+    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        let delay = self.jump_delay_ticks.load(Ordering::Relaxed);
+        if delay > 0 {
+            self.jump_delay_ticks.store(delay - 1, Ordering::Relaxed);
+        }
+        let on_ground = self.get_entity().on_ground.load(Ordering::Relaxed);
+        if on_ground {
+            if !self.was_on_ground.load(Ordering::Relaxed) {
+                self.hopping.store(false, Ordering::Relaxed);
+                let landing_delay = if self.next_jump_speed.load() < 2.2 {
+                    10
+                } else {
+                    1
+                };
+                self.jump_delay_ticks
+                    .store(landing_delay, Ordering::Relaxed);
+            }
+            let wants_to_move = self
+                .mob_entity
+                .move_control
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .has_wanted();
+            if wants_to_move
+                && !self.hopping.load(Ordering::Relaxed)
+                && self.jump_delay_ticks.load(Ordering::Relaxed) == 0
+            {
+                self.hop();
+            }
+        }
+        self.was_on_ground.store(on_ground, Ordering::Relaxed);
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         Some(pumpkin_data::sound::Sound::EntityRabbitAmbient)
     }

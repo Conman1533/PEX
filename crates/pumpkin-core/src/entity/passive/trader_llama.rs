@@ -1,6 +1,6 @@
 use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
-use crate::entity::passive::horse::can_parent;
-use crate::entity::passive::llama::llama_tamed;
+use crate::entity::passive::horse::{can_parent, handle_horse_eating};
+use crate::entity::passive::llama::{llama_keeps_grudge, llama_tamed};
 use std::sync::{
     Arc, Weak,
     atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
@@ -86,6 +86,8 @@ pub struct TraderLlamaEntity {
     pub has_chest: AtomicBool,
     pub temper: AtomicI32,
     pub owner: AtomicCell<Option<Uuid>>,
+    /// Vanilla `didSpit`: ends the revenge target after one spit.
+    pub did_spit: AtomicBool,
 }
 
 impl TraderLlamaEntity {
@@ -105,6 +107,7 @@ impl TraderLlamaEntity {
             has_chest: AtomicBool::new(false),
             temper: AtomicI32::new(0),
             owner: AtomicCell::new(None),
+            did_spit: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(llama);
         let mob_weak: Weak<dyn Mob> = {
@@ -149,7 +152,10 @@ impl TraderLlamaEntity {
             // Vanilla `TraderLlama.registerGoals` adds this on top of the llama goals.
             goal_selector.add_goal(1, EscapeDangerGoal::new(2.0));
 
-            target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
+            target_selector.add_goal(
+                1,
+                Box::new(RevengeGoal::new(true).continuing_while(llama_keeps_grudge)),
+            );
             target_selector.add_goal(
                 2,
                 ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::WOLF, true),
@@ -249,6 +255,7 @@ impl TraderLlamaEntity {
 
         let spit_arc: Arc<dyn EntityBase> = Arc::new(spit);
         world.spawn_entity(spit_arc);
+        self.did_spit.store(true, Ordering::Relaxed);
     }
 }
 
@@ -408,6 +415,22 @@ impl Mob for TraderLlamaEntity {
                 ent.add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
                 return true;
             }
+        }
+
+        if self.is_food(item_stack) {
+            let used = handle_horse_eating(
+                self,
+                &self.temper,
+                self.is_tame(),
+                true,
+                Sound::EntityLlamaEat,
+                player,
+                item_stack.get_item(),
+            );
+            if used {
+                item_stack.decrement_unless_creative(player.gamemode.load(), 1);
+            }
+            return used;
         }
 
         self.animal_interact(player, item_stack)
