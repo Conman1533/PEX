@@ -485,6 +485,16 @@ impl ProtoChunk {
         });
     }
 
+    /// Schedules a tick for a placed water or lava source, as vanilla does for generated fluids
+    /// (`scheduleTick`, or `markPosForPostProcessing`, which ticks the fluid once the chunk loads).
+    pub fn schedule_fluid_tick_for_state(&mut self, x: i32, y: i32, z: i32, state: &BlockState) {
+        if state.id == pumpkin_data::Block::WATER.default_state.id {
+            self.schedule_fluid_tick(x, y, z, &Fluid::WATER);
+        } else if state.id == pumpkin_data::Block::LAVA.default_state.id {
+            self.schedule_fluid_tick(x, y, z, &Fluid::LAVA);
+        }
+    }
+
     fn maybe_update_surface_height_map(&mut self, index: usize, y: i16) {
         let current_height = self.flat_surface_height_map[index];
         self.flat_surface_height_map[index] = current_height.max(y);
@@ -1049,16 +1059,20 @@ impl ProtoChunk {
                 for y in (0..volume.size_y).rev() {
                     let block_y = volume.block_y(y);
                     let index = volume.index_unchecked(x, y, z);
-                    let block_state = noise_sampler
-                        .sample_block_state(
-                            ore_random_deriver,
-                            &Vector3::new(block_x, block_y, block_z),
-                            densities.density[index],
-                            densities.vein_sample(index).as_ref(),
-                            surface_height_estimate_sampler,
-                        )
-                        .unwrap_or(generator.default_block);
+                    let (block_state, schedule_fluid_update) = noise_sampler.sample_block_state(
+                        ore_random_deriver,
+                        &Vector3::new(block_x, block_y, block_z),
+                        densities.density[index],
+                        densities.vein_sample(index).as_ref(),
+                        surface_height_estimate_sampler,
+                    );
+                    let block_state = block_state.unwrap_or(generator.default_block);
                     self.set_block_state(block_x, block_y, block_z, block_state);
+                    // Vanilla `NoiseBasedChunkGenerator.doFill`: aquifer fluids at a boundary
+                    // between fluid levels flow once the chunk is loaded.
+                    if schedule_fluid_update {
+                        self.schedule_fluid_tick_for_state(block_x, block_y, block_z, block_state);
+                    }
                 }
             }
         }

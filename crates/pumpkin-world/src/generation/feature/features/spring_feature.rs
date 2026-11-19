@@ -132,6 +132,10 @@ impl SpringFeatureFeature {
         }
         if valid == self.rock_count && air == self.hole_count {
             chunk.set_block_state(&pos.0, self.state);
+            // Vanilla `SpringFeature` starts the spring flowing right away.
+            if let Some(proto) = chunk.get_chunk_mut(pos.0.x >> 4, pos.0.z >> 4) {
+                proto.schedule_fluid_tick_for_state(pos.0.x, pos.0.y, pos.0.z, self.state);
+            }
             return true;
         }
         false
