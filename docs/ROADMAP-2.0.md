@@ -8,12 +8,12 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6e3588730`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `968726b31`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 5 | 1 | 39 | |
+| G1 Mob AI | 45 | 6 | 1 | 38 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 53 | 1 | 127 | 15 |
+| Total | 196 | 54 | 1 | 126 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -480,6 +480,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-combat-zoglin`
 - Needs decision: D1-1.
 - Done when: `pumpkin:zoglin_attacks_any_nearby_mob` and unit `stop_attacking_if_target_invalid_forgets_a_dead_target` pass.
+- Status (2026-11-20): landed (branch `feat/brain-combat-zoglin`). New Brain behaviours `StartAttacking`, `StopAttackingIfTargetInvalid` (gives up after 200 unreachable ticks), `SetWalkTargetFromAttackTargetIfTargetOutOfReach` (vanilla `isWithinAttackRange`, bow 15 and crossbow 8 less the margin when the mob can shoot), `MeleeAttack` (shares the melee goal's hit path and hooks), `EraseMemoryIf`, `SetWalkTargetAwayFrom` (`pos` and `entity`, on a new `LandRandomPos.getPosAway` port), `StopBeingAngryIfTargetDead` (honours `forgiveDeadPlayers`), `BecomePassiveIfMemoryPresent`, `CopyMemoryWithExpiry` and `InteractWithDoor` (opens `#mob_interactable_doors` on the path's previous and next nodes, remembers them in `doors_to_close` and closes them behind it unless a same-type mob's own path goes through, read from that mob's brain only when it is free). New `Mob::can_use_non_melee_weapon` hook (vanilla `canUseNonMeleeWeapon`, false by default). The zoglin now runs vanilla's Brain (core, idle and fight activities) instead of goals: it targets the nearest visible attackable mob that is not a zoglin or creeper, not only players, attacks every 40 ticks (15 for babies), keeps a hurting attacker as its target for 10 seconds unless it is much further than the current one, plays the angry sound when a fight starts, and no longer swims, like vanilla. Also fixed on the way: ground navigation tested a waypoint by its round horizontal distance where vanilla `followThePath` tests each axis, so a mob wider than a block (zoglin, hoglin, ravager, iron golem) that spawned on a block corner never reached its first node and stood still. `pumpkin:zoglin_attacks_any_nearby_mob` passes (kills a cow in a closed pen) and so do `stop_attacking_if_target_invalid_forgets_a_dead_target` and four more unit tests beside it. Play test for Neon: spawn a zoglin near cows and a pig, expect it to chase and kill them one by one and then come for you; hit it from range while it chases a cow, expect it to switch to you.
 
 #### G1-06 Zombies
 - Scope: zombie, husk, zombie_villager, drowned, zombified_piglin, giant. Mob spear use (SpearUseGoal), MoveThroughVillageGoal, priorities and villager targeting in `ZombieEntityBase`, zombified piglin anger and alerting; remove the giant's goals. Out: drowned trident items and spear items.
