@@ -416,6 +416,32 @@ mod tests {
     }
 
     #[test]
+    fn suffocation_follows_the_vanilla_exceptions() {
+        // These block motion but never suffocate.
+        for block in [
+            &Block::OAK_LEAVES,
+            &Block::CHERRY_LEAVES,
+            &Block::GLASS,
+            &Block::WHITE_STAINED_GLASS,
+            &Block::TINTED_GLASS,
+            &Block::COPPER_GRATE,
+        ] {
+            assert!(!block.default_state.is_suffocating(), "{}", block.name);
+        }
+        // These aren't full cubes but always suffocate; stone and dirt follow the default rule.
+        for block in [
+            &Block::SOUL_SAND,
+            &Block::MUD,
+            &Block::FARMLAND,
+            &Block::DIRT_PATH,
+            &Block::STONE,
+            &Block::DIRT,
+        ] {
+            assert!(block.default_state.is_suffocating(), "{}", block.name);
+        }
+    }
+
+    #[test]
     fn bamboo_collision_shape_uses_its_world_position() {
         let state = Block::BAMBOO.default_state;
         let origin_shape = state
