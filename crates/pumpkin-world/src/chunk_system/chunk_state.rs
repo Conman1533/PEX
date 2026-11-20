@@ -290,6 +290,7 @@ impl Chunk {
                 change_count: std::sync::atomic::AtomicU64::new(0),
                 inhabited_time: AtomicU64::new(0),
                 custom_data: Mutex::new(NbtCompound::new()),
+                passthrough: NbtCompound::new(),
             })),
         ) {
             Self::Proto(proto) => proto,
@@ -331,7 +332,7 @@ impl Chunk {
             x: proto_chunk.x,
             z: proto_chunk.z,
             dirty: AtomicBool::new(true),
-            block_ticks: ChunkTickScheduler::default(),
+            block_ticks: ChunkTickScheduler::from_iter(proto_chunk.block_ticks),
             fluid_ticks: ChunkTickScheduler::from_iter(proto_chunk.fluid_ticks),
             pending_block_entities: Mutex::new(pending_block_entities),
             status: proto_chunk.stage.into(),
@@ -339,6 +340,7 @@ impl Chunk {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(0),
             custom_data: Mutex::new(NbtCompound::new()),
+            passthrough: proto_chunk.passthrough,
         };
 
         *self = Self::Level(Arc::new(chunk));

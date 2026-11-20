@@ -167,6 +167,9 @@ pub struct ProtoChunk {
     pub pending_block_entities: Vec<NbtCompound>,
     pending_structure_entities: Vec<NbtCompound>,
     pub fluid_ticks: Vec<ScheduledTick<&'static Fluid>>,
+    pub block_ticks: Vec<ScheduledTick<&'static Block>>,
+    /// The saved chunk's keys PEX doesn't model, carried to the level chunk (G7-06).
+    pub passthrough: NbtCompound,
 }
 
 pub struct TerrainCache {
@@ -290,6 +293,8 @@ impl ProtoChunk {
             pending_block_entities: Vec::new(),
             pending_structure_entities: Vec::new(),
             fluid_ticks: Vec::new(),
+            block_ticks: Vec::new(),
+            passthrough: NbtCompound::new(),
         }
     }
 
@@ -309,6 +314,10 @@ impl ProtoChunk {
         proto_chunk
             .blending_data
             .clone_from(&chunk_data.blending_data);
+        proto_chunk.passthrough = chunk_data.passthrough.clone();
+        // Keep a saved proto-chunk's scheduled ticks, and a full chunk's when it is relit.
+        proto_chunk.block_ticks = chunk_data.block_ticks.to_vec();
+        proto_chunk.fluid_ticks = chunk_data.fluid_ticks.to_vec();
 
         // Chunks loaded from disk carry their block entities in the chunk data.
         // Keep them so the world can create the block entities when the chunk
