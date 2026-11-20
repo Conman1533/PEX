@@ -613,12 +613,29 @@ impl BedrockClient {
     }
 
     pub async fn close(&self) {
-        if self.close_token.is_cancelled() {
-            return;
-        }
+        // A kick or a full outgoing buffer may have cancelled the token already; the session
+        // still has to close and the client still has to leave the client list.
+        let kicked = self.close_token.is_cancelled();
         self.close_token.cancel();
+        if kicked {
+            // `try_kick` queues its `Disconnect` and then cancels: let the outgoing task hand
+            // it to the session, and the session deliver it, before the peer goes away.
+            let deadline = std::time::Instant::now() + KICK_FLUSH_TIMEOUT;
+            while self.pending_bytes.load(Ordering::Acquire) > 0
+                && std::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            self.flush_before_close().await;
+        }
         self.session.close().await;
-        self.be_clients.lock().await.remove(&self.address);
+        let mut clients = self.be_clients.lock().await;
+        if clients
+            .get(&self.address)
+            .is_some_and(|client| std::ptr::eq(Arc::as_ptr(client), self))
+        {
+            clients.remove(&self.address);
+        }
     }
 
     pub async fn await_tasks(&self) {
@@ -759,7 +776,7 @@ impl BedrockClient {
             }
             SClientCacheBlobStatus::PACKET_ID => {
                 let packet = SClientCacheBlobStatus::read(reader)?;
-                self.handle_client_cache_blob_status(packet);
+                self.handle_client_cache_blob_status(&packet);
             }
             SResourcePackClientResponse::PACKET_ID => {
                 let packet = SResourcePackClientResponse::read(reader)?;
@@ -910,28 +927,15 @@ impl BedrockClient {
         Ok(())
     }
 
-    pub fn handle_client_cache_blob_status(&self, packet: SClientCacheBlobStatus) {
-        if packet.miss_hashes.is_empty() {
-            return;
-        }
-        let missing_blobs = {
-            let cache = self
+    pub fn handle_client_cache_blob_status(&self, packet: &SClientCacheBlobStatus) {
+        let missing_blobs = take_status_blobs(
+            &mut self
                 .blob_cache
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut missing_blobs = Vec::with_capacity(packet.miss_hashes.len());
-            for hash in packet.miss_hashes {
-                if let Some(payload) = cache.get(&hash) {
-                    missing_blobs.push(MissingBlobData {
-                        blob_id: hash,
-                        blob_data: payload.clone(),
-                    });
-                } else {
-                    warn!("Client requested missing blob {hash:#x} not found in server cache");
-                }
-            }
-            missing_blobs
-        };
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            &packet.miss_hashes,
+            &packet.hit_hashes,
+        );
         if !missing_blobs.is_empty() {
             self.try_enqueue_client_packet(&CClientCacheMissResponse { missing_blobs });
         }
@@ -975,5 +979,46 @@ impl BedrockClient {
             let _guard = self.rt_handle.enter();
             Some(self.tasks.spawn(task))
         }
+    }
+}
+
+/// Answers a `ClientCacheBlobStatus`: the blobs the client is missing, to send now. Every blob
+/// the status lists leaves the cache, since the client has it or is about to, so the cache only
+/// holds blobs still waiting for a status.
+fn take_status_blobs(
+    cache: &mut HashMap<u64, Vec<u8>>,
+    misses: &[u64],
+    hits: &[u64],
+) -> Vec<MissingBlobData> {
+    for hash in hits {
+        cache.remove(hash);
+    }
+    let mut missing_blobs = Vec::with_capacity(misses.len());
+    for &hash in misses {
+        if let Some(blob_data) = cache.remove(&hash) {
+            missing_blobs.push(MissingBlobData {
+                blob_id: hash,
+                blob_data,
+            });
+        } else {
+            warn!("Client requested missing blob {hash:#x} not found in server cache");
+        }
+    }
+    missing_blobs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blob_cache_drops_acknowledged_blobs() {
+        let mut cache = HashMap::from([(1, vec![1]), (2, vec![2]), (3, vec![3])]);
+        let missing = take_status_blobs(&mut cache, &[2], &[1]);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].blob_id, 2);
+        assert_eq!(missing[0].blob_data, vec![2]);
+        assert_eq!(cache.len(), 1, "only the blob no status listed is left");
+        assert!(cache.contains_key(&3));
     }
 }
