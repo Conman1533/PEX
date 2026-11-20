@@ -57,6 +57,7 @@ pub async fn run_player_move_broadcast_interval_test(
     }
 
     clear_path(server, mover.position)?;
+    steady_health(server, &mover.name)?;
 
     // Turn to the fixed look first, and let that rotation go out before counting.
     let mut position = mover.position;
@@ -165,5 +166,24 @@ fn clear_path(server: &Arc<Server>, start: Vector3<f64>) -> Result<(), String> {
                 )
             })?;
     }
+    Ok(())
+}
+
+/// Clears the mover's effects and puts it at full health and food. Vanilla syncs a player's
+/// health to everyone tracking them (`DATA_HEALTH_ID`), and a dirty value makes
+/// `ServerEntity.sendChanges` send a movement packet outside the interval: regeneration or a
+/// leftover effect from an earlier test would add packets while counting.
+fn steady_health(server: &Arc<Server>, name: &str) -> Result<(), String> {
+    // Fails with "no effects to remove" when there are none, which is fine.
+    let _ = server.command_dispatcher.load().execute_input(
+        &format!("effect clear {name}"),
+        &CommandSender::Console.into_source(server),
+    );
+    let player = server
+        .get_player_by_name(name)
+        .ok_or("Player move broadcast: could not find the moving bot")?;
+    player.set_food_level(20);
+    let living = &player.living_entity;
+    living.set_health(living.get_max_health());
     Ok(())
 }
