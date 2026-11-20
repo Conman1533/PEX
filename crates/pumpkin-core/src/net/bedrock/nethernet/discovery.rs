@@ -297,7 +297,7 @@ pub(super) fn encode_discovery_response(
         game_mode,
         players,
         server.advanced_config.networking.bedrock.max_players,
-        server.basic_config.hardcore,
+        server.level_info.load().hardcore,
         !(config.online_mode && config.authentication.enabled),
     )
 }

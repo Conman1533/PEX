@@ -6,7 +6,7 @@ use std::path::Path;
 use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_world::world_info::{
-    WorldInfoError,
+    LevelData, WorldInfoError,
     data_files::{read_data_file, write_data_file},
 };
 use rustc_hash::FxHashSet;
@@ -27,6 +27,31 @@ pub fn load_world_border(folder: &Path) -> Option<Worldborder> {
 
 pub fn save_world_border(folder: &Path, border: &Worldborder) -> Result<(), WorldInfoError> {
     write_data_file(folder, WORLD_BORDER, DATA_VERSION, border.to_nbt())
+}
+
+/// The `world_border.dat` data of a world whose `level.dat` still has the `Border*` keys (a world
+/// from before 26.1). It is written at once, as the next `level.dat` save drops those keys.
+#[must_use]
+#[expect(clippy::cast_possible_truncation)]
+pub fn migrate_legacy_world_border(folder: &Path, info: &LevelData) -> Option<Worldborder> {
+    if !info.legacy_border {
+        return None;
+    }
+    let mut data = NbtCompound::new();
+    data.put_double("center_x", info.border_center_x);
+    data.put_double("center_z", info.border_center_z);
+    data.put_double("size", info.border_size);
+    data.put_double("damage_per_block", info.border_damage_per_block);
+    data.put_double("safe_zone", info.border_safe_zone);
+    data.put_int("warning_blocks", info.border_warning_blocks as i32);
+    data.put_int("warning_time", info.border_warning_time as i32);
+    data.put_double("lerp_target", info.border_size_lerp_target);
+    data.put_long("lerp_time", info.border_size_lerp_time);
+    let border = Worldborder::from_nbt(&data);
+    if let Err(e) = save_world_border(folder, &border) {
+        tracing::warn!("Failed to save the world border taken from level.dat: {e}");
+    }
+    Some(border)
 }
 
 fn tickets(data: &NbtCompound) -> impl Iterator<Item = &NbtCompound> {
@@ -125,6 +150,25 @@ mod tests {
             .filter_map(|t| t.get_string("type"))
             .collect();
         assert_eq!(types, ["minecraft:ender_pearl", FORCED, FORCED]);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn a_border_in_an_old_level_dat_becomes_world_border_dat() {
+        let folder = temp_folder("legacy-border");
+        let mut info = LevelData::default(pumpkin_util::world_seed::Seed(1));
+        assert!(migrate_legacy_world_border(&folder, &info).is_none());
+
+        info.legacy_border = true;
+        info.border_size = 1024.0;
+        info.border_center_x = 8.0;
+        info.border_damage_per_block = 0.5;
+        let border = migrate_legacy_world_border(&folder, &info).unwrap();
+        assert_eq!((border.center_x, border.new_diameter), (8.0, 1024.0));
+        let saved = load_world_border(&folder).expect("world_border.dat written");
+        assert_eq!(saved.center_x, 8.0);
+        assert_eq!(saved.new_diameter, 1024.0);
+        assert_eq!(saved.damage_per_block, 0.5);
         let _ = std::fs::remove_dir_all(&folder);
     }
 

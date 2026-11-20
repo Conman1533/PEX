@@ -225,6 +225,10 @@ impl Server {
             }
         };
 
+        let mut level_info = level_info;
+        // Vanilla takes `hardcore` from server.properties only for a new world. PEX wrote every
+        // world as not hardcore before G7-13, so `hardcore = true` keeps its world hardcore.
+        level_info.hardcore |= basic_config.hardcore;
         let seed = level_info.world_gen_settings.seed;
         let level_info = Arc::new(ArcSwap::new(Arc::new(level_info)));
 
@@ -548,6 +552,11 @@ impl Server {
     /// keeps them in the level data itself.
     fn sync_level_info(&self) -> Arc<LevelData> {
         let mut data = (**self.level_info.load()).clone();
+        data.game_type = self
+            .defaultgamemode
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .gamemode as i32;
         if let Some(overworld) = self
             .worlds
             .load()
@@ -940,7 +949,7 @@ impl Server {
             return;
         }
 
-        let new_difficulty = if self.basic_config.hardcore {
+        let new_difficulty = if current_info.hardcore {
             Difficulty::Hard
         } else {
             difficulty

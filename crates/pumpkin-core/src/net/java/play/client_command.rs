@@ -20,7 +20,7 @@ impl JavaClient {
                 let Some(server) = player.world().server.upgrade() else {
                     return;
                 };
-                let hardcore = server.basic_config.hardcore;
+                let hardcore = server.level_info.load().hardcore;
                 server.spawn_task(async move {
                     player_c
                         .world()

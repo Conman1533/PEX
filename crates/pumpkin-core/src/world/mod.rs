@@ -381,6 +381,16 @@ impl World {
                 ))
             });
         let worldborder = saved_data::load_world_border(&level.level_folder.dim_folder)
+            .or_else(|| {
+                (dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name)
+                    .then(|| {
+                        saved_data::migrate_legacy_world_border(
+                            &level.level_folder.dim_folder,
+                            &level_info.load(),
+                        )
+                    })
+                    .flatten()
+            })
             .unwrap_or_else(|| Worldborder::new(0.0, 0.0, 5.999_996_8E7, 0, 5, 300));
         let forced_chunks = saved_data::load_forced_chunks(&level.level_folder.dim_folder);
         let scoreboard = scoreboard::shared_scoreboard(&level.level_folder.root_folder);
@@ -2955,7 +2965,7 @@ impl World {
     #[allow(clippy::too_many_lines)]
     pub async fn spawn_bedrock_player(
         &self,
-        base_config: &BasicConfiguration,
+        _base_config: &BasicConfiguration,
         player: Arc<Player>,
         server: &Arc<Server>,
     ) {
@@ -3017,7 +3027,7 @@ impl World {
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .gamemode
                 .into(),
-            hardcore: base_config.hardcore,
+            hardcore: level_info.hardcore,
             difficulty: VarInt(level_info.difficulty as i32),
             spawn_position: BlockPos::new(
                 level_info.spawn_x,
@@ -3472,7 +3482,7 @@ impl World {
         client
             .send_packet(&CLogin::new(
                 entity_id,
-                base_config.hardcore,
+                self.level_info.load().hardcore,
                 &dimensions,
                 server
                     .advanced_config
