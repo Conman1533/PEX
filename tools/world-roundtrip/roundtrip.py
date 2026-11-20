@@ -312,7 +312,7 @@ STRUCTURE_SEED = 20261120
 STRUCTURE = "minecraft:village_plains"
 LOCATED = re.compile(r"is at \[(-?\d+), [^,\]]+, (-?\d+)\]")
 STRUCTURE_PROBLEMS = re.compile(
-    r"Failed Start|Unknown stucture|Unknown structure|Exception loading structure piece"
+    r"Failed Start|Unknown stu?r?ucture|Exception loading structure piece"
     r"|Invalid pool element|invalid structure reference|reference to unknown structure", re.I)
 
 
