@@ -259,7 +259,71 @@ async fn run_scenarios(
         result = Box::pin(run_login_checks(server, &mut bedrock, summary_lines)).await;
     }
     bedrock.disconnect().await;
+    if result.is_ok() {
+        result = Box::pin(run_bad_packet_checks(server, summary_lines)).await;
+    }
     result
+}
+
+/// A packet id the protocol doesn't have (ids are 10 bits; the highest real one is in the 300s).
+const UNKNOWN_PACKET_ID: i32 = 1000;
+
+/// What the server does with packets it can't use: unknown ids are ignored, a packet that
+/// fails to decode ends the connection.
+async fn run_bad_packet_checks(
+    server: &BedrockTestServer,
+    summary_lines: &mut Vec<String>,
+) -> Result<(), String> {
+    const NAME: &str = "BadPacketBot";
+    let mut checks = Checks::new("bad_packets");
+    let mut bot = server
+        .tick_while(Box::pin(BedrockBot::connect_and_join(
+            server.signaling_addr,
+            NAME,
+        )))
+        .await
+        .map_err(|err| format!("bedrock:bad_packets: {NAME} could not join: {err}"))?;
+
+    for _ in 0..3 {
+        bot.send_raw(UNKNOWN_PACKET_ID, &[1, 2, 3]).await?;
+    }
+    for _ in 0..10 {
+        tick(server, &mut bot, None).await?;
+    }
+    checks.record(
+        "unknown packets don't disconnect",
+        if bot.disconnect.is_none() && server.server.get_player_by_name(NAME).is_some() {
+            Ok(())
+        } else {
+            Err(format!("{NAME} was dropped: {:?}", bot.disconnect))
+        },
+    );
+
+    // Two bytes of a packet that starts with five floats.
+    bot.send_raw(bot::PLAYER_AUTH_INPUT_ID, &[0, 0]).await?;
+    let mut kicked = Err("no Disconnect after a malformed PlayerAuthInput".to_string());
+    for _ in 0..MAX_WAIT_TICKS {
+        server.server.tick();
+        tokio::time::sleep(TICK).await;
+        let _ = bot.poll_packets().await;
+        if bot.disconnect.is_some() {
+            kicked = Ok(());
+            break;
+        }
+    }
+    checks.record("a malformed packet disconnects", kicked);
+    let mut dropped = Err(format!("{NAME} stayed on the server"));
+    for _ in 0..MAX_WAIT_TICKS {
+        if server.server.get_player_by_name(NAME).is_none() {
+            dropped = Ok(());
+            break;
+        }
+        server.server.tick();
+        tokio::time::sleep(TICK).await;
+    }
+    checks.record("the server drops the player", dropped);
+    bot.disconnect().await;
+    checks.finish(summary_lines)
 }
 
 /// What a Java login is refused for, on the Bedrock login path. The main Bedrock bot is online

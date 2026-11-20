@@ -3,7 +3,7 @@ pub mod play;
 pub(crate) mod recipe;
 use crossbeam::atomic::AtomicCell;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::{Cursor, Error, Write},
     net::SocketAddr,
     sync::{
@@ -151,6 +151,9 @@ pub struct BedrockClient {
     incoming_game_packet_recv: Mutex<Option<Receiver<RawPacket>>>,
     /// Packet rate limiter for incoming client packets.
     pub packet_limiter: PacketRateLimiter,
+    /// Unknown packet ids already logged for this client, so a client can't flood the log by
+    /// repeating one. Ids are 10 bits, so this stays small.
+    unknown_packet_ids: std::sync::Mutex<HashSet<i32>>,
 }
 
 impl BedrockClient {
@@ -190,6 +193,7 @@ impl BedrockClient {
             incoming_game_packet_send: incoming_send,
             incoming_game_packet_recv: Mutex::new(Some(incoming_recv)),
             packet_limiter,
+            unknown_packet_ids: std::sync::Mutex::new(HashSet::new()),
         }
     }
 
@@ -693,8 +697,10 @@ impl BedrockClient {
                     let packet = match SRequestNetworkSettings::read(payload) {
                         Ok(p) => p,
                         Err(err) => {
-                            error!("Failed to read SRequestNetworkSettings: {err}");
-                            continue;
+                            warn!("Failed to read SRequestNetworkSettings: {err}");
+                            self.kick(DisconnectReason::BadPacket, err.to_string())
+                                .await;
+                            return PacketHandlerResult::Stop;
                         }
                     };
                     if !self.handle_request_network_settings(packet, server).await {
@@ -888,7 +894,17 @@ impl BedrockClient {
                 );
             }
             _ => {
-                warn!("Bedrock: Received Unknown Game packet: {}", packet.id);
+                if self
+                    .unknown_packet_ids
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(packet.id)
+                {
+                    warn!(
+                        "Bedrock client {} sent unknown packet {}; later ones with this id are not logged",
+                        self.address, packet.id
+                    );
+                }
             }
         }
         Ok(())

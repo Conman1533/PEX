@@ -2883,7 +2883,17 @@ impl Player {
                         && let Err(err) =
                             client.handle_play_packet(&player_arc, &server_arc, &packet)
                     {
-                        tracing::error!("Failed to handle Bedrock play packet: {err}");
+                        // As on Java: a packet the server can't read ends the connection, rather
+                        // than leaving the client and server out of step.
+                        tracing::warn!(
+                            "Failed to handle Bedrock play packet id {} (payload {} bytes): {err}",
+                            packet.id,
+                            packet.payload.len()
+                        );
+                        client.try_kick(
+                            DisconnectReason::BadPacket,
+                            format!("Error while handling incoming packet {}: {err}", packet.id),
+                        );
                     }
                 }
             }

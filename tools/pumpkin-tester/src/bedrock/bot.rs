@@ -60,6 +60,8 @@ const PLAY_MODE_NORMAL: u32 = 0;
 const INTERACTION_MODEL_CROSSHAIR: i32 = 1;
 /// `PlayerActionType::StartDestroyBlock`, which breaks the block at once in creative.
 pub const ACTION_START_BREAK: i32 = 0;
+/// `PlayerAuthInput`, for tests that send it raw.
+pub const PLAYER_AUTH_INPUT_ID: i32 = SPlayerAuthInput::PACKET_ID;
 /// `TextPacketType::Chat`.
 const TEXT_TYPE_CHAT: u8 = 1;
 
