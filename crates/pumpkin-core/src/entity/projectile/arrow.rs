@@ -761,8 +761,9 @@ impl EntityBase for ArrowEntity {
             }
         }
 
-        // Entity collisions
-        let candidates = world.get_all_at_box(&search_box);
+        // Entity collisions: a dragon's parts, not the dragon (vanilla `EnderDragon.isPickable`).
+        let candidates =
+            super::with_dragon_parts(world.get_all_at_box(&search_box), &search_box, true);
         for cand in candidates {
             if self.should_skip_collision(entity, &cand) {
                 continue;
