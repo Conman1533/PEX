@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6fcfe4020`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7b7419bd6`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 3 | 2 | 40 | |
+| G1 Mob AI | 45 | 4 | 1 | 40 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
-| G6 Survival | 26 | 9 | 4 | 12 | G6-26 dropped (no code) |
+| G6 Survival | 26 | 13 | 0 | 12 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 10 | 0 | 22 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 42 | 6 | 133 | 15 |
+| Total | 196 | 47 | 1 | 133 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -36,7 +36,7 @@ What holds 2.0 back:
 
 1. GitHub Actions: the newest run on the repository is from 2026-10-14 (D0-1's support ticket). G0-01, G0-02 and Goal 10's release pieces wait on it.
 2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4, D7-1 and D7-4 on 2026-11-20), so 18 are open and 6 more partly or except a sub-question.
-3. The proofs: 6 pieces have their code on `alpha` but not the test their Done when asks for. The world round trip (2026-11-20) proved G7-14, G7-15 and G7-17. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching.
+3. The proofs: 1 piece has its code on `alpha` but not the test its Done when asks for. The world round trip (2026-11-20) proved G7-14, G7-15 and G7-17. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching. Proof batch 2 (2026-11-20) landed five more (G1-36, G6-14, G6-16, G6-17, G6-19) and fixed the seven bugs they found: zombie nautilus anger and charges never reaching players, arrows hitting the dragon instead of its parts, a hovering dragon shrugging off arrows, the dragon ignoring `NoAI`, an eye of ender thrown right after startup doing nothing, and the fight file's gateway and crystal fields.
 4. Fixed 2026-11-20 in proof batch 1: GameTest `scaffolding_distance_and_collapse` checked the overhang before its scheduled tick had run; it now waits for it, and the full tester passes on `alpha`.
 
 ## Order of work
@@ -702,7 +702,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-nautilus`
 - Needs decision: D1-1.
 - Done when: `pumpkin:nautilus_follows_tempting_player` and `pumpkin:zombie_nautilus_charges_survival_player` pass.
-- Status (2026-11-19): built by `feat/water-mob-ai` (on `alpha` since 2026-11-05): nautilus AI, the charge (dash) attack and the zombie nautilus as goal ports, with unit tests `the_dash_runs_at_the_target_then_waits`, `zombie_nautilus_is_a_nautilus_that_is_never_a_baby` and `zombie_nautilus_variant_survives_a_save`. Not done: the two GameTests in the Done when.
+- Status (2026-11-20): landed. Built by `feat/water-mob-ai` (on `alpha` since 2026-11-05); proof batch 2 (branch `test/proof-batch-2`, on `alpha` since 2026-11-20) adds GameTests `pumpkin:nautilus_follows_tempting_player` and `pumpkin:zombie_nautilus_charges_survival_player`, which pass. They found that a zombie nautilus could not find the player it was angry at and its charge could not hit players (both looked only at non-player entities); `fix(nautilus)` and `fix(ai)` in the batch fix them.
 
 #### G1-37 Allay and happy ghast
 - Scope: allay audit and GameTest; HappyGhastAi with its 3 goals, BabyFlyingPathNavigation and FlyingMoveControl. Out: harness riding.
@@ -1966,7 +1966,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/ender-eye-parity
 - Needs decision: none
 - Done when: new `bot_tests/end_portal_frame.rs` passes: a comparator next to a filled frame reads 15, a block inside the ring drops as an item when the last eye goes in, a bot standing on the frame gets a teleport up onto the eye (vanilla `Block.pushEntitiesUp`), and an eye thrown right after startup flies instead of doing nothing.
-- Status (2026-11-19): partly built by `feat/survival-basics` (on `alpha` since 2026-11-05): eye of ender and end portal changes. Not done: `bot_tests/end_portal_frame.rs`; the comparator reading and pushing a player up onto the eye were not checked for this update.
+- Status (2026-11-20): landed. Eye of ender and end portal code by `feat/survival-basics` (on `alpha` since 2026-11-05); proof batch 2 (branch `test/proof-batch-2`, on `alpha` since 2026-11-20) adds `bot_tests/end_portal_frame.rs`, which passes: a comparator reads 15 from the frame the bot fills, the dirt inside the ring drops as an item when the last eye goes in, and the bot standing on that frame is moved up to y + 1 on the server and the client. `eye_of_ender_flies_right_after_startup` found an eye thrown before the stronghold search finished did nothing; `fix(item)` in the same batch waits for it like vanilla `getRingPositionsFor`.
 
 #### G6-15 Stage: stronghold
 
@@ -1983,7 +1983,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-damage-parts
 - Needs decision: none
 - Done when: new `bot_tests/dragon_damage.rs` passes in the End: a hit on the head id lowers health by the full damage, a body hit by `damage / 4 + min(damage, 1)`, the bot isn't kicked, an arrow hits a part, `damage` without a player source leaves health alone, and destroying the healing crystal costs 10.
-- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): dragon parts in the world, body hits for a quarter plus one, projectiles hit the parts, only player and dragon damage types hurt it (unit tests `parts_resolve_by_id_with_their_own_sizes`, `body_parts_take_a_quarter_plus_one`, `projectiles_find_the_parts_not_the_dragon`, `only_players_and_dragon_damage_types_hurt_it`). Not done: `bot_tests/dragon_damage.rs` in the End.
+- Status (2026-11-20): landed. Built by `feat/dragon-fight` (on `alpha` since 2026-11-05); proof batch 2 (branch `test/proof-batch-2`, on `alpha` since 2026-11-20) adds bot test `dragon_damage_through_parts` (in `tools/pumpkin-tester/src/end_fight.rs`, which runs the End tests on their own servers instead of `bot_tests/dragon_damage.rs`), which passes: a diamond axe on the head takes 9, on the body 3.25, the bot isn't kicked, its arrow hurts the dragon, generic damage without a player leaves it alone, and the healing crystal costs 10 when destroyed. It found three bugs, fixed in the same batch: arrows hit the dragon instead of its parts, a hovering dragon shrugged off arrows like the sitting phases, and the dragon ignored `NoAI`.
 
 #### G6-17 Dragon death sequence
 
@@ -1992,7 +1992,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-death-sequence
 - Needs decision: none
 - Done when: new `bot_tests/dragon_death.rs` passes: after `damage <dragon> 1000 minecraft:player_attack by <bot>` the dragon exists for 200 ticks, then the exit portal holds `end_portal` blocks, the egg sits on the podium, one gateway exists and the XP orbs add up to 12,000; the same test with `kill` instead of `damage`, on a fresh world, opens the portal at once.
-- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): a killing blow in flight keeps the dragon at one health for 200 ticks, `kill` removes it at once, and the fight places the exit portal, the egg, a gateway and 12,000 XP (unit tests `killing_blow_in_flight_keeps_one_health_and_dies_over_200_ticks`, `kill_removes_the_dragon_at_once`). Not done: `bot_tests/dragon_death.rs`.
+- Status (2026-11-20): landed. Built by `feat/dragon-fight` (on `alpha` since 2026-11-05); proof batch 2 (branch `test/proof-batch-2`, on `alpha` since 2026-11-20) adds bot tests `dragon_death_sequence` and `dragon_kill_command_opens_portal_at_once` (in `end_fight.rs`, not `bot_tests/dragon_death.rs`), which pass: after `damage ... 1000 minecraft:player_attack by EndBot` the dragon stays 200 ticks, then the exit portal has its 20 `end_portal` blocks, the egg sits on the podium, one gateway is placed and the orbs add up to 12,000 XP; `kill` on a fresh world opens the portal at once.
 
 #### G6-18 Credits and respawn after the End
 
@@ -2009,7 +2009,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/dragon-fight-saved-data
 - Needs decision: none
 - Done when: a test in `core/world/dragon_fight.rs` reads an `ender_dragon_fight.dat` written by vanilla 26.3 and writes the same fields back; a boot test (kill the dragon, `stop`, start) finds no new dragon and the same gateways; a fight stopped mid-way comes back with the same dragon and health.
-- Status (2026-11-19): built by `feat/dragon-fight` (on `alpha` since 2026-11-05): `ender_dragon_fight.dat` in the End's `data/minecraft/` (unit tests `fight_round_trips_through_its_saved_data_file`, `missing_fight_file_starts_a_new_fight`). Not done: reading a file written by vanilla 26.3, and the kill, stop and start boot test.
+- Status (2026-11-20): landed. Built by `feat/dragon-fight` (on `alpha` since 2026-11-05); proof batch 2 (branch `test/proof-batch-2`, on `alpha` since 2026-11-20) adds `a_fight_file_written_by_vanilla_is_written_back_with_the_same_fields` (the file vanilla 26.3 wrote for G7-01's fixture) and bot tests `dragon_fight_resumes_after_restart` (same dragon, 150 health, no second dragon) and `killed_dragon_stays_dead_after_restart` (no new dragon, the same gateways). `fix(dragon)` in the batch writes `gateways` as a list of ints and leaves out an empty `respawn_crystals` like vanilla, so the world round trip's 3 G6-19 lines are gone from `known-losses.txt`.
 
 #### G6-20 Stage: the End and the dragon
 
