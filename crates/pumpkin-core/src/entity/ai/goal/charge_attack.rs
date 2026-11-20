@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pumpkin_data::attributes::Attributes;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::effect::StatusEffect;
@@ -114,9 +116,14 @@ impl Goal for ChargeAttackGoal {
         let world = entity.world.load();
         let caller: &dyn EntityBase = mob;
         let targeting = TargetPredicate::create_attackable().ignore_visibility();
+        // Vanilla `getEntitiesOfClass(LivingEntity.class, ...)`, which includes players;
+        // `get_entities_at_box` leaves them out.
+        let bounds = entity.bounding_box.load();
         let hit = world
-            .get_entities_at_box(&entity.bounding_box.load())
+            .get_players_at_box(&bounds)
             .into_iter()
+            .map(|player| player as Arc<dyn EntityBase>)
+            .chain(world.get_entities_at_box(&bounds))
             .find(|other| targeting.test(&world, Some(caller), other.as_ref()));
         let Some(hit) = hit else {
             return;
