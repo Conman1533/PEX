@@ -257,7 +257,10 @@ const BUILTIN_TEST_IDS: &[&str] = &[
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
 /// tests, so a mob doesn't target or follow anything in the next test.
-const MOB_TEST_IDS: &[&str] = &["pumpkin:zombie_pathfinds_to_villager"];
+const MOB_TEST_IDS: &[&str] = &[
+    "pumpkin:zombie_pathfinds_to_villager",
+    "pumpkin:armadillo_rolls_up_near_zombie",
+];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
 /// `MOB_TEST_IDS`, since mobs in other tests can see the player.
@@ -557,6 +560,13 @@ pub fn ensure_builtin_game_tests_registered() {
             140,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:armadillo_rolls_up_near_zombie",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            farm_animals::test_armadillo_rolls_up_near_zombie,
         );
         register_function_test(
             "pumpkin:quoted_non_ascii_player_name_in_commands",
