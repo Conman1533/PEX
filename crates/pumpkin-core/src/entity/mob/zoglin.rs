@@ -1,8 +1,9 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Weak};
 
 use pumpkin_data::attributes::Attributes;
-use pumpkin_data::entity::{EntityStatus, EntityType};
+use pumpkin_data::damage::DamageType;
+use pumpkin_data::entity::EntityStatus;
 use pumpkin_data::sound::Sound;
 use pumpkin_data::tracked_data;
 use pumpkin_nbt::compound::NbtCompound;
@@ -11,15 +12,12 @@ use pumpkin_util::math::boundingbox::EntityDimensions;
 
 use crate::entity::{
     Entity, EntityBase,
-    ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
-        swim::SwimGoal, wander_around::WanderAroundGoal,
-    },
-    living::LivingEntity,
+    ai::brain::{Brain, memory::PackedMemories},
     mob::{Mob, MobEntity, MobMetadata, hoglin::throw_target},
 };
 use crate::world::World;
+
+mod ai;
 
 pub struct ZoglinEntity {
     pub mob_entity: MobEntity,
@@ -36,6 +34,7 @@ impl ZoglinEntity {
         eye_height: 0.625,
     };
 
+    /// Vanilla `Zoglin`, on the Brain of `Zoglin.getActivities` (`ai.rs`).
     pub fn new(entity: Entity) -> Arc<Self> {
         let mob_entity = MobEntity::new(entity);
         {
@@ -67,47 +66,10 @@ impl ZoglinEntity {
         }
         mob_entity.living_entity.health.store(40.0);
 
-        let zoglin = Self {
+        Arc::new(Self {
             mob_entity,
             is_baby: AtomicBool::new(false),
-        };
-        let mob_arc = Arc::new(zoglin);
-        let mob_weak: Weak<dyn Mob> = {
-            let mob_arc: Arc<dyn Mob> = mob_arc.clone();
-            Arc::downgrade(&mob_arc)
-        };
-
-        {
-            let goal_selector = &mob_arc.mob_entity.goals_selector;
-
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.0, true)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
-            goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak.clone(), &EntityType::PLAYER, 8.0),
-            );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
-
-            let target_selector = &mob_arc.mob_entity.target_selector;
-            target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
-            target_selector.add_goal(
-                2,
-                Box::new(ActiveTargetGoal::new(
-                    &mob_arc.mob_entity,
-                    &EntityType::PLAYER,
-                    10,
-                    true,
-                    false,
-                    Some(|target: &LivingEntity, _world: &World| {
-                        target.entity.entity_type != &EntityType::ZOGLIN
-                            && target.entity.entity_type != &EntityType::CREEPER
-                    }),
-                )),
-            );
-        };
-
-        mob_arc
+        })
     }
 
     #[must_use]
@@ -181,8 +143,19 @@ impl Mob for ZoglinEntity {
         self.set_baby(nbt.get_bool("IsBaby").unwrap_or(false));
     }
 
-    fn melee_attack_interval(&self) -> i32 {
-        if self.is_baby() { 15 } else { 40 }
+    fn make_brain(&self, packed: &PackedMemories) -> Brain {
+        ai::make_brain(self, packed)
+    }
+
+    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        self.mob_entity.tick_brain(self);
+        ai::update_activity(self);
+    }
+
+    fn on_damage(&self, _damage_type: DamageType, source: Option<&dyn EntityBase>) {
+        if let Some(attacker) = source {
+            ai::react_to_hurt(self, attacker);
+        }
     }
 
     fn before_melee_attack(&self, _target: &dyn EntityBase) {
