@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4f094ed19`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `f88488344`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 13 | 0 | 19 | |
+| G7 Worlds | 32 | 14 | 0 | 18 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 51 | 1 | 129 | 15 |
+| Total | 196 | 52 | 1 | 128 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -107,7 +107,7 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
 | D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Answered by the 2.0 loop (2026-11-20): pass through now, model fields as features need them, because the first round trip shows losses in dozens of chunk, block entity, item and entity keys that one generic mechanism stops at once, while fields PEX models still win | G7-06, G7-21, G7-23, G7-24, G7-25 |
 | D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Open | G7-28 |
-| D7-3 | How much of a structure start should PEX save for chunks it generates? | Open | G7-07 |
+| D7-3 | How much of a structure start should PEX save for chunks it generates? | Answered by the 2.0 loop (2026-11-20): the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored | G7-07 |
 | D7-4 | Which `data/` files must round-trip for 2.0? | Answered by the 2.0 loop (2026-11-20): all, because the first round trip shows PEX already leaves every one of these files intact and vanilla reads them, so each piece only has to read and write its own file, and a subset would mean documented losses of players' maps, raids and boss bars | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
@@ -2224,6 +2224,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/chunk-structure-starts
 - Needs decision: D7-3
 - Done when: in a world PEX generated, vanilla's `/locate structure minecraft:village_plains` and PEX's agree on an already generated village, and G7-04 logs no structure errors. G6-10 waits on this.
+- Status (2026-11-20): landed (branch `feat/chunk-structure-starts`). Chunks PEX generates save `structures` like `SerializableChunkData.packStructureData`: each start PEX can write in full (`id`, `ChunkX`, `ChunkZ`, `references`, `Children` with every jigsaw piece's `pool_element`, position, rotation, junctions and liquid settings, `generation/structure/save.rs`) and, for every structure, the start chunks reaching into the chunk. A chunk loaded from disk keeps the starts it was saved with, and PEX only adds the ones it is missing and merges references. D7-3 answered by the 2.0 loop: the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored. Lookups by position for spawn overrides stay with G6-10. The world round trip gained step 6: PEX makes a world with seed 20261120, locates the nearest plains village (-1504, -1360), generates the chunks around it and saves; the start chunk holds the village's start with its pieces, vanilla on that save locates the same village and logs no structure errors, and steps 1 to 3 still show nothing outside the known losses (`tools/world-roundtrip/reports/2026-11-20-g7-07.md`). Also fixed here: G7-06's known-loss edit had cut 167 unrelated lines (G7-15/16/23/24/25, light, game rules) from `known-losses.txt`; they are back. Without the merge, PEX finishing vanilla's proto-chunks beside the lab lost `structures.References."minecraft:mineshaft"` in 3 chunks, so PEX's own mineshaft references can miss some vanilla has; not looked into further.
 
 #### G7-08 Log unreadable chunks
 
@@ -2458,6 +2459,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Start id, bounding box and references only. Enough for spawn overrides and `/locate`; what vanilla does with a start without pieces is unknown until G7-04 runs it.
   - Nothing: only vanilla's starts survive (G7-06), and PEX-generated chunks keep losing them.
   - Waits on it: G7-07, and through it G6-10.
+  - Answered by the 2.0 loop (2026-11-20): the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored.
 - D7-4: Which `data/` files must round-trip for 2.0? Options:
   - All: scoreboard, maps, world border, chunk tickets, raids, command storage, scheduled events, boss bars, random sequences, stopwatches. Six pieces.
   - A subset (for example maps, scoreboard, world border and chunk tickets), with the rest listed as known losses in the release notes.
