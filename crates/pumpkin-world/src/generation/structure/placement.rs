@@ -157,6 +157,23 @@ impl GlobalStructureCache {
             .unwrap_or_default()
     }
 
+    /// Waits for the stronghold ring positions like vanilla `getRingPositionsFor`, which joins
+    /// their future. Safe from any thread, the tick included: the search runs on its own thread
+    /// and pool, never on the global Rayon pool. Never panics, unlike
+    /// [`Self::get_stronghold_chunks`]: a failed search is [`StrongholdLayout::Failed`].
+    pub fn wait_for_stronghold_chunks(&self) -> StrongholdLayout<'_> {
+        if self.stronghold_job.is_none() {
+            return self.try_get_stronghold_chunks();
+        }
+        self.ensure_strongholds_generated();
+        self.stronghold_chunks
+            .wait()
+            .as_ref()
+            .map_or(StrongholdLayout::Failed, |chunks| {
+                StrongholdLayout::Ready(chunks)
+            })
+    }
+
     /// Returns the stronghold ring positions without waiting.
     pub fn try_get_stronghold_chunks(&self) -> StrongholdLayout<'_> {
         self.ensure_strongholds_generated();

@@ -151,7 +151,9 @@ fn find_stronghold(world: &Arc<World>, origin: BlockPos) -> Option<BlockPos> {
 
     let strongholds = StructureSet::get("strongholds")?;
 
-    // Pending positions leave the eye unthrown and unconsumed, so the player can retry
+    // Vanilla `getRingPositionsFor` joins the ring search, so an eye thrown right after startup
+    // waits for it instead of doing nothing.
+    global_cache.wait_for_stronghold_chunks();
     match find_nearest_structure(
         origin,
         &[&strongholds.placement],
