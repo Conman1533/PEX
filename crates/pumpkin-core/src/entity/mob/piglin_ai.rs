@@ -371,12 +371,19 @@ mod tests {
                 assert!(item.get_enchantment_level(soul_speed) > 0);
                 boots += 1;
             } else if item.item == &Item::POTION || item.item == &Item::SPLASH_POTION {
-                assert!(
-                    item.get_data_component::<pumpkin_data::data_component_impl::PotionContentsImpl>()
-                        .is_some_and(|p| p.potion_id.is_some()),
-                    "fire resistance potion"
-                );
-                potions += 1;
+                let potion = item
+                    .get_data_component::<pumpkin_data::data_component_impl::PotionContentsImpl>()
+                    .and_then(|p| p.potion_id)
+                    .expect("a potion id");
+                // The table's splash potion is always Fire Resistance; its plain potion is Fire
+                // Resistance or a water bottle.
+                let fire_resistance = i32::from(pumpkin_data::potion::Potion::FIRE_RESISTANCE.id);
+                if potion == fire_resistance {
+                    potions += 1;
+                } else {
+                    assert_eq!(item.item, &Item::POTION, "splash potion {potion}");
+                    assert_eq!(potion, i32::from(pumpkin_data::potion::Potion::WATER.id));
+                }
             }
         }
         // 5, 8 and 8 + 8 of 459 weight: about 22, 35 and 70 in 2000.
