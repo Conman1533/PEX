@@ -6,9 +6,9 @@ This is a fresh skeleton on branch `roadmap-2.0-v2`. The earlier roadmap is stil
 
 Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still the newest commit). See [Status on 2026-11-19](#status-on-2026-11-19) and the "Status (2026-11-19)" line on each piece it touches.
 
-## Status on 2026-11-19
+## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6fcfe4020`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -16,14 +16,14 @@ Checked against `alpha` at `466d2af9d`. "Landed" means the piece's branch, or th
 | G1 Mob AI | 45 | 3 | 2 | 40 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
-| G4 Offline UUIDs | 6 | 0 | 1 | 5 | |
+| G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
-| G6 Survival | 26 | 6 | 7 | 12 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 4 | 4 | 24 | |
+| G6 Survival | 26 | 9 | 4 | 12 | G6-26 dropped (no code) |
+| G7 Worlds | 32 | 5 | 3 | 24 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 32 | 14 | 135 | 15 |
+| Total | 196 | 37 | 9 | 135 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -35,9 +35,9 @@ Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by th
 What holds 2.0 back:
 
 1. GitHub Actions: the newest run on the repository is from 2026-10-14 (D0-1's support ticket). G0-01, G0-02 and Goal 10's release pieces wait on it.
-2. Decisions: this file records no answers after 2026-10-31, so 21 are open and 6 more partly or except a sub-question. D7-1 and D7-4 hold 11 Goal 7 pieces.
-3. The proofs: 14 pieces have their code on `alpha` but not the test their Done when asks for.
-4. `alpha` fails GameTest `scaffolding_distance_and_collapse`, as it has since before this roadmap.
+2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4 on 2026-11-20), so 20 are open and 6 more partly or except a sub-question. D7-1 and D7-4 hold 11 Goal 7 pieces.
+3. The proofs: 9 pieces have their code on `alpha` but not the test their Done when asks for. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching.
+4. Fixed 2026-11-20 in proof batch 1: GameTest `scaffolding_distance_and_collapse` checked the overhang before its scheduled tick had run; it now waits for it, and the full tester passes on `alpha`.
 
 ## Order of work
 
@@ -48,7 +48,7 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 1. Answer the open decisions that hold the most work. The table below has all of them.
    - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
    - D7-4 (6 pieces) and D7-1 (5).
-   - D5-1, D6-4, D8-3 and the open part of D10-2 (2 pieces each).
+   - D5-1, D8-3 and the open part of D10-2 (2 pieces each).
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
    - G3-01: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world. D3-1 is answered except its two-key sub-question.
@@ -76,7 +76,7 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 
 Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. Neon answered D0-1, D1-2, D1-3, D3-2, D6-1, D6-3 and D7-6 the same day. That leaves 18 answered, 2 answered except a sub-question, 4 partly answered and 21 open.
 
-No answers were recorded after 2026-10-31, so the counts above still hold on 2026-11-19.
+No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Answered by the 2.0 loop"). On 2026-11-20: 19 answered, 2 answered except a sub-question, 4 partly answered and 20 open.
 
 | ID | Question | Status | Pieces waiting |
 | :-- | :-- | :-- | :-- |
@@ -102,7 +102,7 @@ No answers were recorded after 2026-10-31, so the counts above still hold on 202
 | D6-1 | What may a stage set up with commands? | Answered: `give` and `locate` per stage; only G6-22 chains without `give` | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
 | D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Answered: the shared tester server, fixed seed, both dimensions on (Q6.4) | G6-01 |
 | D6-3 | Which stages run in CI's `gametest` job? | Answered: short stages in CI, the long ones nightly and before releases | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
-| D6-4 | Where do the 12 pearls come from? | Open | G6-12, G6-13 |
+| D6-4 | Where do the 12 pearls come from? | Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work | G6-12, G6-13 |
 | D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Open | G6-20 |
 | D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
 | D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Open | G7-06, G7-21, G7-23, G7-24, G7-25 |
@@ -659,7 +659,6 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-piglin`
 - Needs decision: D1-1, D1-3 (#3630).
 - Done when: `pumpkin:piglin_barters_gold_ingot_for_loot` passes.
-- Needed by: G6-13 (piglin admiring and bartering).
 
 #### G1-31 Goat and long jump
 - Scope: GoatAi, PrepareRamNearestTarget, RamTarget, LongJumpToRandomPos, LongJumpMidJump. Out: goat horn items.
@@ -1527,7 +1526,7 @@ Format and place of the lists, outside the migration:
 - Branch: fix/usercache-vanilla-format
 - Needs decision: none
 - Done when: unit tests in `usercache.rs` and `banlist_serializer.rs` load a `usercache.json` and a `banned-players.json` written by a vanilla 26.3 server (bytes in the test) with every entry, write dates byte-identical to vanilla's, and still load the files PEX 1.2.0 wrote; the vanilla-file tests fail on alpha.
-- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): ban and usercache dates are written in vanilla's format and older forms still load (`dates_are_written_like_vanilla_and_old_forms_still_read`, `the_disk_entry_uses_vanilla_keys_and_date_format`, `entries_expire_one_calendar_month_later`). Not done: tests on files written by a vanilla 26.3 server, byte for byte, and on files PEX 1.2.0 wrote.
+- Status (2026-11-20): landed. Built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05); in proof batch 1 (branch `test/proof-batch-1b`) `a_vanilla_usercache_loads_and_saves_byte_for_byte`, `a_pex_1_2_0_usercache_still_loads`, `vanilla_ban_lists_load_and_save_byte_for_byte` and `pex_1_2_0_ban_lists_still_load` load files written by vanilla 26.3 and PEX 1.2.0 and write vanilla's bytes back. They pass on the `alpha` before the batch too, since `feat/vanilla-saved-data` had already done the work the "fail on alpha" clause was written against.
 
 #### G4-06 Server lists in vanilla's place
 
@@ -1892,7 +1891,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/attack-cooldown-parity
 - Needs decision: none
 - Done when: new `bot_tests/attack_cooldown.rs` passes: a punch 5 ticks after the last attack deals the full base damage, a punch after 2 ticks deals `getAttackStrengthScale`'s reduced amount, `attribute <bot> minecraft:attack_speed base set 8` halves the delay, and changing `tps` in the config doesn't change it.
-- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): the attack strength delay comes from `attack_speed` (unit test `attack_strength_delay_is_twenty_ticks_over_attack_speed`). Not done: `bot_tests/attack_cooldown.rs`.
+- Status (2026-11-20): landed. Built by `feat/survival-basics` (on `alpha` since 2026-11-05); `bot_tests/attack_cooldown.rs` landed on `alpha` on 2026-11-20 in proof batch 1 (branch `test/proof-batch-1b`) and passes: a punch 5 ticks after the last one deals full damage, one after 2 ticks deals `getAttackStrengthScale`'s amount at attack_speed 4 and 8, 1 tick at speed 8 is checked too, and `tick rate 40` (the runtime tick rate, since PEX has no `tps` config key) gives the same damage for the same tick gap.
 
 #### G6-06 Stage: iron tools
 
@@ -1925,7 +1924,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/spawner-spawn-rules
 - Needs decision: none
 - Done when: new `bot_tests/spawners.rs` passes: a zombie spawner next to a torch spawns nothing (vanilla `Monster.checkMonsterSpawnRules` only skips light for trial spawners), nothing spawns on Peaceful, a custom name in SpawnData reaches the mob, and a blaze spawner in a lit fortress room still spawns (blazes use `checkAnyLightMonsterSpawnRules`).
-- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): a vanilla `BaseSpawner` with light rules, custom spawn rules and SpawnData/SpawnPotentials saved (unit tests for the saved data and spawn eggs). Not done: `bot_tests/spawners.rs`.
+- Status (2026-11-20): landed. Built by `feat/survival-basics` (on `alpha` since 2026-11-05); `bot_tests/spawners.rs` landed on `alpha` on 2026-11-20 in proof batch 1 (branch `test/proof-batch-1b`). It found that spawners skipped the light check for every mob (vanilla skips it only for trial spawners) and ran the ground check they skip in vanilla; `fix(spawner)` in the same batch fixes both, and the test fails without it (a zombie spawned next to a torch).
 
 #### G6-10 Structure spawn overrides
 
@@ -1950,12 +1949,12 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/piglin-barter-loot-table
 - Needs decision: D6-4
 - Done when: a test bartering until it gets one shows the enchanted book carries Soul Speed and the potions Fire Resistance (both fail on alpha).
-- Status (2026-11-19): built by `feat/survival-basics` (on `alpha` since 2026-11-05): bartering rolls the loot table, with `enchant_randomly` and `set_potion`. Unit test `bartering_rolls_the_loot_table` checks the book carries Soul Speed; the Fire Resistance potion check from the Done when is not in it. D6-4 is still open.
+- Status (2026-11-20): landed. Built by `feat/survival-basics` (on `alpha` since 2026-11-05); in proof batch 1 (branch `test/proof-batch-1b`) `bartering_rolls_the_loot_table` also checks every bartered potion and splash potion is Fire Resistance, or water for the table's water bottle. D6-4 answered: the pearl stage uses endermen, so bartering stays a parity fix with this test.
 
 #### G6-13 Stage: ender pearls
 
 - Scope: in: `survival/ender_pearls.rs`: collect 12 pearls by the route D6-4 picks: drop gold ingots near a piglin and pick up what it throws, or kill endermen. Out: Looting.
-- Depends on: G6-03, G6-05, G6-12 (if bartering), G1-30 (piglin admiring and bartering, if bartering), G1-10 (enderman AI, if endermen)
+- Depends on: G6-03, G6-05, G1-10 (enderman AI; D6-4 picked endermen)
 - Branch: test/survival-ender-pearls
 - Needs decision: D6-1, D6-3, D6-4
 - Done when: `survival:ender_pearls` passes 10 of 10 and every pearl came from a barter or a kill.
@@ -2108,7 +2107,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
   - Endermen: needs Goal 1's enderman work; 0 or 1 pearl per kill without Looting, about 24 kills.
   - Both, as players do: both Goal 1 dependencies, and both mechanics get tested.
   - Waits on it: G6-12, G6-13.
-- D6-5: Does the dragon stage wait for Goal 1's dragon phases? Options:
+  - Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work. G6-12 stays as a parity fix with its own test, and G6-13 depends on G1-10, not G1-30.: Does the dragon stage wait for Goal 1's dragon phases? Options:
   - Wait: the stage proves the vanilla fight (perching, breath, fireballs), but G6-20 and G6-22 block on Goal 1.
   - Run it on the current phase machine with the phase gaps in the deviations list, and rerun when Goal 1 lands.
   - Waits on it: G6-20, G6-22.
@@ -2236,7 +2235,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/wide-tick-delays
 - Needs decision: none
 - Done when: a unit test loads ticks with `t = 300` and `t = -5`, runs the overdue one on the first tick and saves the other with its remaining delay; a frogspawn hatches between 3600 and 12000 ticks.
-- Status (2026-11-19): built by `feat/long-tick-delays` (on `alpha` since 2026-11-05): `i32` delays with a far-tick list, pump format v2, and vanilla frogspawn and sniffer egg timers (unit tests `overdue_ticks_save_a_negative_delay_and_load_ahead`, `a_long_delay_runs_on_time_through_skips` and four more). The unit part of the Done when looks covered; a frogspawn hatching in game is not checked.
+- Status (2026-11-20): landed. Built by `feat/long-tick-delays` (on `alpha` since 2026-11-05); GameTest `pumpkin:frogspawn_hatches_between_3600_and_12000_ticks` landed on `alpha` on 2026-11-20 in proof batch 1 (branch `test/proof-batch-1b`). It found that frogspawn on alpha always broke at its hatch tick without hatching, because the water below was read as flowing water, which `supports_frogspawn` doesn't list; `fix(frogspawn)` in the same batch fixes it. The tester now gives the GameTest suite as many ticks as its longest test.
 
 #### G7-10 Block entity changes survive their chunk unloading
 
