@@ -30,13 +30,11 @@ pub(super) async fn test_scaffolding_distance_and_collapse(
         .set_block(&overhang_1, overhang_props.to_state_id(&Block::SCAFFOLDING))
         .await?;
 
-    // Removing the supporting top block causes the overhang's neighbor update to collapse to AIR (distance == 7)
+    // Removing the supporting top block schedules a tick on the overhang (vanilla `updateShape`),
+    // and that tick finds distance 7 and destroys it, so the check has to wait for the tick.
     helper.set_block_default(&column_top, &Block::AIR).await?;
 
-    helper
-        .assert_block_present(&overhang_1, &Block::AIR)
-        .await?;
-
-    helper.succeed();
-    Ok(())
+    helper.succeed_when(move |helper| async move {
+        helper.assert_block_present(&overhang_1, &Block::AIR).await
+    })
 }
