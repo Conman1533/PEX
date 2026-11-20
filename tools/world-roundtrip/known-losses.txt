@@ -25,25 +25,8 @@ dimensions/minecraft/*/region/*.mca block_ticks[*].t G7-06; first run: step 1: 3
 dimensions/minecraft/*/region/*.mca fluid_ticks[*] G7-06; first run: step 1: 360 lost
 dimensions/minecraft/*/region/*.mca fluid_ticks[*].t G7-06; first run: step 1: 9 changed
 
-# G7-13: PEX still writes level.dat keys 26.3 moved to data files
-level.dat Data.BorderCenterX G7-13; first run: step 1: 1 added
-level.dat Data.BorderCenterZ G7-13; first run: step 1: 1 added
-level.dat Data.BorderDamagePerBlock G7-13; first run: step 1: 1 added
-level.dat Data.BorderSafeZone G7-13; first run: step 1: 1 added
-level.dat Data.BorderSize G7-13; first run: step 1: 1 added
-level.dat Data.BorderSizeLerpTarget G7-13; first run: step 1: 1 added
-level.dat Data.BorderSizeLerpTime G7-13; first run: step 1: 1 added
-level.dat Data.BorderWarningBlocks G7-13; first run: step 1: 1 added
-level.dat Data.BorderWarningTime G7-13; first run: step 1: 1 added
-level.dat Data.Difficulty G7-13; first run: step 1: 1 added
-level.dat Data.DifficultyLocked G7-13; first run: step 1: 1 added
-level.dat Data.SpawnAngle G7-13; first run: step 1: 1 added
-level.dat Data.SpawnPitch G7-13; first run: step 1: 1 added
-level.dat Data.SpawnX G7-13; first run: step 1: 1 added
-level.dat Data.SpawnY G7-13; first run: step 1: 1 added
-level.dat Data.SpawnZ G7-13; first run: step 1: 1 added
-level.dat Data.WorldGenSettings G7-13; first run: step 1: 1 added
-level.dat Data.map_id G7-13; first run: step 1: 1 added
+# G7-16: PEX keeps the next map id in level.dat; vanilla 26.3 keeps it in data/minecraft/last_id.dat
+level.dat Data.map_id G7-16; first run: step 1: 1 added
 
 # G7-15: PEX writes default fields vanilla omits
 data/minecraft/scoreboard.dat data.Objectives[*].CriteriaName G7-15; first run: step 1: 1 added

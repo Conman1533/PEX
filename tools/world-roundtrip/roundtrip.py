@@ -17,6 +17,8 @@ Steps, each in its own folder under --out:
 4. fresh: PEX makes a new world, sets time, weather, a scoreboard objective, score and team, a
    moved border and forced chunks, saves, and restarts. After the restart it checks they came
    back, then vanilla opens the same save and checks it sees them too.
+5. hardcore: PEX, configured not hardcore, opens the fixture's hardcore world and saves it, then
+   vanilla opens that save and saves it; both saves must still be hardcore (G7-13).
 
 Every step's saved data files (`scoreboard.dat`, `world_clocks.dat`, `weather.dat`, each
 dimension's `world_border.dat`, `chunk_tickets.dat` and `ender_dragon_fight.dat`) also get
@@ -28,7 +30,7 @@ names a known vanilla log line instead: its path glob is searched for in each pr
 with `*` for any run of characters (spaces included). The report goes to <out>/report.md.
 
 Exit status: 0 when every step ran, no difference falls outside the ignore and known-loss
-lists, vanilla logged none of the G7-04 lines and every check in step 4 passed; 1 otherwise;
+lists, vanilla logged none of the G7-04 lines and every check in steps 4 and 5 passed; 1 otherwise;
 2 on usage errors.
 """
 import argparse
@@ -267,6 +269,41 @@ def weather_check(world, kind):
     return []
 
 
+def hardcore_check(world, kind):
+    data = (read_dat(world, "level.dat") or {}).get("Data", {})
+    settings = data.get("difficulty_settings", {})
+    if not int(settings.get("hardcore", 0)):
+        return [f"{kind}: level.dat difficulty_settings is not hardcore: {nbt.to_snbt(settings)}"]
+    return []
+
+
+def hardcore_step(args, report):
+    """Step 5. Returns failed checks."""
+    fixture_world = os.path.join(args.fixture, "world-hardcore")
+    if not os.path.isfile(os.path.join(fixture_world, "level.dat")):
+        return [f"{fixture_world} has no level.dat"]
+    failures = []
+    pex_dir = os.path.join(args.out, "hardcore")
+    copy_world(fixture_world, os.path.join(pex_dir, "world"))
+    server, console = start(args, "pex", pex_dir, args.port + 5)
+    try:
+        save_and_stop(server, console)
+    finally:
+        server.stop()
+    failures += hardcore_check(os.path.join(pex_dir, "world"), "PEX's save")
+    vanilla_dir = os.path.join(args.out, "hardcore-vanilla")
+    copy_world(os.path.join(pex_dir, "world"), os.path.join(vanilla_dir, "world"))
+    server, console = start(args, "vanilla", vanilla_dir, args.port + 6)
+    try:
+        save_and_stop(server, console)
+    finally:
+        server.stop()
+    failures += hardcore_check(os.path.join(vanilla_dir, "world"), "vanilla's save of it")
+    report.append("## 5. The hardcore fixture through PEX (configured not hardcore), then vanilla\n")
+    report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
+    return failures
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pex", required=True)
@@ -362,6 +399,7 @@ def main():
     report.append("## 4. The fixture's border and forced chunks live in PEX; set in PEX, after a restart, then in vanilla\n")
     report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
     problems += len(failures)
+    problems += len(hardcore_step(args, report))
 
     if args.write_known_losses:
         seen = set()
