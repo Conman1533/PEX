@@ -16,7 +16,7 @@
     "file_denylist": [],
     "startup": ".\/pumpkin",
     "config": {
-        "files": "{\r\n    \"pumpkin.toml\": {\r\n        \"parser\": \"file\",\r\n        \"find\": {\r\n            \"address = \\\"0.0.0.0:25565\\\"\": \"address = \\\"0.0.0.0:{{server.build.default.port}}\\\"\"\r\n        }\r\n    }\r\n}",
+        "files": "{\r\n    \"pumpkin.toml\": {\r\n        \"parser\": \"file\",\r\n        \"find\": {\r\n            \"address = \\\"0.0.0.0:25565\\\"\": \"address = \\\"0.0.0.0:{{server.build.default.port}}\\\"\",\r\n            \"address = \\\"0.0.0.0:19132\\\"\": \"address = \\\"0.0.0.0:{{server.build.env.BEDROCK_PORT}}\\\"\"\r\n        }\r\n    }\r\n}",
         "startup": "{\r\n    \"done\": \"Server is now running.\"\r\n}",
         "logs": "{}",
         "stop": "stop"
@@ -67,6 +67,16 @@
             "user_viewable": true,
             "user_editable": true,
             "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Bedrock Port",
+            "description": "The port Bedrock Edition players join on. Bedrock uses it for both TCP (signaling) and UDP (the WebRTC connection). Add a second allocation to the server and set this to its port. Written into pumpkin.toml at start while the Bedrock address there is still the default 19132.",
+            "env_variable": "BEDROCK_PORT",
+            "default_value": "19132",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,65535",
             "field_type": "text"
         }
     ]
