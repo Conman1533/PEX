@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7b7419bd6`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `0bfdaecc7`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 13 | 0 | 12 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 10 | 0 | 22 | |
+| G7 Worlds | 32 | 11 | 0 | 21 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 47 | 1 | 133 | 15 |
+| Total | 196 | 48 | 1 | 132 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2196,7 +2196,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: test/world-roundtrip-vanilla
 - Needs decision: none
 - Done when: it runs in CI and its first report says, for palettes, POI and the `data/` files, what vanilla actually did with them.
-- Status (2026-11-20): landed with G7-03 (same script, steps 2 and 3). The first report, `tools/world-roundtrip/reports/2026-11-20.md`, says what vanilla did: it reads every PEX palette as air (about 800 "Recoverable errors when loading section" lines, G7-05, the biggest loss found), leaves POI as it was (PEX never rewrote the fixture's POI file), and, after the fix below, reads every `data/` file. The first runs found that vanilla refused PEX's `game_rules.dat` and `world_clocks.dat` (DataVersion inside `data`), fixed by `fix/saved-data-dataversion` (G7-13's DataVersion part), and that PEX kept the border's damage and safe zone as f32. The fresh-world part runs on a PEX-made world as the Scope asks.
+- Status (2026-11-20): landed with G7-03 (same script, steps 2 and 3). The first report, `tools/world-roundtrip/reports/2026-11-20.md`, says what vanilla did: it reads every PEX palette as air (about 800 "Recoverable errors when loading section" lines, G7-05, the biggest loss found; fixed by G7-05 on 2026-11-20), leaves POI as it was (PEX never rewrote the fixture's POI file), and, after the fix below, reads every `data/` file. The first runs found that vanilla refused PEX's `game_rules.dat` and `world_clocks.dat` (DataVersion inside `data`), fixed by `fix/saved-data-dataversion` (G7-13's DataVersion part), and that PEX kept the border's damage and safe zone as f32. The fresh-world part runs on a PEX-made world as the Scope asks.
 
 #### G7-05 Block palettes in 26.3 form
 
@@ -2205,6 +2205,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/palette-26-3-ids
 - Needs decision: none
 - Done when: a unit test checks the written tags for a default and a non-default state, and G7-04 shows no block change in chunks PEX wrote.
+- Status (2026-11-20): landed (branch `fix/palette-26-3-ids`). `internal_to_bytes` writes a default state as its bare id and any other as `{id, properties}` with every property, like `BlockState.CODEC`; a palette mixing both is a list of compounds with the ids wrapped as `{"": id}`, as vanilla's NBT writes it. Unit test `saved_palettes_use_26_3_ids` checks the tags and the reload. The round trip (`tools/world-roundtrip/reports/2026-11-20-g7-05.md`) now has no "Recoverable errors when loading section" line, and the only block changes left in steps 2 and 3 are fluids flowing and gravel falling while each server ticks (kept in `known-losses.txt` as `ticking`). With the lab's sections no longer read as air, vanilla keeps its block entities, so finer item component and block entity losses showed up; they are listed under G7-23 and G7-25.
 
 #### G7-06 Keep chunk keys PEX doesn't model
 
