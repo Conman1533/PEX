@@ -22,6 +22,9 @@ const TICK: Duration = Duration::from_millis(50);
 const MAX_WAIT_TICKS: usize = 200;
 const BEDROCK_NAME: &str = "BedrockBot";
 const JAVA_NAME: &str = "JavaBot";
+/// `bedrock.max_players` on the test server: room for the Java and Bedrock bots in `mixed_play`,
+/// and for the main Bedrock bot plus one more in `login_checks`.
+const MAX_PLAYERS: u32 = 2;
 
 /// A test server with Java and Bedrock listeners on loopback, ticked by the tests.
 pub struct BedrockTestServer {
@@ -39,6 +42,7 @@ impl BedrockTestServer {
             let bedrock = &mut advanced.networking.bedrock;
             bedrock.enabled = true;
             bedrock.online_mode = false;
+            bedrock.max_players = MAX_PLAYERS;
             bedrock.authentication.enabled = false;
             bedrock.nethernet.enabled = true;
             bedrock.nethernet.address = SocketAddr::from(([127, 0, 0, 1], 0));
@@ -250,9 +254,135 @@ async fn run_scenarios(
     );
     join.finish(summary_lines)?;
 
-    let result = Box::pin(run_mixed_play(server, &mut bedrock, java, summary_lines)).await;
+    let mut result = Box::pin(run_mixed_play(server, &mut bedrock, java, summary_lines)).await;
+    if result.is_ok() {
+        result = Box::pin(run_login_checks(server, &mut bedrock, summary_lines)).await;
+    }
     bedrock.disconnect().await;
     result
+}
+
+/// What a Java login is refused for, on the Bedrock login path. The main Bedrock bot is online
+/// alone when this starts.
+async fn run_login_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    summary_lines: &mut Vec<String>,
+) -> Result<(), String> {
+    let mut checks = Checks::new("login_checks");
+
+    checks.record(
+        "a second login with an online name is refused",
+        expect_refused(server, bedrock, BEDROCK_NAME, bot::xuid_for("SomeoneElse")).await,
+    );
+    checks.record(
+        "a second login with an online UUID is refused",
+        expect_refused(server, bedrock, "OtherName", bedrock.xuid).await,
+    );
+    checks.record(
+        "the first player is still online",
+        if server.server.get_player_by_name(BEDROCK_NAME).is_some() {
+            Ok(())
+        } else {
+            Err(format!("{BEDROCK_NAME} was dropped by the refused logins"))
+        },
+    );
+
+    run_console(server, "whitelist on");
+    checks.record(
+        "an unlisted player is refused with the whitelist on",
+        expect_refused(server, bedrock, "UnlistedBot", bot::xuid_for("UnlistedBot")).await,
+    );
+    run_console(server, "whitelist off");
+
+    // Fills the server: the main bot plus this one.
+    let mut banned = server
+        .tick_while(Box::pin(BedrockBot::connect_and_join(
+            server.signaling_addr,
+            "BannedBot",
+        )))
+        .await
+        .map_err(|err| format!("bedrock:login_checks: BannedBot could not join: {err}"))?;
+    checks.record(
+        "a login past bedrock.max_players is refused",
+        expect_refused(server, bedrock, "LateBot", bot::xuid_for("LateBot")).await,
+    );
+    run_console(server, "ban BannedBot");
+    checks.record(
+        "a banned player is kicked",
+        tick_until(
+            server,
+            bedrock,
+            None,
+            "BannedBot to leave the server",
+            |_, _| server.server.get_player_by_name("BannedBot").is_none(),
+        )
+        .await,
+    );
+    let _ = banned.poll_packets().await;
+    checks.record(
+        "a kicked player is told why",
+        match &banned.disconnect {
+            Some(message) if !message.is_empty() => Ok(()),
+            Some(_) => Err("the Disconnect had no message".to_string()),
+            None => Err("BannedBot got no Disconnect".to_string()),
+        },
+    );
+    banned.disconnect().await;
+    checks.record(
+        "a banned player is refused",
+        expect_refused(server, bedrock, "BannedBot", bot::xuid_for("BannedBot")).await,
+    );
+    run_console(server, "pardon BannedBot");
+
+    // Last: it kicks the main bot too, since every bot comes from loopback.
+    run_console(server, "ban-ip 127.0.0.1");
+    checks.record(
+        "a player from a banned IP is refused",
+        expect_refused(server, bedrock, "IpBot", bot::xuid_for("IpBot")).await,
+    );
+    run_console(server, "pardon-ip 127.0.0.1");
+
+    checks.finish(summary_lines)
+}
+
+/// Joins as `name` with `xuid` and expects the server to disconnect the bot before it spawns.
+/// `online` keeps sending input meanwhile, so the server doesn't time it out.
+async fn expect_refused(
+    server: &BedrockTestServer,
+    online: &mut BedrockBot,
+    name: &str,
+    xuid: u64,
+) -> Result<(), String> {
+    let mut join = Box::pin(BedrockBot::connect_and_join_as(
+        server.signaling_addr,
+        name,
+        xuid,
+    ));
+    let result = loop {
+        tokio::select! {
+            result = &mut join => break result,
+            () = tokio::time::sleep(TICK) => {
+                // The online bot may be kicked on the way (the IP ban); that is not this check's
+                // business.
+                if online.disconnect.is_none() {
+                    let _ = online.send_input(online.position, &[]).await;
+                    let _ = online.poll_packets().await;
+                }
+                server.server.tick();
+            }
+        }
+    };
+    match result {
+        Ok(bot) => {
+            bot.disconnect().await;
+            Err(format!("{name} joined"))
+        }
+        Err(err) if err.contains("was disconnected") => Ok(()),
+        Err(err) => Err(format!(
+            "{name} failed to join without being refused: {err}"
+        )),
+    }
 }
 
 /// Cross-play: what one edition does, the other sees.

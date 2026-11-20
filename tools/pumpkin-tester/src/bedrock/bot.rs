@@ -79,6 +79,8 @@ pub struct SeenText {
 
 pub struct BedrockBot {
     pub name: String,
+    /// The Xbox user id the bot claims, which the server turns into its UUID.
+    pub xuid: u64,
     transport: NetherNetClient,
     encoder: BedrockBatchEncoder,
     decoder: BedrockBatchDecoder,
@@ -107,6 +109,15 @@ pub struct BedrockBot {
     pub packet_counts: HashMap<i32, usize>,
     /// Packets of a batch not handled yet.
     pending: VecDeque<RawPacket>,
+}
+
+/// A stable, made-up Xbox user id for `name`, in the range real ones use.
+pub fn xuid_for(name: &str) -> u64 {
+    // FNV-1a, so the id is the same on every run.
+    let hash = name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    2_535_000_000_000_000 + hash % 1_000_000_000_000
 }
 
 fn b64url(data: &[u8]) -> String {
@@ -141,6 +152,15 @@ fn read_error(what: &str, err: impl std::fmt::Display) -> String {
 impl BedrockBot {
     /// Checks the server's `/v1/join` status, then joins and waits until the bot has spawned.
     pub async fn connect_and_join(signaling: SocketAddr, name: &str) -> Result<Self, String> {
+        Self::connect_and_join_as(signaling, name, xuid_for(name)).await
+    }
+
+    /// Like [`Self::connect_and_join`], claiming `xuid` instead of the one derived from `name`.
+    pub async fn connect_and_join_as(
+        signaling: SocketAddr,
+        name: &str,
+        xuid: u64,
+    ) -> Result<Self, String> {
         let status = http_request(signaling, "GET", "/v1/join", &[]).await?;
         if status.status != 200 {
             return Err(format!("/v1/join answered HTTP {}", status.status));
@@ -155,6 +175,7 @@ impl BedrockBot {
         let transport = NetherNetClient::connect(signaling, network_id).await?;
         let mut bot = Self {
             name: name.to_string(),
+            xuid,
             transport,
             encoder: BedrockBatchEncoder::new(),
             decoder: BedrockBatchDecoder::new(),
@@ -227,6 +248,7 @@ impl BedrockBot {
             let id = packet.id;
             let payload = packet.payload.clone();
             self.handle_packet(&packet)?;
+            self.check_disconnected()?;
             if id == CPlayStatus::PACKET_ID
                 && i32::read_be(&mut &payload[..]).ok() == Some(PLAY_STATUS_PLAYER_SPAWN)
             {
@@ -257,6 +279,7 @@ impl BedrockBot {
             &public_key_b64,
             &json!({
                 "xname": self.name,
+                "xid": self.xuid.to_string(),
                 "cpk": public_key_b64,
                 "iat": now,
                 "exp": now + 3600,
@@ -430,7 +453,18 @@ impl BedrockBot {
                 return Ok(packet);
             }
             self.handle_packet(&packet)?;
+            self.check_disconnected()?;
         }
+    }
+
+    /// An error once the server has sent `Disconnect`, so a refused join fails at once.
+    fn check_disconnected(&self) -> Result<(), String> {
+        self.disconnect.as_ref().map_or(Ok(()), |message| {
+            Err(format!(
+                "Bedrock bot '{}' was disconnected: {message}",
+                self.name
+            ))
+        })
     }
 
     /// Handles every packet that has already arrived, without waiting.
