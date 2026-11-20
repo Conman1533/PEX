@@ -23,7 +23,9 @@ dimension's `world_border.dat`, `chunk_tickets.dat` and `ender_dragon_fight.dat`
 their own section in the report, because Goal 7's saved data pieces prove themselves there.
 
 --known-losses lists differences that are known and not yet fixed, in world_diff's ignore
-file form (`<file glob> <path glob> <reason>`). The report goes to <out>/report.md.
+file form (`<file glob> <path glob> <reason>`). An entry whose file glob is `vanilla.log`
+names a known vanilla log line instead: its path glob is searched for in each problem line,
+with `*` for any run of characters (spaces included). The report goes to <out>/report.md.
 
 Exit status: 0 when every step ran, no difference falls outside the ignore and known-loss
 lists, vanilla logged none of the G7-04 lines and every check in step 4 passed; 1 otherwise;
@@ -46,7 +48,9 @@ from dual_run import Server  # noqa: E402
 LAB_CHUNKS = (0, 0, 5, 3)  # the fixture lab is x 0..95, z 0..63
 VANILLA_PROBLEMS = re.compile(
     r"Failed to parse saved data|Skipping block entity with invalid type|reportChunkLoadFailure"
-    r"|Failed to load chunk|Couldn't load chunk|Failed to read")
+    r"|Failed to load chunk|Couldn't load chunk|Failed to read"
+    # Vanilla falls back to air for a section whose palette it can't read (G7-05).
+    r"|Recoverable errors when loading section")
 PEX_READY = re.compile(r"Started server|Done \(")
 VANILLA_READY = re.compile(r"Done \(")
 SAVED = re.compile(r"[Ss]aved the game|Saved the world|saved", re.I)
@@ -61,20 +65,25 @@ def data_file(rel):
 
 
 class Console:
-    """Sends commands and collects what each one printed, up to a marker line."""
+    """Sends commands and collects what each one printed, up to a marker line.
+
+    The marker is an unknown command: both servers echo it back as `<command><--[HERE]`
+    (PEX doesn't log `say`). Vanilla shows at most 10 characters before the cursor, so the
+    token stays short.
+    """
 
     def __init__(self, server, kind):
         self.server, self.kind, self.count = server, kind, 0
 
     def output(self, command, timeout=120):
         self.count += 1
-        token = f"roundtrip-sync-{self.count}"
+        token = f"rts{self.count}"
         self.server.command(command)
-        self.server.command(f"say {token}")
-        lines, deadline = [], time.time() + timeout
+        self.server.command(token)
+        marker, lines, deadline = f"{token}<--[HERE]", [], time.time() + timeout
         while True:
             line = self.server.next_line(deadline)
-            if line.rstrip().endswith(token):
+            if marker in line:
                 return lines
             lines.append(line)
 
@@ -120,11 +129,13 @@ def save_and_stop(server, console):
 
 
 def load_lab(console):
+    # The fixture already force-loads the lab, so this changes nothing in chunk_tickets.dat;
+    # it makes sure the chunks are loaded on a server that didn't restore the tickets.
+    # Never `forceload remove` here: that would delete the fixture's own tickets.
     x0, z0, x1, z1 = LAB_CHUNKS
     console.output(f"forceload add {x0 * 16} {z0 * 16} {x1 * 16 + 15} {z1 * 16 + 15}")
     # Let block entities wake and entity chunks go live before saving.
     time.sleep(10)
-    console.output(f"forceload remove {x0 * 16} {z0 * 16} {x1 * 16 + 15} {z1 * 16 + 15}")
 
 
 def copy_world(src, dst):
@@ -133,7 +144,37 @@ def copy_world(src, dst):
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("session.lock"))
 
 
-def diff(report, title, world_a, world_b, known):
+def file_glob(rel):
+    rel = re.sub(r"r\.-?\d+\.-?\d+\.mca$", "*.mca", rel)
+    return re.sub(r"c\.-?\d+\.-?\d+\.mcc$", "*.mcc", rel)
+
+
+def path_glob(path):
+    """`block_entities[{x:1,y:2,z:3}].Items[{Slot:0b}]` -> `block_entities[*].Items[*]`."""
+    while True:
+        new = re.sub(r"\[[^\[\]]*\]", "\0", path)
+        if new == path:
+            return path.replace("\0", "[*]")
+        path = new
+
+
+def change_kind(d):
+    if d.a == world_diff.MISSING:
+        return "added"
+    if d.b == world_diff.MISSING:
+        return "lost"
+    return "changed"
+
+
+def groups(diffs):
+    counts = {}
+    for d in diffs:
+        key = (file_glob(d.file), path_glob(d.path), change_kind(d))
+        counts[key] = counts.get(key, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def diff(report, title, world_a, world_b, known, all_groups):
     kept, ignored = world_diff.diff_worlds(world_a, world_b, ignore=world_diff.IGNORE + known)
     new = [d for d in kept]
     known_hits = [d for d, entry in ignored if entry in known]
@@ -147,6 +188,13 @@ def diff(report, title, world_a, world_b, known):
     by_file = {}
     for d in new:
         by_file.setdefault(d.file, []).append(d)
+    grouped = groups(new)
+    all_groups.extend((title, f, p, k, n) for (f, p, k), n in grouped)
+    report.append(f"### By kind: {len(grouped)} groups\n")
+    report.append("| Count | Change | File | Path |")
+    report.append("| --: | :-- | :-- | :-- |")
+    report.extend(f"| {n} | {k} | `{f}` | `{p}` |" for (f, p, k), n in grouped)
+    report.append("")
     report.append("### All differences by file\n")
     for rel, diffs in sorted(by_file.items(), key=lambda item: -len(item[1])):
         report.append(f"- `{rel}`: {len(diffs)}")
@@ -159,19 +207,18 @@ def diff(report, title, world_a, world_b, known):
 
 def read_dat(world, rel):
     path = os.path.join(world, rel)
-    return nbt.read_file(path) if os.path.exists(path) else None
+    return nbt.read_file(path)[1] if os.path.exists(path) else None
 
 
 def fresh_checks(console, kind):
     """Reads back what fresh_setup set. Returns failed checks."""
     failures = []
-    lines = " ".join(console.output("time query daytime"))
-    match = re.search(r"(?:time is|daytime is) (\d+)", lines, re.I) or re.search(r"(\d+)\s*$", lines)
+    # 26.3 queries the overworld clock with `time query time`; `daytime` is a timeline id there.
+    lines = " ".join(console.output("time query time"))
+    match = re.search(r"(?:time is|is at) (\d+)", lines, re.I)
     if not match or not 6000 <= int(match.group(1)) < 7200:
-        failures.append(f"{kind}: time query daytime printed {lines!r}, expected about 6000")
-    lines = " ".join(console.output("scoreboard objectives list"))
-    if "roundtrip_obj" not in lines:
-        failures.append(f"{kind}: objective roundtrip_obj missing: {lines!r}")
+        failures.append(f"{kind}: time query time printed {lines!r}, expected about 6000")
+    # The score check below also proves the objective exists (PEX has no `objectives list`).
     lines = " ".join(console.output("scoreboard players get #roundtrip roundtrip_obj"))
     if not re.search(r"\b31\b", lines):
         failures.append(f"{kind}: score of #roundtrip is not 31: {lines!r}")
@@ -216,6 +263,8 @@ def main():
     parser.add_argument("--fixture", required=True, help="build_fixture.py's --out folder")
     parser.add_argument("--out", required=True)
     parser.add_argument("--known-losses")
+    parser.add_argument("--write-known-losses", metavar="FILE",
+                        help="write every difference group found as a known-loss list, to start one")
     parser.add_argument("--port", type=int, default=25960)
     args = parser.parse_args()
     fixture_world = os.path.join(args.fixture, "world")
@@ -223,7 +272,7 @@ def main():
         parser.error(f"{fixture_world} has no level.dat")
     known = world_diff.read_ignore_file(args.known_losses) if args.known_losses else []
     os.makedirs(args.out, exist_ok=True)
-    report, problems = ["# World round trip\n"], 0
+    report, problems, all_groups = ["# World round trip\n"], 0, []
 
     pex_dir = os.path.join(args.out, "pex")
     copy_world(fixture_world, os.path.join(pex_dir, "world"))
@@ -233,7 +282,7 @@ def main():
         save_and_stop(server, console)
     finally:
         server.stop()
-    problems += diff(report, "1. Fixture -> PEX", fixture_world, os.path.join(pex_dir, "world"), known)
+    problems += diff(report, "1. Fixture -> PEX", fixture_world, os.path.join(pex_dir, "world"), known, all_groups)
 
     vanilla_dir = os.path.join(args.out, "vanilla")
     copy_world(os.path.join(pex_dir, "world"), os.path.join(vanilla_dir, "world"))
@@ -245,13 +294,18 @@ def main():
         server.stop()
     with open(os.path.join(vanilla_dir, "console.log")) as f:
         bad = [line.rstrip() for line in f if VANILLA_PROBLEMS.search(line)]
+    log_known = [(world_diff.glob(p), reason) for f, p, reason in known if f == "vanilla.log"]
+    known_lines = [line for line in bad if any(g.search(line) for g, _ in log_known)]
+    bad = [line for line in bad if line not in known_lines]
     report.append("## 2. Vanilla log on PEX's save\n")
-    report.append(f"{len(bad)} lines naming a load problem.\n")
+    report.append(f"{len(bad)} lines naming a load problem, {len(known_lines)} known.\n")
     report.extend(f"- `{line}`" for line in bad[:50])
+    if known_lines:
+        report.append(f"\nKnown, first of {len(known_lines)}: `{known_lines[0]}`")
     report.append("")
     problems += len(bad)
     problems += diff(report, "2. PEX -> vanilla", os.path.join(pex_dir, "world"),
-                     os.path.join(vanilla_dir, "world"), known)
+                     os.path.join(vanilla_dir, "world"), known, all_groups)
 
     again_dir = os.path.join(args.out, "pex-again")
     copy_world(os.path.join(vanilla_dir, "world"), os.path.join(again_dir, "world"))
@@ -262,7 +316,7 @@ def main():
     finally:
         server.stop()
     problems += diff(report, "3. Vanilla -> PEX again", os.path.join(pex_dir, "world"),
-                     os.path.join(again_dir, "world"), known)
+                     os.path.join(again_dir, "world"), known, all_groups)
 
     failures = []
     fresh_dir = os.path.join(args.out, "fresh")
@@ -295,6 +349,16 @@ def main():
     report.append("## 4. Set in PEX, after a restart, then in vanilla\n")
     report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
     problems += len(failures)
+
+    if args.write_known_losses:
+        seen = set()
+        with open(args.write_known_losses, "w") as f:
+            f.write("# <file glob> <path glob> <reason>; written by roundtrip.py --write-known-losses\n")
+            for title, file, path, kind, count in all_groups:
+                if (file, path) in seen:
+                    continue
+                seen.add((file, path))
+                f.write(f"{file} {path} step {title.split('.')[0]}: {count} {kind}\n")
 
     with open(os.path.join(args.out, "report.md"), "w") as f:
         f.write("\n".join(report) + "\n")

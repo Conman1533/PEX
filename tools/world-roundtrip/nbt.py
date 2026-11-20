@@ -210,7 +210,61 @@ def region_position(path):
     return int(x), int(z)
 
 
+def _lz4_block(src, size):
+    """Decodes one raw LZ4 block of `size` bytes."""
+    out, i = bytearray(), 0
+    while i < len(src):
+        token = src[i]
+        i += 1
+        literals = token >> 4
+        if literals == 15:
+            while True:
+                extra = src[i]
+                i += 1
+                literals += extra
+                if extra != 255:
+                    break
+        out += src[i:i + literals]
+        i += literals
+        if i >= len(src) or len(out) >= size:
+            break
+        offset = src[i] | src[i + 1] << 8
+        i += 2
+        length = token & 15
+        if length == 15:
+            while True:
+                extra = src[i]
+                i += 1
+                length += extra
+                if extra != 255:
+                    break
+        length += 4
+        start = len(out) - offset
+        for k in range(length):
+            out.append(out[start + k])
+    return bytes(out)
+
+
+def _lz4_java(data):
+    """Decodes lz4-java's `LZ4BlockOutputStream` framing, which vanilla's LZ4 chunks use."""
+    out, i = bytearray(), 0
+    while i < len(data):
+        if data[i:i + 8] != b"LZ4Block":
+            raise ValueError("bad LZ4Block magic")
+        token = data[i + 8]
+        compressed, size, _checksum = struct.unpack_from("<iii", data, i + 9)
+        i += 21
+        if size == 0:
+            break
+        payload = data[i:i + compressed]
+        i += compressed
+        out += payload if token & 0xF0 == 0x10 else _lz4_block(payload, size)
+    return bytes(out)
+
+
 def _decompress(kind, data):
+    if kind == COMPRESSION_LZ4:
+        return _lz4_java(data)
     if kind == COMPRESSION_GZIP:
         return gzip.decompress(data)
     if kind == COMPRESSION_ZLIB:

@@ -50,7 +50,9 @@ IGNORE = [
 ]
 # Fields that identify an element of a list of compounds, tried in order. A field set is
 # used when every element on both sides has it and no two elements share its value.
-IDENTITY = [("UUID",), ("x", "y", "z"), ("Slot",), ("slot",), ("pos",), ("Y",), ("id",)]
+# `chunk_pos` and `type` name chunk_tickets.dat entries, `Name` scoreboard objectives and teams.
+IDENTITY = [("UUID",), ("x", "y", "z"), ("Slot",), ("slot",), ("pos",), ("Y",), ("chunk_pos", "type"),
+            ("Name",), ("id",)]
 Diff = collections.namedtuple("Diff", "file chunk path a b")
 
 
