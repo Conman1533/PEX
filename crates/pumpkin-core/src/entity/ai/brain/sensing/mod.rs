@@ -714,4 +714,151 @@ mod tests {
         assert_eq!(tracked_id(&state), Some(far.get_entity().entity_id));
         Ok(())
     }
+
+    fn as_target(cow: &Arc<CowEntity>) -> Arc<dyn EntityBase> {
+        cow.clone()
+    }
+
+    #[tokio::test]
+    async fn stop_attacking_if_target_invalid_forgets_a_dead_target() -> TestResult {
+        use crate::entity::ai::brain::behavior::stop_attacking_if_target_invalid;
+
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let body = cow(&world, 0.0);
+        let target = cow(&world, 2.0);
+        world
+            .entities
+            .store(Arc::new(vec![body.clone(), target.clone()]));
+        let mut behavior = stop_attacking_if_target_invalid::create();
+        let mut state = brain_state(behavior.required_memories());
+        state.set(types::ATTACK_TARGET, as_target(&target));
+
+        let started_alive = try_start(&mut behavior, &mut state, &world, &body, 0);
+        let kept_alive = state.has_memory_value(types::ATTACK_TARGET.id());
+        tick_or_stop(&mut behavior, &mut state, &world, &body, 0);
+        target.mob_entity.living_entity.health.store(0.0);
+        let started_dead = try_start(&mut behavior, &mut state, &world, &body, 1);
+        world.level.shutdown().await;
+
+        assert!(started_alive);
+        assert!(kept_alive);
+        assert!(started_dead);
+        assert!(!state.has_memory_value(types::ATTACK_TARGET.id()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stop_attacking_if_target_invalid_gives_up_after_ten_unreachable_seconds() -> TestResult
+    {
+        use crate::entity::ai::brain::behavior::stop_attacking_if_target_invalid;
+
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let body = cow(&world, 0.0);
+        let target = cow(&world, 2.0);
+        world
+            .entities
+            .store(Arc::new(vec![body.clone(), target.clone()]));
+        let mut behavior = stop_attacking_if_target_invalid::create();
+        let mut state = brain_state(behavior.required_memories());
+        state.set(types::ATTACK_TARGET, as_target(&target));
+        state.set(types::CANT_REACH_WALK_TARGET_SINCE, 100);
+
+        try_start(&mut behavior, &mut state, &world, &body, 300);
+        let kept_at_200 = state.has_memory_value(types::ATTACK_TARGET.id());
+        tick_or_stop(&mut behavior, &mut state, &world, &body, 300);
+        try_start(&mut behavior, &mut state, &world, &body, 301);
+        world.level.shutdown().await;
+
+        assert!(kept_at_200);
+        assert!(!state.has_memory_value(types::ATTACK_TARGET.id()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn start_attacking_remembers_the_found_target_and_forgets_cant_reach() -> TestResult {
+        use crate::entity::ai::brain::behavior::start_attacking;
+
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let body = cow(&world, 0.0);
+        let target = cow(&world, 3.0);
+        world
+            .entities
+            .store(Arc::new(vec![body.clone(), target.clone()]));
+        let found = as_target(&target);
+        let mut behavior = start_attacking::create(move |_| Some(found.clone()));
+        let mut state = brain_state(behavior.required_memories());
+        state.set(types::CANT_REACH_WALK_TARGET_SINCE, 5);
+
+        let started = try_start(&mut behavior, &mut state, &world, &body, 0);
+        tick_or_stop(&mut behavior, &mut state, &world, &body, 0);
+        let started_again = try_start(&mut behavior, &mut state, &world, &body, 1);
+        world.level.shutdown().await;
+
+        assert!(started);
+        assert!(!started_again);
+        assert_eq!(
+            state
+                .get(types::ATTACK_TARGET)
+                .map(|entity| entity.get_entity().entity_id),
+            Some(target.get_entity().entity_id)
+        );
+        assert!(!state.has_memory_value(types::CANT_REACH_WALK_TARGET_SINCE.id()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn walk_target_follows_an_attack_target_out_of_sight() -> TestResult {
+        use crate::entity::ai::brain::behavior::set_walk_target_from_attack_target_if_target_out_of_reach as walk_to_target;
+
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let body = cow(&world, 0.0);
+        let target = cow(&world, 6.0);
+        world
+            .entities
+            .store(Arc::new(vec![body.clone(), target.clone()]));
+        let mut behavior = walk_to_target::create(1.0);
+        let mut state = brain_state(behavior.required_memories());
+        state.set(types::ATTACK_TARGET, as_target(&target));
+
+        let started = try_start(&mut behavior, &mut state, &world, &body, 0);
+        world.level.shutdown().await;
+
+        assert!(started);
+        assert_eq!(tracked_id(&state), Some(target.get_entity().entity_id));
+        assert_eq!(
+            state
+                .get(types::WALK_TARGET)
+                .map(|walk| (walk.speed_modifier(), walk.close_enough_dist())),
+            Some((1.0, 0))
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn become_passive_if_memory_present_forgets_the_attack_target() -> TestResult {
+        use crate::entity::ai::brain::behavior::become_passive_if_memory_present;
+        use pumpkin_util::math::position::BlockPos;
+
+        let folder = tempfile::tempdir()?;
+        let world = world(&folder);
+        let body = cow(&world, 0.0);
+        let target = cow(&world, 2.0);
+        let mut behavior =
+            become_passive_if_memory_present::create(types::NEAREST_REPELLENT.id(), 200);
+        let mut state = brain_state(behavior.required_memories());
+        state.set(types::ATTACK_TARGET, as_target(&target));
+        state.set(types::NEAREST_REPELLENT, BlockPos::new(1, 64, 0));
+
+        let started = try_start(&mut behavior, &mut state, &world, &body, 0);
+        world.level.shutdown().await;
+
+        assert!(started);
+        assert!(!state.has_memory_value(types::ATTACK_TARGET.id()));
+        assert_eq!(state.time_until_expiry(types::PACIFIED.id()), Some(200));
+        Ok(())
+    }
 }

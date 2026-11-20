@@ -1543,6 +1543,12 @@ pub trait Mob: EntityBase + Send + Sync {
         20
     }
 
+    /// Vanilla `Mob.canUseNonMeleeWeapon`: whether the mob shoots with this item (bows for
+    /// skeletons, crossbows for piglins and pillagers), which keeps the Brain's `MeleeAttack` off.
+    fn can_use_non_melee_weapon(&self, _stack: &pumpkin_data::item_stack::ItemStack) -> bool {
+        false
+    }
+
     /// Start of vanilla `doHurtTarget`, run whether or not the hit lands: attack events and
     /// sounds.
     fn before_melee_attack(&self, _target: &dyn EntityBase) {}

@@ -56,7 +56,9 @@ impl MeleeAttackGoal {
         self
     }
 
-    fn attack(mob: &dyn Mob, target: &dyn EntityBase) {
+    /// Vanilla `Mob.doHurtTarget` with the mob's melee hooks, shared with the Brain's
+    /// `MeleeAttack`.
+    pub(crate) fn attack(mob: &dyn Mob, target: &dyn EntityBase) {
         mob.before_melee_attack(target);
         let damaged =
             mob.get_mob_entity()
