@@ -626,6 +626,39 @@ impl MobEntity {
         result
     }
 
+    /// Like [`Self::with_brain`], but `None` instead of waiting while the brain is in use, such as
+    /// during the mob's own brain tick, whose callbacks read `BrainTick` instead.
+    pub fn try_with_brain<R>(
+        &self,
+        mob: &dyn Mob,
+        callback: impl FnOnce(&mut Brain) -> R,
+    ) -> Option<R> {
+        let result = {
+            let mut slot = match self.brain.try_lock() {
+                Ok(slot) => slot,
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+                Err(std::sync::TryLockError::WouldBlock) => return None,
+            };
+            let brain = slot.get_or_insert_with(|| mob.make_brain(&PackedMemories::empty()));
+            if self.take_brain_memory_clear_request() {
+                brain.clear_memories();
+            }
+            callback(brain)
+        };
+        self.process_brain_memory_clear();
+        Some(result)
+    }
+
+    /// Vanilla `Mob.stopInPlace`.
+    pub fn stop_in_place(&self) {
+        let living = &self.living_entity;
+        self.steered().navigator().stop();
+        // setXxa, setYya and setSpeed: travel would otherwise keep walking on the last input.
+        living.movement_input.store(Vector3::default());
+        living.jumping.store(false, Ordering::Relaxed);
+        living.entity.velocity.store(Vector3::default());
+    }
+
     /// Installs an already built brain, such as one restored from saved memories.
     pub fn set_brain(&self, brain: Brain) {
         *self
@@ -1361,6 +1394,12 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn get_path_aware_entity(&self) -> Option<&dyn PathAwareEntity> {
         None
+    }
+
+    /// Vanilla `PathfinderMob.isPanicking`; Brain mobs read their `is_panicking` memory.
+    fn mob_is_panicking(&self) -> bool {
+        self.get_path_aware_entity()
+            .is_some_and(PathAwareEntity::is_panicking)
     }
 
     fn get_item_steerable(&self) -> Option<&dyn crate::entity::item_steerable::ItemSteerable> {
@@ -2256,8 +2295,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
     }
 
     fn is_panicking(&self) -> bool {
-        self.get_path_aware_entity()
-            .is_some_and(PathAwareEntity::is_panicking)
+        Mob::mob_is_panicking(self)
     }
 
     fn get_job_site_pos(&self) -> Option<pumpkin_util::math::position::BlockPos> {

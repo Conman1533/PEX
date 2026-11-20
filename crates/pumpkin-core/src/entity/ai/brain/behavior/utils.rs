@@ -138,6 +138,15 @@ pub fn is_other_target_much_further_away_than_current_attack_target(
     dist_to_other > dist_to_current + how_much_further_away * how_much_further_away
 }
 
+/// Vanilla `LivingEntity.isBaby` for ageable mobs.
+#[must_use]
+pub fn is_baby(entity: &dyn EntityBase) -> bool {
+    entity
+        .get_mob()
+        .and_then(crate::entity::mob::Mob::as_ageable)
+        .is_some_and(crate::entity::ageable::AgeableMob::is_baby)
+}
+
 #[must_use]
 pub fn is_breeding(brain: &BrainState) -> bool {
     brain.has_memory_value(types::BREED_TARGET.id())
