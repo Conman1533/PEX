@@ -33,6 +33,7 @@ Real-client checks (a phone or console on 1.26.60) stay Neon's. Each stage ends 
 - BP0-05, first half: every wire change gophertunnel made between 2169 and 2225 is already in PEX (passenger-of-block on AddActor and AddPlayer, MoveActorDelta ticks, StartGame's editor migration version, PlayFab ids in the player list, single-layer optionals in PlayerAuthInput). The `Last verified for v2169` comments in `pumpkin-protocol` are stale, not the layouts. Block positions are zigzag VarInts on every packet at 2225, so the old unsigned-y worry doesn't apply.
 - BP0-05, second half, on `test/bedrock-wire`: with `PUMPKIN_TESTER_BEDROCK_DUMP=<dir>` the bot writes every packet it receives to a file, and `tools/bedrock-wirecheck` (Go, gophertunnel at 2225) decodes each one with gophertunnel's own codec. All 832 packets of 33 types from a `--bedrock-only` run decode with no bytes left over. Dropping the tick field from `CMoveActorDelta` makes the Rust tests still pass and the wire check fail 140 packets.
 - Stage 1 on branches: BP1-01 on `fix/bedrock-login-checks`, BP1-03 on `fix/bedrock-bad-packet-kick`, BP1-02 on `fix/bedrock-connection-limits` (each stacked on the one before). The bot suite is at 24 checks.
+- BP1-04 on `fix/bedrock-oidc-keys` (off alpha, independent): OIDC keys are fetched only with Bedrock on, retried with backoff after a failure, and refetched (at most once a minute) when a token names an unknown key. Five unit tests against a local key server; three fail with the old fetch-once behaviour.
 
 ## Stage 1: safe to let in
 
