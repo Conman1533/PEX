@@ -8,7 +8,7 @@ use std::{
     collections::HashMap, future::Future, net::SocketAddr, path::Path, sync::Arc, time::Duration,
 };
 
-use pumpkin_core::{PumpkinServer, server::Server};
+use pumpkin_core::{PumpkinServer, net::bedrock::BedrockClient, server::Server};
 use pumpkin_data::entity::EntityType;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 use tokio::{net::TcpListener, sync::Mutex};
@@ -26,11 +26,15 @@ const JAVA_NAME: &str = "JavaBot";
 /// and for the main Bedrock bot plus one more in `login_checks`.
 const MAX_PLAYERS: u32 = 2;
 
+type BedrockClients = Arc<Mutex<HashMap<SocketAddr, Arc<BedrockClient>>>>;
+
 /// A test server with Java and Bedrock listeners on loopback, ticked by the tests.
 pub struct BedrockTestServer {
     pub server: Arc<Server>,
     pub java_addr: SocketAddr,
     pub signaling_addr: SocketAddr,
+    /// The server's open Bedrock clients, as `PumpkinServer` keeps them.
+    pub bedrock_clients: BedrockClients,
     cancel: CancellationToken,
     tasks: TaskTracker,
 }
@@ -73,8 +77,9 @@ impl BedrockTestServer {
         let accept_server = server.clone();
         let accept_cancel = cancel.clone();
         let accept_tasks = tasks.clone();
+        let bedrock_clients: BedrockClients = Arc::new(Mutex::new(HashMap::new()));
+        let clients = bedrock_clients.clone();
         tasks.spawn(async move {
-            let clients = Arc::new(Mutex::new(HashMap::new()));
             loop {
                 tokio::select! {
                     () = accept_cancel.cancelled() => break,
@@ -97,6 +102,7 @@ impl BedrockTestServer {
             server,
             java_addr,
             signaling_addr,
+            bedrock_clients,
             cancel,
             tasks,
         })
@@ -323,6 +329,21 @@ async fn run_bad_packet_checks(
     }
     checks.record("the server drops the player", dropped);
     bot.disconnect().await;
+
+    // Every bot so far has left: refused, kicked in game, kicked for a bad packet, or closed by
+    // the bot. None of them may leave a client behind.
+    let mut released = Err("clients are still listed".to_string());
+    for _ in 0..MAX_WAIT_TICKS {
+        let open = server.bedrock_clients.lock().await.len();
+        if open == 0 {
+            released = Ok(());
+            break;
+        }
+        released = Err(format!("{open} closed Bedrock clients are still listed"));
+        server.server.tick();
+        tokio::time::sleep(TICK).await;
+    }
+    checks.record("closed sessions are released", released);
     checks.finish(summary_lines)
 }
 
