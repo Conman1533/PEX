@@ -12,7 +12,7 @@ use pumpkin_core::{
     world::{BlockFlags, World},
 };
 use pumpkin_data::{Block, dimension::Dimension};
-use pumpkin_gametest::{GameTestReporter, GameTestRunner};
+use pumpkin_gametest::{GameTestReporter, GameTestRunner, registered_test_definitions};
 use pumpkin_util::{
     math::{position::BlockPos, vector2::Vector2},
     text::TextComponent,
@@ -44,7 +44,9 @@ const MOB_TEST_CELLS: [(i32, i32); 8] = [
     (-1, 1),
     (1, 1),
 ];
-const MAX_GAMETEST_TICKS: usize = 500;
+/// The suite always gets at least this many ticks, plus a margin over the longest test.
+const MIN_GAMETEST_TICKS: usize = 500;
+const GAMETEST_TICK_MARGIN: usize = 100;
 
 #[derive(Default)]
 struct CaptureReporter {
@@ -97,6 +99,18 @@ pub async fn run_gametests(
     }
 
     run_batch(server, &world, runner, &all_tests, summary_lines).await
+}
+
+/// Tests in a batch run side by side, so the batch needs as many ticks as its longest test.
+fn suite_tick_budget(test_ids: &[&str]) -> usize {
+    let definitions = registered_test_definitions();
+    let longest = definitions
+        .iter()
+        .filter(|(id, _)| test_ids.contains(&id.as_str()))
+        .map(|(_, def)| usize::try_from(def.max_ticks + def.setup_ticks).unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+    (longest + GAMETEST_TICK_MARGIN).max(MIN_GAMETEST_TICKS)
 }
 
 async fn run_batch(
@@ -175,7 +189,8 @@ async fn run_batch(
         runner.enqueue(manager);
     }
 
-    for _ in 0..MAX_GAMETEST_TICKS {
+    let max_ticks = suite_tick_budget(test_ids);
+    for _ in 0..max_ticks {
         if runner.is_empty() {
             break;
         }
@@ -191,7 +206,7 @@ async fn run_batch(
 
     if !finished {
         return Err(format!(
-            "GameTest suite did not finish within {MAX_GAMETEST_TICKS} ticks:\n{}",
+            "GameTest suite did not finish within {max_ticks} ticks:\n{}",
             messages.join("\n")
         ));
     }
