@@ -8,12 +8,12 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `968726b31`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `af3e3eb7a`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 6 | 1 | 38 | |
+| G1 Mob AI | 45 | 7 | 1 | 37 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 54 | 1 | 126 | 15 |
+| Total | 196 | 55 | 1 | 125 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -517,6 +517,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: none.
 - Done when: `pumpkin:enderman_angers_when_stared_at` and `pumpkin:shulker_shoots_bullet_at_survival_player` pass.
 - Needed by: G6-13 (endermen that hunt players and drop ender pearls).
+- Status (2026-11-20): landed (branch `fix/mobai-enderman-shulker`). Enderman: teleports now follow vanilla `randomTeleport` (clamped into the world border, walk down to the first `#entities_can_teleport_to` block, refuse `#enderman_does_not_teleport_to` there or in the body, no collision, no liquid, no water right below, not while riding), send entity event 46, world event 2018, the teleport game event and both sounds; projectiles never hurt an enderman that is not riding, even when all 64 teleports fail (before, it took the damage); in daylight, ten seconds after its last target change, an enderman under open sky drops its target and teleports away like vanilla; the stare check aims from the player's real eye height and uses collision shapes, so glass hides a stare as in vanilla; an enderman holding a block never despawns and drops that block on death (silk-touch loot, honours the mob drops game rule); teleport-towards aims at the target's real eyes. Shulker: fires every 20 to 110 ticks (was 20 to 60), looks at its target, stops in peaceful; peeks at vanilla's goal rate and length; teleports with vanilla's 5 tries and checks (world border, empty space, `#shulker_does_not_teleport_to`, not with NoAI) and sends the teleport game event and world event 2016 without the close sound; a closed shell turns away tridents too, not only arrows; an open shulker hit by a shulker bullet teleports and may leave a new shulker behind, less likely the more are near; and a shulker on a scoreboard team shoots monsters in front of its shell (`ShulkerDefenseAttackGoal`). The look-at-player goal looks horizontally like vanilla. The tester has four more mob test cells (12). `pumpkin:enderman_angers_when_stared_at` and `pumpkin:shulker_shoots_bullet_at_survival_player` pass. Play test for Neon: look at an enderman's head through glass, expect nothing; look with no glass, expect it to scream and come for you; shoot it with arrows, expect it to teleport every time and never lose health. In an End city, hit an open shulker with another shulker's bullet (stand behind it), expect it to teleport and sometimes leave a second shulker.
 
 #### G1-11 Cube mobs
 - Scope: slime and magma cube audit; sulfur cube rebuilt on its own vanilla goals with no attack. Out: splitting on death.
