@@ -75,6 +75,9 @@ use pumpkin_protocol::bedrock::server::login::ClientData;
 use pumpkin_util::version::BedrockMinecraftVersion;
 use pumpkin_world::level::SyncChunk;
 
+/// How long a kick waits for its `Disconnect` to be acknowledged before closing the peer.
+const KICK_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
 pub struct OutgoingPacket {
     pub data: Bytes,
     pub completion: Option<oneshot::Sender<()>>,
@@ -326,7 +329,16 @@ impl BedrockClient {
         warn!("Closing connection for {}: {message}", self.address);
         self.send_packet(&CDisconnect::new(reason as i32, message))
             .await;
+        self.flush_before_close().await;
         self.close().await;
+    }
+
+    /// Waits a moment for the reliable channel to deliver what was sent: closing the peer drops
+    /// queued messages, which would lose a kick's `Disconnect` and its reason.
+    async fn flush_before_close(&self) {
+        if let Err(error) = self.session.flush_reliable(KICK_FLUSH_TIMEOUT).await {
+            debug!(address = %self.address, %error, "Failed to flush before closing");
+        }
     }
 
     pub async fn kick_explicit(
@@ -346,6 +358,7 @@ impl BedrockClient {
                 filtered_message,
             })
             .await;
+            self.flush_before_close().await;
         }
         self.close().await;
     }
