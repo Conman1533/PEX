@@ -10,6 +10,7 @@ mod mob_head_rot_interval;
 mod player_actions;
 mod player_move_broadcast_interval;
 mod sheep_shearing;
+mod spawners;
 mod status_ping;
 mod teleport_confirm;
 mod world_interaction;
@@ -72,6 +73,10 @@ pub async fn run_bot_tests(
 
     mob_head_rot_interval::run_mob_head_rot_interval_test(server, &mut bot1, summary_lines).await?;
 
+    attack_cooldown::run_attack_cooldown_test(server, &mut bot1, summary_lines).await?;
+
+    spawners::run_spawner_tests(server, &mut bot1, summary_lines).await?;
+
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)
         .await?;
 
@@ -79,3 +84,4 @@ pub async fn run_bot_tests(
     block_entity_unload::run_block_entity_unload_test(server, addr).await
 }
 mod allay;
+mod attack_cooldown;
