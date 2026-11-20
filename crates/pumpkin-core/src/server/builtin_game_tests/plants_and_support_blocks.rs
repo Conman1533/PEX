@@ -311,3 +311,34 @@ pub(super) async fn test_pressure_plate_breaks_when_floor_removed(
     helper.succeed();
     Ok(())
 }
+
+/// Vanilla `FrogspawnBlock.onPlace` schedules the hatch 3600 to 11999 ticks out
+/// (`MIN_HATCH_TICK_DELAY`, `MAX_HATCH_TICK_DELAY`); PEX used to keep tick delays in a byte.
+pub(super) async fn test_frogspawn_hatches_between_3600_and_12000_ticks(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let water = BlockPos::new(2, 1, 2);
+    let frogspawn = BlockPos::new(2, 2, 2);
+    for wall in [
+        BlockPos::new(1, 1, 2),
+        BlockPos::new(3, 1, 2),
+        BlockPos::new(2, 1, 1),
+        BlockPos::new(2, 1, 3),
+    ] {
+        helper.set_block_default(&wall, &Block::STONE).await?;
+    }
+    helper.set_block_default(&water, &Block::WATER).await?;
+    helper
+        .set_block_default(&frogspawn, &Block::FROGSPAWN)
+        .await?;
+
+    helper
+        .start_sequence()
+        .then_wait_at_least(3600, move |helper| async move {
+            helper.assert_block_present(&frogspawn, &Block::AIR).await?;
+            helper.assert_entity_present("minecraft:tadpole").await
+        })
+        .then_succeed();
+    Ok(())
+}
