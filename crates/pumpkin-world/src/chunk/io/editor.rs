@@ -272,6 +272,7 @@ mod tests {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(12345),
             custom_data: Mutex::new(owned_by("old")),
+            passthrough: NbtCompound::new(),
         };
         chunk.internal_to_pump_bytes()
     }

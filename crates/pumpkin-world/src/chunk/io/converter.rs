@@ -501,6 +501,7 @@ mod tests {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(12345),
             custom_data: Mutex::new(NbtCompound::default()),
+            passthrough: NbtCompound::new(),
         };
         chunk.set_custom_data("test_ns", "flag", NbtTag::Int(99));
 

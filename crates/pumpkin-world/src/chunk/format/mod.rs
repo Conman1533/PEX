@@ -117,6 +117,36 @@ fn lowest_biome_section_y(root_tag: &NbtCompound) -> Option<i32> {
         .map(|y| y.min(0))
 }
 
+/// Top-level chunk keys PEX reads into its own fields and writes itself. `BukkitValues` is read
+/// as `PumpkinCustomData`.
+const MODELED_CHUNK_KEYS: [&str; 14] = [
+    "DataVersion",
+    "xPos",
+    "zPos",
+    "yPos",
+    "Status",
+    "Heightmaps",
+    "sections",
+    "block_ticks",
+    "fluid_ticks",
+    "block_entities",
+    "isLightOn",
+    "InhabitedTime",
+    "PumpkinCustomData",
+    "BukkitValues",
+];
+
+/// The chunk's other top-level keys, kept and written back unchanged (D7-1, G7-06).
+fn unmodeled_chunk_keys(root: &NbtCompound) -> NbtCompound {
+    let mut kept = NbtCompound::new();
+    for (key, tag) in &root.child_tags {
+        if !MODELED_CHUNK_KEYS.contains(&key.as_ref()) {
+            kept.put(key, tag.clone());
+        }
+    }
+    kept
+}
+
 /// One block palette entry the way vanilla 26.3 `BlockState.CODEC` writes it: a default state as
 /// its bare block id, any other as `{id, properties}` with every property. A palette that mixes
 /// both is a list of compounds on disk, the bare ids wrapped as `{"": id}`, like vanilla's.
@@ -525,6 +555,7 @@ impl ChunkData {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(root_tag.get_long("InhabitedTime").unwrap_or(0) as u64),
             custom_data: std::sync::Mutex::new(custom_data),
+            passthrough: unmodeled_chunk_keys(&root_tag),
         })
     }
 
@@ -708,6 +739,11 @@ impl ChunkData {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if !custom_data.is_empty() {
             root_compound.put_compound("PumpkinCustomData", custom_data.clone());
+        }
+        for (key, tag) in &self.passthrough.child_tags {
+            if !root_compound.has(key) {
+                root_compound.put(key, tag.clone());
+            }
         }
 
         let nbt = pumpkin_nbt::Nbt::from(root_compound);
@@ -1179,6 +1215,7 @@ impl ChunkData {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: AtomicU64::new(inhabited_time),
             custom_data: std::sync::Mutex::new(custom_data),
+            passthrough: NbtCompound::new(),
         })
     }
 
@@ -2006,6 +2043,53 @@ mod tests {
             reloaded.section.get_block_absolute_y(0, -47, 0),
             Some(Block::REPEATER.default_state.id)
         );
+    }
+
+    /// G7-06: keys PEX doesn't model survive a load and save unchanged.
+    #[test]
+    fn unmodeled_chunk_keys_are_written_back() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        let mut structures = NbtCompound::new();
+        structures.put_compound("starts", NbtCompound::new());
+        let mut references = NbtCompound::new();
+        references.put("minecraft:village_plains", NbtTag::LongArray(vec![7, -3]));
+        structures.put_compound("References", references);
+        let post_processing = NbtTag::List(vec![
+            NbtTag::List(vec![NbtTag::Short(17), NbtTag::Short(300)]),
+            NbtTag::List(vec![]),
+        ]);
+
+        let mut chunk = test_chunk(vec![test_section(-4, "minecraft:stone", true)]);
+        chunk
+            .root_tag
+            .put_compound("structures", structures.clone());
+        chunk
+            .root_tag
+            .put("PostProcessing", post_processing.clone());
+        chunk.root_tag.put_long("LastUpdate", 1234);
+        chunk
+            .root_tag
+            .put_compound("pex_unknown_key", structures.clone());
+        let loaded = ChunkData::from_bytes(&chunk.write(), Vector2::new(0, 0)).expect("parses");
+        assert!(!loaded.passthrough.has("sections"));
+        let saved = loaded.to_bytes().expect("chunk saves");
+
+        let mut cursor = std::io::Cursor::new(&saved[..]);
+        let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
+        let nbt = if has_named_root(&saved) {
+            pumpkin_nbt::Nbt::read(&mut reader)
+        } else {
+            pumpkin_nbt::Nbt::read_unnamed(&mut reader)
+        }
+        .expect("saved chunk is NBT");
+        let root = nbt.root_tag;
+        assert_eq!(root.get_compound("structures"), Some(&structures));
+        assert_eq!(root.get("PostProcessing"), Some(&post_processing));
+        assert_eq!(root.get_long("LastUpdate"), Some(1234));
+        assert_eq!(root.get_compound("pex_unknown_key"), Some(&structures));
+        assert_eq!(root.get_int("DataVersion"), Some(WORLD_DATA_VERSION));
     }
 
     #[test]

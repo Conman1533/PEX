@@ -85,6 +85,10 @@ pub struct ChunkData {
     pub change_count: AtomicU64,
     pub inhabited_time: AtomicU64,
     pub custom_data: std::sync::Mutex<NbtCompound>,
+    /// Top-level keys of the saved chunk that PEX doesn't model (`structures`, `PostProcessing`,
+    /// `blending_data`, `UpgradeData`, `LastUpdate`, a proto-chunk's `entities`, ...), written
+    /// back unchanged (D7-1).
+    pub passthrough: NbtCompound,
 }
 
 impl ChunkData {
@@ -705,6 +709,7 @@ impl ChunkData {
             change_count: std::sync::atomic::AtomicU64::new(0),
             inhabited_time: std::sync::atomic::AtomicU64::new(0),
             custom_data: std::sync::Mutex::new(NbtCompound::new()),
+            passthrough: NbtCompound::new(),
         }
     }
 
