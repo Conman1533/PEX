@@ -8,12 +8,12 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `af3e3eb7a`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7ade74378`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 7 | 1 | 37 | |
+| G1 Mob AI | 45 | 8 | 1 | 36 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 55 | 1 | 125 | 15 |
+| Total | 196 | 56 | 1 | 124 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -533,6 +533,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: none.
 - Done when: `pumpkin:blaze_alerts_nearby_blazes_when_hit`, `pumpkin:ghast_shoots_fireball_at_survival_player` and `pumpkin:strider_walks_back_to_lava` pass.
 - Needed by: G6-11 (blazes that fight and drop blaze rods).
+- Status (2026-11-20): landed (branch `fix/mobai-nether`). Blaze: vanilla goal list (no extra swim goal; MoveTowardsRestriction and water-avoiding wander added), a hit blaze alerts the blazes around it (`HurtByTargetGoal.setAlertOthers`), it takes damage in rain as well as water, and a silent blaze shoots without the fireball sound. Ghast: vanilla `GhastMoveControl` (re-checks the flight path every 2 to 6 ticks and stops in front of blocks instead of pushing through them), random float goal with vanilla's distance checks and its fly-down when the spot is above the ground, targets only players within 4 blocks of height difference like vanilla, needs line of sight to shoot, sends the warning and shoot world events (1015, 1016, silent ghasts send none) and fires from vanilla's spot at the target's middle. Strider: StriderPathNavigation (lava counts as a stable destination), vanilla path maluses (water blocked, lava and fire free), StriderGoToLavaGoal walks back to lava with room above it, cold and shivering follows vanilla (warm blocks, lava, or riding a warm strider), it takes damage in rain, and it makes the retreat sound while panicking. `MoveToBlockGoal` now re-paths to `getMoveToTarget` like vanilla (only the strider aims anywhere but the block above). The tester has four more mob test cells (16). `pumpkin:blaze_alerts_nearby_blazes_when_hit`, `pumpkin:ghast_shoots_fireball_at_survival_player` and `pumpkin:strider_walks_back_to_lava` pass. Play test for Neon: in a fortress, hit one blaze with a group nearby, expect the whole group to come for you; stand behind a pillar from a ghast, expect no fireballs until it can see you again; lead a strider off a lava lake with a warped fungus on a stick held but not ridden, then let it go, expect it to walk back into the lava and turn from purple to red.
 
 #### G1-13 Raiders
 - Scope: pillager, vindicator, ravager, witch: AvoidEntity(Creaking), VindicatorBreakDoor, Johnny, ObtainRaidLeaderBanner, witch raider-heal and player targets, LongDistancePatrol. Out: raid waves.
