@@ -14,7 +14,7 @@ use crate::logging::{
 };
 use crate::net::bedrock::{
     BedrockClient,
-    nethernet::{IceSocket, NetherNetListener, load_or_create_identity_key},
+    nethernet::{IceSocket, NetherNetListener, NetherNetSession, load_or_create_identity_key},
 };
 use crate::net::java::JavaClient;
 use crate::net::java::pending::PendingConnection;
@@ -352,7 +352,7 @@ impl PumpkinServer {
         })
     }
 
-    async fn bind_nethernet(
+    pub async fn bind_nethernet(
         server: &Arc<Server>,
         ice_socket: Option<IceSocket>,
     ) -> Option<NetherNetListener> {
@@ -383,7 +383,7 @@ impl PumpkinServer {
     }
 
     /// Binds the UDP port used by Bedrock's `NetherNet` ICE agent.
-    async fn bind_bedrock_ice(server: &Arc<Server>) -> Option<IceSocket> {
+    pub async fn bind_bedrock_ice(server: &Arc<Server>) -> Option<IceSocket> {
         let config = &server.advanced_config.networking.bedrock;
         if !config.enabled || !config.nethernet.enabled {
             return None;
@@ -645,34 +645,14 @@ impl PumpkinServer {
             nethernet_result = resolve_some(self.nethernet_listener.as_ref(), NetherNetListener::accept) => {
                 if let Some((session, client_addr)) = nethernet_result {
                     *master_client_id_counter += 1;
-                    let be_clients = bedrock_clients.clone();
-                    let packet_limiter = PacketRateLimiter::from_config(
-                        &self.server.advanced_config.networking.bedrock.packet_limiter,
-                    );
-                    let client = Arc::new(BedrockClient::new(
-                        session.clone(),
+                    Self::accept_nethernet_session(
+                        &self.server,
+                        session,
                         client_addr,
-                        be_clients,
-                        packet_limiter,
-                    ));
-                    client.start_outgoing_packet_task();
-                    bedrock_clients.lock().await.insert(client_addr, client.clone());
-
-                    let packet_client = client.clone();
-                    let packet_server = self.server.clone();
-                    tasks.spawn(async move {
-                        while let Some(packet) = session.recv().await {
-                            packet_client
-                                .process_nethernet_packet(&packet_server, packet)
-                                .await;
-                            if packet_client.is_closed() {
-                                break;
-                            }
-                        }
-                        packet_client.close().await;
-                    });
-
-                    self.spawn_bedrock_client_task(client, tasks);
+                        bedrock_clients,
+                        tasks,
+                    )
+                    .await;
                 }
             },
 
@@ -684,8 +664,45 @@ impl PumpkinServer {
         true
     }
 
-    fn spawn_bedrock_client_task(&self, client: Arc<BedrockClient>, tasks: &Arc<TaskTracker>) {
-        let server = self.server.clone();
+    /// Serves a Bedrock client whose `NetherNet` session just opened: reads its packets, runs the
+    /// login sequence and plays it until it disconnects.
+    pub async fn accept_nethernet_session(
+        server: &Arc<Server>,
+        session: Arc<NetherNetSession>,
+        client_addr: SocketAddr,
+        bedrock_clients: &Arc<Mutex<HashMap<SocketAddr, Arc<BedrockClient>>>>,
+        tasks: &TaskTracker,
+    ) {
+        let packet_limiter = PacketRateLimiter::from_config(
+            &server.advanced_config.networking.bedrock.packet_limiter,
+        );
+        let client = Arc::new(BedrockClient::new(
+            session.clone(),
+            client_addr,
+            bedrock_clients.clone(),
+            packet_limiter,
+        ));
+        client.start_outgoing_packet_task();
+        bedrock_clients
+            .lock()
+            .await
+            .insert(client_addr, client.clone());
+
+        let packet_client = client.clone();
+        let packet_server = server.clone();
+        tasks.spawn(async move {
+            while let Some(packet) = session.recv().await {
+                packet_client
+                    .process_nethernet_packet(&packet_server, packet)
+                    .await;
+                if packet_client.is_closed() {
+                    break;
+                }
+            }
+            packet_client.close().await;
+        });
+
+        let server = server.clone();
         tasks.spawn(async move {
             let login_result = client.handle_login_sequence(&server).await;
             match login_result {
