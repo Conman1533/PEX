@@ -95,7 +95,9 @@ pub async fn run_attack_cooldown_test(
     let _ = console(server, "tick rate 20");
     hits.target.store(-1, Ordering::Relaxed);
     player.set_gamemode(original_mode);
-    player.inventory().set_stack_in_hand(Hand::Right, original_hand);
+    player
+        .inventory()
+        .set_stack_in_hand(Hand::Right, original_hand);
     result.map_err(|err| format!("Attack cooldown: {err}"))?;
 
     summary_lines.push(format!(

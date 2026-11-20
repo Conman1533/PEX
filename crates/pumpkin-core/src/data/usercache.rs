@@ -284,8 +284,7 @@ mod tests {
         );
         assert_eq!(
             entry.expiration_date,
-            at(2026, Month::December, 20)
-                .replace_time(time::Time::from_hms(2, 47, 33).unwrap())
+            at(2026, Month::December, 20).replace_time(time::Time::from_hms(2, 47, 33).unwrap())
         );
         assert_eq!(cache.to_json().unwrap(), VANILLA_USERCACHE);
     }
@@ -293,7 +292,9 @@ mod tests {
     #[test]
     fn a_pex_1_2_0_usercache_still_loads() {
         let mut cache = cache_from(PEX_1_2_0_USERCACHE);
-        let entry = cache.get_by_name("fixturebot").expect("the PEX 1.2.0 entry");
+        let entry = cache
+            .get_by_name("fixturebot")
+            .expect("the PEX 1.2.0 entry");
         assert_eq!(
             entry.expiration_date.unix_timestamp(),
             at(2026, Month::December, 20).unix_timestamp() + 2 * 3600 + 47 * 60 + 38

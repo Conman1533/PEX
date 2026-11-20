@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
+use pumpkin_core::world::BlockFlags;
 use pumpkin_core::{
-    block::entities::mob_spawner::MobSpawnerBlockEntity,
+    block::entities::{BlockEntity, mob_spawner::MobSpawnerBlockEntity},
     command::CommandSender,
     entity::EntityBase,
     server::Server,
@@ -13,11 +14,10 @@ use pumpkin_util::{
     Difficulty,
     math::{boundingbox::BoundingBox, position::BlockPos, vector3::Vector3},
 };
-use pumpkin_core::world::BlockFlags;
 
 use crate::bot::HeadlessBot;
 
-/// The name the dark room's spawner puts in its SpawnData.
+/// The name the dark room's spawner puts in its `SpawnData`.
 const SPAWNED_NAME: &str = "Spawned";
 /// Ticks each phase waits. A spawner with `Delay` 0 tries 4 spots every tick until one works.
 const PEACEFUL_TICKS: usize = 100;
@@ -41,12 +41,14 @@ impl Room {
         )
     }
 
-    fn torch_pos(&self) -> BlockPos {
+    /// Four torches on the floor, so every spot the spawner can pick is lit.
+    fn torch_positions(&self) -> [BlockPos; 4] {
         let c = self.center.0;
-        BlockPos::new(c.x + 2, c.y - 1, c.z + 2)
+        [(2, 2), (2, -2), (-2, 2), (-2, -2)]
+            .map(|(dx, dz)| BlockPos::new(c.x + dx, c.y - 1, c.z + dz))
     }
 
-    /// Mobs of the room's type inside it, and how many of them carry the SpawnData name.
+    /// Mobs of the room's type inside it, and how many of them carry the `SpawnData` name.
     fn count(&self, world: &Arc<World>) -> (usize, usize) {
         let mobs: Vec<_> = world
             .get_entities_at_box(&self.interior())
@@ -70,11 +72,11 @@ impl Room {
 
 /// Vanilla `BaseSpawner.serverTick` with `Monster.checkMonsterSpawnRules`: only trial spawners
 /// skip the light check, so a zombie spawner by a torch spawns nothing; nothing hostile spawns on
-/// Peaceful; the SpawnData `entity` NBT reaches the mob; and a blaze (`checkAnyLightMonsterSpawnRules`)
+/// Peaceful; the `SpawnData` `entity` NBT reaches the mob; and a blaze (`checkAnyLightMonsterSpawnRules`)
 /// still spawns in a lit room.
 pub async fn run_spawner_tests(
     server: &Arc<Server>,
-    bot: &mut HeadlessBot,
+    bot: &HeadlessBot,
     summary_lines: &mut Vec<String>,
 ) -> Result<(), String> {
     let start = Instant::now();
@@ -130,7 +132,12 @@ pub async fn run_spawner_tests(
     Ok(())
 }
 
-async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> Result<(), String> {
+/// Seals each room in stone, lights the torch rooms and checks the light has settled.
+async fn build_rooms(
+    server: &Arc<Server>,
+    world: &Arc<World>,
+    rooms: &[Room],
+) -> Result<(), String> {
     for room in rooms {
         let c = room.center.0;
         console(
@@ -161,8 +168,10 @@ async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> 
             ),
         )?;
         if room.torch {
-            let t = room.torch_pos().0;
-            console(server, &format!("setblock {} {} {} torch", t.x, t.y, t.z))?;
+            for torch in room.torch_positions() {
+                let t = torch.0;
+                console(server, &format!("setblock {} {} {} torch", t.x, t.y, t.z))?;
+            }
         }
     }
     // Lighting runs off the tick; let it settle before checking it.
@@ -185,6 +194,12 @@ async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> 
         }
     }
 
+    Ok(())
+}
+
+async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> Result<(), String> {
+    build_rooms(server, world, rooms).await?;
+
     for room in rooms {
         let mut entity = NbtCompound::new();
         entity.put_string("id", format!("minecraft:{}", room.entity.resource_name));
@@ -201,10 +216,7 @@ async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> 
             Block::SPAWNER.default_state.id,
             BlockFlags::NOTIFY_ALL,
         );
-        world.add_block_entity(Arc::new(MobSpawnerBlockEntity::from_nbt(
-            &nbt,
-            room.center,
-        )));
+        world.add_block_entity(Arc::new(MobSpawnerBlockEntity::from_nbt(&nbt, room.center)));
     }
 
     server.set_difficulty(Difficulty::Peaceful, true);
@@ -237,7 +249,9 @@ async fn run_rooms(server: &Arc<Server>, world: &Arc<World>, rooms: &[Room]) -> 
     let (dark, named) = dark_zombies.count(world);
     let (blaze, _) = blazes.count(world);
     if lit != 0 {
-        return Err(format!("the zombie spawner next to a torch spawned {lit} zombies"));
+        return Err(format!(
+            "the zombie spawner next to a torch spawned {lit} zombies"
+        ));
     }
     if named == 0 {
         return Err(format!(

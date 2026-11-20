@@ -174,15 +174,9 @@ mod tests {
     /// returns what was written.
     fn through_the_list<T>(name: &str, contents: &str) -> (T, String)
     where
-        T: crate::data::SaveJSONConfiguration
-            + Default
-            + Serialize
-            + for<'de> Deserialize<'de>,
+        T: crate::data::SaveJSONConfiguration + Default + Serialize + for<'de> Deserialize<'de>,
     {
-        let dir = std::env::temp_dir().join(format!(
-            "pex-banlist-{name}-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("pex-banlist-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(T::get_path());
