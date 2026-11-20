@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `a7c5e14c0`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4f094ed19`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -18,12 +18,12 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
-| G6 Survival | 26 | 13 | 0 | 12 | G6-26 dropped (no code) |
+| G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 13 | 0 | 19 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 50 | 1 | 130 | 15 |
+| Total | 196 | 51 | 1 | 129 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -1873,6 +1873,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: test/survival-bot-actions
 - Needs decision: none
 - Done when: new `bot_tests/survival_actions.rs` passes in `pumpkin-tester`: `eat_restores_food` (after `effect give <bot> hunger` the food level rises when the bot eats bread), `bow_release_spawns_arrow`, `kill_then_respawn` (health 0, `PERFORM_RESPAWN`, health 20 at spawn), `tracks_summoned_mob` (a summoned zombie shows up with its type and is gone after `kill`), `dimension_change` (`execute in minecraft:the_nether run tp` gives a `CRespawn` and nether chunks).
+- Status (2026-11-20): landed (branch `test/survival-bot-actions`). `HeadlessBot` gained `look_at`, `drop_item` (which also takes the item out of the bot's own inventory, as `LocalPlayer.drop` does), `swing` and `respawn`, reads `CRespawn` (dimension, clears chunks, items and entities), `CSetHealth` and `CGameEvent` (win game, no respawn block), and tracks every entity by id, type and position. `StageContext` gained `eat`, `shoot_bow_at`, `attack_until_gone` and `wait_for_dimension`, and the deviations list starts in the module doc of `survival/mod.rs`. `bot_tests/survival_actions.rs` passes in `pumpkin-tester`: `tracks_summoned_mob`, `attack_until_gone_kills_a_chicken`, `eat_restores_food` (bread adds exactly 5 food), `bow_release_spawns_arrow` (also drops the bow and checks the server inventory), `kill_then_respawn` (server health 20, within 32 blocks of the world spawn) and `dimension_change` (`CRespawn` for the nether, then nether chunks, then back). The first nether visit took 13 s of tester ticks, so `wait_for_dimension` allows 6000 ticks. One run took 3 punches for the chicken instead of 4, likely a critical hit from the bot's on-ground flag; the test accepts 3 or 4 and this was not looked into further.
 
 #### G6-04 Land attack packet parity
 
