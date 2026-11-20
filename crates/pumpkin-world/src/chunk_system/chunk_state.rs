@@ -297,7 +297,24 @@ impl Chunk {
             Self::Level(_) => panic!("Cannot upgrade a Level chunk"),
         };
 
-        let proto_chunk = *proto_chunk_box;
+        let mut proto_chunk = *proto_chunk_box;
+        // Save the structure starts and references PEX found like vanilla (G7-07), on top of the
+        // ones a chunk loaded from disk was saved with.
+        let structures = crate::generation::structure::save::structures_tag(
+            proto_chunk.x,
+            proto_chunk.z,
+            &proto_chunk.structure_starts,
+            &proto_chunk.structure_reference_starts,
+        );
+        if let Some(pumpkin_nbt::tag::NbtTag::Compound(saved)) =
+            proto_chunk.passthrough.child_tags.get_mut("structures")
+        {
+            crate::generation::structure::save::merge_structures(saved, structures);
+        } else {
+            proto_chunk
+                .passthrough
+                .put_compound("structures", structures);
+        }
 
         let sections = Self::build_level_sections(&proto_chunk, dimension);
         let heightmaps = Self::build_level_heightmaps(&proto_chunk, dimension.min_y);

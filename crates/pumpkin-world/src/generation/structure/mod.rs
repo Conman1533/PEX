@@ -35,6 +35,7 @@ use crate::{
 pub(crate) mod height_sampler;
 pub mod piece;
 pub mod placement;
+pub mod save;
 pub mod shiftable_piece;
 pub mod structures;
 pub mod template;
