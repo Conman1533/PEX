@@ -117,6 +117,33 @@ fn lowest_biome_section_y(root_tag: &NbtCompound) -> Option<i32> {
         .map(|y| y.min(0))
 }
 
+/// One block palette entry the way vanilla 26.3 `BlockState.CODEC` writes it: a default state as
+/// its bare block id, any other as `{id, properties}` with every property. A palette that mixes
+/// both is a list of compounds on disk, the bare ids wrapped as `{"": id}`, like vanilla's.
+fn palette_entry_tag(id: BlockStateId) -> pumpkin_nbt::tag::NbtTag {
+    use pumpkin_nbt::tag::NbtTag;
+
+    let block = Block::from_state_id(id);
+    let name = if block.name.starts_with("minecraft:") {
+        block.name.to_string()
+    } else {
+        format!("minecraft:{}", block.name)
+    };
+    if id == block.default_state.id {
+        return NbtTag::String(name.into());
+    }
+    let mut comp = NbtCompound::new();
+    comp.put_string("id", name);
+    if let Some(props) = block.properties(id) {
+        let mut props_comp = NbtCompound::new();
+        for p in props.to_props() {
+            props_comp.put_string(p.key_str(), p.value_str().to_string());
+        }
+        comp.put_compound("properties", props_comp);
+    }
+    NbtTag::Compound(comp)
+}
+
 fn extract_u16_array(tag: &pumpkin_nbt::tag::NbtTag) -> Option<Box<[BlockStateId]>> {
     match tag {
         pumpkin_nbt::tag::NbtTag::IntArray(arr) => Some(
@@ -585,27 +612,7 @@ impl ChunkData {
             let palette_tags: Vec<NbtTag> = block_states_nbt
                 .palette
                 .iter()
-                .map(|&id| {
-                    let block = Block::from_state_id(id);
-                    let mut comp = NbtCompound::new();
-                    let name = if block.name.starts_with("minecraft:") {
-                        block.name.to_string()
-                    } else {
-                        format!("minecraft:{}", block.name)
-                    };
-                    comp.put_string("Name", name);
-                    if let Some(props) = block.properties(id) {
-                        let prop_vec = props.to_props();
-                        if !prop_vec.is_empty() {
-                            let mut props_comp = NbtCompound::new();
-                            for p in prop_vec {
-                                props_comp.put_string(p.key_str(), p.value_str().to_string());
-                            }
-                            comp.put_compound("Properties", props_comp);
-                        }
-                    }
-                    NbtTag::Compound(comp)
-                })
+                .map(|&id| palette_entry_tag(id))
                 .collect();
             bs_comp.put_list("palette", palette_tags);
             section_comp.put_compound("block_states", bs_comp);
@@ -1913,6 +1920,92 @@ mod tests {
             ])
             .to_state_id(&Block::REPEATER);
         assert_eq!(result[1], repeater_state);
+    }
+
+    /// G7-05: vanilla 26.3 reads `{Name, Properties}` entries as air, so PEX writes what
+    /// `BlockState.CODEC` writes.
+    #[test]
+    fn saved_palettes_use_26_3_ids() {
+        use crate::chunk::ChunkData;
+        use pumpkin_util::math::vector2::Vector2;
+
+        let repeater = Block::REPEATER
+            .from_properties(&[
+                pumpkin_data::Property::Facing(pumpkin_data::block_properties::Facing::East),
+                pumpkin_data::Property::Delay(3),
+                pumpkin_data::Property::Locked(false),
+                pumpkin_data::Property::Powered(false),
+            ])
+            .to_state_id(&Block::REPEATER);
+        assert_ne!(repeater, Block::REPEATER.default_state.id);
+        // `test_section` puts its block at x 0 of every row of 16 and air elsewhere.
+        let bytes = test_chunk(vec![
+            test_section(-4, "minecraft:stone", true),
+            test_section(-3, "minecraft:repeater", true),
+        ])
+        .write();
+        let chunk = ChunkData::from_bytes(&bytes, Vector2::new(0, 0)).expect("chunk parses");
+        chunk.section.set_block_absolute_y(0, -48, 0, repeater);
+        let saved = chunk.to_bytes().expect("chunk saves");
+
+        let mut cursor = std::io::Cursor::new(&saved[..]);
+        let mut reader = pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut cursor);
+        let nbt = if has_named_root(&saved) {
+            pumpkin_nbt::Nbt::read(&mut reader)
+        } else {
+            pumpkin_nbt::Nbt::read_unnamed(&mut reader)
+        }
+        .expect("saved chunk is NBT");
+        let palette = |y: i32| -> Vec<NbtTag> {
+            nbt.root_tag
+                .get_list("sections")
+                .expect("sections")
+                .iter()
+                .find_map(|section| match section {
+                    NbtTag::Compound(section) if section_y(section) == y => section
+                        .get_compound("block_states")
+                        .and_then(|states| states.get_list("palette"))
+                        .map(<[NbtTag]>::to_vec),
+                    _ => None,
+                })
+                .expect("section has a palette")
+        };
+
+        // Default states, alone or beside another state, are bare ids.
+        assert!(palette(-4).contains(&NbtTag::String("minecraft:stone".into())));
+        let mixed = palette(-3);
+        assert!(mixed.contains(&NbtTag::String("minecraft:repeater".into())));
+        let mut properties = NbtCompound::new();
+        for (key, value) in [
+            ("delay", "3"),
+            ("facing", "east"),
+            ("locked", "false"),
+            ("powered", "false"),
+        ] {
+            properties.put_string(key, value.to_string());
+        }
+        let mut entry = NbtCompound::new();
+        entry.put_string("id", "minecraft:repeater".to_string());
+        entry.put_compound("properties", properties);
+        assert!(mixed.contains(&NbtTag::Compound(entry)), "{mixed:?}");
+        assert!(mixed.iter().chain(palette(-4).iter()).all(|tag| match tag {
+            NbtTag::Compound(entry) => entry.get("Name").is_none(),
+            _ => true,
+        }));
+
+        let reloaded = ChunkData::from_bytes(&saved, Vector2::new(0, 0)).expect("chunk reloads");
+        assert_eq!(
+            reloaded.section.get_block_absolute_y(0, -64, 0),
+            Some(Block::STONE.default_state.id)
+        );
+        assert_eq!(
+            reloaded.section.get_block_absolute_y(0, -48, 0),
+            Some(repeater)
+        );
+        assert_eq!(
+            reloaded.section.get_block_absolute_y(0, -47, 0),
+            Some(Block::REPEATER.default_state.id)
+        );
     }
 
     #[test]
