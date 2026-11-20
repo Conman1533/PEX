@@ -34,6 +34,12 @@ impl ExperienceOrbEntity {
         }
     }
 
+    /// The experience this orb gives.
+    #[must_use]
+    pub const fn amount(&self) -> u32 {
+        self.amount
+    }
+
     pub fn spawn(world: &Arc<World>, position: Vector3<f64>, amount: u32) {
         let mut amount = amount;
         while amount > 0 {

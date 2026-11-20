@@ -1,5 +1,6 @@
 mod bot;
 mod bot_tests;
+mod end_fight;
 mod gametests;
 mod harness;
 mod survival;
@@ -108,6 +109,16 @@ async fn main() -> ExitCode {
             (Ok(_), Err(err)) => Err(err),
             (Err(err), Err(saved_err)) => Err(format!("{err}\n{saved_err}")),
         };
+    }
+
+    // The End fight runs its own servers, which stop and start on their own world folders.
+    if let Ok(lines) = &mut result
+        && let Err(err) = end_fight::run_end_fight_tests(lines).await
+    {
+        for line in lines.iter() {
+            println!("{line}");
+        }
+        result = Err(err);
     }
 
     match result {

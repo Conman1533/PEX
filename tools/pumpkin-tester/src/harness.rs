@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, path::Path, sync::Arc};
 
 use pumpkin_config::{AdvancedConfiguration, BasicConfiguration, TelemetryConfig};
 use pumpkin_core::{
@@ -22,8 +22,13 @@ pub const TEST_SEED: Seed = Seed(5_212_026_031_000_017);
 const BOT_KEEP_ALIVE_SECS: u64 = 60 * 60;
 
 pub async fn create_test_server(temp_dir: &tempfile::TempDir) -> Result<Arc<Server>, String> {
+    create_test_server_at(temp_dir.path()).await
+}
+
+/// A test server whose world lives in `world_dir`.
+pub async fn create_test_server_at(world_dir: &Path) -> Result<Arc<Server>, String> {
     let basic_config = BasicConfiguration {
-        default_level_name: temp_dir.path().to_string_lossy().into_owned(),
+        default_level_name: world_dir.to_string_lossy().into_owned(),
         allow_nether: true,
         allow_end: true,
         seed: TEST_SEED,
@@ -52,6 +57,48 @@ pub async fn create_test_server(temp_dir: &tempfile::TempDir) -> Result<Arc<Serv
     )
     .await
     .map_err(|err| format!("Failed to initialize test Server: {err}"))
+}
+
+/// A test server with its own listener, which [`Self::stop`] shuts down like `stop`, so a new
+/// one can start on the same world folder.
+pub struct RunningServer {
+    pub server: Arc<Server>,
+    pub addr: SocketAddr,
+    cancel: CancellationToken,
+    tasks: TaskTracker,
+}
+
+impl RunningServer {
+    pub async fn start(world_dir: &Path) -> Result<Self, String> {
+        let server = create_test_server_at(world_dir).await?;
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .map_err(|err| format!("Failed to bind local TCP listener: {err}"))?;
+        let addr = listener
+            .local_addr()
+            .map_err(|err| format!("Failed to query local TCP address: {err}"))?;
+        let cancel = CancellationToken::new();
+        let tasks = TaskTracker::new();
+        spawn_java_listener(listener, server.clone(), cancel.clone(), &tasks);
+        Ok(Self {
+            server,
+            addr,
+            cancel,
+            tasks,
+        })
+    }
+
+    /// Removes every player, then saves and closes the worlds with `Server::shutdown`.
+    pub async fn stop(self) {
+        self.cancel.cancel();
+        for player in self.server.get_all_players() {
+            player.remove().await;
+            self.server.remove_player(&player);
+        }
+        self.tasks.close();
+        self.tasks.wait().await;
+        self.server.shutdown().await;
+    }
 }
 
 pub fn spawn_java_listener(

@@ -2,6 +2,7 @@ mod block_breaking;
 pub mod block_entity_unload;
 mod block_tuning_and_invert;
 mod commands_and_gamemode;
+mod end_portal_frame;
 mod entity_interaction_range;
 mod entity_target_packets;
 mod login_and_movement;
@@ -76,6 +77,8 @@ pub async fn run_bot_tests(
     attack_cooldown::run_attack_cooldown_test(server, &mut bot1, summary_lines).await?;
 
     spawners::run_spawner_tests(server, &bot1, summary_lines).await?;
+
+    end_portal_frame::run_end_portal_frame_test(server, &mut bot1, summary_lines).await?;
 
     player_actions::run_player_actions_and_disconnect_tests(server, bot1, bot2, summary_lines)
         .await?;

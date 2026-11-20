@@ -21,10 +21,10 @@ use pumpkin_protocol::{
             play::{
                 CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CEntityVelocity,
                 CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse, CPlayDisconnect,
-                CPlayerPosition, CRemoveEntities, CSetContainerContent, CSetContainerSlot,
-                CSetCursorItem, CSetEntityMetadata, CSetPlayerInventory, CSetSelectedSlot,
-                CSpawnEntity, CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot,
-                CUpdateEntityRot,
+                CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
+                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetPlayerInventory,
+                CSetSelectedSlot, CSpawnEntity, CUnloadChunk, CUpdateEntityPos,
+                CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -37,8 +37,8 @@ use pumpkin_protocol::{
                 Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot,
                 SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPickItemFromEntity,
                 SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
-                SPlayerPositionRotation, SSetHeldItem, SSpectateEntity, SUseItemOn, SlotActionType,
-                Status,
+                SPlayerPositionRotation, SSetHeldItem, SSpectateEntity, SUseItem, SUseItemOn,
+                SlotActionType, Status,
             },
         },
     },
@@ -84,6 +84,8 @@ pub struct HeadlessBot {
     pub inventory: ClientInventory,
     /// Dropped item entities the bot has been told about, by entity id.
     pub item_entities: HashMap<i32, Vector3<f64>>,
+    /// Dropped item entities the bot has been told about so far, removed or not.
+    pub spawned_items: usize,
     /// Chunks the server has sent and not unloaded.
     pub chunks: HashSet<(i32, i32)>,
     /// While set, teleports are kept here instead of being confirmed, like a client that lags.
@@ -224,6 +226,7 @@ impl HeadlessBot {
             pitch: 0.0,
             inventory: ClientInventory::new(),
             item_entities: HashMap::new(),
+            spawned_items: 0,
             chunks: HashSet::new(),
             held_teleports: None,
             disconnect_reason: None,
@@ -352,6 +355,13 @@ impl HeadlessBot {
             id if id == CPingResponse::to_id(CURRENT_MC_VERSION) => {
                 self.last_pong = payload.get_i64_be().map_err(|err| read_error(id, &err))?;
             }
+            // A dimension change: the vanilla client drops its chunks and says it has loaded
+            // the new level, which the server waits for before taking actions again.
+            id if id == CRespawn::to_id(CURRENT_MC_VERSION) => {
+                self.chunks.clear();
+                self.item_entities.clear();
+                self.send_packet(&SPlayerLoaded).await?;
+            }
             id if id == CPlayDisconnect::to_id(CURRENT_MC_VERSION) => {
                 self.disconnect_reason = Some(packet.payload.clone());
             }
@@ -426,6 +436,7 @@ impl HeadlessBot {
             }
             if spawn.r#type.0 == i32::from(EntityType::ITEM.id) {
                 self.item_entities.insert(spawn.entity_id.0, spawn.position);
+                self.spawned_items += 1;
             }
         } else if id == CUpdateEntityPos::to_id(CURRENT_MC_VERSION)
             || id == CUpdateEntityPosRot::to_id(CURRENT_MC_VERSION)
@@ -518,6 +529,8 @@ impl HeadlessBot {
         on_ground: bool,
     ) -> Result<(), String> {
         self.position = position;
+        self.yaw = yaw;
+        self.pitch = pitch;
         self.send_packet(&SPlayerPositionRotation {
             position,
             yaw,
@@ -579,6 +592,24 @@ impl HeadlessBot {
             sneaking: false,
         })
         .await
+    }
+
+    /// Right-clicks with the main hand without aiming at a block, like throwing an eye of ender
+    /// or drawing a bow.
+    pub async fn use_item(&mut self, sequence: i32) -> Result<(), String> {
+        self.send_packet(&SUseItem {
+            hand: VarInt(0),
+            sequence: VarInt(sequence),
+            yaw: self.yaw,
+            pitch: self.pitch,
+        })
+        .await
+    }
+
+    /// Lets go of the use key, like loosing a drawn bow.
+    pub async fn release_use_item(&mut self) -> Result<(), String> {
+        self.send_player_action(Status::ReleaseItemInUse, BlockPos::new(0, 0, 0), 0)
+            .await
     }
 
     pub async fn attack_entity(&mut self, entity_id: i32) -> Result<(), String> {
