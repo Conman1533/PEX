@@ -8,12 +8,12 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `f88488344`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6e3588730`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 4 | 1 | 40 | |
+| G1 Mob AI | 45 | 5 | 1 | 39 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 52 | 1 | 128 | 15 |
+| Total | 196 | 53 | 1 | 127 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -472,6 +472,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-animal-armadillo`
 - Needs decision: D1-1.
 - Done when: `pumpkin:armadillo_rolls_up_near_zombie` passes, plus unit tests for each new behaviour beside `hurt_by_remembers_the_attacker_until_it_is_gone`.
+- Status (2026-11-20): landed (branch `feat/brain-animal-armadillo`). New Brain behaviours `FollowTemptation`, `AnimalMakeLove` (sets the partner's `breed_target`, walk and look targets through the partner's own brain), `BabyFollowAdult`, `RandomLookAround` (vanilla's `directionFromRotation` on the sine table) and `SetEntityLookTarget`, plus `SetEntityLookTargetSometimes` by entity type, `RandomStroll.stroll` and `AnimalPanic` with its own panic causes. New sensors `food_temptations`, `frog_temptations`, `nautilus_temptations` (`TemptingSensor`), `nearest_adult`, `nearest_adult_any_type` (`AdultSensor`) and `armadillo_scare_detected` (a generic `MobSensor`, scan rate 5). The armadillo now runs vanilla `ArmadilloAi` (core, idle and panic activities, `ArmadilloBallUp`, `ArmadilloPanic`, the rolling-out step and the scared `MoveToTargetSink` override) instead of goals and the atomics that emulated the sensor and ball-up, so `danger_detected_recently` is a real memory saved in `Brain` NBT like vanilla (D1-1). Also fixed on the way: `isScaredBy` now tests boxes inflated 7/2/7 and skips spectators, `canStayRolledUp` checks lava, leashes and passengers, and `canFallInLove` is false while curled up. `EntityBase::is_panicking` was false for every mob; it now asks a new `Mob::mob_is_panicking` hook, which the armadillo answers from its brain (other Brain mobs like the allay can follow when they move). `pumpkin:armadillo_rolls_up_near_zombie` passes (curls up beside a zombie, unrolls about 5 s after it is killed) and the eight new unit tests sit beside `hurt_by_remembers_the_attacker_until_it_is_gone`. Play test for Neon: sprint up to an armadillo, expect it to curl up, peek now and then, and unroll a few seconds after you stop sprinting; hold a spider eye, expect it to follow you and stop about 2 blocks away.
 
 #### G1-05 Brain combat and door behaviours and zoglin
 - Scope: StartAttacking, StopAttackingIfTargetInvalid, SetWalkTargetFromAttackTargetIfTargetOutOfReach, MeleeAttack, EraseMemoryIf, SetWalkTargetAwayFrom, StopBeingAngryIfTargetDead, BecomePassiveIfMemoryPresent, CopyMemoryWithExpiry, InteractWithDoor; the zoglin on its Brain. Out: piglin and hoglin sensors.
