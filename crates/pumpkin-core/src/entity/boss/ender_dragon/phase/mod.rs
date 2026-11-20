@@ -101,6 +101,16 @@ impl EnderDragonPhase {
             Self::SittingFlaming | Self::SittingScanning | Self::SittingAttacking | Self::Hovering
         )
     }
+
+    /// Vanilla `AbstractDragonSittingPhase.onHurt`: the three sitting phases, not hover, shrug off
+    /// arrows and wind charges.
+    #[must_use]
+    pub const fn shrugs_off_projectiles(self) -> bool {
+        matches!(
+            self,
+            Self::SittingFlaming | Self::SittingScanning | Self::SittingAttacking
+        )
+    }
 }
 
 /// Vanilla `EnderDragonPhaseManager`: one instance of each phase, kept across phase changes.

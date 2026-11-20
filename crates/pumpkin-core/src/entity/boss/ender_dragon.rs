@@ -1047,14 +1047,22 @@ impl EnderDragonEntity {
         self.mob_entity.living_entity.entity.update_last_pos();
         self.update_flap_time();
 
-        {
+        // Vanilla `EnderDragon.aiStep`: a NoAI dragon still ticks its parts and crystals, but it
+        // neither records flight history nor runs its phase, so it stays where it is.
+        let no_ai = self.mob_entity.is_no_ai();
+        if no_ai {
+            *self
+                .flap_time
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = 0.5;
+        } else {
             let y = self.mob_entity.living_entity.entity.pos.load().y;
             let yaw = self.mob_entity.living_entity.entity.yaw.load();
             self.flight_history
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .record(y, yaw);
-        };
+        }
 
         self.tick_growl();
         self.tick_crystal_healing();
@@ -1076,28 +1084,30 @@ impl EnderDragonEntity {
             }
         }
 
-        let mut phase_type = self.phase();
+        if !no_ai {
+            let mut phase_type = self.phase();
 
-        // Vanilla ticks a phase that the current one switched to in the same tick.
-        self.phase_manager.get(phase_type).do_server_tick(self);
-        if self.phase() != phase_type {
-            phase_type = self.phase();
+            // Vanilla ticks a phase that the current one switched to in the same tick.
             self.phase_manager.get(phase_type).do_server_tick(self);
-        }
+            if self.phase() != phase_type {
+                phase_type = self.phase();
+                self.phase_manager.get(phase_type).do_server_tick(self);
+            }
 
-        if self.mob_entity.living_entity.entity.is_removed() {
-            return;
-        }
+            if self.mob_entity.living_entity.entity.is_removed() {
+                return;
+            }
 
-        let phase = self.phase_manager.get(phase_type);
-        if let Some(target) = phase.get_fly_target_location() {
-            let pos = self.mob_entity.living_entity.entity.pos.load();
-            self.steer_toward(
-                pos,
-                target,
-                phase.get_fly_speed(),
-                phase.get_turn_speed(self),
-            );
+            let phase = self.phase_manager.get(phase_type);
+            if let Some(target) = phase.get_fly_target_location() {
+                let pos = self.mob_entity.living_entity.entity.pos.load();
+                self.steer_toward(
+                    pos,
+                    target,
+                    phase.get_fly_speed(),
+                    phase.get_turn_speed(self),
+                );
+            }
         }
 
         self.tick_parts();
@@ -1221,7 +1231,7 @@ impl Mob for EnderDragonEntity {
         if phase == EnderDragonPhase::Dying {
             return false;
         }
-        if phase.is_sitting()
+        if phase.shrugs_off_projectiles()
             && [
                 DamageType::ARROW,
                 DamageType::TRIDENT,
@@ -1398,6 +1408,31 @@ mod tests {
         world.level.shutdown().await;
     }
 
+    /// Vanilla `AbstractDragonSittingPhase.onHurt`: a sitting dragon shrugs off a player's arrow,
+    /// a hovering one (`DragonHoverPhase`, which only counts as sitting) takes it.
+    #[tokio::test]
+    async fn only_the_sitting_phases_shrug_off_arrows() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let fighting = dragon(&world, Vector3::new(0.5, 100.0, 0.5));
+        let player = test_player(&world, Vector3::new(0.5, 100.0, 10.5));
+        for (phase, hurts) in [
+            (EnderDragonPhase::Hovering, true),
+            (EnderDragonPhase::HoldingPattern, true),
+            (EnderDragonPhase::SittingScanning, false),
+            (EnderDragonPhase::SittingAttacking, false),
+            (EnderDragonPhase::SittingFlaming, false),
+        ] {
+            fighting.set_phase(phase);
+            assert_eq!(
+                fighting.pre_damage_with_context(DamageType::ARROW, None, Some(player.as_ref()),),
+                hurts,
+                "{phase:?}"
+            );
+        }
+        world.level.shutdown().await;
+    }
+
     #[tokio::test]
     async fn killing_blow_in_flight_keeps_one_health_and_dies_over_200_ticks() {
         let folder = tempfile::tempdir().unwrap();
@@ -1437,6 +1472,38 @@ mod tests {
         killed.kill(killed.as_ref());
         assert!(killed.get_entity().is_removed());
         assert!(killed.parts.iter().all(|part| part.entity.is_removed()));
+        world.level.shutdown().await;
+    }
+
+    /// Vanilla `EnderDragon.aiStep`: a hovering dragon keeps flying forward round its spot, and
+    /// one with `NoAI` stays put with its wings at `flapTime` 0.5.
+    #[tokio::test]
+    async fn a_dragon_with_no_ai_stays_where_it_is() {
+        let folder = tempfile::tempdir().unwrap();
+        let world = world(&folder);
+        let start = Vector3::new(0.5, 100.0, 0.5);
+
+        let flying = dragon(&world, start);
+        for _ in 0..20 {
+            flying.ai_step();
+        }
+        assert!(
+            flying
+                .get_entity()
+                .pos
+                .load()
+                .squared_distance_to_vec(&start)
+                > 0.01,
+            "a hovering dragon with AI flies round its spot"
+        );
+
+        let frozen = dragon(&world, start);
+        frozen.mob_entity.set_no_ai(true);
+        for _ in 0..20 {
+            frozen.ai_step();
+        }
+        assert_eq!(frozen.get_entity().pos.load(), start);
+        assert!((*frozen.flap_time.lock().unwrap() - 0.5).abs() < f32::EPSILON);
         world.level.shutdown().await;
     }
 
