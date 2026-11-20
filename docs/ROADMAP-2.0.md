@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c37a4e893`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `a7c5e14c0`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 13 | 0 | 12 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 12 | 0 | 20 | |
+| G7 Worlds | 32 | 13 | 0 | 19 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 49 | 1 | 131 | 15 |
+| Total | 196 | 50 | 1 | 130 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2214,6 +2214,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/chunk-passthrough-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows these keys unchanged in every fixture chunk.
+- Status (2026-11-20): landed (branch `fix/chunk-passthrough-keys`). `ChunkData` and `ProtoChunk` carry a `passthrough` compound with every top-level chunk key PEX doesn't read into its own fields (all but `DataVersion`, `xPos`, `zPos`, `yPos`, `Status`, `Heightmaps`, `sections`, `block_ticks`, `fluid_ticks`, `block_entities`, `isLightOn`, `InhabitedTime`, `PumpkinCustomData` and `BukkitValues`), written back unless PEX wrote that key itself; it survives a proto-chunk being finished and a full chunk being relit. Proto-chunks also keep their scheduled block and fluid ticks now. Unit test `unmodeled_chunk_keys_are_written_back`. The round trip (`tools/world-roundtrip/reports/2026-11-20-g7-06.md`) keeps `structures`, `PostProcessing`, `LastUpdate` and proto-chunk `entities` unchanged in every fixture chunk; step 1 loses 2 block ticks instead of 3058, and what is left is ticking (water settling in the lab). The missing `OCEAN_FLOOR`, `OCEAN_FLOOR_WG` and `WORLD_SURFACE_WG` heightmaps stay out on purpose: vanilla recomputes a missing heightmap on load, and a stale one beside blocks PEX changed would be wrong.
 
 #### G7-07 Structure starts and references for chunks PEX generates
 
