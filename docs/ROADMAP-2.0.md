@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 9 | 4 | 12 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 5 | 3 | 24 | |
+| G7 Worlds | 32 | 10 | 0 | 22 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 37 | 9 | 135 | 15 |
+| Total | 196 | 42 | 6 | 133 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -35,8 +35,8 @@ Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by th
 What holds 2.0 back:
 
 1. GitHub Actions: the newest run on the repository is from 2026-10-14 (D0-1's support ticket). G0-01, G0-02 and Goal 10's release pieces wait on it.
-2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4 on 2026-11-20), so 20 are open and 6 more partly or except a sub-question. D7-1 and D7-4 hold 11 Goal 7 pieces.
-3. The proofs: 9 pieces have their code on `alpha` but not the test their Done when asks for. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching.
+2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4, D7-1 and D7-4 on 2026-11-20), so 18 are open and 6 more partly or except a sub-question.
+3. The proofs: 6 pieces have their code on `alpha` but not the test their Done when asks for. The world round trip (2026-11-20) proved G7-14, G7-15 and G7-17. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching.
 4. Fixed 2026-11-20 in proof batch 1: GameTest `scaffolding_distance_and_collapse` checked the overhang before its scheduled tick had run; it now waits for it, and the full tester passes on `alpha`.
 
 ## Order of work
@@ -47,7 +47,7 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 
 1. Answer the open decisions that hold the most work. The table below has all of them.
    - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
-   - D7-4 (6 pieces) and D7-1 (5).
+   - D7-4 and D7-1: answered by the 2.0 loop on 2026-11-20.
    - D5-1, D8-3 and the open part of D10-2 (2 pieces each).
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
@@ -76,7 +76,7 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 
 Every decision, one row each; the options, their costs and the details are in the goal's own Decisions list. On 2026-10-31 Neon accepted every answer the earlier roadmap gave on 2026-10-29 (`git show origin/roadmap-2.0:docs/ROADMAP-2.0.md`, section "All decisions"; those were Claude's recommendations at Neon's request). Where an earlier answer settled only part of a question, the row says what is still open. Neon answered D0-1, D1-2, D1-3, D3-2, D6-1, D6-3 and D7-6 the same day. That leaves 18 answered, 2 answered except a sub-question, 4 partly answered and 21 open.
 
-No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Answered by the 2.0 loop"). On 2026-11-20: 19 answered, 2 answered except a sub-question, 4 partly answered and 20 open.
+No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Answered by the 2.0 loop"). On 2026-11-20: 21 answered, 2 answered except a sub-question, 4 partly answered and 18 open.
 
 | ID | Question | Status | Pieces waiting |
 | :-- | :-- | :-- | :-- |
@@ -105,10 +105,10 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D6-4 | Where do the 12 pearls come from? | Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work | G6-12, G6-13 |
 | D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Open | G6-20 |
 | D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
-| D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Open | G7-06, G7-21, G7-23, G7-24, G7-25 |
+| D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Answered by the 2.0 loop (2026-11-20): pass through now, model fields as features need them, because the first round trip shows losses in dozens of chunk, block entity, item and entity keys that one generic mechanism stops at once, while fields PEX models still win | G7-06, G7-21, G7-23, G7-24, G7-25 |
 | D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Open | G7-28 |
 | D7-3 | How much of a structure start should PEX save for chunks it generates? | Open | G7-07 |
-| D7-4 | Which `data/` files must round-trip for 2.0? | Open | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
+| D7-4 | Which `data/` files must round-trip for 2.0? | Answered by the 2.0 loop (2026-11-20): all, because the first round trip shows PEX already leaves every one of these files intact and vanilla reads them, so each piece only has to read and write its own file, and a subset would mean documented losses of players' maps, raids and boss bars | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
 | D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
@@ -2187,6 +2187,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: test/world-roundtrip-pex
 - Needs decision: none
 - Done when: it runs in CI and the PR holds its first loss report.
+- Status (2026-11-20): landed. `tools/world-roundtrip/roundtrip.py` (on `alpha` since 2026-11-20, branch `test/world-roundtrip-v2`) runs the fixture through PEX, vanilla and PEX again and diffs each save; `known-losses.txt` beside it names the piece behind each of its 190 difference groups. It runs nightly as stage `30-world-roundtrip` in CT 117's CI (G0-05 stands in for G0-01; the GitHub job waits for Actions). PRs are Neon's, so the first loss report is committed as `tools/world-roundtrip/reports/2026-11-20.md` instead.
 
 #### G7-04 Vanilla opens a PEX save
 
@@ -2195,6 +2196,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: test/world-roundtrip-vanilla
 - Needs decision: none
 - Done when: it runs in CI and its first report says, for palettes, POI and the `data/` files, what vanilla actually did with them.
+- Status (2026-11-20): landed with G7-03 (same script, steps 2 and 3). The first report, `tools/world-roundtrip/reports/2026-11-20.md`, says what vanilla did: it reads every PEX palette as air (about 800 "Recoverable errors when loading section" lines, G7-05, the biggest loss found), leaves POI as it was (PEX never rewrote the fixture's POI file), and, after the fix below, reads every `data/` file. The first runs found that vanilla refused PEX's `game_rules.dat` and `world_clocks.dat` (DataVersion inside `data`), fixed by `fix/saved-data-dataversion` (G7-13's DataVersion part), and that PEX kept the border's damage and safe zone as f32. The fresh-world part runs on a PEX-made world as the Scope asks.
 
 #### G7-05 Block palettes in 26.3 form
 
@@ -2270,6 +2272,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/level-data-26-3
 - Needs decision: none
 - Done when: unit tests per file check the root `DataVersion` and the kept fields; the hardcore fixture is still hardcore in vanilla after a PEX save; G7-04 logs no `Failed to parse saved data`.
+- Status (2026-11-20): partly done. `fix/saved-data-dataversion` (on `alpha` since 2026-11-20) writes `DataVersion` at the root of `game_rules.dat`, `world_clocks.dat` and `world_gen_settings.dat` (unit test `saved_data_files_keep_data_version_beside_data_like_vanilla`), and G7-04 now logs no `Failed to parse saved data`. Not done: hardcore kept, `Time` and `GameType`, `generate_structures` and `bonus_chest` kept as read, every clock field; PEX also still writes the pre-26.3 level.dat keys (border, spawn, difficulty, `WorldGenSettings`).
 
 #### G7-14 Time and weather saved and restored
 
@@ -2278,7 +2281,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/persist-time-weather
 - Needs decision: none
 - Done when: a boot test runs `time set 6000` and `weather thunder 3000`, restarts and finds both; vanilla on that save shows the same time and weather.
-- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): time and weather are saved (unit test `time_and_weather_survive_a_save`). Not done: the restart boot test and the vanilla check.
+- Status (2026-11-20): landed. Built by `feat/vanilla-saved-data`; the round trip's step 4 (G7-03) runs `time set 6000` and `weather thunder 3000` on a fresh PEX world, restarts it and finds the clock at 6000 and up and `weather.dat` thundering, then vanilla on that save finds the same. Vanilla only kept the time once `fix/saved-data-dataversion` landed.
 
 #### G7-15 Scoreboard saved data
 
@@ -2287,7 +2290,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/scoreboard-saved-data
 - Needs decision: D7-4
 - Done when: objectives, scores and teams from G7-01's world survive PEX and come back in vanilla, and ones made in PEX survive a restart.
-- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): a shared `scoreboard.dat` in vanilla fields (unit tests `the_scoreboard_survives_a_save_in_vanilla_fields`, `every_dimension_of_a_save_shares_one_scoreboard`). Not done: the round trip through vanilla with G7-01's world. D7-4 is still open.
+- Status (2026-11-20): landed. Built by `feat/vanilla-saved-data`; the round trip (G7-03) shows the fixture's objectives, scores and teams survive PEX and come back in vanilla (PEX only adds default fields vanilla omits, listed as known losses), and step 4 finds an objective, a score and a team made in PEX after a restart and in vanilla. D7-4 answered.
 
 #### G7-16 Map saved data
 
@@ -2304,7 +2307,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/border-tickets-saved-data
 - Needs decision: D7-4
 - Done when: a border and forced chunks set in vanilla are in place in PEX and the reverse, each after a restart.
-- Status (2026-11-19): built by `feat/vanilla-saved-data` (on `alpha` since 2026-11-05): `world_border.dat` and `chunk_tickets.dat` in vanilla fields (unit tests `the_border_survives_a_save_in_vanilla_fields`, `a_border_saved_mid_lerp_resumes_towards_its_target`, `forced_chunks_round_trip_and_keep_other_tickets`, `no_file_is_written_without_forced_chunks`). Not done: the vanilla-to-PEX and PEX-to-vanilla checks. D7-4 is still open.
+- Status (2026-11-20): landed. Built by `feat/vanilla-saved-data`; the round trip (G7-03) finds the fixture's vanilla-set border (4000 wide, off-centre) and forced lab chunks live in PEX (`worldborder get`, `forceload query`) and unchanged in PEX's save, and step 4 finds a border and a forced chunk set in PEX after a restart and in vanilla. It also found that PEX kept `damage_per_block` and `safe_zone` as f32 (0.2 came back as 0.20000000298023224), fixed on `fix/saved-data-dataversion`.
 
 #### G7-18 Raids saved data
 
@@ -2441,6 +2444,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Model each field: exact behaviour, but many per-type changes, and every unmodelled key stays lost until its piece lands.
   - Pass through now, model fields as features need them.
   - Waits on it: G7-06, G7-21, G7-23, G7-24, G7-25.
+  - Answered by the 2.0 loop (2026-11-20): pass through now, model fields as features need them, because the first round trip shows losses in dozens of chunk, block entity, item and entity keys that one generic mechanism stops at once, while fields PEX models still win.
 - D7-2: What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? Options:
   - Refuse to start. Safe, but every world from before 26.3 needs vanilla 26.3 to upgrade it first.
   - Keep each untouched chunk's own `DataVersion` so vanilla fixes it later. Small; chunks PEX changed are still restamped without fixes.
@@ -2455,6 +2459,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - All: scoreboard, maps, world border, chunk tickets, raids, command storage, scheduled events, boss bars, random sequences, stopwatches. Six pieces.
   - A subset (for example maps, scoreboard, world border and chunk tickets), with the rest listed as known losses in the release notes.
   - Waits on it: G7-15 to G7-20.
+  - Answered by the 2.0 loop (2026-11-20): all, because the first round trip shows PEX already leaves every one of these files intact and vanilla reads them, so each piece only has to read and write its own file, and a subset would mean documented losses of players' maps, raids and boss bars.
 - D7-5: What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? Options:
   - Accept the loss and document it. No work.
   - A sidecar file per region beside vanilla's files, keyed by position or UUID. Survives vanilla, but goes stale when vanilla moves or kills things.
