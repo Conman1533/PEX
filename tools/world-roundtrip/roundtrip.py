@@ -234,6 +234,18 @@ def fresh_checks(console, kind):
     return failures
 
 
+def fixture_checks(console, kind):
+    """The fixture's vanilla-set border (4000 wide) and forced lab chunks are live, not only kept."""
+    failures = []
+    lines = " ".join(console.output("worldborder get"))
+    if not re.search(r"\b4000\b", lines):
+        failures.append(f"{kind}: the fixture's border is not 4000 wide: {lines!r}")
+    lines = " ".join(console.output("forceload query 0 0"))
+    if not re.search(r"is marked for force loading|is force loaded", lines, re.I):
+        failures.append(f"{kind}: the fixture's forced chunk 0,0 is not force-loaded: {lines!r}")
+    return failures
+
+
 def fresh_setup(console):
     for command in [
         "time set 6000", "weather thunder 3000", "scoreboard objectives add roundtrip_obj dummy",
@@ -274,10 +286,12 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     report, problems, all_groups = ["# World round trip\n"], 0, []
 
+    failures = []
     pex_dir = os.path.join(args.out, "pex")
     copy_world(fixture_world, os.path.join(pex_dir, "world"))
     server, console = start(args, "pex", pex_dir, args.port)
     try:
+        failures += fixture_checks(console, "PEX on the fixture")
         load_lab(console)
         save_and_stop(server, console)
     finally:
@@ -318,7 +332,6 @@ def main():
     problems += diff(report, "3. Vanilla -> PEX again", os.path.join(pex_dir, "world"),
                      os.path.join(again_dir, "world"), known, all_groups)
 
-    failures = []
     fresh_dir = os.path.join(args.out, "fresh")
     if os.path.exists(fresh_dir):
         shutil.rmtree(fresh_dir)
@@ -346,7 +359,7 @@ def main():
     finally:
         server.stop()
     failures += weather_check(os.path.join(vanilla_fresh, "world"), "vanilla's save of it")
-    report.append("## 4. Set in PEX, after a restart, then in vanilla\n")
+    report.append("## 4. The fixture's border and forced chunks live in PEX; set in PEX, after a restart, then in vanilla\n")
     report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
     problems += len(failures)
 
