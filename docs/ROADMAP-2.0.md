@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `0bfdaecc7`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c37a4e893`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 13 | 0 | 12 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 11 | 0 | 21 | |
+| G7 Worlds | 32 | 12 | 0 | 20 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 48 | 1 | 132 | 15 |
+| Total | 196 | 49 | 1 | 131 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2273,7 +2273,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/level-data-26-3
 - Needs decision: none
 - Done when: unit tests per file check the root `DataVersion` and the kept fields; the hardcore fixture is still hardcore in vanilla after a PEX save; G7-04 logs no `Failed to parse saved data`.
-- Status (2026-11-20): partly done. `fix/saved-data-dataversion` (on `alpha` since 2026-11-20) writes `DataVersion` at the root of `game_rules.dat`, `world_clocks.dat` and `world_gen_settings.dat` (unit test `saved_data_files_keep_data_version_beside_data_like_vanilla`), and G7-04 now logs no `Failed to parse saved data`. Not done: hardcore kept, `Time` and `GameType`, `generate_structures` and `bonus_chest` kept as read, every clock field; PEX also still writes the pre-26.3 level.dat keys (border, spawn, difficulty, `WorldGenSettings`).
+- Status (2026-11-20): landed (branch `fix/level-data-26-3`). On top of `fix/saved-data-dataversion`'s root `DataVersion`: `difficulty_settings.hardcore` is kept from the world (an old `hardcore` key counts too) and used for the login packet, respawn and difficulty instead of the config; `GameType` is written from the default game mode; `world_gen_settings.dat` keeps `generate_structures` and `bonus_chest` as read (PEX worldgen does not obey `generate_structures = false` yet) and is written through a temporary file, since it is now the seed's only copy; `world_clocks.dat` keeps `partial_tick`, `rate` and `paused`, left out at their defaults like `ClockState.CODEC`; PEX no longer writes, and drops on save, the pre-26.1 `Border*`, `Difficulty`, `DifficultyLocked`, `Spawn*` and `WorldGenSettings` keys, and an old `level.dat` border seeds the overworld's `world_border.dat` once. Answered by the 2.0 loop (2026-11-20): a server with `hardcore = true` makes its world hardcore, because PEX wrote every world as not hardcore until now, so following vanilla (config only for new worlds) would turn existing hardcore servers into survival ones. Unit tests `round_trip_level_dat`, `a_save_moves_the_seed_and_border_out_of_level_dat`, `world_gen_settings_keep_structures_and_bonus_chest_as_read`, `world_clocks_keep_every_clock_state_field` and `a_border_in_an_old_level_dat_becomes_world_border_dat`. The world round trip gained step 5: the hardcore fixture is still hardcore after PEX (configured not hardcore) and then vanilla save it; it passes, vanilla logs no `Failed to parse saved data`, and the 17 G7-13 known-loss lines are gone (`map_id` stays, moved to G7-16) (`tools/world-roundtrip/reports/2026-11-20-g7-13.md`).
 
 #### G7-14 Time and weather saved and restored
 
