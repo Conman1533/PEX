@@ -3,7 +3,8 @@
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io::{Cursor, Read},
+    fmt::Write as _,
+    io::{Cursor, Read, Write as _},
     net::SocketAddr,
     time::Duration,
 };
@@ -111,6 +112,21 @@ pub struct BedrockBot {
     pub packet_counts: HashMap<i32, usize>,
     /// Packets of a batch not handled yet.
     pending: VecDeque<RawPacket>,
+    /// Where every received packet is written for `tools/bedrock-wirecheck`, when
+    /// `PUMPKIN_TESTER_BEDROCK_DUMP` names a directory.
+    dump: Option<std::fs::File>,
+}
+
+/// The dump file for one connection, when `PUMPKIN_TESTER_BEDROCK_DUMP` is set.
+fn open_dump(name: &str, network_id: u64) -> Result<Option<std::fs::File>, String> {
+    let Ok(dir) = std::env::var("PUMPKIN_TESTER_BEDROCK_DUMP") else {
+        return Ok(None);
+    };
+    std::fs::create_dir_all(&dir).map_err(|err| format!("packet dump dir {dir}: {err}"))?;
+    let path = std::path::Path::new(&dir).join(format!("{name}-{network_id:016x}.hex"));
+    std::fs::File::create(&path)
+        .map(Some)
+        .map_err(|err| format!("packet dump {}: {err}", path.display()))
 }
 
 /// A stable, made-up Xbox user id for `name`, in the range real ones use.
@@ -198,6 +214,7 @@ impl BedrockBot {
             disconnect: None,
             packet_counts: HashMap::new(),
             pending: VecDeque::new(),
+            dump: open_dump(name, network_id)?,
         };
         bot.login().await?;
         Ok(bot)
@@ -431,6 +448,18 @@ impl BedrockBot {
                     .get_game_packet(&mut cursor)
                     .map_err(|err| format!("bad packet from the server: {err}"))?,
             );
+        }
+        if let Some(dump) = &mut self.dump {
+            for packet in &packets {
+                let mut line = String::with_capacity(packet.payload.len() * 2 + 8);
+                let _ = write!(line, "{} ", packet.id);
+                for byte in &packet.payload {
+                    let _ = write!(line, "{byte:02x}");
+                }
+                line.push('\n');
+                dump.write_all(line.as_bytes())
+                    .map_err(|err| format!("packet dump write failed: {err}"))?;
+            }
         }
         Ok(packets)
     }
