@@ -852,12 +852,38 @@ mod test {
         let game_rules_path = minecraft_data_dir(temp_dir.path()).join("game_rules.dat");
         let game_rules = read_gzip_compound_tag(File::open(game_rules_path).unwrap()).unwrap();
         assert_eq!(
-            game_rules
-                .get_compound("data")
-                .unwrap()
-                .get_int("DataVersion"),
+            game_rules.get_int("DataVersion"),
             Some(MAXIMUM_SUPPORTED_WORLD_DATA_VERSION)
         );
+    }
+
+    /// Vanilla 26.3 failed to parse PEX's `game_rules.dat` and `world_clocks.dat` (found by the
+    /// world round trip): `DataVersion` belongs beside `data`, not in it.
+    #[test]
+    fn saved_data_files_keep_data_version_beside_data_like_vanilla() {
+        let temp_dir = TempDir::new().unwrap();
+        AnvilLevelInfo
+            .write_world_info(&LevelData::default(Seed(11)), temp_dir.path())
+            .unwrap();
+
+        for name in [
+            "game_rules.dat",
+            "world_clocks.dat",
+            "world_gen_settings.dat",
+        ] {
+            let path = minecraft_data_dir(temp_dir.path()).join(name);
+            let root = read_gzip_compound_tag(File::open(path).unwrap()).unwrap();
+            assert_eq!(
+                root.get_int("DataVersion"),
+                Some(MAXIMUM_SUPPORTED_WORLD_DATA_VERSION),
+                "{name}"
+            );
+            let data = root.get_compound("data").unwrap();
+            assert_eq!(data.get_int("DataVersion"), None, "{name}");
+        }
+
+        let read = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+        assert_eq!(read.world_gen_settings.seed, 11);
     }
 
     #[test]

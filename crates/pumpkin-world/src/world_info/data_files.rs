@@ -391,7 +391,6 @@ pub fn write_world_gen_settings(
     let path = dir.join("world_gen_settings.dat");
     let file = File::create(&path)?;
     let mut inner = NbtCompound::new();
-    inner.put_int("DataVersion", data_version);
     inner.put_long("seed", settings.seed);
     inner.put_bool("generate_structures", true);
     inner.put_bool("bonus_chest", false);
@@ -436,6 +435,7 @@ pub fn write_world_gen_settings(
     inner.put_compound("dimensions", dims_comp);
 
     let mut root = NbtCompound::new();
+    root.put_int("DataVersion", data_version);
     root.put_compound("data", inner);
     pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, BufWriter::new(file))
         .map_err(|e| WorldInfoError::SerializationError(e.to_string()))
@@ -451,9 +451,11 @@ pub fn game_rules_to_nbt(rules: &GameRuleRegistry, data_version: i32) -> NbtComp
             GameRuleValue::Int(i) => inner.put(&key, NbtTag::Int(*i as i32)),
         }
     }
-    inner.put_int("DataVersion", data_version);
 
+    // Vanilla `SavedDataStorage` keeps `DataVersion` beside `data`; inside it, vanilla's game
+    // rules codec reads it as a rule id and rejects the whole file.
     let mut root = NbtCompound::new();
+    root.put_int("DataVersion", data_version);
     root.put_compound("data", inner);
     root
 }
@@ -549,7 +551,11 @@ fn world_clocks_from_nbt(root: &NbtCompound) -> WorldClocksData {
         return result;
     };
 
-    result.data_version = inner.get_int("DataVersion").unwrap_or(0);
+    // PEX before 2026-11-20 wrote `DataVersion` inside `data`.
+    result.data_version = root
+        .get_int("DataVersion")
+        .or_else(|| inner.get_int("DataVersion"))
+        .unwrap_or(0);
 
     for (key, tag) in &inner.child_tags {
         if key.as_ref() == "DataVersion" {
@@ -579,9 +585,10 @@ pub fn write_world_clocks(
         dim_compound.put_long("total_ticks", clock.total_ticks);
         inner.put_compound(dim_name, dim_compound);
     }
-    inner.put_int("DataVersion", clocks.data_version);
 
+    // Beside `data` like vanilla: inside it, vanilla reads `DataVersion` as a clock id.
     let mut root = NbtCompound::new();
+    root.put_int("DataVersion", clocks.data_version);
     root.put_compound("data", inner);
 
     let file = File::create(&path)?;
