@@ -1,0 +1,128 @@
+# Bedrock parity roadmap
+
+Goal: a Bedrock player on the current client (1.26.60, protocol 2225) joins PEX directly, with no proxy, and plays alongside Java players with the same game. Same world, same rules, same items and drops, same mobs, same chat, commands and plugins. Where Bedrock's client can't show something the Java way (advancements, some GUIs), it gets the closest native Bedrock equivalent instead of nothing.
+
+This builds on Goal 8 of `docs/ROADMAP-2.0.md`. Its answer to D8-1 kept 2.0 at "experimental with honest gaps" (G8-01 to G8-12). This roadmap is everything after that, up to full parity, and it takes over G8-01 to G8-22 so the work has one owner. Its Current state section (2026-11-19) is the survey this plan starts from and isn't repeated here.
+
+IDs are `BP<stage>-<nn>`. A piece that already has a Goal 8 ID keeps it in brackets. Each piece names its branch and what proves it done. Stages are ordered; pieces inside a stage mostly aren't.
+
+## How parity is measured
+
+Three yardsticks, used together:
+
+1. **The bot.** A Rust Bedrock client in `tools/pumpkin-tester` (BP0-01) joins over NetherNet exactly as a phone does, next to the Java `HeadlessBot`. Every piece below that a bot can observe is proven by a bot test that fails before the change.
+2. **The coverage table.** `docs/BEDROCK.md` (BP0-03) lists every clientbound Java send in `pumpkin-core` and every serverbound Bedrock packet, each marked covered, partial, native-equivalent or gap. A script regenerates the call-site list so a new Java-only send can't slip in unnoticed.
+3. **Geyser as the floor.** Paper 26.3 with Geyser and Floodgate is what Bedrock players get today. PEX should never do worse than it for the same client, and should do better where Geyser is limited by being a proxy (no double translation, real block and item ids for Bedrock-only content, server-side knowledge of Bedrock players).
+
+Real-client checks (a phone or console on 1.26.60) stay Neon's. Each stage ends with a short human checklist for what a bot can't see: rendering, sounds, GUI layout.
+
+## Stage 0: see what we're doing
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP0-01 [G8-11] | Rust Bedrock bot: NetherNet client (`/v1/join`, WebRTC offer with both data channels, segment framing), self-signed login, resource pack handshake, StartGame, chunk receipt, `SetLocalPlayerAsInitialized`, `PlayerAuthInput` movement, text, commands, block break and place, disconnect. Readers for the clientbound packets it checks and writers for the serverbound ones it sends, in `pumpkin-protocol` behind a `bedrock-client` feature so the server binary doesn't grow. | test/bedrock-bot | `bedrock:join_and_spawn` and `bedrock:mixed_play` pass 10 runs in a row, each under 60 s. |
+| BP0-02 | Mixed-play harness: one server, Java `HeadlessBot` plus Bedrock bot. Assertions both ways: each sees the other spawn, move, swing, chat, break and place, and leave. | test/bedrock-bot | The mixed test fails on alpha at its first gap and the gap is a row in BP0-03. |
+| BP0-03 [G8-10] | Coverage table `docs/BEDROCK.md` plus `tools/bedrock-coverage.py` that rebuilds the call-site list from the source and fails on rows the table doesn't have. | docs/bedrock-coverage | The script prints nothing on the branch; adding a `broadcast_packet_all` call makes it fail. |
+| BP0-04 [G8-12] | Bedrock bot tests in the tester's normal run and in local CI. | ci/bedrock-bot | Tester run includes the `bedrock:` tests; a scratch branch that drops `SText` handling fails. |
+
+## Stage 1: safe to let in
+
+Nothing here is new gameplay. It makes a public Bedrock port as safe as the Java one.
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP1-01 [G8-01] | Bans, IP bans, whitelist, duplicate UUID and name, `bedrock.max_players` on the Bedrock login path. | fix/bedrock-login-checks | The five G8-01 tests fail on alpha and pass. |
+| BP1-02 [G8-05] | Bounded memory: NetherNet reassembly capped at `MAX_PACKET_DATA_SIZE`, chunk blob cache trimmed on `ClientCacheBlobStatus`, closed sessions released. | fix/bedrock-connection-limits | G8-05's three tests. |
+| BP1-03 | A Bedrock packet that fails to decode kicks like Java does, instead of logging and carrying on. Unknown packet ids log once per id per session, not per packet. | fix/bedrock-bad-packet-kick | Bot test sends a malformed `PlayerAuthInput` and is disconnected; log has one line. |
+| BP1-04 [G8-09] | OIDC key lifecycle: fetch only with Bedrock on, retry with backoff, refetch on an unknown `kid`. | fix/bedrock-oidc-keys | G8-09's tests. |
+| BP1-05 [G8-08] | Ports in Docker and the eggs: TCP 19132 for signaling, UDP 19132 and 19133. | fix/bedrock-deploy-ports | `curl /v1/join` answers 200 from the compose stack. |
+| BP1-06 [G8-07] | Java skin download off the join path, bounded, only with Bedrock on. | perf/skin-fetch-off-join | G8-07's timing test. |
+
+## Stage 2: survival core
+
+A Bedrock player can play a normal survival session on their own and with Java players.
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP2-01 [G8-14] | Movement and physics: fall damage matches Java's for the same fall, swim and float states, no wall damage, crawling, sprint and sneak states seen by Java players, elytra. | fix/bedrock-movement | Bot: 10-block fall costs the same health as the Java bot's; Java bot sees the Bedrock bot's sneak and sprint flags. |
+| BP2-02 | Block breaking: server-side break timing with tool, enchantments, effects and in-water and airborne penalties identical to Java; break progress shown to others both ways; drops from the same loot tables; instant break in creative. | fix/bedrock-block-breaking | Bot test breaks stone with a wooden pickaxe and gets cobblestone after the Java number of ticks, and the Java bot sees the crack stages. |
+| BP2-03 | Block placing and using: every placement rule the Java path has (facing, half, waterlogging, replaceable blocks, double slabs), no double placement, no ghost blocks after a refused place. Item use on blocks (buckets, flint and steel, bone meal, hoes, axes stripping, shovels pathing). | fix/bedrock-block-placement | Bot places 20 block kinds; the server state matches what the Java bot gets for the same clicks. |
+| BP2-04 [G8-13] | Survival containers: crafting table, 2x2 grid, furnace family, chests (single, double, ender, shulker, barrel), hopper, dispenser and dropper, anvil, grindstone, stonecutter, loom, smithing, cartography, enchanting table, brewing stand, beacon, villager trading, horse and llama inventories, crafter. | fix/bedrock-containers | One bot scenario per container: put in, take out, craft or process, close, reopen, contents match the server. |
+| BP2-05 | Recipes: furnace, blasting, smoking, campfire, stonecutting, smithing, and special crafting (fireworks, banners, maps, dye) sent in `CraftingData`, plus recipe unlocks driving Bedrock's recipe book. | feat/bedrock-recipes | Bot receives every recipe type; crafting a firework star works. |
+| BP2-06 | Health, hunger, saturation, exhaustion, XP, effects, attributes, armor, offhand, totems, death screen, respawn, beds and spawn points, hardcore. | fix/bedrock-player-state | Bot test: take damage, eat, gain XP, die, respawn at a bed. |
+| BP2-07 | Combat both ways: Bedrock hitting mobs and Java players with the Java attack cooldown, crits, sweep, knockback and shields; Java hitting Bedrock players with correct hurt animation and knockback on the Bedrock side; bows, crossbows, tridents, maces, wind charges. | fix/bedrock-combat | Bot: Bedrock bot kills a zombie with the same number of hits as the Java bot; Java bot damages the Bedrock bot and it sees `CSetHealth` drop. |
+| BP2-08 | Dimensions: nether and end portals, `ChangeDimension` with the loading screen handshake, end credits and the exit portal, respawn into another dimension. | fix/bedrock-dimensions | Bot walks through a nether portal and gets chunks of the nether. |
+| BP2-09 | Riding: horses, pigs and striders with steering items, boats, minecarts, camels, happy ghasts, nautiluses; `SetActorLink` both ways; Java players see Bedrock riders and vice versa. | fix/bedrock-riding | Bot mounts a saddled horse and moves it; Java bot sees it as a passenger. |
+| BP2-10 | Item use: food, potions, splash and lingering, ender pearls, eyes of ender, fishing rods, spyglass, goat horns, shields, buckets of mobs, spawn eggs, bundles, brush, maps in hand. | fix/bedrock-item-use | Bot test per group. |
+
+## Stage 3: seeing the same world
+
+Everything a Java player sees, a Bedrock player sees, rendered the Bedrock way.
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP3-01 | Block mapping audit: every Java 26.3 block state to a Bedrock state, generated from Geyser's mappings. Report states that fall back to air or a stand-in, and block entities (signs, banners, beds, skulls, chests, decorated pots, shelves, copper golem statues) with their Bedrock NBT. | fix/bedrock-block-mapping | Codegen test: no Java state maps to air except air; every block entity type has a Bedrock writer. |
+| BP3-02 | Item mapping audit: every Java item and its data components (enchantments, damage, names, lore, dyed colour, trims, banner patterns, potion contents, firework data, written books, maps, bundles) to Bedrock item NBT and back. | fix/bedrock-item-mapping | Round trip test per component; enchanted diamond sword shows its enchantments on the bot. |
+| BP3-03 [G8-17] | Entities: every 26.3 entity type has a Bedrock identifier and metadata (variants, colours, ages, saddles, armor, chest, sheared, angry, sitting, climate variants, falling block, TNT fuse, item frames, paintings, armor stands, display entities). | fix/bedrock-entity-metadata | Table test over every entity type; unit tests for falling sand, primed TNT, a cold pig. |
+| BP3-04 | Entity animation and events: swing, hurt, death, eat, critical hit, totem, firework explode, `ActorEvent` and `Animate` for every Java `CEntityStatus` and `CEntityAnimation` that has one. | fix/bedrock-entity-events | Bot sees the hurt event when the Java bot hits it. |
+| BP3-05 [G8-15] | Sounds: generated Java to Bedrock sound mapping; every `play_sound*` helper reaches Bedrock players in range, minus sounds the Bedrock client plays itself. | feat/bedrock-sounds | Codegen test that every mapped sound resolves; bot receives a level sound when a door opens. |
+| BP3-06 [G8-16] | Particles: generated Java to Bedrock particle mapping; `spawn_particle*` helpers reach Bedrock. | feat/bedrock-particles | Bot receives a particle packet for a broken block. |
+| BP3-07 | World events: Java `CWorldEvent` and `CGameEvent` (rain, thunder, gamemode change, demo, credits, guardian curse, arrow hit sound) to `LevelEvent` and friends; explosions; block events (note blocks, pistons, chests opening, bells). | fix/bedrock-world-events | Bot sees rain start and a piston extend. |
+| BP3-08 | Block updates in bulk: `CMultiBlockUpdate` and chunk section rewrites reach Bedrock as `UpdateBlock`/`UpdateSubChunkBlocks`; light and fluid updates. | fix/bedrock-bulk-block-updates | Bot sees every block of a `/fill`. |
+| BP3-09 | Time, weather, game rules (`GameRulesChanged`), difficulty, world border (Bedrock has no border packet: drawn with particles and enforced server-side), ticking freeze and step. | fix/bedrock-world-state | Bot gets the game rule change; border pushes the bot back like the Java client. |
+| BP3-10 | Maps: `MapItemData` to `ClientboundMapItemData`, map decorations, locked maps, explorer maps. | feat/bedrock-maps | Bot receives map pixels that match the Java bot's. |
+
+## Stage 4: social and server features
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP4-01 [G8-06] | Chat both ways under every chat setting, Bedrock text with Java-only translation keys rendered, formatting codes and colours, `/msg`, `/me`, `/say`, team chat. | fix/bedrock-chat-text | G8-06's two tests plus a mixed-play chat test. |
+| BP4-02 | Commands: the full command tree with argument types Bedrock can show, permission levels from ops (not a fixed 2), `CommandOutput` for feedback, selectors resolving Bedrock players by name with spaces. | fix/bedrock-commands | Bot runs `/give @s diamond 3` as an op and is refused as a non-op. |
+| BP4-03 | Player list and names: tab list with both editions, header and footer, teams with prefixes, suffixes and colours on name tags, hidden name tags. | fix/bedrock-player-list | Java bot's team colour shows on the Bedrock bot's `AddPlayer` name. |
+| BP4-04 | Scoreboards, boss bars, titles, subtitles, action bar, toasts. | fix/bedrock-hud | Bot receives each. |
+| BP4-05 | Advancements: Bedrock has no advancement screen. Completion toasts and chat announcements as on Java, and `/advancement` works on Bedrock players; a form that lists progress. | feat/bedrock-advancements | Bot gets a toast when it picks up a log for the first time. |
+| BP4-06 | Signs, books and lecterns: edit both sides of signs, write and sign books, read lecterns; Java and Bedrock see each other's text. | fix/bedrock-signs-books | Bot writes a sign that the Java bot reads. |
+| BP4-07 [G8-18] | Skins: Bedrock skins (including persona and capes) seen by other Bedrock players; Java skins seen by Bedrock players (exists, made bounded). | feat/bedrock-skins | G8-18's test. |
+| BP4-08 | Bedrock skins seen by Java players. Needs a signed `textures` property, so an upload service. Opt-in config. | feat/bedrock-skins-to-java | Decision DP-3. |
+| BP4-09 | Emotes shown to Bedrock viewers, and as an arm swing or a chat line to Java viewers. | feat/bedrock-emotes | Bot emote reaches the other Bedrock bot. |
+| BP4-10 | Forms: native plugin API for modal, simple and custom forms, server settings form, plus Java fallbacks (chest GUI or dialogs) so a plugin's form works for both editions. | feat/bedrock-forms | Native plugin test sends a form and gets the answer from the bot. |
+| BP4-11 | Plugin API: `Player::platform()`, Bedrock device info, XUID, input mode; events fire for Bedrock players exactly as for Java ones (audit every event caller on the Bedrock paths). | feat/bedrock-plugin-api | Event audit table in `docs/BEDROCK.md`; native plugin test sees a Bedrock join with its XUID. |
+
+## Stage 5: identity and operations
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP5-01 [G8-20] | Bedrock UUIDs (decision DP-1) and name prefix (DP-2), with the login-time file move from Goal 4 for existing players. | fix/bedrock-uuids | G8-20's tests. |
+| BP5-02 [G8-19] | TLS on NetherNet signaling from a configured certificate, so direct joins skip the trust prompt. | feat/nethernet-tls | `curl --cacert` answers 200. |
+| BP5-03 | Xbox friends join: the server shows up in friends' Bedrock friends list and joins go through Xbox's signaling relay, as MCXboxBroadcast does for Geyser. Optional, needs a Microsoft account for the server. | feat/bedrock-friends-join | Decision DP-4. |
+| BP5-04 | Bedrock and Java account linking (one player, two clients, one inventory), with a `/link` command. | feat/account-linking | Decision DP-5. |
+| BP5-05 | Guest and split-screen logins. | feat/bedrock-subclients | Bot logs in a sub-client and both players spawn. |
+| BP5-06 | Resource packs: config for Bedrock packs (exists), plus serving a converted copy of the server's Java resource pack where a conversion exists. | feat/bedrock-resource-packs | Bot downloads the pack. |
+
+## Stage 6: keeping up with Bedrock
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP6-01 [G8-21] | Version policy written down (DP-6) and a release step that compares `CURRENT_BEDROCK_MC_PROTOCOL` with upstream's and gophertunnel's. | docs/bedrock-version-policy | `docs/BEDROCK.md` states it. |
+| BP6-02 | Two protocols at once (current and previous), so a server isn't locked out for the days between a client release and a PEX release. `BClientPacket::write_packet` takes a version like Java's. | feat/bedrock-multi-version | Bot joins as both protocols. |
+| BP6-03 | Mapping refresh script: pull Geyser mappings and CloudburstMC data for a new version, regenerate, report diffs. | tools/bedrock-data-refresh | Script run reproduces today's `assets/bedrock/` byte for byte. |
+| BP6-04 | Text in the player's locale for both editions (needs every vanilla language file from the Extractor). | feat/locale-text | A `de_de` Bedrock bot gets German death messages. |
+
+## Stage 7: performance
+
+| ID | Piece | Branch | Done when |
+| :-- | :-- | :-- | :-- |
+| BP7-01 | Chunk encoding: reuse palettes, skip all-air sub-chunks, cache encoded sub-chunks across Bedrock players. | perf/bedrock-chunk-encode | Bench: bytes and encode time per chunk down against alpha on the same world. |
+| BP7-02 | Sub-chunk request mode (`SubChunkRequest`), which the Bedrock client uses for long render distances. | feat/bedrock-subchunk-requests | Bot at render distance 32 gets every requested sub-chunk. |
+| BP7-03 | Mixed soak: 2 Bedrock bots and 2 Java bots for 60 minutes, then 20 and 20 for load. MSPT within 10% of 40 Java bots. | test/bedrock-soak | Numbers recorded in `docs/BEDROCK.md`. |
+
+## Decisions for Neon
+
+None of these block Stage 0 or 1. Each has a recommendation that work proceeds on until Neon says otherwise.
+
+- **DP-1 Bedrock UUIDs.** (a) keep PEX's MD5 of `pocket-auth-1-xuid:<xid>`; (b) Floodgate's `UUID(0, xuid)` so player data from a Paper+Geyser+Floodgate server carries over, and plugins that know Floodgate UUIDs work; (c) offline UUID of the prefixed name. Recommended: (b). Bedrock joins on alpha don't work with a current client yet, so there are almost no existing files to move.
+- **DP-2 Name prefix for Bedrock players.** Empty today, so a Bedrock gamertag can take a Java player's name. Recommended: `.` like Floodgate, on new configs only.
+- **DP-3 Bedrock skins for Java players.** Needs a third-party signing service (GeyserMC's global API or MineSkin), which sees every Bedrock skin. Recommended: opt-in, off by default.
+- **DP-4 Xbox friends join.** Needs a Microsoft account signed in on the server. Recommended: build it, opt-in.
+- **DP-5 Account linking.** Recommended: yes, after Stage 4, with a link code shown in-game, no external service.
+- **DP-6 Version policy.** Recommended: current and previous protocol (BP6-02).
