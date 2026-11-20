@@ -2878,3 +2878,18 @@ mod lifecycle_tests {
         Ok(())
     }
 }
+
+/// Vanilla `Entity.isInWaterOrRain`: in water, or rained on at the feet or the top of the box.
+/// Mobs that are `isSensitiveToWater` take 1 drowning damage each tick this holds.
+#[must_use]
+pub fn is_in_water_or_rain(entity: &crate::entity::Entity) -> bool {
+    if entity
+        .touching_water
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return true;
+    }
+    let world = entity.world.load();
+    world.is_raining_at(&entity.block_pos.load())
+        || world.is_raining_at(&entity.bounding_box.load().max_block_pos())
+}

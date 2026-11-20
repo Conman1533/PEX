@@ -162,10 +162,12 @@ fn shoot_fireball(blaze: &Entity, dx: f64, yd: f64, dz: f64, distance_sq: f64) {
     let spread = 2.297 * distance_sq.sqrt().sqrt() * 0.5;
     let world = blaze.world.load_full();
 
-    world.broadcast_to_chunk(
-        blaze.chunk_pos.load(),
-        &CWorldEvent::new(1018, blaze.block_pos.load(), 0, false),
-    );
+    if !blaze.is_silent() {
+        world.broadcast_to_chunk(
+            blaze.chunk_pos.load(),
+            &CWorldEvent::new(1018, blaze.block_pos.load(), 0, false),
+        );
+    }
 
     let direction = {
         let mut rng = rand::rng();
