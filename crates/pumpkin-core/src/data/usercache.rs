@@ -66,6 +66,17 @@ impl UserCache {
             return;
         }
 
+        let Some(content) = self.to_json() else {
+            return;
+        };
+
+        if let Err(error) = fs::write(path, content) {
+            warn!("Failed to save user cache: {error}");
+        }
+    }
+
+    /// The file's contents, most recently used first, as vanilla writes them.
+    fn to_json(&self) -> Option<String> {
         let to_save: Vec<UserCacheEntryDisk> = self
             .top_mru_profiles(USER_CACHE_MRU_LIMIT)
             .into_iter()
@@ -75,14 +86,7 @@ impl UserCache {
                 expires_on: format_date(entry.expiration_date),
             })
             .collect();
-
-        let Ok(content) = serde_json::to_string(&to_save) else {
-            return;
-        };
-
-        if let Err(error) = fs::write(path, content) {
-            warn!("Failed to save user cache: {error}");
-        }
+        serde_json::to_string(&to_save).ok()
     }
 
     pub fn upsert(&mut self, uuid: Uuid, name: String) {
@@ -166,7 +170,11 @@ impl UserCache {
         let Some(array) = super::load_list::<Vec<serde_json::Value>>(&Self::path()) else {
             return Vec::new();
         };
+        Self::parse_entries(array)
+    }
 
+    /// Vanilla `GameProfileCache.load`: entries without a name, UUID or readable date are skipped.
+    fn parse_entries(array: Vec<serde_json::Value>) -> Vec<UserCacheEntry> {
         let mut entries = Vec::new();
         for element in array {
             let Some(object) = element.as_object() else {
@@ -250,6 +258,49 @@ mod tests {
         assert_eq!(
             one_month_after(at(2028, Month::January, 31)),
             at(2028, Month::February, 29)
+        );
+    }
+
+    /// Written by vanilla 26.3 (offline, `ban fixturebot`) on 2026-11-20.
+    const VANILLA_USERCACHE: &str = r#"[{"uuid":"2f1e2305-25df-3dac-bfa2-b5baaab4b251","name":"fixturebot","expiresOn":"2026-12-20 02:47:33 +0000"}]"#;
+    /// Written by PEX 1.2.0 (the v1.2.0 release binary) for the same command.
+    const PEX_1_2_0_USERCACHE: &str = r#"[{"uuid":"c49a0338-03fb-89e2-e6ce-7a3721039f79","name":"fixturebot","expiresOn":"2026-12-20T02:47:38.567951144Z"}]"#;
+
+    fn cache_from(json: &str) -> UserCache {
+        let mut cache = UserCache::default();
+        for entry in UserCache::parse_entries(serde_json::from_str(json).unwrap()) {
+            cache.safe_add(entry);
+        }
+        cache
+    }
+
+    #[test]
+    fn a_vanilla_usercache_loads_and_saves_byte_for_byte() {
+        let mut cache = cache_from(VANILLA_USERCACHE);
+        let entry = cache.get_by_name("fixturebot").expect("the vanilla entry");
+        assert_eq!(
+            entry.uuid,
+            Uuid::parse_str("2f1e2305-25df-3dac-bfa2-b5baaab4b251").unwrap()
+        );
+        assert_eq!(
+            entry.expiration_date,
+            at(2026, Month::December, 20)
+                .replace_time(time::Time::from_hms(2, 47, 33).unwrap())
+        );
+        assert_eq!(cache.to_json().unwrap(), VANILLA_USERCACHE);
+    }
+
+    #[test]
+    fn a_pex_1_2_0_usercache_still_loads() {
+        let mut cache = cache_from(PEX_1_2_0_USERCACHE);
+        let entry = cache.get_by_name("fixturebot").expect("the PEX 1.2.0 entry");
+        assert_eq!(
+            entry.expiration_date.unix_timestamp(),
+            at(2026, Month::December, 20).unix_timestamp() + 2 * 3600 + 47 * 60 + 38
+        );
+        assert_eq!(
+            cache.to_json().unwrap(),
+            r#"[{"uuid":"c49a0338-03fb-89e2-e6ce-7a3721039f79","name":"fixturebot","expiresOn":"2026-12-20 02:47:38 +0000"}]"#
         );
     }
 
