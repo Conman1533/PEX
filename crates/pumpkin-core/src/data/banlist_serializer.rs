@@ -161,4 +161,70 @@ mod tests {
         assert_eq!(entry.expires, None);
         assert_eq!(serde_json::to_string(&entry).unwrap(), json);
     }
+
+    /// Written by vanilla 26.3 (offline, `ban fixturebot Testing bans`,
+    /// `ban-ip 203.0.113.7 Testing ip bans`) on 2026-11-20.
+    const VANILLA_BANNED_PLAYERS: &str = "[\n  {\n    \"uuid\": \"2f1e2305-25df-3dac-bfa2-b5baaab4b251\",\n    \"name\": \"fixturebot\",\n    \"created\": \"2026-11-20 02:47:33 +0000\",\n    \"source\": \"Server\",\n    \"expires\": \"forever\",\n    \"reason\": \"Testing bans\"\n  }\n]";
+    const VANILLA_BANNED_IPS: &str = "[\n  {\n    \"ip\": \"203.0.113.7\",\n    \"created\": \"2026-11-20 02:47:33 +0000\",\n    \"source\": \"Server\",\n    \"expires\": \"forever\",\n    \"reason\": \"Testing ip bans\"\n  }\n]";
+    /// Written by PEX 1.2.0 (the v1.2.0 release binary) for the same commands.
+    const PEX_1_2_0_BANNED_PLAYERS: &str = "[\n  {\n    \"uuid\": \"c49a0338-03fb-89e2-e6ce-7a3721039f79\",\n    \"name\": \"fixturebot\",\n    \"created\": \"2026-11-20 02:47:38+00:00\",\n    \"source\": \"Server\",\n    \"expires\": \"forever\",\n    \"reason\": \"Testing bans\"\n  }\n]";
+    const PEX_1_2_0_BANNED_IPS: &str = "[\n  {\n    \"ip\": \"203.0.113.7\",\n    \"created\": \"2026-11-20 02:47:39+00:00\",\n    \"source\": \"Server\",\n    \"expires\": \"forever\",\n    \"reason\": \"Testing ip bans\"\n  }\n]";
+
+    /// Loads `contents` as the list's file from a fresh data folder, saves it there again and
+    /// returns what was written.
+    fn through_the_list<T>(name: &str, contents: &str) -> (T, String)
+    where
+        T: crate::data::SaveJSONConfiguration + Default + Serialize + for<'de> Deserialize<'de>,
+    {
+        let dir = std::env::temp_dir().join(format!("pex-banlist-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(T::get_path());
+        std::fs::write(&path, contents).unwrap();
+        let list = T::load_from(&dir);
+        std::fs::remove_file(&path).unwrap();
+        list.save_to(&dir);
+        let written = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        (list, written)
+    }
+
+    #[test]
+    fn vanilla_ban_lists_load_and_save_byte_for_byte() {
+        let (players, written) = through_the_list::<crate::data::banned_player::BannedPlayerList>(
+            "vanilla-players",
+            VANILLA_BANNED_PLAYERS,
+        );
+        assert_eq!(players.banned_players.len(), 1);
+        assert_eq!(players.banned_players[0].name, "fixturebot");
+        assert_eq!(written, VANILLA_BANNED_PLAYERS);
+        let (ips, written) = through_the_list::<crate::data::banned_ip::BannedIpList>(
+            "vanilla-ips",
+            VANILLA_BANNED_IPS,
+        );
+        assert_eq!(ips.banned_ips.len(), 1);
+        assert_eq!(written, VANILLA_BANNED_IPS);
+    }
+
+    #[test]
+    fn pex_1_2_0_ban_lists_still_load() {
+        let (players, written) = through_the_list::<crate::data::banned_player::BannedPlayerList>(
+            "pex120-players",
+            PEX_1_2_0_BANNED_PLAYERS,
+        );
+        assert_eq!(players.banned_players.len(), 1);
+        assert_eq!(
+            written,
+            PEX_1_2_0_BANNED_PLAYERS.replace("02:47:38+00:00", "02:47:38 +0000")
+        );
+        let (ips, written) = through_the_list::<crate::data::banned_ip::BannedIpList>(
+            "pex120-ips",
+            PEX_1_2_0_BANNED_IPS,
+        );
+        assert_eq!(ips.banned_ips.len(), 1);
+        assert_eq!(
+            written,
+            PEX_1_2_0_BANNED_IPS.replace("02:47:39+00:00", "02:47:39 +0000")
+        );
+    }
 }
