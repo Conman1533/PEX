@@ -1072,8 +1072,12 @@ impl PathNavigation {
                     return self.ground_target(entity);
                 }
 
-                let close_enough = horizontal_dist < f64::from(self.max_distance_to_waypoint)
-                    && dy.abs() < NODE_REACH_Y;
+                // Vanilla `PathNavigation.followThePath` tests each axis on its own, not the
+                // horizontal distance: a mob wider than a block stands 0.5 off the node centre on
+                // both axes while its entity position at the node is reached.
+                let margin = f64::from(self.max_distance_to_waypoint);
+                let close_enough =
+                    dx.abs() < margin && dz.abs() < margin && dy.abs() < NODE_REACH_Y;
 
                 let corner_cut =
                     path.get_next_node().is_some_and(|n| {
