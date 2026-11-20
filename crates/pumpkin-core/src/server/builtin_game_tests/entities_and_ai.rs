@@ -193,3 +193,78 @@ pub(super) async fn test_zoglin_attacks_any_nearby_mob(
     })?;
     Ok(())
 }
+
+/// Its own name, so the `tp` below moves no other test's mock player.
+const ENDERMAN_STARER: &str = "ender-starer";
+
+/// Vanilla `EndermanLookForPlayerGoal`: a survival player looking at an enderman's eyes with
+/// nothing solid in between becomes its target.
+pub(super) async fn test_enderman_angers_when_stared_at(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..3 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
+    helper
+        .spawn_named_mock_player_at(
+            ENDERMAN_STARER,
+            GameMode::Survival,
+            "minecraft:stick",
+            Vector3::new(1.5, 1.0, 2.5),
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 2),
+            "summon minecraft:enderman ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+
+    let pen_min = BlockPos::new(0, 1, 0);
+    let pen_max = BlockPos::new(9, 4, 5);
+    helper.succeed_when(move |helper| async move {
+        // Aim from the player's eyes at the enderman's, wherever it has wandered.
+        helper
+            .execute_command(
+                &BlockPos::new(1, 1, 2),
+                "execute anchored eyes run tp @a[name=ender-starer] ~ ~ ~ facing entity @e[type=minecraft:enderman,limit=1] eyes",
+            )
+            .await?;
+        helper
+            .assert_entity_target("minecraft:enderman", pen_min, pen_max, Some("minecraft:player"))
+            .await
+    })?;
+    Ok(())
+}
+
+/// Vanilla `ShulkerNearestAttackGoal` + `ShulkerAttackGoal`: a shulker targets a survival player
+/// within its follow range and fires a bullet at them.
+pub(super) async fn test_shulker_shoots_bullet_at_survival_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(7, 1, 2),
+            "summon minecraft:shulker ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper
+            .assert_entity_present("minecraft:shulker_bullet")
+            .await
+    })?;
+    Ok(())
+}

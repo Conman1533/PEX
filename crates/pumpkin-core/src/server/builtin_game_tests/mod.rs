@@ -271,6 +271,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_targets_survival_mock_player",
     "pumpkin:nautilus_follows_tempting_player",
     "pumpkin:zombie_nautilus_charges_survival_player",
+    "pumpkin:enderman_angers_when_stared_at",
+    "pumpkin:shulker_shoots_bullet_at_survival_player",
 ];
 
 #[must_use]
@@ -568,6 +570,20 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             farm_animals::test_armadillo_rolls_up_near_zombie,
+        );
+        register_function_test(
+            "pumpkin:enderman_angers_when_stared_at",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_enderman_angers_when_stared_at,
+        );
+        register_function_test(
+            "pumpkin:shulker_shoots_bullet_at_survival_player",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_shulker_shoots_bullet_at_survival_player,
         );
         register_function_test(
             "pumpkin:zoglin_attacks_any_nearby_mob",
