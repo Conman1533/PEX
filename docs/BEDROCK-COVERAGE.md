@@ -6,7 +6,7 @@ Encodes and decodes mean pumpkin-protocol has a struct for the packet. Sends mea
 
 | Direction | Packets | PEX has a struct | PEX uses it |
 | --- | --- | --- | --- |
-| clientbound | 192 | 61 | 50 |
+| clientbound | 193 | 61 | 50 |
 | serverbound | 91 | 30 | 30 |
 
 | Id | Packet | Direction | Encodes | Sends | Decodes | Handles | PEX structs |
@@ -96,7 +96,7 @@ Encodes and decodes mean pumpkin-protocol has a struct for the packet. Sends mea
 | 90 | StructureBlockUpdate | C->S | - | - |  |  |  |
 | 91 | ShowStoreOffer | S->C |  |  | - | - |  |
 | 92 | PurchaseReceipt | S->C/C->S |  |  |  |  |  |
-| 93 | PlayerSkin | C->S | - | - |  |  |  |
+| 93 | PlayerSkin | S->C/C->S |  |  |  |  |  |
 | 94 | SubClientLogin | S->C/C->S |  |  |  |  |  |
 | 95 | AutomationClientConnect | S->C/C->S |  |  |  |  |  |
 | 96 | SetLastHurtBy | S->C |  |  | - | - |  |

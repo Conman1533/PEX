@@ -34,7 +34,6 @@ CLIENT_ONLY = {
     "ResourcePackChunkRequest",
     "BlockPickRequest",
     "ActorPickRequest",
-    "PlayerSkin",
     "ItemStackRequest",
     "LecternUpdate",
     "Interact",
