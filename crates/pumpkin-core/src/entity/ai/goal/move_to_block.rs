@@ -28,6 +28,8 @@ pub struct MoveToBlockGoal {
     pub accepted_distance: f64,
     pub recalculate_interval: i32,
     pub is_valid_target: BlockTargetPredicate,
+    /// Vanilla `getMoveToTarget` is the block above by default; striders aim at the lava itself.
+    pub targets_block_above: bool,
 }
 
 impl MoveToBlockGoal {
@@ -52,6 +54,7 @@ impl MoveToBlockGoal {
             accepted_distance: 1.0,
             recalculate_interval: 40,
             is_valid_target,
+            targets_block_above: true,
         }
     }
 
@@ -103,13 +106,25 @@ impl MoveToBlockGoal {
         false
     }
 
+    /// Vanilla `getMoveToTarget` returning the found block itself.
     #[must_use]
-    pub fn get_move_to_target(&self) -> BlockPos {
-        self.target_pos.up()
+    pub const fn targeting_the_block_itself(mut self) -> Self {
+        self.targets_block_above = false;
+        self
     }
 
+    #[must_use]
+    pub fn get_move_to_target(&self) -> BlockPos {
+        if self.targets_block_above {
+            self.target_pos.up()
+        } else {
+            self.target_pos
+        }
+    }
+
+    /// Vanilla `moveMobToBlock` always walks to the block above, whatever `getMoveToTarget` is.
     pub fn move_mob_to_block(&self, mob: &dyn Mob) {
-        let target = self.get_move_to_target();
+        let target = self.target_pos.up();
         let mob_pos = mob.get_entity().pos.load();
         let dest = Vector3::new(
             f64::from(target.0.x) + 0.5,
@@ -166,7 +181,13 @@ impl Goal for MoveToBlockGoal {
             self.reached_target = false;
             self.try_ticks += 1;
             if self.try_ticks % self.recalculate_interval == 0 || mob.is_navigator_idle() {
-                self.move_mob_to_block(mob);
+                // Vanilla `tick` re-paths to `getMoveToTarget`, not the block above.
+                let dest = Vector3::new(
+                    f64::from(target.0.x) + 0.5,
+                    f64::from(target.0.y),
+                    f64::from(target.0.z) + 0.5,
+                );
+                mob.navigate_to(mob_pos, dest, self.speed);
             }
         }
     }
