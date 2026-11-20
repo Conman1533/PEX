@@ -3624,6 +3624,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "xxhash-rust",
 ]

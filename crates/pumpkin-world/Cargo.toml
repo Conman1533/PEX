@@ -61,6 +61,7 @@ time.workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
+tracing-subscriber.workspace = true
 
 [[bench]]
 name = "chunk"
