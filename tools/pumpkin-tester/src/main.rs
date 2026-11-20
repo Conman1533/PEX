@@ -1,3 +1,4 @@
+mod bedrock;
 mod bot;
 mod bot_tests;
 mod end_fight;
@@ -45,6 +46,10 @@ async fn main() -> ExitCode {
         .build_global();
 
     let start = Instant::now();
+    init_logging();
+    if std::env::args().any(|arg| arg == "--bedrock-only") {
+        return run_bedrock_only(start).await;
+    }
     println!("Starting pumpkin-tester (single server + headless bots + Mojang GameTests)...");
 
     let temp_dir = match tempfile::tempdir() {
@@ -123,6 +128,16 @@ async fn main() -> ExitCode {
         result = Err(err);
     }
 
+    // Bedrock tests run their own server with Bedrock on.
+    if let Ok(lines) = &mut result
+        && let Err(err) = Box::pin(bedrock::run_bedrock_tests(lines)).await
+    {
+        for line in lines.iter() {
+            println!("{line}");
+        }
+        result = Err(err);
+    }
+
     match result {
         Ok(lines) => {
             for line in lines {
@@ -132,6 +147,40 @@ async fn main() -> ExitCode {
                 "All bot integration tests and Mojang GameTests passed in {}ms!",
                 start.elapsed().as_millis()
             );
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("pumpkin-tester FAILED:\n{err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Server logs on stderr when `PUMPKIN_TESTER_LOG` holds a tracing filter, such as `info`.
+fn init_logging() {
+    if let Ok(filter) = std::env::var("PUMPKIN_TESTER_LOG") {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::new(filter))
+            .with_writer(std::io::stderr)
+            .try_init();
+    }
+}
+
+#[expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "CLI test runner outputs results to stdout/stderr"
+)]
+async fn run_bedrock_only(start: Instant) -> ExitCode {
+    println!("Starting pumpkin-tester, Bedrock tests only...");
+    let mut lines = Vec::new();
+    let result = Box::pin(bedrock::run_bedrock_tests(&mut lines)).await;
+    for line in lines {
+        println!("{line}");
+    }
+    match result {
+        Ok(()) => {
+            println!("Bedrock tests passed in {}ms!", start.elapsed().as_millis());
             ExitCode::SUCCESS
         }
         Err(err) => {

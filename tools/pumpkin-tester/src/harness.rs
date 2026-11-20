@@ -27,6 +27,15 @@ pub async fn create_test_server(temp_dir: &tempfile::TempDir) -> Result<Arc<Serv
 
 /// A test server whose world lives in `world_dir`.
 pub async fn create_test_server_at(world_dir: &Path) -> Result<Arc<Server>, String> {
+    create_test_server_with(world_dir, |_| {}).await
+}
+
+/// A test server whose world lives in `world_dir`, with `configure` applied on top of the
+/// tester's settings.
+pub async fn create_test_server_with(
+    world_dir: &Path,
+    configure: impl FnOnce(&mut AdvancedConfiguration),
+) -> Result<Arc<Server>, String> {
     let basic_config = BasicConfiguration {
         default_level_name: world_dir.to_string_lossy().into_owned(),
         allow_nether: true,
@@ -47,6 +56,7 @@ pub async fn create_test_server_at(world_dir: &Path) -> Result<Arc<Server>, Stri
     advanced_config.networking.bedrock.authentication.enabled = false;
     advanced_config.player_data.save_player_data = false;
     advanced_config.advancement.save_advancements = false;
+    configure(&mut advanced_config);
 
     Server::new(
         basic_config,

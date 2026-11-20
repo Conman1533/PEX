@@ -19,12 +19,13 @@ use pumpkin_protocol::{
             config::{CFinishConfig, CKnownPacks},
             login::CLoginSuccess,
             play::{
-                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CEntityVelocity,
-                CGameEvent, CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse,
-                CPlayDisconnect, CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
-                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetHealth,
-                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CUnloadChunk,
-                CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
+                CBlockUpdate, CChunkBatchEnd, CChunkData, CCloseContainer, CDisguisedChatMessage,
+                CEntityPositionSync, CEntityVelocity, CGameEvent, CHeadRot, CKeepAlive, CLogin,
+                COpenScreen, CPingResponse, CPlayDisconnect, CPlayerChatMessage, CPlayerPosition,
+                CRemoveEntities, CRespawn, CSetContainerContent, CSetContainerSlot, CSetCursorItem,
+                CSetEntityMetadata, CSetHealth, CSetPlayerInventory, CSetSelectedSlot,
+                CSpawnEntity, CSystemChatMessage, CUnloadChunk, CUpdateEntityPos,
+                CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -34,11 +35,12 @@ use pumpkin_protocol::{
             handshake::SHandShake,
             login::{SLoginAcknowledged, SLoginStart},
             play::{
-                Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot, SClientCommand,
-                SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPickItemFromEntity,
-                SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
-                SPlayerPositionRotation, SPlayerRotation, SSetHeldItem, SSpectateEntity, SSwingArm,
-                SUseItem, SUseItemOn, SlotActionType, Status,
+                Action, ActionType, SAttack, SChatCommand, SChatMessage, SChunkBatch, SClickSlot,
+                SClientCommand, SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive,
+                SPickItemFromEntity, SPlayPingRequest, SPlayerAction, SPlayerCommand,
+                SPlayerLoaded, SPlayerPosition, SPlayerPositionRotation, SPlayerRotation,
+                SSetHeldItem, SSpectateEntity, SSwingArm, SUseItem, SUseItemOn, SlotActionType,
+                Status,
             },
         },
     },
@@ -123,6 +125,10 @@ pub struct HeadlessBot {
     pub won_game: bool,
     /// The server said the bot's bed or respawn anchor was missing or blocked.
     pub no_respawn_block: bool,
+    /// Payloads of every system, player and disguised chat message.
+    pub chat: Vec<Bytes>,
+    /// Every single block update, as position and state id.
+    pub block_updates: Vec<(BlockPos, i32)>,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -267,6 +273,8 @@ impl HeadlessBot {
             saturation: 5.0,
             won_game: false,
             no_respawn_block: false,
+            chat: Vec::new(),
+            block_updates: Vec::new(),
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -423,6 +431,21 @@ impl HeadlessBot {
             }
             id if id == CPlayDisconnect::to_id(CURRENT_MC_VERSION) => {
                 self.disconnect_reason = Some(packet.payload.clone());
+            }
+            id if [
+                CSystemChatMessage::to_id(CURRENT_MC_VERSION),
+                CPlayerChatMessage::to_id(CURRENT_MC_VERSION),
+                CDisguisedChatMessage::to_id(CURRENT_MC_VERSION),
+            ]
+            .contains(&id) =>
+            {
+                self.chat.push(packet.payload.clone());
+            }
+            id if id == CBlockUpdate::to_id(CURRENT_MC_VERSION) => {
+                let position =
+                    BlockPos::from_i64(payload.get_i64_be().map_err(|err| read_error(id, &err))?);
+                let state = payload.get_var_int().map_err(|err| read_error(id, &err))?.0;
+                self.block_updates.push((position, state));
             }
             id => {
                 self.handle_inventory_packet(id, &mut payload)
@@ -667,6 +690,27 @@ impl HeadlessBot {
             .filter(|(_, entity)| entity.entity_type == i32::from(entity_type.id))
             .map(|(id, entity)| (*id, entity.position))
             .collect()
+    }
+
+    /// Sends an unsigned chat message, as an offline-mode client does.
+    pub async fn send_chat(&mut self, message: &str) -> Result<(), String> {
+        self.send_packet(&SChatMessage {
+            message,
+            timestamp: 0,
+            salt: 0,
+            signature: None,
+            message_count: VarInt(0),
+            acknowledged: &[0; 3],
+            checksum: 0,
+        })
+        .await
+    }
+
+    /// Whether a chat message whose text contains `text` arrived.
+    pub fn saw_chat_containing(&self, text: &str) -> bool {
+        self.chat
+            .iter()
+            .any(|payload| String::from_utf8_lossy(payload).contains(text))
     }
 
     pub async fn send_command(&mut self, command: &str) -> Result<(), String> {
