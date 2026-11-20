@@ -60,6 +60,12 @@ pub struct LevelData {
     pub difficulty: Difficulty,
     #[serde(default)]
     pub difficulty_locked: bool,
+    /// `difficulty_settings.hardcore`, the world's own hardcore flag.
+    #[serde(default)]
+    pub hardcore: bool,
+    /// The default game mode, vanilla `GameType`.
+    #[serde(rename = "GameType", default)]
+    pub game_type: i32,
     #[serde(default)]
     pub last_played: i64,
     #[serde(default = "default_level_name")]
@@ -80,6 +86,10 @@ pub struct LevelData {
     pub level_version: i32,
     #[serde(rename = "map_id", default)]
     pub map_id: i32,
+    /// `level.dat` still had the `Border*` keys vanilla moved to `world_border.dat`, so the
+    /// overworld seeds that file from the border fields above.
+    #[serde(skip)]
+    pub legacy_border: bool,
 
     // These are NOT serialized to level.dat, but are still deserialized from it if present.
     // They are loaded and saved by AnvilLevelInfo via the data_files module.
@@ -179,6 +189,15 @@ pub struct WorldGenSettings {
     pub seed: i64,
     #[serde(default)]
     pub dimensions: Dimensions,
+    /// Kept as read; PEX worldgen places structures either way.
+    #[serde(default = "default_generate_structures")]
+    pub generate_structures: bool,
+    #[serde(default)]
+    pub bonus_chest: bool,
+}
+
+const fn default_generate_structures() -> bool {
+    true
 }
 
 impl Default for WorldGenSettings {
@@ -494,6 +513,8 @@ impl WorldGenSettings {
             Self {
                 dimensions,
                 seed: seed.0 as i64,
+                generate_structures: true,
+                bonus_chest: false,
             }
         })
     }
@@ -503,6 +524,8 @@ impl WorldGenSettings {
         Self {
             dimensions: preset.dimensions.clone(),
             seed: seed.0 as i64,
+            generate_structures: true,
+            bonus_chest: false,
         }
     }
 
@@ -558,6 +581,8 @@ impl LevelData {
             data_version: MAXIMUM_SUPPORTED_WORLD_DATA_VERSION,
             difficulty: DEFAULT_DIFFICULTY,
             difficulty_locked: false,
+            hardcore: false,
+            game_type: 0,
             last_played: -1,
             level_name: DEFAULT_LEVEL_NAME.to_string(),
             spawn_x: 0,
@@ -568,6 +593,7 @@ impl LevelData {
             world_version: WorldVersion::default(),
             level_version: MAXIMUM_SUPPORTED_LEVEL_VERSION,
             map_id: 0,
+            legacy_border: false,
             // fields now in data/minecraft/*.dat
             game_rules: GameRuleRegistry::default(),
             world_gen_settings: WorldGenSettings::new(seed),

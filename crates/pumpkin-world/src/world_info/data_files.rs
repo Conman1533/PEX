@@ -46,40 +46,35 @@ impl Default for WeatherData {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
-pub struct WorldGenSettingsData {
-    #[serde(flatten)]
-    pub settings: WorldGenSettings,
-    #[serde(rename = "DataVersion", default)]
-    pub data_version: i32,
-    #[serde(rename = "bonus_chest", default)]
-    pub bonus_chest: bool,
-    #[serde(rename = "generate_structures", default = "default_true")]
-    pub generate_structures: bool,
+/// One clock in `world_clocks.dat`, vanilla 26.3 `ClockState`.
+#[derive(Clone, PartialEq, Debug)]
+pub struct DimensionClock {
+    pub total_ticks: i64,
+    pub partial_tick: f32,
+    pub rate: f32,
+    pub paused: bool,
 }
 
-const fn default_true() -> bool {
-    true
-}
-
-impl WorldGenSettingsData {
+impl DimensionClock {
+    /// A running clock at `total_ticks`, the `ClockState` defaults otherwise.
     #[must_use]
-    pub const fn new(settings: WorldGenSettings, data_version: i32) -> Self {
+    pub const fn at(total_ticks: i64) -> Self {
         Self {
-            settings,
-            data_version,
-            bonus_chest: false,
-            generate_structures: true,
+            total_ticks,
+            partial_tick: 0.0,
+            rate: 1.0,
+            paused: false,
         }
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct DimensionClock {
-    pub total_ticks: i64,
+impl Default for DimensionClock {
+    fn default() -> Self {
+        Self::at(0)
+    }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct WorldClocksData {
     pub clocks: std::collections::HashMap<String, DimensionClock>,
     pub data_version: i32,
@@ -356,7 +351,12 @@ fn read_world_gen_settings_file(path: &Path) -> Option<WorldGenSettings> {
                         }
                     }
                 }
-                Some(WorldGenSettings { seed, dimensions })
+                Some(WorldGenSettings {
+                    seed,
+                    dimensions,
+                    generate_structures: c.get_bool("generate_structures").unwrap_or(true),
+                    bonus_chest: c.get_bool("bonus_chest").unwrap_or(false),
+                })
             }
             Err(e) => {
                 warn!("Failed to deserialize {}: {e}", path.display());
@@ -387,13 +387,10 @@ pub fn write_world_gen_settings(
     settings: &WorldGenSettings,
     data_version: i32,
 ) -> Result<(), WorldInfoError> {
-    let dir = ensure_minecraft_data_dir(level_folder)?;
-    let path = dir.join("world_gen_settings.dat");
-    let file = File::create(&path)?;
     let mut inner = NbtCompound::new();
     inner.put_long("seed", settings.seed);
-    inner.put_bool("generate_structures", true);
-    inner.put_bool("bonus_chest", false);
+    inner.put_bool("generate_structures", settings.generate_structures);
+    inner.put_bool("bonus_chest", settings.bonus_chest);
 
     let mut dims_comp = NbtCompound::new();
     for (dim_name, dim) in &settings.dimensions {
@@ -434,11 +431,8 @@ pub fn write_world_gen_settings(
     }
     inner.put_compound("dimensions", dims_comp);
 
-    let mut root = NbtCompound::new();
-    root.put_int("DataVersion", data_version);
-    root.put_compound("data", inner);
-    pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, BufWriter::new(file))
-        .map_err(|e| WorldInfoError::SerializationError(e.to_string()))
+    // The only copy of the seed since G7-13, so it goes through a temporary file.
+    write_data_file(level_folder, "world_gen_settings.dat", data_version, inner)
 }
 
 #[must_use]
@@ -561,11 +555,16 @@ fn world_clocks_from_nbt(root: &NbtCompound) -> WorldClocksData {
         if key.as_ref() == "DataVersion" {
             continue;
         }
-        if let NbtTag::Compound(dim_compound) = tag {
-            let total_ticks = dim_compound.get_long("total_ticks").unwrap_or(0);
-            result
-                .clocks
-                .insert(key.to_string(), DimensionClock { total_ticks });
+        if let NbtTag::Compound(clock) = tag {
+            result.clocks.insert(
+                key.to_string(),
+                DimensionClock {
+                    total_ticks: clock.get_long("total_ticks").unwrap_or(0),
+                    partial_tick: clock.get_numeric_float("partial_tick").unwrap_or(0.0),
+                    rate: clock.get_numeric_float("rate").unwrap_or(1.0),
+                    paused: clock.get_bool("paused").unwrap_or(false),
+                },
+            );
         }
     }
 
@@ -576,25 +575,27 @@ pub fn write_world_clocks(
     level_folder: &Path,
     clocks: &WorldClocksData,
 ) -> Result<(), WorldInfoError> {
-    let dir = ensure_minecraft_data_dir(level_folder)?;
-    let path = dir.join("world_clocks.dat");
-
+    let defaults = DimensionClock::default();
     let mut inner = NbtCompound::new();
     for (dim_name, clock) in &clocks.clocks {
+        // Vanilla `ClockState.CODEC` leaves out an optional field equal to its default
+        // (`Float.equals`, so compared by bits).
         let mut dim_compound = NbtCompound::new();
         dim_compound.put_long("total_ticks", clock.total_ticks);
+        if clock.partial_tick.to_bits() != defaults.partial_tick.to_bits() {
+            dim_compound.put_float("partial_tick", clock.partial_tick);
+        }
+        if clock.rate.to_bits() != defaults.rate.to_bits() {
+            dim_compound.put_float("rate", clock.rate);
+        }
+        if clock.paused {
+            dim_compound.put_bool("paused", true);
+        }
         inner.put_compound(dim_name, dim_compound);
     }
 
-    // Beside `data` like vanilla: inside it, vanilla reads `DataVersion` as a clock id.
-    let mut root = NbtCompound::new();
-    root.put_int("DataVersion", clocks.data_version);
-    root.put_compound("data", inner);
-
-    let file = File::create(&path)?;
-
-    pumpkin_nbt::nbt_compress::write_gzip_compound_tag(root, file)
-        .map_err(|e| WorldInfoError::SerializationError(e.to_string()))
+    // `DataVersion` beside `data` like vanilla: inside it, vanilla reads it as a clock id.
+    write_data_file(level_folder, "world_clocks.dat", clocks.data_version, inner)
 }
 
 pub fn read_wandering_trader(level_folder: &Path) -> WanderingTraderData {

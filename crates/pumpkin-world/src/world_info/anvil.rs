@@ -38,6 +38,30 @@ pub const LEVEL_DAT_BACKUP_FILE_NAME: &str = "level.dat_old";
 const LEVEL_DATA_TAG: &str = "Data";
 const WORLD_GEN_SETTINGS_TAG: &str = "WorldGenSettings";
 
+/// `level.dat` keys vanilla 26.1 moved to `world_border.dat`, `difficulty_settings`, `spawn` and
+/// `world_gen_settings.dat`. PEX reads them from older worlds and drops them when it saves, like
+/// vanilla, which reads 26.3 `level.dat` without them.
+const LEGACY_LEVEL_DAT_KEYS: [&str; 18] = [
+    "BorderCenterX",
+    "BorderCenterZ",
+    "BorderDamagePerBlock",
+    "BorderSize",
+    "BorderSafeZone",
+    "BorderSizeLerpTarget",
+    "BorderSizeLerpTime",
+    "BorderWarningBlocks",
+    "BorderWarningTime",
+    "Difficulty",
+    "DifficultyLocked",
+    "SpawnX",
+    "SpawnY",
+    "SpawnZ",
+    "SpawnAngle",
+    "SpawnYaw",
+    "SpawnPitch",
+    WORLD_GEN_SETTINGS_TAG,
+];
+
 /// Keeps two saves from interleaving, which could make one read `level.dat` while the other has
 /// moved it to `level.dat_old`. Vanilla saves level data only on the server thread.
 static LEVEL_DAT_SAVE_LOCK: Mutex<()> = Mutex::new(());
@@ -157,16 +181,8 @@ fn stored_world_seed(level_folder: &Path, data: &NbtCompound) -> Option<i64> {
         })
 }
 
-fn put_world_gen_settings_seed(data: &mut NbtCompound, seed: i64) {
-    let mut world_gen_settings = data
-        .get_compound(WORLD_GEN_SETTINGS_TAG)
-        .cloned()
-        .unwrap_or_default();
-    world_gen_settings.put_long("seed", seed);
-    data.put_compound(WORLD_GEN_SETTINGS_TAG, world_gen_settings);
-}
-
 fn update_world_border_from_nbt(level_data: &mut LevelData, data: &NbtCompound) {
+    level_data.legacy_border = LEGACY_LEVEL_DAT_KEYS[..9].iter().any(|key| data.has(key));
     if let Some(border_center_x) = data.get_double("BorderCenterX") {
         level_data.border_center_x = border_center_x;
     }
@@ -214,6 +230,8 @@ fn update_spawn_from_nbt(level_data: &mut LevelData, data: &NbtCompound) {
         if let Some(spawn_pitch) = spawn_comp.get_float("pitch") {
             level_data.spawn_pitch = spawn_pitch;
         }
+        // A converted world PEX saved before G7-13 has both; `spawn` is the newer.
+        return;
     }
     if let Some(spawn_x) = data.get_int("SpawnX") {
         level_data.spawn_x = spawn_x;
@@ -271,6 +289,16 @@ fn level_data_from_nbt(data: &NbtCompound, seed: i64) -> LevelData {
             level_data.difficulty_locked = difficulty_locked;
         }
     }
+    // PEX before G7-13 wrote `difficulty_settings.hardcore: false` for every world and kept a
+    // converted world's old `hardcore` key beside it, so either one makes the world hardcore.
+    level_data.hardcore = data.get_bool("hardcore") == Some(true)
+        || data
+            .get_compound("difficulty_settings")
+            .and_then(|settings| settings.get_bool("hardcore"))
+            == Some(true);
+    if let Some(game_type) = data.get_int("GameType") {
+        level_data.game_type = game_type;
+    }
     if let Some(last_played) = data.get_long("LastPlayed") {
         level_data.last_played = last_played;
     }
@@ -300,16 +328,10 @@ fn level_data_from_nbt(data: &NbtCompound, seed: i64) -> LevelData {
 }
 
 fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
+    for key in LEGACY_LEVEL_DAT_KEYS {
+        data.child_tags.remove(key);
+    }
     data.put_bool("allowCommands", info.allow_commands);
-    data.put_double("BorderCenterX", info.border_center_x);
-    data.put_double("BorderCenterZ", info.border_center_z);
-    data.put_double("BorderDamagePerBlock", info.border_damage_per_block);
-    data.put_double("BorderSize", info.border_size);
-    data.put_double("BorderSafeZone", info.border_safe_zone);
-    data.put_double("BorderSizeLerpTarget", info.border_size_lerp_target);
-    data.put_long("BorderSizeLerpTime", info.border_size_lerp_time);
-    data.put_double("BorderWarningBlocks", info.border_warning_blocks);
-    data.put_double("BorderWarningTime", info.border_warning_time);
     data.put_compound("DataPacks", data_packs_to_nbt(&info.data_packs));
     data.put_int("DataVersion", info.data_version);
 
@@ -322,12 +344,11 @@ fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
         Difficulty::Hard => "hard",
     };
     diff_comp.put_string("difficulty", diff_name.to_string());
-    diff_comp.put_bool("hardcore", false);
+    diff_comp.put_bool("hardcore", info.hardcore);
     diff_comp.put_bool("locked", info.difficulty_locked);
     data.put_compound("difficulty_settings", diff_comp);
 
-    data.put_byte("Difficulty", info.difficulty as i8);
-    data.put_bool("DifficultyLocked", info.difficulty_locked);
+    data.put_int("GameType", info.game_type);
     data.put_long("LastPlayed", info.last_played);
     data.put_long("Time", info.game_time);
     data.put_string("LevelName", info.level_name.clone());
@@ -343,15 +364,9 @@ fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
     spawn_comp.put_float("yaw", info.spawn_yaw);
     data.put_compound("spawn", spawn_comp);
 
-    data.put_int("SpawnX", info.spawn_x);
-    data.put_int("SpawnY", info.spawn_y);
-    data.put_int("SpawnZ", info.spawn_z);
-    data.put_float("SpawnAngle", info.spawn_yaw);
-    data.put_float("SpawnPitch", info.spawn_pitch);
     data.put_compound("Version", world_version_to_nbt(&info.world_version));
     data.put_int("version", info.level_version);
     data.put_int("map_id", info.map_id);
-    put_world_gen_settings_seed(data, info.world_gen_settings.seed);
 }
 
 fn stamp_current_version(level_data: &mut LevelData) {
@@ -533,9 +548,9 @@ impl WorldInfoWriter for AnvilLevelInfo {
             .clocks
             .entry("minecraft:overworld".to_string())
             .and_modify(|c| c.total_ticks = info.day_time)
-            .or_insert(crate::world_info::data_files::DimensionClock {
-                total_ticks: info.day_time,
-            });
+            .or_insert(crate::world_info::data_files::DimensionClock::at(
+                info.day_time,
+            ));
 
         if let Err(e) = write_world_clocks(level_folder, &clocks) {
             error!("Failed to write world_clocks.dat: {e}");
@@ -618,11 +633,17 @@ mod test {
             DataPacks, LevelData, MAXIMUM_SUPPORTED_LEVEL_VERSION,
             MAXIMUM_SUPPORTED_WORLD_DATA_VERSION, MINIMUM_SUPPORTED_LEVEL_VERSION,
             MINIMUM_SUPPORTED_WORLD_DATA_VERSION, WorldGenSettings, WorldInfoError, WorldVersion,
-            data_files::{minecraft_data_dir, read_world_gen_settings, write_world_gen_settings},
+            data_files::{
+                minecraft_data_dir, read_data_file, read_world_gen_settings, write_data_file,
+                write_world_gen_settings,
+            },
         },
     };
 
-    use super::{AnvilLevelInfo, LEVEL_DAT_FILE_NAME, LevelDat, WorldInfoReader, WorldInfoWriter};
+    use super::{
+        AnvilLevelInfo, LEGACY_LEVEL_DAT_KEYS, LEVEL_DAT_FILE_NAME, LevelDat, WorldInfoReader,
+        WorldInfoWriter,
+    };
 
     const CONVERTED_LEVEL_NAME: &str = "Converted World";
 
@@ -814,6 +835,19 @@ mod test {
         let root = read_level_dat(temp_dir.path());
         let data = root.get_compound("Data").unwrap();
         assert_eq!(data.get_bool("hardcore"), Some(true));
+        assert_eq!(
+            data.get_compound("difficulty_settings")
+                .and_then(|settings| settings.get_bool("hardcore")),
+            Some(true)
+        );
+        assert_eq!(
+            data.get_compound("spawn")
+                .and_then(|spawn| spawn.get_int_array("pos")),
+            Some([128, 72, -64].as_slice())
+        );
+        for key in LEGACY_LEVEL_DAT_KEYS {
+            assert!(!data.has(key), "{key}");
+        }
         assert_eq!(data.get_string("LevelName"), Some("Renamed World"));
         assert_eq!(
             data.get_compound("Version").unwrap().get_string("Series"),
@@ -886,18 +920,83 @@ mod test {
         assert_eq!(read.world_gen_settings.seed, 11);
     }
 
+    /// G7-13: vanilla 26.3 keeps the seed only in `world_gen_settings.dat`.
     #[test]
-    fn recover_seed_from_level_dat_after_losing_world_gen_settings() {
+    fn a_save_moves_the_seed_and_border_out_of_level_dat() {
         let temp_dir = TempDir::new().unwrap();
+        write_level_dat(temp_dir.path(), converted_level_dat(Some(8_675_309)));
 
+        let imported = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+        assert!(imported.legacy_border);
         AnvilLevelInfo
-            .write_world_info(&LevelData::default(Seed(8_675_309)), temp_dir.path())
+            .write_world_info(&imported, temp_dir.path())
             .unwrap();
-        fs::remove_dir_all(temp_dir.path().join("data")).unwrap();
 
+        let root = read_level_dat(temp_dir.path());
+        assert!(!root.get_compound("Data").unwrap().has("WorldGenSettings"));
+        assert_eq!(
+            read_world_gen_settings(temp_dir.path()).map(|settings| settings.seed),
+            Some(8_675_309)
+        );
         let reloaded = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
-
         assert_eq!(reloaded.world_gen_settings.seed, 8_675_309);
+        assert!(!reloaded.legacy_border);
+        assert!(reloaded.hardcore);
+    }
+
+    #[test]
+    fn world_gen_settings_keep_structures_and_bonus_chest_as_read() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut level_data = LevelData::default(Seed(5));
+        level_data.world_gen_settings.generate_structures = false;
+        level_data.world_gen_settings.bonus_chest = true;
+        AnvilLevelInfo
+            .write_world_info(&level_data, temp_dir.path())
+            .unwrap();
+
+        let data = read_data_file(temp_dir.path(), "world_gen_settings.dat").unwrap();
+        assert_eq!(data.get_bool("generate_structures"), Some(false));
+        assert_eq!(data.get_bool("bonus_chest"), Some(true));
+        let reloaded = AnvilLevelInfo.read_world_info(temp_dir.path()).unwrap();
+        assert!(!reloaded.world_gen_settings.generate_structures);
+        assert!(reloaded.world_gen_settings.bonus_chest);
+    }
+
+    #[test]
+    fn world_clocks_keep_every_clock_state_field() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut end = NbtCompound::new();
+        end.put_long("total_ticks", 900);
+        end.put_float("partial_tick", 0.5);
+        end.put_float("rate", 2.0);
+        end.put_bool("paused", true);
+        let mut overworld = NbtCompound::new();
+        overworld.put_long("total_ticks", 10);
+        overworld.put_bool("paused", true);
+        let mut clocks = NbtCompound::new();
+        clocks.put_compound("minecraft:the_end", end.clone());
+        clocks.put_compound("minecraft:overworld", overworld);
+        write_data_file(
+            temp_dir.path(),
+            "world_clocks.dat",
+            MAXIMUM_SUPPORTED_WORLD_DATA_VERSION,
+            clocks,
+        )
+        .unwrap();
+
+        let mut level_data = LevelData::default(Seed(3));
+        level_data.day_time = 20;
+        AnvilLevelInfo
+            .write_world_info(&level_data, temp_dir.path())
+            .unwrap();
+
+        let saved = read_data_file(temp_dir.path(), "world_clocks.dat").unwrap();
+        assert_eq!(saved.get_compound("minecraft:the_end"), Some(&end));
+        let overworld = saved.get_compound("minecraft:overworld").unwrap();
+        assert_eq!(overworld.get_long("total_ticks"), Some(20));
+        assert_eq!(overworld.get_bool("paused"), Some(true));
+        // Left out at their defaults, like vanilla.
+        assert!(!overworld.has("partial_tick") && !overworld.has("rate"));
     }
 
     #[test]
@@ -911,8 +1010,8 @@ mod test {
         original.set_pos(16, -32);
         original.spawn_y = 64;
         original.spawn_yaw = 45.0;
-        original.border_size = 2048.0;
-        original.border_center_x = 8.0;
+        original.hardcore = true;
+        original.game_type = 2;
         original.day_time = 12_345;
         original.map_id = 3;
 
@@ -931,15 +1030,18 @@ mod test {
             Some(MAXIMUM_SUPPORTED_LEVEL_VERSION)
         );
         assert_eq!(data.get_string("LevelName"), Some("Round Trip"));
-        assert_eq!(data.get_byte("Difficulty"), Some(Difficulty::Easy as i8));
-        assert_eq!(data.get_bool("DifficultyLocked"), Some(true));
+        let difficulty = data.get_compound("difficulty_settings").unwrap();
+        assert_eq!(difficulty.get_string("difficulty"), Some("easy"));
+        assert_eq!(difficulty.get_bool("locked"), Some(true));
+        assert_eq!(difficulty.get_bool("hardcore"), Some(true));
+        assert_eq!(data.get_int("GameType"), Some(2));
         assert_eq!(data.get_bool("allowCommands"), Some(true));
-        assert_eq!(data.get_int("SpawnX"), Some(16));
-        assert_eq!(data.get_int("SpawnY"), Some(64));
-        assert_eq!(data.get_int("SpawnZ"), Some(-32));
-        assert_eq!(data.get_float("SpawnAngle"), Some(45.0));
-        assert_eq!(data.get_double("BorderSize"), Some(2048.0));
-        assert_eq!(data.get_double("BorderCenterX"), Some(8.0));
+        let spawn = data.get_compound("spawn").unwrap();
+        assert_eq!(spawn.get_int_array("pos"), Some([16, 64, -32].as_slice()));
+        assert_eq!(spawn.get_float("yaw"), Some(45.0));
+        for key in LEGACY_LEVEL_DAT_KEYS {
+            assert!(!data.has(key), "{key}");
+        }
         assert_eq!(data.get_int("map_id"), Some(3));
         assert!(data.get_long("LastPlayed").is_some_and(|played| played > 0));
 
@@ -1000,6 +1102,8 @@ mod test {
             thundering: false,
             difficulty: Difficulty::Normal,
             difficulty_locked: false,
+            hardcore: false,
+            game_type: 0,
             game_rules: GameRuleRegistry {
                 block_explosion_drop_decay: true,
                 command_block_output: true,
@@ -1046,6 +1150,7 @@ mod test {
                 series: "main".to_string(),
             },
             map_id: 0,
+            legacy_border: false,
         },
     });
 
