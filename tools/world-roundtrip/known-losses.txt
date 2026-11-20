@@ -5,10 +5,6 @@
 
 vanilla.log Recoverable*errors*when*loading*section G7-05: vanilla can't read PEX's palettes and loads the section as air
 
-# G6-19: gateways as an int array and an empty respawn_crystals
-dimensions/minecraft/the_end/data/minecraft/ender_dragon_fight.dat data.gateways G6-19; first run: step 1: 1 changed
-dimensions/minecraft/the_end/data/minecraft/ender_dragon_fight.dat data.respawn_crystals G6-19; first run: step 1: 1 added
-
 # G7-05: PEX writes palettes as {Name, Properties}; vanilla 26.3 reads them as air
 dimensions/minecraft/*/region/*.mca sections[*].block_states G7-05; first run: step 1: 6 changed
 dimensions/minecraft/*/region/*.mca sections[*].block_states.palette G7-05; first run: step 1: 50 changed

@@ -198,14 +198,24 @@ impl DragonFight {
                 NbtTag::IntArray(vec![pos.0.x, pos.0.y, pos.0.z]),
             );
         }
-        data.put("gateways", NbtTag::IntArray(self.gateways.clone()));
+        // Vanilla writes `Codec.INT.listOf()` as a list of ints, not an int array, and leaves
+        // `respawn_crystals` out while it is empty (`optionalFieldOf` with an empty default).
         data.put_list(
-            "respawn_crystals",
-            self.respawn_crystals
+            "gateways",
+            self.gateways
                 .iter()
-                .map(|uuid| NbtTag::from_uuid(*uuid))
+                .map(|&gateway| NbtTag::Int(gateway))
                 .collect(),
         );
+        if !self.respawn_crystals.is_empty() {
+            data.put_list(
+                "respawn_crystals",
+                self.respawn_crystals
+                    .iter()
+                    .map(|uuid| NbtTag::from_uuid(*uuid))
+                    .collect(),
+            );
+        }
         data
     }
 
@@ -1342,6 +1352,40 @@ mod save_tests {
         assert_eq!(loaded.exit_portal_location, Some(BlockPos::new(0, 63, 0)));
         assert_eq!(loaded.gateways, vec![3, 1, 2]);
         assert_eq!(loaded.respawn_crystals, fight.respawn_crystals);
+    }
+
+    /// `testdata/ender_dragon_fight_vanilla_26_3.dat` is the file vanilla 26.3 wrote for G7-01's
+    /// fixture world (a fight that hasn't started yet).
+    #[test]
+    fn a_fight_file_written_by_vanilla_is_written_back_with_the_same_fields() {
+        use pumpkin_nbt::nbt_compress::read_gzip_compound_tag;
+
+        let vanilla = include_bytes!("testdata/ender_dragon_fight_vanilla_26_3.dat");
+        let folder = tempfile::tempdir().unwrap();
+        let data_dir = folder.path().join("data/minecraft");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let path = data_dir.join("ender_dragon_fight.dat");
+        std::fs::write(&path, vanilla).unwrap();
+
+        let fight = DragonFight::load(folder.path());
+        assert!(fight.needs_state_scanning);
+        assert!(!fight.dragon_killed);
+        assert_eq!(
+            fight.gateways,
+            [
+                1, 6, 9, 0, 17, 10, 7, 2, 12, 3, 4, 8, 5, 19, 16, 14, 15, 18, 13, 11
+            ]
+        );
+        fight.save(folder.path());
+
+        let read = |bytes: &[u8]| read_gzip_compound_tag(std::io::Cursor::new(bytes)).unwrap();
+        let original = read(vanilla);
+        let written = read(&std::fs::read(&path).unwrap());
+        assert_eq!(written.get_compound("data"), original.get_compound("data"));
+        assert_eq!(
+            written.get_int("DataVersion"),
+            original.get_int("DataVersion")
+        );
     }
 
     #[test]
