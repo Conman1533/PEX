@@ -19,6 +19,10 @@ Steps, each in its own folder under --out:
    back, then vanilla opens the same save and checks it sees them too.
 5. hardcore: PEX, configured not hardcore, opens the fixture's hardcore world and saves it, then
    vanilla opens that save and saves it; both saves must still be hardcore (G7-13).
+6. structures: PEX makes a new world with a fixed seed, finds the nearest plains village with
+   `locate`, generates the chunks around it and saves. Its start chunk must hold the village's
+   start, and vanilla, opening that save, must find the same village and log no structure
+   errors (G7-07).
 
 Every step's saved data files (`scoreboard.dat`, `world_clocks.dat`, `weather.dat`, each
 dimension's `world_border.dat`, `chunk_tickets.dat` and `ender_dragon_fight.dat`) also get
@@ -30,7 +34,7 @@ names a known vanilla log line instead: its path glob is searched for in each pr
 with `*` for any run of characters (spaces included). The report goes to <out>/report.md.
 
 Exit status: 0 when every step ran, no difference falls outside the ignore and known-loss
-lists, vanilla logged none of the G7-04 lines and every check in steps 4 and 5 passed; 1 otherwise;
+lists, vanilla logged none of the G7-04 lines and every check in steps 4 to 6 passed; 1 otherwise;
 2 on usage errors.
 """
 import argparse
@@ -90,10 +94,10 @@ class Console:
             lines.append(line)
 
 
-def write_pex_config(folder, port):
+def write_pex_config(folder, port, seed=None):
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, "pumpkin.toml"), "w") as f:
-        f.write("\n".join([
+        f.write("\n".join(([f'seed = "{seed}"', ""] if seed is not None else []) + [
             "[networking.java]", f'address = "127.0.0.1:{port}"', "online_mode = false", "",
             "[networking.bedrock]", "enabled = false", "",
             "[plugins]", "enabled = false", "",
@@ -113,9 +117,9 @@ def write_vanilla_config(folder, port):
         ]) + "\n")
 
 
-def start(args, kind, folder, port):
+def start(args, kind, folder, port, seed=None):
     if kind == "pex":
-        write_pex_config(folder, port)
+        write_pex_config(folder, port, seed)
         server = Server([os.path.abspath(args.pex)], folder)
         server.wait_for(PEX_READY, 900)
     else:
@@ -304,6 +308,77 @@ def hardcore_step(args, report):
     return failures
 
 
+STRUCTURE_SEED = 20261120
+STRUCTURE = "minecraft:village_plains"
+LOCATED = re.compile(r"is at \[(-?\d+), [^,\]]+, (-?\d+)\]")
+STRUCTURE_PROBLEMS = re.compile(
+    r"Failed Start|Unknown stucture|Unknown structure|Exception loading structure piece"
+    r"|Invalid pool element|invalid structure reference|reference to unknown structure", re.I)
+
+
+def locate(console, kind):
+    """(x, z) of the nearest STRUCTURE, or a failure message."""
+    lines = " ".join(console.output(f"locate structure {STRUCTURE}", timeout=600))
+    match = LOCATED.search(lines)
+    if not match:
+        return f"{kind}: locate printed {lines!r}"
+    return int(match.group(1)), int(match.group(2))
+
+
+def saved_start(world, x, z):
+    """The saved `structures.starts` entry for STRUCTURE in the chunk holding block x, z."""
+    cx, cz = x >> 4, z >> 4
+    for region in ("dimensions/minecraft/overworld/region", "region"):
+        path = os.path.join(world, region, f"r.{cx >> 5}.{cz >> 5}.mca")
+        if not os.path.isfile(path):
+            continue
+        for chunk_x, chunk_z, _, data in nbt.region_chunks(path):
+            if (chunk_x, chunk_z) == (cx, cz):
+                root = nbt.loads(data)[1]
+                return root.get("structures", {}).get("starts", {}).get(STRUCTURE)
+    return None
+
+
+def structures_step(args, report):
+    """Step 6. Returns failed checks."""
+    failures = []
+    pex_dir = os.path.join(args.out, "structures")
+    if os.path.exists(pex_dir):
+        shutil.rmtree(pex_dir)
+    server, console = start(args, "pex", pex_dir, args.port + 7, seed=STRUCTURE_SEED)
+    try:
+        found = locate(console, "PEX")
+        if isinstance(found, tuple):
+            x, z = found
+            console.output(f"forceload add {x - 80} {z - 80} {x + 80} {z + 80}")
+            time.sleep(30)
+        save_and_stop(server, console)
+    finally:
+        server.stop()
+    if not isinstance(found, tuple):
+        failures.append(found)
+    else:
+        start_tag = saved_start(os.path.join(pex_dir, "world"), *found)
+        if not start_tag or not start_tag.get("Children"):
+            failures.append(f"PEX's save has no {STRUCTURE} start with pieces in the chunk at {found}: {start_tag!r}")
+        vanilla_dir = os.path.join(args.out, "structures-vanilla")
+        copy_world(os.path.join(pex_dir, "world"), os.path.join(vanilla_dir, "world"))
+        server, console = start(args, "vanilla", vanilla_dir, args.port + 8)
+        try:
+            vanilla_found = locate(console, "vanilla")
+            save_and_stop(server, console)
+        finally:
+            server.stop()
+        if vanilla_found != found:
+            failures.append(f"vanilla locates {STRUCTURE} at {vanilla_found}, PEX at {found}")
+        with open(os.path.join(vanilla_dir, "console.log")) as f:
+            failures += [f"vanilla: {line.rstrip()}" for line in f if STRUCTURE_PROBLEMS.search(line)][:20]
+    report.append(f"## 6. Structure starts: {STRUCTURE} in a PEX world (seed {STRUCTURE_SEED}), then vanilla\n")
+    report.append(f"PEX locates it at {found}.\n")
+    report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
+    return failures
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pex", required=True)
@@ -400,6 +475,7 @@ def main():
     report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
     problems += len(failures)
     problems += len(hardcore_step(args, report))
+    problems += len(structures_step(args, report))
 
     if args.write_known_losses:
         seen = set()
