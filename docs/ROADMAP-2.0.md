@@ -25,7 +25,7 @@ Checked against `alpha` at `466d2af9d`. "Landed" means the piece's branch, or th
 | G10 Releases | 10 | 2 | 0 | 8 | |
 | Total | 196 | 32 | 14 | 135 | 15 |
 
-Pushed but not on `alpha` (all off `466d2af9d`, each waiting for Neon's OK to merge):
+Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop, which Neon gave the go-ahead to land finished branches. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
 - `fix/broken-mob-mechanics` (12 commits, 2026-11-14): the 15 broken mobs from the 2026-11-13 parity check (blaze and ghast fireballs, wind charges, breeze, guardians, illusioner and parched, wither, dragon movement, bee stings, hoglin, frog and turtle breeding, parrot and horse taming, happy ghast, axolotl and tadpole buckets). Goal 1.
 - `fix/systemic-mob-parity` (13 commits, 2026-11-14): spawn health in metadata, step, swim and ambient sounds, sound variants, mob sound volume and pitch, hurt sounds to other players, `/effect` on any living entity, melee pathing, fluid spreading. Goal 1.
