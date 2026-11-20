@@ -1,25 +1,23 @@
 use std::sync::{
-    Arc, Weak,
+    Arc,
     atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
 };
 
 use pumpkin_data::damage::DamageType;
-use pumpkin_data::entity::{EntityStatus, EntityType};
+use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
-use pumpkin_protocol::bedrock::server::ActorEventID;
 use pumpkin_protocol::codec::var_int::VarInt;
 
 use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
-    ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        tempt::TemptGoal, wander_around::WanderAroundGoal,
+    ai::brain::{
+        Brain, BrainTick,
+        memory::{PackedMemories, types},
     },
     custom_sound::CustomSound,
     item::ItemEntity,
@@ -27,6 +25,8 @@ use crate::entity::{
     passive::animal::Animal,
     player::Player,
 };
+
+mod ai;
 
 pub const ARMADILLO_BABY_START_AGE: i32 = -48000;
 pub const SCARE_CHECK_INTERVAL: i32 = 80;
@@ -119,72 +119,21 @@ pub struct ArmadilloEntity {
     pub state: AtomicI32,
     pub in_state_ticks: AtomicU64,
     pub scute_time: AtomicI32,
-    pub danger_detected_recently_ticks: AtomicI32,
-    /// Vanilla `ArmadilloBallUp` behaviour state.
-    ball_up_running: AtomicBool,
     /// Set when the hurt reaction already ran before the hurt sound.
     reacted_to_hurt: AtomicBool,
-    ball_up_ticks: AtomicI32,
-    next_peek_timer: AtomicI32,
-    danger_was_around: AtomicBool,
 }
 
 impl ArmadilloEntity {
+    /// Vanilla `Armadillo`, on the Brain of `ArmadilloAi` (`ai.rs`).
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
-        let armadillo = Self {
-            mob_entity,
+        Arc::new(Self {
+            mob_entity: MobEntity::new(entity),
             ageable_data: AgeableData::default(),
             state: AtomicI32::new(ArmadilloState::Idle.id()),
             in_state_ticks: AtomicU64::new(0),
             scute_time: AtomicI32::new(pick_next_scute_drop_time()),
-            danger_detected_recently_ticks: AtomicI32::new(0),
-            ball_up_running: AtomicBool::new(false),
             reacted_to_hurt: AtomicBool::new(false),
-            ball_up_ticks: AtomicI32::new(0),
-            next_peek_timer: AtomicI32::new(0),
-            danger_was_around: AtomicBool::new(false),
-        };
-        let mob_arc = Arc::new(armadillo);
-        let mob_weak: Weak<dyn Mob> = {
-            let mob_arc: Arc<dyn Mob> = mob_arc.clone();
-            Arc::downgrade(&mob_arc)
-        };
-
-        {
-            let goal_selector = &mob_arc.mob_entity.goals_selector;
-
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            // Vanilla `ArmadilloPanic`: only fire, freezing and the like; a hit makes it roll up.
-            goal_selector.add_goal(
-                1,
-                EscapeDangerGoal::new(2.0)
-                    .with_panic_causes(|_| &tag::DamageType::MINECRAFT_PANIC_ENVIRONMENTAL_CAUSES)
-                    .lasting(),
-            );
-            goal_selector.add_goal(2, BreedGoal::new(1.0));
-            goal_selector.add_goal(
-                3,
-                Box::new(TemptGoal::new(
-                    1.25,
-                    |_, stack| {
-                        stack
-                            .get_item()
-                            .has_tag(&tag::Item::MINECRAFT_ARMADILLO_FOOD)
-                    },
-                    false,
-                )),
-            );
-            goal_selector.add_goal(4, Box::new(FollowParentGoal::new(1.1)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
-            goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
-            );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
-        };
-
-        mob_arc
+        })
     }
 
     #[must_use]
@@ -220,16 +169,49 @@ impl ArmadilloEntity {
                 > ArmadilloState::Rolling.animation_duration()
     }
 
+    /// Vanilla `PathfinderMob.isPanicking`: the brain's `is_panicking` memory. While the
+    /// armadillo's own brain ticks, its behaviours read the memory from `BrainTick` instead.
+    #[must_use]
+    pub fn is_panicking(&self) -> bool {
+        self.mob_entity
+            .try_with_brain(self, |brain| {
+                brain.has_memory_value(types::IS_PANICKING.id())
+            })
+            .unwrap_or(false)
+    }
+
+    #[must_use]
     pub fn can_stay_rolled_up(&self) -> bool {
-        !self.is_panicking()
-            && !self.mob_entity.living_entity.is_in_water()
-            && !self.get_entity().has_vehicle()
+        self.can_stay_rolled_up_with(self.is_panicking())
+    }
+
+    /// Vanilla `Armadillo.canStayRolledUp`, given whether it is panicking.
+    #[must_use]
+    pub fn can_stay_rolled_up_with(&self, panicking: bool) -> bool {
+        let entity = self.get_entity();
+        !panicking
+            && !entity.is_in_water()
+            && !entity.touching_lava.load(Ordering::Relaxed)
+            && !entity.is_leashed()
+            && !entity.has_vehicle()
+            && !entity.has_passengers()
+    }
+
+    /// Vanilla `Entity.playSound(sound)`: full volume, normal pitch.
+    fn play_sound(&self, sound: Sound) {
+        let entity = self.get_entity();
+        entity.world.load().play_sound_fine(
+            sound,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            1.0,
+            1.0,
+        );
     }
 
     pub fn roll_up(&self) {
         if !self.is_scared() {
-            // Vanilla `stopInPlace`.
-            self.mob_entity.steered().navigator().stop();
+            self.mob_entity.stop_in_place();
             self.reset_love();
             self.mob_entity
                 .living_entity
@@ -244,127 +226,6 @@ impl ArmadilloEntity {
                 .living_entity
                 .make_sound(Sound::EntityArmadilloUnrollFinish);
             self.switch_to_state(ArmadilloState::Idle);
-        }
-    }
-
-    /// Vanilla `ARMADILLO_SCARE_DETECTED` sensor: every 5 ticks, a scary entity nearby keeps
-    /// the danger memory at 80 ticks.
-    fn tick_scare_sensor(&self) {
-        let entity = self.get_entity();
-        if (entity.tick_count.load(Ordering::Relaxed) + entity.entity_id).rem_euclid(5) != 0 {
-            return;
-        }
-        if !self.can_stay_rolled_up() {
-            self.danger_detected_recently_ticks
-                .store(0, Ordering::Relaxed);
-            return;
-        }
-        let area = entity.bounding_box.load().expand(
-            SCARE_DISTANCE_HORIZONTAL,
-            SCARE_DISTANCE_VERTICAL,
-            SCARE_DISTANCE_HORIZONTAL,
-        );
-        let scared = entity
-            .world
-            .load()
-            .get_all_at_box(&area)
-            .iter()
-            .any(|other| {
-                other.get_entity().entity_id != entity.entity_id
-                    && other.get_living_entity().is_some()
-                    && other.get_entity().is_alive()
-                    && self.is_scared_by(other.as_ref())
-            });
-        if scared {
-            self.danger_detected_recently_ticks
-                .store(SCARE_CHECK_INTERVAL, Ordering::Relaxed);
-        }
-    }
-
-    fn pick_next_peek_timer() -> i32 {
-        ArmadilloState::Scared.animation_duration() as i32 + rand::random_range(100..=400)
-    }
-
-    /// Vanilla `ArmadilloAi`: the core `ARMADILLO_ROLLING_OUT` step and the panic activity's
-    /// `ArmadilloBallUp` behaviour.
-    fn tick_ball_up(&self) {
-        let danger = self.danger_detected_recently_ticks.load(Ordering::Relaxed);
-        let entity = self.get_entity();
-        let on_ground = entity.on_ground.load(Ordering::Relaxed);
-
-        if danger == 0 && self.is_scared() {
-            self.roll_out();
-        }
-
-        if !self.ball_up_running.load(Ordering::Relaxed) {
-            if danger > 0
-                && !self.is_panicking()
-                && on_ground
-                && !self.mob_entity.living_entity.is_in_water()
-            {
-                self.ball_up_running.store(true, Ordering::Relaxed);
-                self.ball_up_ticks.store(0, Ordering::Relaxed);
-                self.roll_up();
-            } else {
-                return;
-            }
-        }
-
-        // Five-minute behaviour timeout, or nothing left to hide from.
-        if self.ball_up_ticks.fetch_add(1, Ordering::Relaxed) >= 6000
-            || !self.get_state().is_threatened()
-        {
-            self.ball_up_running.store(false, Ordering::Relaxed);
-            if !self.can_stay_rolled_up() {
-                self.roll_out();
-            }
-            return;
-        }
-
-        let peek = self.next_peek_timer.load(Ordering::Relaxed);
-        if peek > 0 {
-            self.next_peek_timer.store(peek - 1, Ordering::Relaxed);
-        }
-
-        if self.should_switch_to_scared_state() {
-            self.switch_to_state(ArmadilloState::Scared);
-            if on_ground {
-                self.mob_entity
-                    .living_entity
-                    .make_sound(Sound::EntityArmadilloLand);
-            }
-            return;
-        }
-
-        let state = self.get_state();
-        let danger_is_around = danger > 75;
-        if self
-            .danger_was_around
-            .swap(danger_is_around, Ordering::Relaxed)
-            != danger_is_around
-        {
-            self.next_peek_timer
-                .store(Self::pick_next_peek_timer(), Ordering::Relaxed);
-        }
-        let unroll_ticks = ArmadilloState::Unrolling.animation_duration() as i32;
-        if state == ArmadilloState::Scared {
-            if self.next_peek_timer.load(Ordering::Relaxed) == 0 && on_ground && danger_is_around {
-                entity.world.load().send_entity_status(
-                    entity,
-                    EntityStatus::ArmadilloPeek,
-                    ActorEventID::None,
-                );
-                self.next_peek_timer
-                    .store(Self::pick_next_peek_timer(), Ordering::Relaxed);
-            }
-            if danger < unroll_ticks {
-                self.mob_entity
-                    .living_entity
-                    .make_sound(Sound::EntityArmadilloUnrollStart);
-                self.switch_to_state(ArmadilloState::Unrolling);
-            }
-        } else if state == ArmadilloState::Unrolling && danger > unroll_ticks {
-            self.switch_to_state(ArmadilloState::Scared);
         }
     }
 
@@ -393,8 +254,13 @@ impl ArmadilloEntity {
             return;
         }
         if attacker_is_living {
-            self.danger_detected_recently_ticks
-                .store(SCARE_CHECK_INTERVAL, Ordering::Relaxed);
+            self.mob_entity.try_with_brain(self, |brain| {
+                brain.set_with_expiry(
+                    types::DANGER_DETECTED_RECENTLY,
+                    true,
+                    i64::from(SCARE_CHECK_INTERVAL),
+                );
+            });
             if self.can_stay_rolled_up() {
                 self.roll_up();
             }
@@ -403,41 +269,53 @@ impl ArmadilloEntity {
         }
     }
 
+    /// Vanilla `Armadillo.isScaredBy`.
     pub fn is_scared_by(&self, living_entity: &dyn EntityBase) -> bool {
-        let entity = self.get_entity();
-        let pos = entity.pos.load();
-        let target_pos = living_entity.get_entity().pos.load();
-        let dx = (pos.x - target_pos.x).abs();
-        let dy = (pos.y - target_pos.y).abs();
-        let dz = (pos.z - target_pos.z).abs();
-
-        if dx > SCARE_DISTANCE_HORIZONTAL
-            || dz > SCARE_DISTANCE_HORIZONTAL
-            || dy > SCARE_DISTANCE_VERTICAL
+        let target = living_entity.get_entity();
+        if !self
+            .get_entity()
+            .bounding_box
+            .load()
+            .expand(
+                SCARE_DISTANCE_HORIZONTAL,
+                SCARE_DISTANCE_VERTICAL,
+                SCARE_DISTANCE_HORIZONTAL,
+            )
+            .intersects(&target.bounding_box.load())
         {
             return false;
         }
-
-        let target_type = living_entity.get_entity().entity_type;
-        if target_type.has_tag(&tag::EntityType::MINECRAFT_UNDEAD) {
-            return true;
-        }
-
-        if self.mob_entity.living_entity.get_last_hurt_by_id()
-            == Some(living_entity.get_entity().entity_id)
+        if target
+            .entity_type
+            .has_tag(&tag::EntityType::MINECRAFT_UNDEAD)
         {
             return true;
         }
-
-        if target_type == &EntityType::PLAYER {
-            let target_ent = living_entity.get_entity();
-            if target_ent.is_sprinting() || target_ent.has_vehicle() {
-                return true;
-            }
+        if self.mob_entity.living_entity.get_last_hurt_by_id() == Some(target.entity_id) {
+            return true;
         }
-
+        if target.entity_type == &EntityType::PLAYER {
+            return !living_entity.is_spectator()
+                && (target.is_sprinting() || target.has_vehicle());
+        }
         false
     }
+}
+
+/// The `armadillo_scare_detected` sensor's mob test.
+pub(crate) fn is_scared_by_mob(mob: &dyn Mob, entity: &dyn EntityBase) -> bool {
+    mob.cast_any()
+        .downcast_ref::<ArmadilloEntity>()
+        .is_some_and(|armadillo| armadillo.is_scared_by(entity))
+}
+
+/// The `armadillo_scare_detected` sensor's ready test, `canStayRolledUp`.
+pub(crate) fn can_stay_rolled_up_in_brain(tick: &BrainTick<'_>) -> bool {
+    let panicking = tick.state.has_memory_value(types::IS_PANICKING.id());
+    tick.mob
+        .cast_any()
+        .downcast_ref::<ArmadilloEntity>()
+        .is_some_and(|armadillo| armadillo.can_stay_rolled_up_with(panicking))
 }
 
 impl CustomSound for ArmadilloEntity {
@@ -486,6 +364,11 @@ impl AgeableMob for ArmadilloEntity {
 }
 
 impl Animal for ArmadilloEntity {
+    /// Vanilla `Armadillo.canFallInLove`: not while curled up.
+    fn can_fall_in_love(&self) -> bool {
+        self.get_mob_entity().love_ticks.load(Ordering::Relaxed) <= 0 && !self.is_scared()
+    }
+
     fn is_food(&self, item_stack: &ItemStack) -> bool {
         item_stack
             .item
@@ -558,26 +441,21 @@ impl Mob for ArmadilloEntity {
         Some(self)
     }
 
+    fn make_brain(&self, packed: &PackedMemories) -> Brain {
+        ai::make_brain(self, packed)
+    }
+
+    fn mob_is_panicking(&self) -> bool {
+        self.is_panicking()
+    }
+
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         self.in_state_ticks.fetch_add(1, Ordering::Relaxed);
     }
 
     fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
-        // Vanilla `stopInPlace` on rolling up, and no `MoveToTargetSink` while rolled.
-        if self.is_scared() {
-            self.mob_entity.steered().navigator().stop();
-            let pos = self.get_entity().pos.load();
-            self.mob_entity
-                .move_control
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .set_wanted_position(pos.x, pos.y, pos.z, 0.0);
-        }
-        let danger_ticks = self.danger_detected_recently_ticks.load(Ordering::Relaxed);
-        if danger_ticks > 0 {
-            self.danger_detected_recently_ticks
-                .store(danger_ticks - 1, Ordering::Relaxed);
-        }
+        self.mob_entity.tick_brain(self);
+        ai::update_activity(self);
 
         let entity = self.get_entity();
         let world = entity.world.load();
@@ -600,9 +478,6 @@ impl Mob for ArmadilloEntity {
                     .store(pick_next_scute_drop_time(), Ordering::Relaxed);
             }
         }
-
-        self.tick_scare_sensor();
-        self.tick_ball_up();
     }
 
     fn mob_init_data_tracker(&self) {
