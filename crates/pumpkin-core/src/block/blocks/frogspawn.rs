@@ -32,14 +32,17 @@ const HATCH_DELAY: std::ops::Range<i32> = 3600..12000;
 pub struct FrogspawnBlock;
 
 impl FrogspawnBlock {
+    /// Vanilla `FrogspawnBlock.mayPlaceOn`. The fluid tag lists only still `water`, so the
+    /// fluid below must be read as `FluidState.getType()` (still for a source), not as the
+    /// flowing family `World::get_fluid` returns.
     #[must_use]
     pub fn may_place_on_world(world: &World, pos: &BlockPos) -> bool {
         let below_pos = pos.down();
-        let (below_fluid, below_fluid_state) = world.get_fluid_and_fluid_state(&below_pos);
-        let below_block = world.get_block(&below_pos);
+        let below_state = world.get_block_state_id(&below_pos);
+        let below_fluid = World::get_fluid_type_from_state_id(below_state);
+        let below_block = below_state.to_block();
         let above_fluid = world.get_fluid(pos);
-        ((below_fluid.has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_FROGSPAWN)
-            && below_fluid_state.is_source)
+        (below_fluid.has_tag(&tag::Fluid::MINECRAFT_SUPPORTS_FROGSPAWN)
             || below_block.has_tag(&tag::Block::MINECRAFT_SUPPORTS_FROGSPAWN))
             && *above_fluid == Fluid::EMPTY
     }
