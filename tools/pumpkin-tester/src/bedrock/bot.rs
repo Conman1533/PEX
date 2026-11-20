@@ -23,7 +23,8 @@ use pumpkin_protocol::{
             move_player::CMovePlayer, network_settings::CNetworkSettings, play_status::CPlayStatus,
             remove_actor::CRemoveActor, resource_pack_stack::CResourcePackStackPacket,
             resource_packs_info::CResourcePacksInfo, set_health::CSetHealth,
-            start_game::CStartGame, update_block::CUpdateBlock,
+            start_game::CStartGame, update_attributes::CUpdateAttributes,
+            update_block::CUpdateBlock,
         },
         packet_decoder::BedrockBatchDecoder,
         packet_encoder::BedrockBatchEncoder,
@@ -54,6 +55,10 @@ const PLAY_STATUS_PLAYER_SPAWN: i32 = 3;
 const AUTHENTICATION_SELF_SIGNED: u8 = 2;
 /// `InputData` flags the bot sets in `PlayerAuthInput`.
 const INPUT_PERFORM_BLOCK_ACTIONS: i32 = 35;
+/// `InputData::VerticalCollision`: the player is standing on something.
+pub const INPUT_VERTICAL_COLLISION: i32 = 50;
+/// The vertical motion a Bedrock client on the ground sends: one tick of gravity, 0.08 * 0.98.
+const GROUND_GRAVITY_DELTA: f32 = -0.078_4;
 /// `InputMode::Mouse`, `PlayMode::Normal` and `InteractionModel::Crosshair`.
 const INPUT_MODE_MOUSE: u32 = 1;
 const PLAY_MODE_NORMAL: u32 = 0;
@@ -106,6 +111,9 @@ pub struct BedrockBot {
     /// Every layer-0 `UpdateBlock`, as position and block network id.
     pub block_updates: Vec<(BlockPos, u32)>,
     pub health: i32,
+    /// Whether inputs report standing on something, as a real client does when it isn't
+    /// falling or jumping.
+    pub on_ground: bool,
     pub disconnect: Option<String>,
     /// How many of each packet id arrived.
     pub packet_counts: HashMap<i32, usize>,
@@ -195,6 +203,7 @@ impl BedrockBot {
             texts: Vec::new(),
             block_updates: Vec::new(),
             health: 20,
+            on_ground: true,
             disconnect: None,
             packet_counts: HashMap::new(),
             pending: VecDeque::new(),
@@ -525,6 +534,7 @@ impl BedrockBot {
                     .map_err(|err| read_error("SetHealth", err))?
                     .0;
             }
+            CUpdateAttributes::PACKET_ID => self.read_attributes(reader)?,
             CDisconnect::PACKET_ID => {
                 let _reason = VarInt::read(reader).map_err(|err| read_error("Disconnect", err))?;
                 let skip_message =
@@ -541,6 +551,34 @@ impl BedrockBot {
     }
 
     /// Players and other entities coming, going and moving.
+    /// Takes the bot's health from an `UpdateAttributes` for its own runtime id, which is how
+    /// PEX tells Bedrock players their health.
+    fn read_attributes(&mut self, reader: &mut &[u8]) -> Result<(), String> {
+        let err = |err| read_error("UpdateAttributes", err);
+        let runtime_id = VarULong::read(reader).map_err(err)?.0;
+        let count = VarUInt::read(reader).map_err(err)?.0;
+        for _ in 0..count {
+            let mut floats = [0.0f32; 6];
+            for value in &mut floats {
+                *value = f32::read(reader).map_err(err)?;
+            }
+            let name = String::read(reader).map_err(err)?;
+            for _ in 0..VarUInt::read(reader).map_err(err)?.0 {
+                String::read(reader).map_err(err)?;
+                String::read(reader).map_err(err)?;
+                f32::read(reader).map_err(err)?;
+                i32::read(reader).map_err(err)?;
+                i32::read(reader).map_err(err)?;
+                bool::read(reader).map_err(err)?;
+            }
+            if runtime_id == self.runtime_id && name == "minecraft:health" {
+                // Min, max, then the current value.
+                self.health = floats[2].ceil() as i32;
+            }
+        }
+        Ok(())
+    }
+
     fn handle_entity_packet(&mut self, id: i32, reader: &mut &[u8]) -> Result<(), String> {
         match id {
             CAddPlayer::PACKET_ID => {
@@ -624,14 +662,40 @@ impl BedrockBot {
         self.send_raw(SCommandRequest::PACKET_ID, &payload).await
     }
 
-    /// Sends one `PlayerAuthInput` at `position`, with block actions if there are any.
+    /// Sends one `PlayerAuthInput` at `position`, standing on the ground if [`Self::on_ground`]
+    /// says so, with block actions if there are any.
     pub async fn send_input(
         &mut self,
         position: Vector3<f32>,
         block_actions: &[(i32, BlockPos, i32)],
     ) -> Result<(), String> {
+        let flags: &[i32] = if self.on_ground {
+            &[INPUT_VERTICAL_COLLISION]
+        } else {
+            &[]
+        };
+        self.send_input_with_flags(position, flags, block_actions)
+            .await
+    }
+
+    /// Sends one `PlayerAuthInput` at `position` with the given `InputData` flags, plus
+    /// `PerformBlockActions` when there are block actions.
+    pub async fn send_input_with_flags(
+        &mut self,
+        position: Vector3<f32>,
+        flags: &[i32],
+        block_actions: &[(i32, BlockPos, i32)],
+    ) -> Result<(), String> {
         self.tick += 1;
-        let delta = position - self.position;
+        let mut delta = position - self.position;
+        // A client standing on the ground reports one tick of gravity as its vertical motion.
+        if flags.contains(&INPUT_VERTICAL_COLLISION) && delta.y >= 0.0 {
+            delta.y = GROUND_GRAVITY_DELTA;
+        }
+        let mut flags = flags.to_vec();
+        if !block_actions.is_empty() {
+            flags.push(INPUT_PERFORM_BLOCK_ACTIONS);
+        }
         let mut payload = Vec::new();
         let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
             self.pitch.write(payload)?;
@@ -640,11 +704,9 @@ impl BedrockBot {
             0.0f32.write(payload)?;
             0.0f32.write(payload)?;
             self.yaw.write(payload)?;
-            if block_actions.is_empty() {
-                VarUInt(0).write(payload)?;
-            } else {
-                VarUInt(1).write(payload)?;
-                VarInt(INPUT_PERFORM_BLOCK_ACTIONS).write(payload)?;
+            VarUInt(flags.len() as u32).write(payload)?;
+            for flag in &flags {
+                VarInt(*flag).write(payload)?;
             }
             VarUInt(INPUT_MODE_MOUSE).write(payload)?;
             VarUInt(PLAY_MODE_NORMAL).write(payload)?;

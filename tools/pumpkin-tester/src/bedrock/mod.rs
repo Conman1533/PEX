@@ -511,6 +511,8 @@ async fn run_mixed_play(
 
     run_chat_checks(server, bedrock, &mut java, &mut checks).await?;
     run_move_checks(server, bedrock, &mut java, &mut checks).await?;
+    // Before `run_block_checks`, which puts both players in creative.
+    run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -627,6 +629,92 @@ async fn run_move_checks(
                         && (f64::from(player.position.z) - java_target.z).abs() < 0.6
                 })
             },
+        )
+        .await,
+    );
+    Ok(())
+}
+
+/// How far the fall checks drop each player. Vanilla's fall damage is the floor of the distance
+/// less the safe fall distance of 3, so 7 health; the half block keeps float error away from the
+/// floor.
+const FALL_HEIGHT: f32 = 10.5;
+const FALL_STEP: f32 = 0.5;
+
+/// A Bedrock player takes the same fall damage as a Java player falling the same distance, and
+/// is told its new health.
+async fn run_fall_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let health_of = |name: &str| -> Result<f32, String> {
+        server
+            .server
+            .get_player_by_name(name)
+            .map(|player| player.living_entity.health.load())
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    // Natural regeneration would heal the first player while the second one falls.
+    run_console(server, "gamerule natural_health_regeneration false");
+    let (bedrock_before, java_before) = (health_of(BEDROCK_NAME)?, health_of(JAVA_NAME)?);
+    let steps = (FALL_HEIGHT / FALL_STEP) as u8;
+
+    // Up in one move, then down half a block per tick, landing on the last one.
+    let start = bedrock.position;
+    bedrock.on_ground = false;
+    bedrock
+        .send_input(start + Vector3::new(0.0, FALL_HEIGHT, 0.0), &[])
+        .await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    for step in 1..=steps {
+        bedrock.on_ground = step == steps;
+        let height = FALL_HEIGHT - f32::from(step) * FALL_STEP;
+        bedrock
+            .send_input(start + Vector3::new(0.0, height, 0.0), &[])
+            .await?;
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+
+    let java_start = java.position;
+    java.move_to(
+        java_start + Vector3::new(0.0, f64::from(FALL_HEIGHT), 0.0),
+        false,
+    )
+    .await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    for step in 1..=steps {
+        let height = f64::from(FALL_HEIGHT - f32::from(step) * FALL_STEP);
+        java.move_to(java_start + Vector3::new(0.0, height, 0.0), step == steps)
+            .await?;
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    tick(server, bedrock, Some(&mut *java)).await?;
+
+    let bedrock_lost = bedrock_before - health_of(BEDROCK_NAME)?;
+    let java_lost = java_before - health_of(JAVA_NAME)?;
+    checks.record(
+        "bedrock fall damage matches java",
+        if java_lost >= 7.0 && (bedrock_lost - java_lost).abs() < 0.01 {
+            Ok(())
+        } else {
+            Err(format!(
+                "a {FALL_HEIGHT}-block fall cost the Bedrock player {bedrock_lost} health and the \
+                 Java player {java_lost}"
+            ))
+        },
+    );
+    run_console(server, "gamerule natural_health_regeneration true");
+    let expected = health_of(BEDROCK_NAME)?.ceil() as i32;
+    checks.record(
+        "bedrock told its health after the fall",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a SetHealth with the health left after the fall",
+            |bot, _| bot.health == expected,
         )
         .await,
     );
