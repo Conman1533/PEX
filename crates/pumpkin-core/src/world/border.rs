@@ -18,8 +18,8 @@ pub struct Worldborder {
     pub portal_teleport_boundary: i32,
     pub warning_blocks: i32,
     pub warning_time: i32,
-    pub damage_per_block: f32,
-    pub buffer: f32,
+    pub damage_per_block: f64,
+    pub buffer: f64,
 }
 
 impl Worldborder {
@@ -58,8 +58,8 @@ impl Worldborder {
             data.get_int("warning_blocks").unwrap_or(5),
             data.get_int("warning_time").unwrap_or(15),
         );
-        border.damage_per_block = data.get_double("damage_per_block").unwrap_or(0.2) as f32;
-        border.buffer = data.get_double("safe_zone").unwrap_or(5.0) as f32;
+        border.damage_per_block = data.get_double("damage_per_block").unwrap_or(0.2);
+        border.buffer = data.get_double("safe_zone").unwrap_or(5.0);
         // A border saved mid-lerp carries on towards its target for the time it had left.
         let lerp_time = data.get_long("lerp_time").unwrap_or(0);
         if lerp_time > 0 {
@@ -76,8 +76,8 @@ impl Worldborder {
         let mut data = NbtCompound::new();
         data.put_double("center_x", self.center_x);
         data.put_double("center_z", self.center_z);
-        data.put_double("damage_per_block", f64::from(self.damage_per_block));
-        data.put_double("safe_zone", f64::from(self.buffer));
+        data.put_double("damage_per_block", self.damage_per_block);
+        data.put_double("safe_zone", self.buffer);
         data.put_int("warning_blocks", self.warning_blocks);
         data.put_int("warning_time", self.warning_time);
         data.put_double("size", self.new_diameter);
@@ -142,11 +142,11 @@ impl Worldborder {
         world.broadcast_packet_all(&CSetBorderWarningDistance::new(self.warning_blocks.into()));
     }
 
-    pub const fn set_damage_buffer(&mut self, buffer: f32) {
+    pub const fn set_damage_buffer(&mut self, buffer: f64) {
         self.buffer = buffer;
     }
 
-    pub const fn set_damage_per_block(&mut self, damage: f32) {
+    pub const fn set_damage_per_block(&mut self, damage: f64) {
         self.damage_per_block = damage;
     }
 
@@ -237,6 +237,20 @@ mod tests {
         assert_eq!((loaded.warning_blocks, loaded.warning_time), (7, 20));
         assert_eq!((loaded.damage_per_block, loaded.buffer), (0.5, 3.0));
         assert_eq!(loaded.speed, 0);
+    }
+
+    /// Vanilla saves `damage_per_block` and `safe_zone` as doubles; PEX kept them as f32 and
+    /// wrote `0.2` back as `0.20000000298023224` (found by the world round trip).
+    #[test]
+    fn vanilla_border_doubles_are_written_back_exactly() {
+        let mut data = Worldborder::new(0.0, 0.0, 100.0, 0, 5, 15).to_nbt();
+        data.put_double("damage_per_block", 0.2);
+        data.put_double("safe_zone", 5.1);
+
+        let saved = Worldborder::from_nbt(&data).to_nbt();
+
+        assert_eq!(saved.get_double("damage_per_block"), Some(0.2));
+        assert_eq!(saved.get_double("safe_zone"), Some(5.1));
     }
 
     #[test]

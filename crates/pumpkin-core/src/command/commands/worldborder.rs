@@ -193,11 +193,12 @@ fn set_damage_amount(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    if (border.damage_per_block - damage_per_block).abs() < f32::EPSILON {
+    // Vanilla widens the float argument to the border's double, as here.
+    if (border.damage_per_block - f64::from(damage_per_block)).abs() < f64::EPSILON {
         return Err(ERROR_SAME_DAMAGE_AMOUNT.create_without_context());
     }
 
-    border.set_damage_per_block(damage_per_block);
+    border.set_damage_per_block(f64::from(damage_per_block));
 
     source.send_feedback(
         TextComponent::translate_cross(
@@ -218,11 +219,11 @@ fn set_damage_buffer(source: &CommandSource, distance: f32) -> Result<i32, Comma
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    if (border.buffer - distance).abs() < f32::EPSILON {
+    if (border.buffer - f64::from(distance)).abs() < f64::EPSILON {
         return Err(ERROR_SAME_DAMAGE_BUFFER.create_without_context());
     }
 
-    border.set_damage_buffer(distance);
+    border.set_damage_buffer(f64::from(distance));
 
     source.send_feedback(
         TextComponent::translate_cross(
