@@ -261,6 +261,8 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_pathfinds_to_villager",
     "pumpkin:armadillo_rolls_up_near_zombie",
     "pumpkin:zoglin_attacks_any_nearby_mob",
+    "pumpkin:blaze_alerts_nearby_blazes_when_hit",
+    "pumpkin:strider_walks_back_to_lava",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -273,6 +275,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_nautilus_charges_survival_player",
     "pumpkin:enderman_angers_when_stared_at",
     "pumpkin:shulker_shoots_bullet_at_survival_player",
+    "pumpkin:ghast_shoots_fireball_at_survival_player",
 ];
 
 #[must_use]
@@ -570,6 +573,27 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             farm_animals::test_armadillo_rolls_up_near_zombie,
+        );
+        register_function_test(
+            "pumpkin:blaze_alerts_nearby_blazes_when_hit",
+            "pumpkin:empty_9x6x5",
+            200,
+            0,
+            entities_and_ai::test_blaze_alerts_nearby_blazes_when_hit,
+        );
+        register_function_test(
+            "pumpkin:ghast_shoots_fireball_at_survival_player",
+            "pumpkin:empty_11x6x5",
+            200,
+            0,
+            entities_and_ai::test_ghast_shoots_fireball_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:strider_walks_back_to_lava",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            entities_and_ai::test_strider_walks_back_to_lava,
         );
         register_function_test(
             "pumpkin:enderman_angers_when_stared_at",
