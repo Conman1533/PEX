@@ -1,0 +1,204 @@
+# Known losses for tools/world-roundtrip/roundtrip.py (roadmap G7-03/G7-04), first written
+# 2026-11-20 from a run on the G7-01 fixture. One entry per line: <file glob> <path glob> <reason>.
+# `vanilla.log` entries name known lines in vanilla's log instead. Each fix piece removes the lines
+# it fixes; the nightly stage fails on any difference no line here covers.
+
+vanilla.log Recoverable*errors*when*loading*section G7-05: vanilla can't read PEX's palettes and loads the section as air
+
+# G6-19: gateways as an int array and an empty respawn_crystals
+dimensions/minecraft/the_end/data/minecraft/ender_dragon_fight.dat data.gateways G6-19; first run: step 1: 1 changed
+dimensions/minecraft/the_end/data/minecraft/ender_dragon_fight.dat data.respawn_crystals G6-19; first run: step 1: 1 added
+
+# G7-05: PEX writes palettes as {Name, Properties}; vanilla 26.3 reads them as air
+dimensions/minecraft/*/region/*.mca sections[*].block_states G7-05; first run: step 1: 6 changed
+dimensions/minecraft/*/region/*.mca sections[*].block_states.palette G7-05; first run: step 1: 50 changed
+
+# G7-06/G7-07: chunk keys PEX doesn't keep (D7-1)
+dimensions/minecraft/*/region/*.mca Heightmaps.OCEAN_FLOOR G7-06/G7-07; first run: step 1: 50 lost
+dimensions/minecraft/*/region/*.mca Heightmaps.OCEAN_FLOOR_WG G7-06/G7-07; first run: step 1: 33 lost
+dimensions/minecraft/*/region/*.mca Heightmaps.WORLD_SURFACE_WG G7-06/G7-07; first run: step 1: 33 lost
+dimensions/minecraft/*/region/*.mca PostProcessing G7-06/G7-07; first run: step 1: 50 lost
+dimensions/minecraft/*/region/*.mca entities G7-06/G7-07; first run: step 1: 33 lost
+dimensions/minecraft/*/region/*.mca structures G7-06/G7-07; first run: step 1: 50 lost
+
+# G7-06: scheduled ticks of chunks below full status are dropped; ticks that ran change t
+dimensions/minecraft/*/region/*.mca block_ticks[*] G7-06; first run: step 1: 2853 lost
+dimensions/minecraft/*/region/*.mca block_ticks[*].t G7-06; first run: step 1: 3 changed
+dimensions/minecraft/*/region/*.mca fluid_ticks[*] G7-06; first run: step 1: 360 lost
+dimensions/minecraft/*/region/*.mca fluid_ticks[*].t G7-06; first run: step 1: 9 changed
+
+# G7-13: PEX still writes level.dat keys 26.3 moved to data files
+level.dat Data.BorderCenterX G7-13; first run: step 1: 1 added
+level.dat Data.BorderCenterZ G7-13; first run: step 1: 1 added
+level.dat Data.BorderDamagePerBlock G7-13; first run: step 1: 1 added
+level.dat Data.BorderSafeZone G7-13; first run: step 1: 1 added
+level.dat Data.BorderSize G7-13; first run: step 1: 1 added
+level.dat Data.BorderSizeLerpTarget G7-13; first run: step 1: 1 added
+level.dat Data.BorderSizeLerpTime G7-13; first run: step 1: 1 added
+level.dat Data.BorderWarningBlocks G7-13; first run: step 1: 1 added
+level.dat Data.BorderWarningTime G7-13; first run: step 1: 1 added
+level.dat Data.Difficulty G7-13; first run: step 1: 1 added
+level.dat Data.DifficultyLocked G7-13; first run: step 1: 1 added
+level.dat Data.SpawnAngle G7-13; first run: step 1: 1 added
+level.dat Data.SpawnPitch G7-13; first run: step 1: 1 added
+level.dat Data.SpawnX G7-13; first run: step 1: 1 added
+level.dat Data.SpawnY G7-13; first run: step 1: 1 added
+level.dat Data.SpawnZ G7-13; first run: step 1: 1 added
+level.dat Data.WorldGenSettings G7-13; first run: step 1: 1 added
+level.dat Data.map_id G7-13; first run: step 1: 1 added
+
+# G7-15: PEX writes default fields vanilla omits
+data/minecraft/scoreboard.dat data.Objectives[*].CriteriaName G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Objectives[*].RenderType G7-15; first run: step 1: 2 added
+data/minecraft/scoreboard.dat data.Objectives[*].display_auto_update G7-15; first run: step 1: 2 added
+data/minecraft/scoreboard.dat data.Teams[*].CollisionRule G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Teams[*].DeathMessageVisibility G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Teams[*].MemberNamePrefix G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Teams[*].MemberNameSuffix G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Teams[*].NameTagVisibility G7-15; first run: step 1: 1 added
+data/minecraft/scoreboard.dat data.Teams[*].SeeFriendlyInvisibles G7-15; first run: step 1: 1 added
+
+# G7-23: item components
+dimensions/minecraft/*/region/*.mca block_entities[*].Book.components."minecraft:writable_book_content".pages[*].raw G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components G7-23; first run: step 1: 24 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:bundle_contents"[*].components G7-23; first run: step 1: 2 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container"[*] G7-23; first run: step 1: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container"[*].item.components G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".allowed_entities G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".can_be_sheared G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".damage_on_hurt G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".dispensable G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".equip_on_interact G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".equip_sound G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".shearing_sound G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".swappable G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".colors G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".fade_colors G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".has_trail G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".has_twinkle G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".explosions[*].colors G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".explosions[*].fade_colors G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".flight_duration G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:item_name" G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:lodestone_tracker".tracked G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations".+ G7-23; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations".fixture G7-23; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:pot_decorations" G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].ambient G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].amplifier G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].show_particles G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".potion G7-23; first run: step 1: 2 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:tool".can_destroy_blocks_in_creative G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:tool".damage_per_block G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:weapon".disable_blocking_for_seconds G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:weapon".item_damage_per_attack G7-23; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:writable_book_content".pages[*].raw G7-23; first run: step 1: 2 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".generation G7-23; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw.bold G7-23; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw.text G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".title.raw G7-23; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].item.components G7-23; first run: step 1: 2 added
+
+# G7-24: entity keys (D7-1), or values that changed while the entity ticked
+dimensions/minecraft/*/entities/*.mca Entities[*] G7-24; first run: step 2: 2 lost
+dimensions/minecraft/*/entities/*.mca Entities[*].Age G7-24; first run: step 2: 3 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Air G7-24; first run: step 2: 7 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].DespawnDelay G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].EggLayTime G7-24; first run: step 2: 2 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Fire G7-24; first run: step 2: 2 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Fuel G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].HasBeenShot G7-24; first run: step 2: 18 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].LastGossipDecay G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].LeftOwner G7-24; first run: step 2: 18 added
+dimensions/minecraft/*/entities/*.mca Entities[*].Life G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Motion[*] G7-24; first run: step 2: 3 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].NoGravity G7-24; first run: step 2: 1 added
+dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].LastGossipDecay G7-24; first run: step 2: 2 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].Pos[*] G7-24; first run: step 2: 6 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].VillagerDataFinalized G7-24; first run: step 2: 2 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].attributes[*] G7-24; first run: step 2: 5 added
+dimensions/minecraft/*/entities/*.mca Entities[*].Pos[*] G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Rotation[*] G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Time G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Warmup G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].anger_end_time G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].angry_at G7-24; first run: step 2: 1 added
+dimensions/minecraft/*/entities/*.mca Entities[*].attributes[*] G7-24; first run: step 2: 92 added
+dimensions/minecraft/*/entities/*.mca Entities[*].fuse G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].hive_pos G7-24; first run: step 2: 1 lost
+dimensions/minecraft/*/entities/*.mca Entities[*].home_pos G7-24; first run: step 2: 2 added
+dimensions/minecraft/*/entities/*.mca Entities[*].home_radius G7-24; first run: step 2: 2 added
+dimensions/minecraft/*/entities/*.mca Entities[*].next_weather_age G7-24; first run: step 2: 1 changed
+
+# G7-25: block entity keys (D7-1)
+dimensions/minecraft/*/region/*.mca block_entities[*] G7-25; first run: step 1: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Age G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].BrewTime G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].CookingTimes G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].CustomName G7-25; first run: step 1: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Fuel G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*] G7-25; first run: step 1: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].count G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].LastOutput G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].RecipesUsed G7-25; first run: step 1: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].RecordItem.components G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].SpawnPotentials[*] G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].TransferCooldown G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].UpdateLastExecution G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].components G7-25; first run: step 1: 53 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].cooking_time_spent G7-25; first run: step 1: 3 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].cooking_total_time G7-25; first run: step 1: 3 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].cooldown_ends_at G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].current_mobs G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].cursors G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].decay_delay G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].keepPacked G7-25; first run: step 1: 53 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].last_vibration_frequency G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.event G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.tick G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].lit_time_remaining G7-25; first run: step 1: 3 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].lit_total_time G7-25; first run: step 1: 3 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].next_mob_spawns_at G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].normal_config G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].ominous_config G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].registered_players G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].required_player_range G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].sherds G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].spawn_data.entity G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].speed_multiplier G7-25; first run: step 1: 4 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].target_cooldown_length G7-25; first run: step 1: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].total_brew_time G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].total_fuel G7-25; first run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].total_mobs_spawned G7-25; first run: step 1: 1 added
+
+# PEX writes the default spawn_chance vanilla omits
+data/minecraft/wandering_trader.dat data.spawn_chance PEX writes the default spawn_chance vanilla omits; first run: step 1: 1 added
+
+# game rules: PEX writes the experimental max_minecart_speed rule
+data/minecraft/game_rules.dat data."minecraft:max_minecart_speed" game rules; first run: step 1: 1 added
+
+# light: PEX relights loaded chunks and writes layers vanilla leaves out
+dimensions/minecraft/*/region/*.mca isLightOn light; first run: step 1: 33 added
+dimensions/minecraft/*/region/*.mca sections[*] light; first run: step 2: 2 added
+dimensions/minecraft/*/region/*.mca sections[*].BlockLight light; first run: step 1: 8 changed
+dimensions/minecraft/*/region/*.mca sections[*].SkyLight light; first run: step 1: 461 added
+
+# run config: vanilla applies server.properties difficulty
+level.dat Data.difficulty_settings.difficulty run config; first run: step 2: 1 changed
+
+# ticking: raids and stopwatches advanced while the server ran
+data/minecraft/stopwatches.dat data.stopwatches."fixture:watch" ticking; first run: step 2: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].cooldown_ticks ticking; first run: step 2: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].ticks_active ticking; first run: step 2: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.tick ticking; first run: step 2: 1 changed
+dimensions/minecraft/the_end/data/minecraft/raids.dat data.tick ticking; first run: step 2: 1 changed
+dimensions/minecraft/the_nether/data/minecraft/raids.dat data.tick ticking; first run: step 2: 1 changed
+
+# ticking: the loaded chunks ran for 10 s, or G7-06 for proto-chunks
+dimensions/minecraft/*/region/*.mca InhabitedTime ticking; first run: step 1: 14 changed
+dimensions/minecraft/*/region/*.mca LastUpdate ticking; first run: step 1: 50 lost
+dimensions/minecraft/*/region/*.mca Status ticking; first run: step 1: 28 changed
+
+# ticking: time ran while the server did
+level.dat Data.Time ticking; first run: step 1: 1 changed
