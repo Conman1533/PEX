@@ -781,29 +781,42 @@ impl MobEntity {
         state.is_side_solid(BlockDirection::Up)
     }
 
+    /// Vanilla `Mob.checkMobSpawnRules`: a spawner (`EntitySpawnReason.isSpawner`) skips the
+    /// check for a block to stand on.
+    pub fn check_mob_spawn_rules_for(world: &World, pos: &BlockPos, from_spawner: bool) -> bool {
+        from_spawner || Self::check_mob_spawn_rules(world, pos)
+    }
+
+    /// Vanilla `Monster.checkMonsterSpawnRules`. Only trial spawners ignore light
+    /// (`EntitySpawnReason.ignoresLightRequirements`), and they don't come through here: a mob
+    /// spawner still needs darkness.
     pub fn check_monster_spawn_rules(
         world: &World,
         pos: &BlockPos,
         is_thundering: bool,
-        ignores_light: bool,
+        from_spawner: bool,
     ) -> bool {
         if world.level_info.load().difficulty == Difficulty::Peaceful {
             return false;
         }
 
-        if !ignores_light && !Self::is_dark_enough_to_spawn(world, pos, is_thundering) {
+        if !Self::is_dark_enough_to_spawn(world, pos, is_thundering) {
             return false;
         }
 
-        Self::check_mob_spawn_rules(world, pos)
+        Self::check_mob_spawn_rules_for(world, pos, from_spawner)
     }
 
-    pub fn check_any_light_monster_spawn_rules(world: &World, pos: &BlockPos) -> bool {
+    pub fn check_any_light_monster_spawn_rules(
+        world: &World,
+        pos: &BlockPos,
+        from_spawner: bool,
+    ) -> bool {
         if world.level_info.load().difficulty == Difficulty::Peaceful {
             return false;
         }
 
-        Self::check_mob_spawn_rules(world, pos)
+        Self::check_mob_spawn_rules_for(world, pos, from_spawner)
     }
 
     pub fn check_surface_monsters_spawn_rules(
