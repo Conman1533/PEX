@@ -178,7 +178,12 @@ impl NautilusEntity {
             self.angry_at.store(None);
             return None;
         }
-        world.get_entity_by_uuid(uuid)
+        // Vanilla `ServerLevel.getEntity(UUID)` finds players too; `get_entity_by_uuid` doesn't.
+        world.get_entity_by_uuid(uuid).or_else(|| {
+            world
+                .get_player_by_uuid(uuid)
+                .map(|player| player as Arc<dyn EntityBase>)
+        })
     }
 
     pub fn is_dashing(&self) -> bool {
