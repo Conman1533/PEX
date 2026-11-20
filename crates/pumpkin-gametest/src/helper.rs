@@ -947,6 +947,21 @@ impl GameTestHelper {
         })
     }
 
+    /// The tags at the NBT path `path` (`/data get entity` syntax) of each living `entity_name`
+    /// touching the box, for checks [`Self::assert_entity_nbt`] can't express.
+    pub async fn entity_nbt_values(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+        path: &str,
+    ) -> GameTestResult<Vec<Vec<NbtTag>>> {
+        let (_, min, max) = self.absolute_box(&relative_min, &relative_max);
+        self.world
+            .entity_nbt_at_path(entity_name, min, max, path)
+            .await
+    }
+
     pub async fn assert_item_entity_present(
         &self,
         item_name: &str,

@@ -31,6 +31,7 @@ mod scaffolding;
 mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
+mod water_mobs;
 
 use std::sync::Once;
 
@@ -264,6 +265,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
     "pumpkin:quoted_non_ascii_player_name_in_commands",
     "pumpkin:zombie_targets_survival_mock_player",
+    "pumpkin:nautilus_follows_tempting_player",
+    "pumpkin:zombie_nautilus_charges_survival_player",
 ];
 
 #[must_use]
@@ -568,6 +571,20 @@ pub fn ensure_builtin_game_tests_registered() {
             100,
             0,
             entities_and_ai::test_zombie_targets_survival_mock_player,
+        );
+        register_function_test(
+            "pumpkin:nautilus_follows_tempting_player",
+            "pumpkin:empty_11x5x5",
+            200,
+            0,
+            water_mobs::test_nautilus_follows_tempting_player,
+        );
+        register_function_test(
+            "pumpkin:zombie_nautilus_charges_survival_player",
+            "pumpkin:empty_11x5x5",
+            300,
+            0,
+            water_mobs::test_zombie_nautilus_charges_survival_player,
         );
 
         // redstone_wire_and_power (14)
