@@ -13,6 +13,7 @@ mod player_move_broadcast_interval;
 mod sheep_shearing;
 mod spawners;
 mod status_ping;
+pub mod survival_actions;
 mod teleport_confirm;
 mod world_interaction;
 

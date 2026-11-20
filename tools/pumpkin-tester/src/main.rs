@@ -23,6 +23,8 @@ async fn run_all_suites(
 
     // Survival stages go first so they start from the freshly generated world.
     survival::run_survival_stages(server, addr, &mut summary_lines).await?;
+    bot_tests::survival_actions::run_survival_action_tests(server, addr, &mut summary_lines)
+        .await?;
     *unloaded_chests =
         Some(bot_tests::run_bot_tests(server, addr, &mut runner, &mut summary_lines).await?);
     gametests::run_gametests(server, &mut runner, &mut summary_lines).await?;

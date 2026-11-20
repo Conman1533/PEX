@@ -20,11 +20,11 @@ use pumpkin_protocol::{
             login::CLoginSuccess,
             play::{
                 CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CEntityVelocity,
-                CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse, CPlayDisconnect,
-                CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
-                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetPlayerInventory,
-                CSetSelectedSlot, CSpawnEntity, CUnloadChunk, CUpdateEntityPos,
-                CUpdateEntityPosRot, CUpdateEntityRot,
+                CGameEvent, CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse,
+                CPlayDisconnect, CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
+                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetHealth,
+                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CUnloadChunk,
+                CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -34,11 +34,11 @@ use pumpkin_protocol::{
             handshake::SHandShake,
             login::{SLoginAcknowledged, SLoginStart},
             play::{
-                Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot,
+                Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot, SClientCommand,
                 SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPickItemFromEntity,
                 SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
-                SPlayerPositionRotation, SSetHeldItem, SSpectateEntity, SUseItem, SUseItemOn,
-                SlotActionType, Status,
+                SPlayerPositionRotation, SPlayerRotation, SSetHeldItem, SSpectateEntity, SSwingArm,
+                SUseItem, SUseItemOn, SlotActionType, Status,
             },
         },
     },
@@ -70,6 +70,23 @@ const CHUNKS_PER_TICK: f32 = 64.0;
 const MAX_LIST_LENGTH: i32 = 1024;
 /// Vanilla `VecDeltaCodec` scale of relative entity moves.
 const ENTITY_DELTA_SCALE: f64 = 4096.0;
+/// Vanilla `Player.getEyeHeight` while standing.
+pub const EYE_HEIGHT: f64 = 1.62;
+/// `ClientboundGameEventPacket` event ids.
+const GAME_EVENT_NO_RESPAWN_BLOCK: u8 = 0;
+const GAME_EVENT_WIN_GAME: u8 = 4;
+/// `Direction.DOWN`, the face the vanilla client sends with actions that aren't about a block.
+const FACE_DOWN: u8 = 0;
+/// `Direction.UP`, the face the bot digs and clicks.
+const FACE_UP: u8 = 1;
+
+/// An entity the server has told the bot about.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrackedEntity {
+    /// The `minecraft:entity_type` registry id.
+    pub entity_type: i32,
+    pub position: Vector3<f64>,
+}
 
 type PacketResult = Result<RawPacket, String>;
 
@@ -94,6 +111,18 @@ pub struct HeadlessBot {
     pub disconnect_reason: Option<Bytes>,
     /// How many of each [`is_counted_entity_packet`] packet arrived, by entity id and packet id.
     pub entity_packets: HashMap<(i32, i32), usize>,
+    /// Every entity the server has spawned for the bot and not removed, by entity id.
+    pub entities: HashMap<i32, TrackedEntity>,
+    /// The dimension the bot is in, from the last `CRespawn`.
+    pub dimension: String,
+    /// From the last `CSetHealth`.
+    pub health: f32,
+    pub food: i32,
+    pub saturation: f32,
+    /// The server sent the win game event (the End poem and credits).
+    pub won_game: bool,
+    /// The server said the bot's bed or respawn anchor was missing or blocked.
+    pub no_respawn_block: bool,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -231,6 +260,13 @@ impl HeadlessBot {
             held_teleports: None,
             disconnect_reason: None,
             entity_packets: HashMap::new(),
+            entities: HashMap::new(),
+            dimension: "minecraft:overworld".to_string(),
+            health: 20.0,
+            food: 20,
+            saturation: 5.0,
+            won_game: false,
+            no_respawn_block: false,
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -358,9 +394,32 @@ impl HeadlessBot {
             // A dimension change: the vanilla client drops its chunks and says it has loaded
             // the new level, which the server waits for before taking actions again.
             id if id == CRespawn::to_id(CURRENT_MC_VERSION) => {
+                let respawn = CRespawn::read(&mut payload, &CURRENT_MC_VERSION)
+                    .map_err(|err| read_error(id, &err))?;
+                self.dimension = respawn
+                    .player_spawn_info
+                    .dimension
+                    .minecraft_name
+                    .to_string();
                 self.chunks.clear();
                 self.item_entities.clear();
+                self.entities.clear();
                 self.send_packet(&SPlayerLoaded).await?;
+            }
+            id if id == CSetHealth::to_id(CURRENT_MC_VERSION) => {
+                let health = CSetHealth::read(&mut payload, &CURRENT_MC_VERSION)
+                    .map_err(|err| read_error(id, &err))?;
+                self.health = health.health;
+                self.food = health.food.0;
+                self.saturation = health.food_saturation;
+            }
+            id if id == CGameEvent::to_id(CURRENT_MC_VERSION) => {
+                let event = payload.get_u8().map_err(|err| read_error(id, &err))?;
+                match event {
+                    GAME_EVENT_WIN_GAME => self.won_game = true,
+                    GAME_EVENT_NO_RESPAWN_BLOCK => self.no_respawn_block = true,
+                    _ => {}
+                }
             }
             id if id == CPlayDisconnect::to_id(CURRENT_MC_VERSION) => {
                 self.disconnect_reason = Some(packet.payload.clone());
@@ -438,6 +497,13 @@ impl HeadlessBot {
                 self.item_entities.insert(spawn.entity_id.0, spawn.position);
                 self.spawned_items += 1;
             }
+            self.entities.insert(
+                spawn.entity_id.0,
+                TrackedEntity {
+                    entity_type: spawn.r#type.0,
+                    position: spawn.position,
+                },
+            );
         } else if id == CUpdateEntityPos::to_id(CURRENT_MC_VERSION)
             || id == CUpdateEntityPosRot::to_id(CURRENT_MC_VERSION)
         {
@@ -446,23 +512,31 @@ impl HeadlessBot {
             if let Some(position) = self.item_entities.get_mut(&entity_id) {
                 *position += delta;
             }
+            if let Some(entity) = self.entities.get_mut(&entity_id) {
+                entity.position += delta;
+            }
         } else if id == CEntityPositionSync::to_id(CURRENT_MC_VERSION) {
             let entity_id = payload.get_var_int()?.0;
             // Since 26.3 the position is a `PositionPath`; type 0 is `Linear`, a single position.
             // Pumpkin never sends `Stepped`.
-            if payload.get_var_int()?.0 == 0
-                && let Some(position) = self.item_entities.get_mut(&entity_id)
-            {
-                *position = Vector3::new(
+            if payload.get_var_int()?.0 == 0 {
+                let position = Vector3::new(
                     payload.get_f64_be()?,
                     payload.get_f64_be()?,
                     payload.get_f64_be()?,
                 );
+                if let Some(item) = self.item_entities.get_mut(&entity_id) {
+                    *item = position;
+                }
+                if let Some(entity) = self.entities.get_mut(&entity_id) {
+                    entity.position = position;
+                }
             }
         } else if id == CRemoveEntities::to_id(CURRENT_MC_VERSION) {
             for _ in 0..read_list_length(payload)? {
                 let entity_id = payload.get_var_int()?.0;
                 self.item_entities.remove(&entity_id);
+                self.entities.remove(&entity_id);
             }
         }
         Ok(())
@@ -540,6 +614,61 @@ impl HeadlessBot {
         .await
     }
 
+    /// Turns the bot's head so its eyes look at `target`, like `Entity.lookAt`.
+    pub async fn look_at(&mut self, target: Vector3<f64>) -> Result<(), String> {
+        let (yaw, pitch) = look_angles(self.position, target);
+        self.yaw = yaw;
+        self.pitch = pitch;
+        self.send_packet(&SPlayerRotation {
+            yaw,
+            pitch,
+            ground: true,
+        })
+        .await
+    }
+
+    /// Presses the drop key: one item, or the whole stack with the modifier held.
+    pub async fn drop_item(&mut self, whole_stack: bool) -> Result<(), String> {
+        let status = if whole_stack {
+            Status::DropItemStack
+        } else {
+            Status::DropItem
+        };
+        self.send_player_action(status, BlockPos::new(0, 0, 0), FACE_DOWN, 0)
+            .await?;
+        // The client takes the item out of its own inventory (`LocalPlayer.drop` calls
+        // `Inventory.removeFromSelected`) and the server sends no slot update for it.
+        let held = &mut self.inventory.items[self.inventory.selected];
+        held.item_count = if whole_stack {
+            0
+        } else {
+            held.item_count.saturating_sub(1)
+        };
+        Ok(())
+    }
+
+    /// Swings the main hand, which the vanilla client sends with every attack.
+    pub async fn swing(&mut self) -> Result<(), String> {
+        self.send_packet(&SSwingArm { hand: VarInt(0) }).await
+    }
+
+    /// Clicks Respawn on the death screen.
+    pub async fn respawn(&mut self) -> Result<(), String> {
+        self.send_packet(&SClientCommand::new(VarInt(
+            SClientCommand::PERFORM_RESPAWN,
+        )))
+        .await
+    }
+
+    /// The tracked entities of `entity_type`, by entity id.
+    pub fn entities_of_type(&self, entity_type: &EntityType) -> Vec<(i32, Vector3<f64>)> {
+        self.entities
+            .iter()
+            .filter(|(_, entity)| entity.entity_type == i32::from(entity_type.id))
+            .map(|(id, entity)| (*id, entity.position))
+            .collect()
+    }
+
     pub async fn send_command(&mut self, command: &str) -> Result<(), String> {
         self.send_packet(&SChatCommand { command }).await
     }
@@ -608,8 +737,13 @@ impl HeadlessBot {
 
     /// Lets go of the use key, like loosing a drawn bow.
     pub async fn release_use_item(&mut self) -> Result<(), String> {
-        self.send_player_action(Status::ReleaseItemInUse, BlockPos::new(0, 0, 0), 0)
-            .await
+        self.send_player_action(
+            Status::ReleaseItemInUse,
+            BlockPos::new(0, 0, 0),
+            FACE_DOWN,
+            0,
+        )
+        .await
     }
 
     pub async fn attack_entity(&mut self, entity_id: i32) -> Result<(), String> {
@@ -638,7 +772,7 @@ impl HeadlessBot {
     }
 
     pub async fn start_digging(&mut self, position: BlockPos, sequence: i32) -> Result<(), String> {
-        self.send_player_action(Status::StartedDigging, position, sequence)
+        self.send_player_action(Status::StartedDigging, position, FACE_UP, sequence)
             .await
     }
 
@@ -647,7 +781,7 @@ impl HeadlessBot {
         position: BlockPos,
         sequence: i32,
     ) -> Result<(), String> {
-        self.send_player_action(Status::FinishedDigging, position, sequence)
+        self.send_player_action(Status::FinishedDigging, position, FACE_UP, sequence)
             .await
     }
 
@@ -655,12 +789,13 @@ impl HeadlessBot {
         &mut self,
         status: Status,
         position: BlockPos,
+        face: u8,
         sequence: i32,
     ) -> Result<(), String> {
         self.send_packet(&SPlayerAction {
             status: VarInt(status as i32),
             position,
-            face: 1,
+            face,
             sequence: VarInt(sequence),
         })
         .await
@@ -729,6 +864,19 @@ impl HeadlessBot {
         self.inventory.open_menu = None;
         self.send_packet(&SCloseContainer { window_id }).await
     }
+}
+
+/// The yaw and pitch, in degrees, that point the eyes of a player standing at `feet` at `target`
+/// (vanilla `Entity.lookAt`).
+#[expect(clippy::cast_possible_truncation, reason = "angles fit an f32")]
+pub fn look_angles(feet: Vector3<f64>, target: Vector3<f64>) -> (f32, f32) {
+    let dx = target.x - feet.x;
+    let dy = target.y - (feet.y + EYE_HEIGHT);
+    let dz = target.z - feet.z;
+    let horizontal = dx.hypot(dz);
+    let yaw = (dz.atan2(dx).to_degrees() - 90.0) as f32;
+    let pitch = (-dy.atan2(horizontal).to_degrees()) as f32;
+    (yaw, pitch)
 }
 
 pub async fn send_framed_packet<P: ClientPacket + MultiVersionJavaPacket>(

@@ -1,6 +1,19 @@
 //! Survival stages. Each stage builds a small area with console commands, then one bot plays
 //! through it with only the packets a vanilla client sends (digging, using items, clicking menu
 //! slots, walking over drops), and the stage checks the outcome on the server.
+//!
+//! # Deviations
+//!
+//! What the stages accept that a vanilla server wouldn't, or that a real client would do
+//! differently (Goal 6's answers). Any other deviation goes here and in the commit that adds it.
+//!
+//! - Movement is client-authoritative: the bot sends positions without jump or fall physics, and
+//!   the server takes them as they come.
+//! - No anti-cheat: nothing checks reach, speed or how fast the bot clicks.
+//! - Digging waits Paper's delayed-dig tick count ([`HeadlessBot::destroy_ticks`]), not vanilla's
+//!   per-tick progress check.
+//! - The bot aims a bow straight at its target with a fixed lift for the arrow's drop
+//!   ([`StageContext::shoot_bow_at`]), so it only hits near targets.
 
 mod wood_to_stone_pickaxe;
 
@@ -11,7 +24,7 @@ use std::{
 };
 
 use pumpkin_core::{command::CommandSender, entity::player::Player, server::Server, world::World};
-use pumpkin_data::{Block, item::Item};
+use pumpkin_data::{Block, entity::EntityType, item::Item};
 use pumpkin_protocol::java::server::play::{SClickSlot, SlotActionType};
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 
@@ -30,6 +43,17 @@ const MAX_COLLECT_TICKS: usize = 200;
 const COLLECT_RADIUS: f64 = 8.0;
 /// Blocks a bot walks per tick, just under vanilla's walking speed.
 const WALK_STEP: f64 = 0.2;
+/// Ticks a bot keeps eating before giving up: vanilla food takes 32 (dried kelp 16).
+const MAX_EAT_TICKS: usize = 60;
+/// Vanilla `BowItem.getPowerForTime` reaches full power after 20 ticks of drawing.
+const BOW_DRAW_TICKS: usize = 20;
+/// Ticks between swings, so each hit lands at full strength (`attack_speed` 4 recharges in 5;
+/// a slower weapon needs more) and after the target's 10 invulnerable ticks.
+const ATTACK_INTERVAL_TICKS: usize = 20;
+/// Ticks the server gets to move the bot to another dimension and send it chunks there. The first
+/// visit generates the destination's chunks, which takes seconds while the tester sleeps 5 ms a
+/// tick.
+const MAX_DIMENSION_TICKS: usize = 6000;
 
 pub async fn run_survival_stages(
     server: &Arc<Server>,
@@ -302,5 +326,103 @@ impl<'a> StageContext<'a> {
     pub async fn close_menu(&mut self) -> Result<(), String> {
         self.bot.close_container().await?;
         self.sync().await
+    }
+
+    /// Eats the held food until the server raises the bot's food level. The bot can't be full.
+    pub async fn eat(&mut self) -> Result<(), String> {
+        self.sync().await?;
+        let before = self.bot.food;
+        let sequence = self.bot.next_sequence();
+        self.bot.use_item(sequence).await?;
+        self.tick_until(
+            &format!("the food level to rise above {before}"),
+            MAX_EAT_TICKS,
+            |bot| bot.food > before,
+        )
+        .await
+    }
+
+    /// Draws the held bow fully at `target` and lets go. Returns the arrow's entity id.
+    pub async fn shoot_bow_at(&mut self, target: Vector3<f64>) -> Result<i32, String> {
+        let before: Vec<i32> = self
+            .bot
+            .entities_of_type(&EntityType::ARROW)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        // Aim a little above the target for the drop over a short flight.
+        let distance = target.squared_distance_to_vec_xz(self.bot.position).sqrt();
+        let aim = Vector3::new(target.x, target.y + distance * 0.05, target.z);
+        self.bot.look_at(aim).await?;
+        let sequence = self.bot.next_sequence();
+        self.bot.use_item(sequence).await?;
+        self.sync().await?;
+        for _ in 0..BOW_DRAW_TICKS {
+            self.tick().await?;
+        }
+        self.bot.release_use_item().await?;
+        self.sync().await?;
+        let mut arrow = None;
+        self.tick_until("the arrow to spawn", MAX_SYNC_TICKS, |bot| {
+            bot.entities_of_type(&EntityType::ARROW)
+                .iter()
+                .any(|(id, _)| !before.contains(id))
+        })
+        .await?;
+        for (id, _) in self.bot.entities_of_type(&EntityType::ARROW) {
+            if !before.contains(&id) {
+                arrow = Some(id);
+            }
+        }
+        arrow.ok_or_else(|| "The arrow vanished".to_string())
+    }
+
+    /// Looks at the entity and hits it with the held item until the server removes it.
+    pub async fn attack_until_gone(
+        &mut self,
+        entity_id: i32,
+        max_hits: usize,
+    ) -> Result<usize, String> {
+        for hits in 0..max_hits {
+            let Some(entity) = self.bot.entities.get(&entity_id).copied() else {
+                return Ok(hits);
+            };
+            self.bot
+                .look_at(entity.position + Vector3::new(0.0, 0.5, 0.0))
+                .await?;
+            self.bot.attack_entity(entity_id).await?;
+            self.bot.swing().await?;
+            self.sync().await?;
+            for _ in 0..ATTACK_INTERVAL_TICKS {
+                if !self.bot.entities.contains_key(&entity_id) {
+                    return Ok(hits + 1);
+                }
+                self.tick().await?;
+            }
+        }
+        if self.bot.entities.contains_key(&entity_id) {
+            Err(format!(
+                "Entity {entity_id} is still there after {max_hits} hits"
+            ))
+        } else {
+            Ok(max_hits)
+        }
+    }
+
+    /// Ticks until the server has moved the bot to `dimension` and sent it a chunk there.
+    pub async fn wait_for_dimension(&mut self, dimension: &str) -> Result<(), String> {
+        self.tick_until(
+            &format!("the bot to arrive in {dimension}"),
+            MAX_DIMENSION_TICKS,
+            |bot| bot.dimension == dimension && !bot.chunks.is_empty(),
+        )
+        .await
+        .map_err(|err| {
+            format!(
+                "{err} (the bot is in {} with {} chunks)",
+                self.bot.dimension,
+                self.bot.chunks.len()
+            )
+        })
     }
 }
