@@ -1,13 +1,15 @@
 # Known losses for tools/world-roundtrip/roundtrip.py (roadmap G7-03/G7-04), first written
-# 2026-11-20 from a run on the G7-01 fixture. One entry per line: <file glob> <path glob> <reason>.
+# 2026-11-20 from a run on the G7-01 fixture. One entry per line: <file glob> <path glob> <reason>,
+# with `-` as the path glob for a whole chunk or file.
 # `vanilla.log` entries name known lines in vanilla's log instead. Each fix piece removes the lines
 # it fixes; the nightly stage fails on any difference no line here covers.
 
-vanilla.log Recoverable*errors*when*loading*section G7-05: vanilla can't read PEX's palettes and loads the section as air
-
-# G7-05: PEX writes palettes as {Name, Properties}; vanilla 26.3 reads them as air
-dimensions/minecraft/*/region/*.mca sections[*].block_states G7-05; first run: step 1: 6 changed
-dimensions/minecraft/*/region/*.mca sections[*].block_states.palette G7-05; first run: step 1: 50 changed
+# ticking: fluids flow and gravel falls while each server runs, and PEX finishes generating the
+# proto-chunks beside the lab (G7-06). Since G7-05 no block changes from reading a palette.
+dimensions/minecraft/*/region/*.mca sections[*].block_states ticking; 2026-11-20 G7-05 run: step 1: 46, step 2: 24, step 3: 24 changed
+dimensions/minecraft/*/region/*.mca Heightmaps.MOTION_BLOCKING ticking; 2026-11-20 G7-05 run: step 1: 9 added, 5 changed; steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca Heightmaps.MOTION_BLOCKING_NO_LEAVES ticking; 2026-11-20 G7-05 run: step 1: 9 added, 5 changed; steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca Heightmaps.WORLD_SURFACE ticking; 2026-11-20 G7-05 run: step 1: 9 added; steps 2 and 3: 1 changed
 
 # G7-06/G7-07: chunk keys PEX doesn't keep (D7-1)
 dimensions/minecraft/*/region/*.mca Heightmaps.OCEAN_FLOOR G7-06/G7-07; first run: step 1: 50 lost
@@ -95,8 +97,18 @@ dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minec
 dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw.text G7-23; first run: step 1: 1 changed
 dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".title.raw G7-23; first run: step 1: 1 changed
 dimensions/minecraft/*/region/*.mca block_entities[*].item.components G7-23; first run: step 1: 2 added
+# Visible since G7-05, when vanilla stopped reading the lab's sections as air and kept its block
+# entities.
+dimensions/minecraft/*/region/*.mca block_entities[*].Book.components G7-23; 2026-11-20 G7-05 run: step 2: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Book.components.* G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations" G7-23; 2026-11-20 G7-05 run: steps 2 and 3: 2 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:writable_book_content" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
 
 # G7-24: entity keys (D7-1), or values that changed while the entity ticked
+dimensions/minecraft/*/entities/*.mca - ticking: an entity chunk appears or goes (a campfire popped its beef in step 3 of the 2026-11-20 G7-05 run)
 dimensions/minecraft/*/entities/*.mca Entities[*] G7-24; first run: step 2: 2 lost
 dimensions/minecraft/*/entities/*.mca Entities[*].Age G7-24; first run: step 2: 3 changed
 dimensions/minecraft/*/entities/*.mca Entities[*].Air G7-24; first run: step 2: 7 changed
@@ -167,6 +179,16 @@ dimensions/minecraft/*/region/*.mca block_entities[*].target_cooldown_length G7-
 dimensions/minecraft/*/region/*.mca block_entities[*].total_brew_time G7-25; first run: step 1: 1 lost
 dimensions/minecraft/*/region/*.mca block_entities[*].total_fuel G7-25; first run: step 1: 1 lost
 dimensions/minecraft/*/region/*.mca block_entities[*].total_mobs_spawned G7-25; first run: step 1: 1 added
+# Visible since G7-05 (vanilla keeps the lab's block entities): PEX writes trial spawner config
+# fields vanilla leaves out, and keys that changed while the block entity ticked.
+dimensions/minecraft/*/region/*.mca block_entities[*].normal_config.* G7-25; 2026-11-20 G7-05 run: step 2: 6 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].ominous_config.* G7-25; 2026-11-20 G7-05 run: step 2: 6 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].Page G7-25; 2026-11-20 G7-05 run: step 2: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].CookingTotalTimes G7-25; 2026-11-20 G7-05 run: step 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].RecipesUsed.* G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].bees[*].ticks_in_hive G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].server_data.state_updating_resumes_at G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].ticks_since_song_started G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
 
 # PEX writes the default spawn_chance vanilla omits
 data/minecraft/wandering_trader.dat data.spawn_chance PEX writes the default spawn_chance vanilla omits; first run: step 1: 1 added
