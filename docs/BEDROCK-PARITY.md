@@ -35,6 +35,7 @@ Real-client checks (a phone or console on 1.26.60) stay Neon's. Each stage ends 
 - Stage 1 on branches: BP1-01 on `fix/bedrock-login-checks`, BP1-03 on `fix/bedrock-bad-packet-kick`, BP1-02 on `fix/bedrock-connection-limits` (each stacked on the one before). The bot suite is at 24 checks.
 - BP1-04 on `fix/bedrock-oidc-keys` (off alpha, independent): OIDC keys are fetched only with Bedrock on, retried with backoff after a failure, and refetched (at most once a minute) when a token names an unknown key. Five unit tests against a local key server; three fail with the old fetch-once behaviour.
 - BP1-05 on `fix/bedrock-deploy-ports` (off alpha, independent): compose publishes TCP and UDP 19132, the Dockerfile exposes them, and both eggs map a `BEDROCK_PORT` variable into the NetherNet address. 19133 (RakNet IPv6) is no longer used. Checked by applying the egg rewrite to a real config: `/v1/join` answers 200 on the remapped port. `docker compose up` itself is still to run.
+- BP1-06 on `perf/skin-fetch-off-join` (off alpha, independent): `Player::new` no longer downloads the Java skin (it blocked the join with no timeout, Bedrock on or off). The download runs on a server task after the join, only with Bedrock on, capped at 5 s and 64 KiB, and the result goes to Bedrock viewers in a new `CPlayerSkin` (93), which gophertunnel decodes cleanly. Stage 1 now has a branch for every item.
 
 ## Stage 1: safe to let in
 
