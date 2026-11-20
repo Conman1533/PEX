@@ -107,6 +107,22 @@ class WorldDiffTest(unittest.TestCase):
         self.assertEqual(kept, [])
         self.assertEqual([d.path for d, _ in ignored], ["Data.LastPlayed"])
 
+    def test_dash_in_an_ignore_file_matches_only_a_whole_chunk(self):
+        a = self.world()
+        b = self.world(entities=[entity(1), entity(3)])
+        extra = Compound(DataVersion=Int(5023), Position=IntArray([1, 0]), Entities=List([entity(4)]))
+        nbt.write_region(os.path.join(b, ENTITIES), {
+            (0, 0): (7, Compound(DataVersion=Int(5023), Position=IntArray([0, 0]),
+                                 Entities=List([entity(1), entity(3)]))),
+            (1, 0): (7, extra)})
+        ignore_file = os.path.join(self.tmp.name, "known.txt")
+        with open(ignore_file, "w") as f:
+            f.write("dimensions/minecraft/*/entities/*.mca - a whole chunk\n")
+        known = world_diff.read_ignore_file(ignore_file)
+        kept, ignored = world_diff.diff_worlds(a, b, ignore=known)
+        self.assertEqual([d.path for d, _ in ignored], [""])
+        self.assertTrue(kept and all(d.path for d in kept), kept)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -307,6 +307,9 @@ def read_ignore_file(path):
             parts = line.split(None, 2)
             if len(parts) < 3:
                 raise ValueError(f"{path}:{number}: needs a file glob, a path glob and a reason")
+            # `-` is the empty path: a whole chunk or file added or lost.
+            if parts[1] == "-":
+                parts[1] = ""
             entries.append(tuple(parts))
     return entries
 
