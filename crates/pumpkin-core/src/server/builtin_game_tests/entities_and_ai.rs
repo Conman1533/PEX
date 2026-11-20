@@ -158,3 +158,38 @@ pub(super) async fn test_zombie_targets_survival_mock_player(
         .then_succeed();
     Ok(())
 }
+
+/// Vanilla `Zoglin.findNearestValidAttackTarget`: a zoglin attacks any mob it can see, not only
+/// players. The pen's walls are three blocks high so the zoglin's throw keeps the cow inside.
+pub(super) async fn test_zoglin_attacks_any_nearby_mob(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..4 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 2),
+            "summon minecraft:cow ~0.5 ~ ~0.5 {NoAI:1b,PersistenceRequired:1b}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 1, 2),
+            "summon minecraft:zoglin ~0.5 ~ ~0.5 {IsBaby:0b,PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper.assert_entity_not_present("minecraft:cow").await
+    })?;
+    Ok(())
+}

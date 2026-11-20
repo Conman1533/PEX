@@ -260,6 +260,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
 const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_pathfinds_to_villager",
     "pumpkin:armadillo_rolls_up_near_zombie",
+    "pumpkin:zoglin_attacks_any_nearby_mob",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -567,6 +568,13 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             farm_animals::test_armadillo_rolls_up_near_zombie,
+        );
+        register_function_test(
+            "pumpkin:zoglin_attacks_any_nearby_mob",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            entities_and_ai::test_zoglin_attacks_any_nearby_mob,
         );
         register_function_test(
             "pumpkin:quoted_non_ascii_player_name_in_commands",
