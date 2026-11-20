@@ -204,6 +204,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:cactus_breaks_when_solid_block_placed_adjacent",
     "pumpkin:cactus_breaks_when_sand_below_removed",
     "pumpkin:sugar_cane_breaks_when_water_removed",
+    "pumpkin:frogspawn_hatches_between_3600_and_12000_ticks",
     "pumpkin:sugar_cane_tall_column_cascades_break",
     "pumpkin:torch_and_soul_torch_break_without_support",
     "pumpkin:wall_torch_breaks_when_wall_removed",
@@ -1392,6 +1393,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             plants_and_support_blocks::test_sugar_cane_breaks_when_water_removed,
+        );
+        register_function_test(
+            "pumpkin:frogspawn_hatches_between_3600_and_12000_ticks",
+            "pumpkin:empty_5x4x5",
+            12100,
+            0,
+            plants_and_support_blocks::test_frogspawn_hatches_between_3600_and_12000_ticks,
         );
         register_function_test(
             "pumpkin:sugar_cane_tall_column_cascades_break",
