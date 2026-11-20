@@ -19,7 +19,8 @@ impl BedrockClient {
             return;
         }
         let entity = player.get_entity();
-        let on_ground = packet.input_data.get(InputData::VerticalCollision as usize)
+        let input_data = &packet.input_data;
+        let on_ground = input_data.get(InputData::VerticalCollision as usize)
             && packet.delta.y < 0.0
             && !entity.has_vehicle();
         entity.on_ground.store(on_ground, Ordering::Relaxed);
@@ -82,14 +83,30 @@ impl BedrockClient {
 
             if pos_changed {
                 chunker::update_position(player);
+                Self::apply_movement_effects(player, delta, on_ground);
                 player.check_location_enchantments(new_pos, on_ground);
                 player.progress_motion(delta);
             }
         }
 
-        crate::entity::client_push::send_bedrock_client_push(player, packet.delta.to_f64());
+        if input_data.get(InputData::StartJumping as usize) && !entity.has_vehicle() {
+            player.jump();
+        }
 
-        let input_data = packet.input_data;
+        // Fall distance builds up while falling and is applied on landing, as for Java players
+        // in `handle_position`.
+        let flying = player
+            .abilities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .flying;
+        if !flying && !entity.has_vehicle() {
+            player
+                .living_entity
+                .fall(player.as_ref(), new_pos.y - old_pos.y, on_ground);
+        }
+
+        crate::entity::client_push::send_bedrock_client_push(player, packet.delta.to_f64());
 
         if input_data.get(InputData::StartSprinting as usize) {
             player.set_sprinting(true);
@@ -197,6 +214,33 @@ impl BedrockClient {
             for action in &block_actions {
                 self.handle_player_block_action(player, server, action);
             }
+        }
+    }
+
+    /// What a Java player's move does besides moving: statistics, game events (footstep
+    /// vibrations), ending an elytra flight on landing, and resetting the idle timer.
+    fn apply_movement_effects(
+        player: &Arc<Player>,
+        movement: pumpkin_util::math::vector3::Vector3<f64>,
+        on_ground: bool,
+    ) {
+        let entity = player.get_entity();
+        let cm = (movement.length() * 100.0) as i32;
+        if cm > 0 {
+            player.increment_stat(
+                pumpkin_data::statistic::StatisticCategory::Custom,
+                player.get_movement_statistic() as i32,
+                cm,
+            );
+        }
+        if movement.length_squared() < 64.0 {
+            entity.emit_movement_events(player.as_ref(), movement);
+        }
+        if on_ground && entity.is_fall_flying() {
+            entity.set_fall_flying(false);
+        }
+        if movement.length_squared() > 1.0E-5 {
+            player.update_last_action_time();
         }
     }
 }
