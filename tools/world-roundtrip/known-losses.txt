@@ -122,56 +122,8 @@ dimensions/minecraft/*/entities/*.mca Entities[*].home_pos G7-24; first run: ste
 dimensions/minecraft/*/entities/*.mca Entities[*].home_radius G7-24; first run: step 2: 2 added
 dimensions/minecraft/*/entities/*.mca Entities[*].next_weather_age G7-24; first run: step 2: 1 changed
 
-# G7-25: block entity keys (D7-1)
-dimensions/minecraft/*/region/*.mca block_entities[*] G7-25; first run: step 1: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Age G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].BrewTime G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].CookingTimes G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].CustomName G7-25; first run: step 1: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Fuel G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*] G7-25; first run: step 1: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].count G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].LastOutput G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].RecipesUsed G7-25; first run: step 1: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].RecordItem.components G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].SpawnPotentials[*] G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].TransferCooldown G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].UpdateLastExecution G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].components G7-25; first run: step 1: 53 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].cooking_time_spent G7-25; first run: step 1: 3 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].cooking_total_time G7-25; first run: step 1: 3 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].cooldown_ends_at G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].current_mobs G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].cursors G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].decay_delay G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].keepPacked G7-25; first run: step 1: 53 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].last_vibration_frequency G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.event G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.tick G7-25; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].lit_time_remaining G7-25; first run: step 1: 3 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].lit_total_time G7-25; first run: step 1: 3 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].next_mob_spawns_at G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].normal_config G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].ominous_config G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].registered_players G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].required_player_range G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].sherds G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].spawn_data.entity G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].speed_multiplier G7-25; first run: step 1: 4 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].target_cooldown_length G7-25; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].total_brew_time G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].total_fuel G7-25; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].total_mobs_spawned G7-25; first run: step 1: 1 added
 # Visible since G7-05 (vanilla keeps the lab's block entities): PEX writes trial spawner config
 # fields vanilla leaves out, and keys that changed while the block entity ticked.
-dimensions/minecraft/*/region/*.mca block_entities[*].normal_config.* G7-25; 2026-11-20 G7-05 run: step 2: 6 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].ominous_config.* G7-25; 2026-11-20 G7-05 run: step 2: 6 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Page G7-25; 2026-11-20 G7-05 run: step 2: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].CookingTotalTimes G7-25; 2026-11-20 G7-05 run: step 3: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].RecipesUsed.* G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].bees[*].ticks_in_hive G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].server_data.state_updating_resumes_at G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].ticks_since_song_started G7-25; 2026-11-20 G7-05 run: steps 2 and 3: 1 changed
 
 # PEX writes the default spawn_chance vanilla omits
 data/minecraft/wandering_trader.dat data.spawn_chance PEX writes the default spawn_chance vanilla omits; first run: step 1: 1 added
@@ -203,3 +155,29 @@ dimensions/minecraft/*/region/*.mca Status ticking; first run: step 1: 28 change
 
 # ticking: time ran while the server did
 level.dat Data.Time ticking; first run: step 1: 1 changed
+
+# ticking: block entities keep running while each server is up, so furnaces smelt and cool,
+# brewing stands finish, pistons finish moving, hoppers and sensors count down. Their keys are
+# saved like vanilla's since G7-25; only the values move.
+dimensions/minecraft/*/region/*.mca block_entities[*] ticking; 2026-11-21 G7-25 run: step 1: 2 lost (the fixture's moving pistons finish)
+dimensions/minecraft/*/region/*.mca block_entities[*].Age ticking; 2026-11-21 G7-25 run: steps 1-3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].BrewTime ticking; 2026-11-21 G7-25 run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].CookingTimes ticking; 2026-11-21 G7-25 run: steps 1-3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].CookingTotalTimes ticking; 2026-11-21 G7-25 run: step 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].count ticking; 2026-11-21 G7-25 run: steps 1-3: 2 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].RecipesUsed.* ticking; 2026-11-21 G7-25 run: steps 1-3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].TransferCooldown ticking; 2026-11-21 G7-25 run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].bees[*].ticks_in_hive ticking; 2026-11-21 G7-25 run: steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].cooking_time_spent ticking; 2026-11-21 G7-25 run: steps 1-3: 3 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].last_vibration_frequency ticking; 2026-11-21 G7-25 run: steps 1-3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.event ticking; 2026-11-21 G7-25 run: step 1: 1 lost
+dimensions/minecraft/*/region/*.mca block_entities[*].listener.selector.tick ticking; 2026-11-21 G7-25 run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].lit_time_remaining ticking; 2026-11-21 G7-25 run: steps 1-3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].server_data.state_updating_resumes_at ticking; 2026-11-21 G7-25 run: steps 2 and 3: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].ticks_since_song_started ticking; 2026-11-21 G7-25 run: steps 2 and 3: 1 changed
+
+# G7-23 leftovers seen in block entities until the item piece lands: whole stacks lost, an empty
+# components compound on the jukebox record, and the lectern's book (vanilla then resets Page).
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*] G7-23; 2026-11-21 G7-25 run: steps 1 and 3: 4 lost (also ticking: a brewed ingredient, cooked beef)
+dimensions/minecraft/*/region/*.mca block_entities[*].RecordItem.components G7-23; 2026-11-21 G7-25 run: steps 1 and 2: 1 added
+dimensions/minecraft/*/region/*.mca block_entities[*].Page G7-23; 2026-11-21 G7-25 run: step 2: 1 changed
