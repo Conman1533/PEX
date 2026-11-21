@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 23 | 0 | 9 | |
+| G7 Worlds | 32 | 25 | 0 | 7 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 68 | 1 | 112 | 15 |
+| Total | 196 | 70 | 1 | 110 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2373,6 +2373,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/item-unknown-components
 - Needs decision: D7-1
 - Done when: unit tests round-trip a stack with an unknown component and one with a malformed known component, and G7-03 shows no item loss in fixture containers.
+- Status (2026-11-21): landed (branch `fix/item-unknown-components`). Item stacks keep every component PEX can't parse, or reads but fails to parse, and write it back in the form it was saved in; a component PEX never changed keeps its saved form; potion contents save like vanilla (a bare potion id when that is all there is). Unit tests `item_stack::tests::{an_unknown_component_is_kept_and_written_back, a_malformed_known_component_is_kept_and_written_back, an_unchanged_component_keeps_its_saved_form, potion_contents_save_like_vanilla, a_plain_stack_saves_no_components}`; the round trip's item component known losses are gone. Play test for Neon: put a written book, a named and enchanted sword and a potion in a chest on vanilla 26.3, open the world on PEX, take them out, then open it on vanilla again; expect all three unchanged. Built on the second lane; landed through merge branch `land/g7-batch-4` (`0811047e4`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-24 Entity NBT keys
 
@@ -2389,6 +2390,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/block-entity-nbt-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no block entity diff outside the ignore list, and G7-04 logs no `Skipping block entity with invalid type`.
+- Status (2026-11-21): landed (branch `fix/block-entity-nbt-keys`). Furnace and brewing stand times save as ints, decorated pots, trial spawners, sculk catalysts, command blocks and spawners save in vanilla's format, and every block entity key PEX doesn't model is kept and written back (`World.kept_block_entity_nbt`). What still differs in the round trip is `ticking` (the block entities keep running while each server is up). Unit tests `block::entities::test::a_vanilla_furnace_keeps_its_unmodelled_keys_and_times`, `decorated_pot::tests::sherds_save_as_vanilla_sides_and_read_back`, `mob_spawner::tests::a_spawner_without_potentials_saves_an_empty_list_like_vanilla` and `trial_spawner::tests::{a_default_trial_spawner_saves_no_config_or_state, a_changed_trial_spawner_saves_only_what_changed}`. Left over, listed as round-trip known losses: PEX starts the fixture's raid on its second load (G7-18; vanilla's raid stop lands in batch 5) and vanilla keeps the visit's ender pearl twice in a PEX save (G7-21 follow-up). Play test for Neon: on vanilla 26.3 light a furnace with half a stack of iron and fill a decorated pot with sherds, open the world on PEX for a minute, then on vanilla again; expect the furnace still smelting with its progress and the pot keeping its sherds. Built on the second lane; landed through merge branch `land/g7-batch-4` (`0811047e4`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-26 Anvil default for new configs
 
