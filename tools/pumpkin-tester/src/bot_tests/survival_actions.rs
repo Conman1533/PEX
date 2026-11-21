@@ -60,6 +60,9 @@ pub async fn run_survival_action_tests(
 /// Empties the bot's inventory. `clear` fails on an empty inventory, so it always gets something
 /// to clear.
 fn empty_inventory(stage: &StageContext<'_>) -> Result<(), String> {
+    // Drops from an earlier test (a killed chicken's raw chicken and feathers) would be picked up
+    // into the emptied hotbar.
+    stage.console("kill @e[type=minecraft:item]")?;
     stage.console(&format!("give {BOT} minecraft:dirt 1"))?;
     stage.console(&format!("clear {BOT}"))
 }
@@ -162,6 +165,10 @@ async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
         return Err(format!(
             "The food level kept changing after the hunger effect was cleared (now {before})"
         ));
+    }
+    let held = stage.player.inventory().held_item().item.registry_key;
+    if held != Item::BREAD.registry_key {
+        return Err(format!("The bot was about to eat {held}, not the bread"));
     }
     let trace = stage.eat().await?;
     // Bread gives 5 food.
