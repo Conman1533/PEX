@@ -545,20 +545,16 @@ macro_rules! impl_block_entity_for_cooking {
                 Self: Sized,
             {
                 let cooking_total_time = AtomicU16::new(
-                    nbt.get_short("cooking_total_time")
-                        .map_or(0, |cooking_total_time| cooking_total_time as u16),
+                    $crate::block::entities::furnace_like_block_entity::saved_time(nbt, "cooking_total_time"),
                 );
                 let cooking_time_spent = AtomicU16::new(
-                    nbt.get_short("cooking_time_spent")
-                        .map_or(0, |cooking_time_spent| cooking_time_spent as u16),
+                    $crate::block::entities::furnace_like_block_entity::saved_time(nbt, "cooking_time_spent"),
                 );
                 let lit_total_time = AtomicU16::new(
-                    nbt.get_short("lit_total_time")
-                        .map_or(0, |lit_total_time| lit_total_time as u16),
+                    $crate::block::entities::furnace_like_block_entity::saved_time(nbt, "lit_total_time"),
                 );
                 let lit_time_remaining = AtomicU16::new(
-                    nbt.get_short("lit_time_remaining")
-                        .map_or(0, |lit_time_remaining| lit_time_remaining as u16),
+                    $crate::block::entities::furnace_like_block_entity::saved_time(nbt, "lit_time_remaining"),
                 );
                 // Load RecipesUsed from NBT (vanilla format: map of recipe ID -> craft count)
                 let mut recipes_used_map = HashMap::new();
@@ -587,30 +583,29 @@ macro_rules! impl_block_entity_for_cooking {
             }
 
             fn write_nbt(&self, nbt: &mut pumpkin_nbt::compound::NbtCompound) {
-                nbt.put_short("cooking_total_time", self.get_cooking_total_time() as i16);
-                nbt.put_short("cooking_time_spent", self.get_cooking_time_spent() as i16);
-                nbt.put_short("lit_total_time", self.get_lit_total_time() as i16);
-                nbt.put_short("lit_time_remaining", self.get_lit_time_remaining() as i16);
+                nbt.put_int("cooking_total_time", i32::from(self.get_cooking_total_time()));
+                nbt.put_int("cooking_time_spent", i32::from(self.get_cooking_time_spent()));
+                nbt.put_int("lit_total_time", i32::from(self.get_lit_total_time()));
+                nbt.put_int("lit_time_remaining", i32::from(self.get_lit_time_remaining()));
 
-                // Save RecipesUsed in vanilla format (map of recipe ID -> craft count)
+                // Save RecipesUsed in vanilla format (map of recipe ID -> craft count), empty
+                // included, as vanilla does.
                 {
                     let recipes = self
                         .recipes_used
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if !recipes.is_empty() {
-                        let mut recipes_compound = pumpkin_nbt::compound::NbtCompound::new();
-                        for (recipe_id, count) in recipes.iter() {
-                            recipes_compound.put(
-                                recipe_id.as_str(),
-                                pumpkin_nbt::tag::NbtTag::Int(*count as i32),
-                            );
-                        }
-                        nbt.put(
-                            "RecipesUsed",
-                            pumpkin_nbt::tag::NbtTag::Compound(recipes_compound),
+                    let mut recipes_compound = pumpkin_nbt::compound::NbtCompound::new();
+                    for (recipe_id, count) in recipes.iter() {
+                        recipes_compound.put(
+                            recipe_id.as_str(),
+                            pumpkin_nbt::tag::NbtTag::Int(*count as i32),
                         );
                     }
+                    nbt.put(
+                        "RecipesUsed",
+                        pumpkin_nbt::tag::NbtTag::Compound(recipes_compound),
+                    );
                 }
 
                 self.write_inventory_nbt(nbt, true);
@@ -637,10 +632,10 @@ macro_rules! impl_block_entity_for_cooking {
 
             fn chunk_data_nbt(&self) -> Option<pumpkin_nbt::compound::NbtCompound> {
                 let mut nbt = pumpkin_nbt::compound::NbtCompound::new();
-                nbt.put_short("cooking_total_time", self.get_cooking_total_time() as i16);
-                nbt.put_short("cooking_time_spent", self.get_cooking_time_spent() as i16);
-                nbt.put_short("lit_total_time", self.get_lit_total_time() as i16);
-                nbt.put_short("lit_time_remaining", self.get_lit_time_remaining() as i16);
+                nbt.put_int("cooking_total_time", i32::from(self.get_cooking_total_time()));
+                nbt.put_int("cooking_time_spent", i32::from(self.get_cooking_time_spent()));
+                nbt.put_int("lit_total_time", i32::from(self.get_lit_total_time()));
+                nbt.put_int("lit_time_remaining", i32::from(self.get_lit_time_remaining()));
 
                 if let Ok(recipes) = self.recipes_used.lock() {
                     if !recipes.is_empty() {
@@ -705,4 +700,12 @@ macro_rules! impl_block_entity_for_cooking {
             }
         }
     };
+}
+
+/// A furnace time as vanilla saves it (an int), or as PEX saved it before (a short).
+#[must_use]
+pub fn saved_time(nbt: &pumpkin_nbt::compound::NbtCompound, key: &str) -> u16 {
+    nbt.get_int(key)
+        .or_else(|| nbt.get_short(key).map(i32::from))
+        .map_or(0, |time| time.clamp(0, i32::from(u16::MAX)) as u16)
 }

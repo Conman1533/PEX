@@ -1,11 +1,14 @@
 use super::BlockEntity;
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::math::position::BlockPos;
 use std::sync::Mutex;
 
 pub struct SculkCatalystBlockEntity {
     pub position: BlockPos,
-    pub decay_delay: Mutex<i32>,
+    /// Vanilla `SculkSpreader.cursors`, kept as saved: PEX does not spread sculk from a catalyst
+    /// yet, so the charges are carried through saves unchanged.
+    pub cursors: Mutex<Vec<NbtTag>>,
 }
 
 impl BlockEntity for SculkCatalystBlockEntity {
@@ -21,23 +24,24 @@ impl BlockEntity for SculkCatalystBlockEntity {
     where
         Self: Sized,
     {
-        let decay_delay = nbt.get_int("decay_delay").unwrap_or(0);
+        let cursors = nbt
+            .get_list("cursors")
+            .map(<[_]>::to_vec)
+            .unwrap_or_default();
         Self {
             position,
-            decay_delay: Mutex::new(decay_delay),
+            cursors: Mutex::new(cursors),
         }
     }
 
+    /// Vanilla `SculkSpreader.save`: `cursors` is always written, empty included.
     fn write_nbt(&self, nbt: &mut NbtCompound) {
-        if let Ok(decay_delay) = self.decay_delay.lock() {
-            nbt.put_int("decay_delay", *decay_delay);
-        }
-    }
-
-    fn chunk_data_nbt(&self) -> Option<NbtCompound> {
-        let mut nbt = NbtCompound::new();
-        nbt.put_int("decay_delay", *self.decay_delay.try_lock().ok()?);
-        Some(nbt)
+        let cursors = self
+            .cursors
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        nbt.put("cursors", NbtTag::List(cursors));
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -51,7 +55,7 @@ impl SculkCatalystBlockEntity {
     pub const fn new(position: BlockPos) -> Self {
         Self {
             position,
-            decay_delay: Mutex::new(0),
+            cursors: Mutex::new(Vec::new()),
         }
     }
 }
