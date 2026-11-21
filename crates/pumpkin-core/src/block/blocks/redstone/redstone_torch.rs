@@ -279,7 +279,6 @@ impl BlockBehaviour for RedstoneTorchBlock {
             if !should_be_lit_now {
                 args.world
                     .set_block_state(args.position, set_lit(false), BlockFlags::NOTIFY_ALL);
-                update_neighbors(args.world, args.position);
                 if toggled_too_frequently(args.world, *args.position, Some(now)) {
                     args.world.sync_world_event(
                         WorldEvent::RedstoneTorchBurnout,
@@ -297,16 +296,21 @@ impl BlockBehaviour for RedstoneTorchBlock {
         } else if should_be_lit_now && !toggled_too_frequently(args.world, *args.position, None) {
             args.world
                 .set_block_state(args.position, set_lit(true), BlockFlags::NOTIFY_ALL);
-            update_neighbors(args.world, args.position);
         }
     }
 
     fn placed(&self, args: PlacedArgs<'_>) {
-        update_neighbors(args.world, args.position);
+        update_neighbors(args.world, args.position, args.block);
+    }
+
+    /// Vanilla `RedstoneTorchBlock.onPlace` runs on every state change, lighting and going out
+    /// included, inside the `setBlock`, before the torch's own neighbours hear of it.
+    fn state_changed(&self, args: PlacedArgs<'_>) {
+        update_neighbors(args.world, args.position, args.block);
     }
 
     fn on_state_replaced(&self, args: OnStateReplacedArgs<'_>) {
-        update_neighbors(args.world, args.position);
+        update_neighbors(args.world, args.position, args.block);
     }
 }
 
@@ -316,10 +320,11 @@ pub fn should_be_lit(world: &World, pos: &BlockPos, face: BlockDirection) -> boo
     get_redstone_power(block, state, world, &other_pos, face) == 0
 }
 
-pub fn update_neighbors(world: &Arc<World>, pos: &BlockPos) {
+/// Vanilla `RedstoneTorchBlock.notifyNeighbors`, the torch being the source of every update.
+pub fn update_neighbors(world: &Arc<World>, pos: &BlockPos, torch: &Block) {
     for dir in BlockDirection::all() {
         let other_pos = pos.offset(dir.to_offset());
-        world.update_neighbors(&other_pos, None);
+        world.update_neighbors_at(&other_pos, torch, None);
     }
 }
 

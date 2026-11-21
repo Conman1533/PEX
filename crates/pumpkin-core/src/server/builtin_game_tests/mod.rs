@@ -75,13 +75,14 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:powered_rail_propagation",
     "pumpkin:activator_rail_propagation",
     "pumpkin:detector_rail_minecart",
+    "pumpkin:redstone/rail_junction_switches",
     "pumpkin:tripwire_entity_collision",
     "pumpkin:snow_golem_pattern_spawns",
     "pumpkin:iron_golem_pattern_spawns",
     "pumpkin:wither_pattern_spawns",
     "pumpkin:item_entities_merge",
     "pumpkin:dragon_fireball_leaves_breath_cloud",
-    // redstone_wire_and_power (14)
+    // redstone_wire_and_power (15)
     "pumpkin:redstone_wire_attenuation_1_to_4",
     "pumpkin:redstone_wire_attenuation_5_to_8",
     "pumpkin:redstone_wire_attenuation_9_to_12",
@@ -96,6 +97,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:redstone_wire_repeater_reboosts_to_15",
     "pumpkin:redstone_wire_strong_power_through_stone",
     "pumpkin:redstone_block_powers_all_horizontal_wires",
+    "pumpkin:redstone/wire_washed_away_unpowers_lamp",
     // redstone_logic_circuits (12)
     "pumpkin:redstone_double_inverter_buffer",
     "pumpkin:redstone_wall_torch_inverter",
@@ -111,6 +113,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:redstone_repeater_delay_4_ticks",
     "pumpkin:redstone_repeater_locking_holds_off",
     "pumpkin:redstone_repeater_locking_holds_on",
+    "pumpkin:redstone/repeater_lock_updates_front",
     // comparators_extended (14)
     "pumpkin:comparator_composter_levels_1_to_4",
     "pumpkin:comparator_composter_levels_5_to_8",
@@ -250,7 +253,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:water_flow_breaks_redstone_torch",
     "pumpkin:sponge_absorbs_multi_block_water_pool",
     "pumpkin:sponge_does_not_absorb_lava",
-    // commands_and_entities_extended (12)
+    // commands_and_entities_extended (14)
     "pumpkin:impulse_command_block_setblock_on_power",
     "pumpkin:chain_command_block_three_stage_pipeline",
     "pumpkin:conditional_chain_command_block_skips_on_failure",
@@ -264,6 +267,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:item_entities_stack_up_to_combined_count",
     "pumpkin:commands/unseen_names_get_vanilla_offline_uuids",
     "pumpkin:commands/forceload_add_loads_before_answering",
+    "pumpkin:commands/execute_if_blocks_compares_states",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -533,6 +537,13 @@ pub fn ensure_builtin_game_tests_registered() {
             rails::test_detector_rail_minecart,
         );
         register_function_test(
+            "pumpkin:redstone/rail_junction_switches",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            rails::test_rail_junction_switches,
+        );
+        register_function_test(
             "pumpkin:tripwire_entity_collision",
             "pumpkin:empty_5x4x5",
             30,
@@ -698,6 +709,13 @@ pub fn ensure_builtin_game_tests_registered() {
             commands_and_entities_extended::test_forceload_add_loads_before_answering,
         );
         register_function_test(
+            "pumpkin:commands/execute_if_blocks_compares_states",
+            "pumpkin:empty_9x4x5",
+            40,
+            0,
+            commands_and_entities_extended::test_execute_if_blocks_compares_states,
+        );
+        register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",
             "pumpkin:empty_9x4x3",
             100,
@@ -719,7 +737,7 @@ pub fn ensure_builtin_game_tests_registered() {
             water_mobs::test_zombie_nautilus_charges_survival_player,
         );
 
-        // redstone_wire_and_power (14)
+        // redstone_wire_and_power (15)
         register_function_test(
             "pumpkin:redstone_wire_attenuation_1_to_4",
             "pumpkin:empty_6x4x4",
@@ -817,6 +835,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             redstone_wire_and_power::test_redstone_wire_corner_south_west,
+        );
+        register_function_test(
+            "pumpkin:redstone/wire_washed_away_unpowers_lamp",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            redstone_wire_and_power::test_wire_washed_away_unpowers_lamp,
         );
 
         // redstone_logic_circuits (12)
@@ -917,6 +942,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             redstone_logic_circuits::test_redstone_repeater_locking_holds_on,
+        );
+        register_function_test(
+            "pumpkin:redstone/repeater_lock_updates_front",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            redstone_logic_circuits::test_repeater_lock_updates_front,
         );
 
         // comparators_extended (14)

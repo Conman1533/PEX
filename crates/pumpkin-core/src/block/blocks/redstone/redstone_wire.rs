@@ -14,9 +14,8 @@ use pumpkin_world::world::{BlockAccessor, BlockFlags};
 
 use crate::block::registry::BlockActionResult;
 use crate::block::{
-    BlockBehaviour, BrokenArgs, CanPlaceAtArgs, GetRedstonePowerArgs,
-    GetStateForNeighborUpdateArgs, NormalUseArgs, OnNeighborUpdateArgs, OnPlaceArgs, PlacedArgs,
-    PrepareArgs,
+    BlockBehaviour, CanPlaceAtArgs, GetRedstonePowerArgs, GetStateForNeighborUpdateArgs,
+    NormalUseArgs, OnNeighborUpdateArgs, OnPlaceArgs, OnStateReplacedArgs, PlacedArgs, PrepareArgs,
 };
 use crate::world::World;
 
@@ -43,18 +42,27 @@ impl BlockBehaviour for RedstoneWireBlock {
 
         for direction in [BlockDirection::Up, BlockDirection::Down] {
             let neighbor_pos = args.position.offset(direction.to_offset());
-            update_neighbors_at(args.world, &neighbor_pos, &Block::REDSTONE_WIRE);
+            args.world
+                .update_neighbors_at(&neighbor_pos, &Block::REDSTONE_WIRE, None);
         }
 
         update_neighbors_of_neighboring_wires(args.world, args.position);
     }
 
-    fn broken(&self, args: BrokenArgs<'_>) {
+    /// Vanilla `RedStoneWireBlock.affectNeighborsAfterRemoval`: however the wire goes (broken,
+    /// washed away, replaced by a command), unless a piston moved it.
+    fn on_state_replaced(&self, args: OnStateReplacedArgs<'_>) {
+        if args.moved {
+            return;
+        }
         for direction in BlockDirection::all() {
             let neighbor_pos = args.position.offset(direction.to_offset());
-            update_neighbors_at(args.world, &neighbor_pos, &Block::REDSTONE_WIRE);
+            args.world
+                .update_neighbors_at(&neighbor_pos, &Block::REDSTONE_WIRE, None);
         }
 
+        let old_wire = RedstoneWireProperties::from_state_id(args.old_state_id);
+        update_power_strength_from(args.world, args.position, args.old_state_id, old_wire);
         update_neighbors_of_neighboring_wires(args.world, args.position);
     }
 
@@ -106,7 +114,8 @@ impl BlockBehaviour for RedstoneWireBlock {
     fn prepare(&self, args: PrepareArgs<'_>) {
         let wire = RedstoneWireProperties::from_state_id(args.state_id);
 
-        for direction in BlockDirection::horizontal() {
+        // Vanilla `updateIndirectNeighbourShapes` goes round `Direction.Plane.HORIZONTAL`.
+        for direction in BlockDirection::horizontal_plane() {
             if is_side_connected_prop(wire, direction) {
                 let dir_block_pos = args.position.offset(direction.to_offset());
                 if args.world.get_block(&dir_block_pos) != &Block::REDSTONE_WIRE {
@@ -281,25 +290,41 @@ pub fn update_power_strength(world: &Arc<World>, pos: &BlockPos) {
     if block != &Block::REDSTONE_WIRE {
         return;
     }
+    update_power_strength_from(
+        world,
+        pos,
+        state.id,
+        RedstoneWireProperties::from_state_id(state.id),
+    );
+}
 
-    let mut wire = RedstoneWireProperties::from_state_id(state.id);
+/// Vanilla `DefaultRedstoneWireEvaluator.updatePowerStrength` for a wire that was in `state_id`.
+/// The wire may be gone already (removal): then nothing is set, but the neighbours still hear
+/// that its power changed.
+fn update_power_strength_from(
+    world: &Arc<World>,
+    pos: &BlockPos,
+    state_id: BlockStateId,
+    mut wire: RedstoneWireProperties,
+) {
     let target_strength = calculate_target_strength(world, pos);
-
-    if wire.power != target_strength {
+    if wire.power == target_strength {
+        return;
+    }
+    if world.get_block_state_id(pos) == state_id {
         wire.power = target_strength;
         let new_state_id = wire.to_state_id(&Block::REDSTONE_WIRE);
-
         world.set_block_state(pos, new_state_id, BlockFlags::NOTIFY_LISTENERS);
+    }
 
-        let mut to_update = Vec::with_capacity(7);
-        to_update.push(*pos);
-        for direction in BlockDirection::all() {
-            to_update.push(pos.offset(direction.to_offset()));
-        }
+    let mut to_update = Vec::with_capacity(7);
+    to_update.push(*pos);
+    for direction in BlockDirection::all() {
+        to_update.push(pos.offset(direction.to_offset()));
+    }
 
-        for block_pos in to_update {
-            update_neighbors_at(world, &block_pos, &Block::REDSTONE_WIRE);
-        }
+    for block_pos in to_update {
+        world.update_neighbors_at(&block_pos, &Block::REDSTONE_WIRE, None);
     }
 }
 
@@ -364,30 +389,24 @@ fn get_incoming_wire_signal(world: &World, pos: &BlockPos) -> u8 {
     max_wire_signal.saturating_sub(1)
 }
 
-pub fn update_neighbors_at(world: &Arc<World>, pos: &BlockPos, source_block: &Block) {
-    for direction in BlockDirection::update_order() {
-        let neighbor_pos = pos.offset(direction.to_offset());
-        world.update_neighbor(&neighbor_pos, source_block);
-    }
-}
-
 fn check_corner_change_at(world: &Arc<World>, pos: &BlockPos) {
     if world.get_block(pos) == &Block::REDSTONE_WIRE {
-        update_neighbors_at(world, pos, &Block::REDSTONE_WIRE);
+        world.update_neighbors_at(pos, &Block::REDSTONE_WIRE, None);
         for direction in BlockDirection::all() {
             let neighbor_pos = pos.offset(direction.to_offset());
-            update_neighbors_at(world, &neighbor_pos, &Block::REDSTONE_WIRE);
+            world.update_neighbors_at(&neighbor_pos, &Block::REDSTONE_WIRE, None);
         }
     }
 }
 
+/// Vanilla `updateNeighborsOfNeighboringWires`, in `Direction.Plane.HORIZONTAL` order.
 fn update_neighbors_of_neighboring_wires(world: &Arc<World>, pos: &BlockPos) {
-    for direction in BlockDirection::horizontal() {
+    for direction in BlockDirection::horizontal_plane() {
         let neighbor_pos = pos.offset(direction.to_offset());
         check_corner_change_at(world, &neighbor_pos);
     }
 
-    for direction in BlockDirection::horizontal() {
+    for direction in BlockDirection::horizontal_plane() {
         let target = pos.offset(direction.to_offset());
         if world.get_block_state(&target).is_solid_block() {
             check_corner_change_at(world, &target.up());
