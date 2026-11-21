@@ -118,7 +118,12 @@ pub fn get_living_entity_from_uuid_memory(
     memory: MemoryModuleType<Uuid>,
 ) -> Option<Arc<dyn EntityBase>> {
     let uuid = *brain.get(memory)?;
-    let entity = world.get_entity_by_uuid(uuid)?;
+    // Vanilla `ServerLevel.getEntity(uuid)` finds players too.
+    let entity = world.get_entity_by_uuid(uuid).or_else(|| {
+        world
+            .get_player_by_uuid(uuid)
+            .map(|player| player as Arc<dyn EntityBase>)
+    })?;
     entity.get_living_entity().is_some().then_some(entity)
 }
 

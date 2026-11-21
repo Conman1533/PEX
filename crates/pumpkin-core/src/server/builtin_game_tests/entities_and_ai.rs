@@ -369,3 +369,59 @@ pub(super) async fn test_strider_walks_back_to_lava(helper: GameTestHelper) -> G
     })?;
     Ok(())
 }
+
+/// A survival mock player of its own, so the armor commands touch nobody in other tests.
+const GOLD_WEARER: &str = "gold-wearer";
+
+/// Vanilla `PiglinBruteAi`: a brute's idle `StartAttacking` takes the nearest visible attackable
+/// player whatever armor it wears (unlike a piglin, which leaves gold wearers alone), and the
+/// fight activity's `MeleeAttack` hits it.
+pub(super) async fn test_piglin_brute_attacks_player_in_gold_armor(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_named_mock_player_at(
+            GOLD_WEARER,
+            GameMode::Survival,
+            "minecraft:stick",
+            Vector3::new(7.5, 1.0, 2.5),
+        )
+        .await?;
+    for (slot, item) in [
+        ("armor.head", "golden_helmet"),
+        ("armor.chest", "golden_chestplate"),
+        ("armor.legs", "golden_leggings"),
+        ("armor.feet", "golden_boots"),
+    ] {
+        helper
+            .execute_command(
+                &BlockPos::new(7, 1, 2),
+                &format!("item replace entity {GOLD_WEARER} {slot} with minecraft:{item}"),
+            )
+            .await?;
+    }
+    helper
+        .spawn_entity_at("minecraft:piglin_brute", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+
+    let area_min = BlockPos::new(0, 1, 0);
+    let area_max = BlockPos::new(8, 3, 4);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            let health = helper
+                .entity_nbt_values("minecraft:player", area_min, area_max, "Health")
+                .await?;
+            let hurt = health
+                .iter()
+                .flatten()
+                .any(|tag| matches!(tag, NbtTag::Float(value) if *value < 20.0));
+            helper.assert_true(
+                hurt,
+                format!("the piglin brute never hit the player in gold armor: {health:?}"),
+            )
+        })
+        .then_succeed();
+    Ok(())
+}
