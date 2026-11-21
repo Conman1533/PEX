@@ -58,6 +58,7 @@ use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
 
 pub mod builtin_game_tests;
+pub mod command_storage;
 mod connection_cache;
 pub(crate) mod debug_profiler;
 pub mod enchantment;
@@ -169,6 +170,7 @@ pub struct Server {
 const CUSTOM_BOSS_EVENTS: &str = "custom_boss_events.dat";
 const RANDOM_SEQUENCES: &str = "random_sequences.dat";
 const STOPWATCHES: &str = "stopwatches.dat";
+const SCHEDULED_EVENTS: &str = "scheduled_events.dat";
 
 impl Server {
     #[expect(clippy::too_many_lines)]
@@ -318,7 +320,7 @@ impl Server {
             map_manager: MapManager::new(),
             defaultgamemode,
             player_data_storage,
-            command_storage: std::sync::Mutex::new(std::collections::HashMap::new()),
+            command_storage: std::sync::Mutex::new(command_storage::load(&world_path)),
             stopwatches: std::sync::Mutex::new(
                 read_data_file(&world_path, STOPWATCHES)
                     .map(|data| crate::world::stopwatches::Stopwatches::from_nbt(&data))
@@ -339,7 +341,11 @@ impl Server {
             debug_profiler: debug_profiler::DebugProfiler::new(),
             tasks: TaskTracker::new(),
             runtime: tokio::runtime::Handle::current(),
-            scheduled_functions: Arc::new(crate::server::scheduler::ScheduledFunctionQueue::new()),
+            scheduled_functions: Arc::new(
+                read_data_file(&world_path, SCHEDULED_EVENTS)
+                    .map(|data| crate::server::scheduler::ScheduledFunctionQueue::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
             server_guid: rand::random(),
             player_idle_timeout: AtomicI32::new(0),
             mojang_public_keys: ArcSwap::from_pointee(Vec::new()),
@@ -667,12 +673,27 @@ impl Server {
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .to_nbt(),
             ),
+            (SCHEDULED_EVENTS, self.scheduled_functions.to_nbt()),
         ];
         for (name, data) in files {
             if let Err(err) = write_data_file(&world_path, name, DATA_VERSION, data) {
                 error!("Failed to save {name}: {err}");
             }
         }
+        command_storage::save(
+            &world_path,
+            &self
+                .command_storage
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
+
+    /// The overworld's game time (`Time` in `level.dat`), which `/schedule` counts in.
+    #[must_use]
+    pub fn game_time(&self) -> i64 {
+        self.get_world_from_dimension(&Dimension::OVERWORLD)
+            .get_world_age()
     }
 
     pub async fn save_all(&self) -> Result<(), String> {
@@ -1324,10 +1345,9 @@ impl Server {
         self.plugin_manager.tick_loaders(self);
         report.plugin_loaders = t_phase.elapsed();
         let t_phase = Instant::now();
-        self.scheduled_functions.tick(
-            self,
-            self.tick_count.load(std::sync::atomic::Ordering::Relaxed) as u64,
-        );
+        // Vanilla runs these from `ServerLevel.tickTime`, after the game time moved on to the
+        // tick being run, so compare against the time the worlds are about to reach.
+        self.scheduled_functions.tick(self, self.game_time() + 1);
         report.scheduled_functions = t_phase.elapsed();
 
         let t_phase = Instant::now();

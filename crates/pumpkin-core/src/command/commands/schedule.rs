@@ -1,12 +1,10 @@
-use std::sync::atomic::Ordering;
-
 use pumpkin_data::translation;
 use pumpkin_util::PermissionLvl;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
 use pumpkin_util::text::TextComponent;
 
 use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
-use crate::command::argument_types::core::string::StringArgumentType;
+use crate::command::argument_types::function::FunctionArgumentType;
 use crate::command::argument_types::time::TimeArgumentType;
 use crate::command::context::command_context::CommandContext;
 use crate::command::errors::command_syntax_error::CommandSyntaxError;
@@ -69,7 +67,8 @@ impl SuggestionProvider for ScheduleSuggestionProvider {
 }
 
 fn execute_schedule(context: &CommandContext, replace: bool) -> Result<i32, CommandSyntaxError> {
-    let function_name = StringArgumentType::get(context, "function")?.to_string();
+    // Namespaced, with `#` in front for a tag: vanilla's schedule id.
+    let function_name = FunctionArgumentType::get(context, "function")?.to_string();
     let time = TimeArgumentType::get(context, "time")?;
 
     if time == 0 {
@@ -77,17 +76,19 @@ fn execute_schedule(context: &CommandContext, replace: bool) -> Result<i32, Comm
     }
 
     let server = context.server();
-    let current_tick = server.tick_count.load(Ordering::Relaxed) as u64;
-    let tick_time = current_tick + (time as u64);
+    let tick_time = server.game_time() + i64::from(time);
     let is_tag = function_name.starts_with('#');
 
+    if replace {
+        server.scheduled_functions.remove(&function_name);
+    }
     server.scheduled_functions.schedule(
         function_name.clone(),
         tick_time,
         function_name.clone(),
         is_tag,
-        replace,
     );
+    let function_name = function_name.trim_start_matches('#').to_string();
 
     if is_tag {
         context.source.send_feedback(
@@ -117,7 +118,7 @@ fn execute_schedule(context: &CommandContext, replace: bool) -> Result<i32, Comm
         );
     }
 
-    Ok((tick_time % (i32::MAX as u64)) as i32)
+    Ok(tick_time.rem_euclid(i64::from(i32::MAX)) as i32)
 }
 
 struct ScheduleExecutor {
@@ -134,7 +135,7 @@ struct ClearExecutor;
 
 impl CommandExecutor for ClearExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
-        let function_name = StringArgumentType::get(context, "function")?;
+        let function_name = FunctionArgumentType::get(context, "function")?;
         let server = context.server();
         let count = server.scheduled_functions.remove(function_name);
 
@@ -171,7 +172,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
             .requires(PERMISSION)
             .then(
                 literal("function").then(
-                    argument("function", StringArgumentType::SingleWord)
+                    argument("function", FunctionArgumentType)
                         .suggests(FunctionSuggestionProvider)
                         .then(
                             argument("time", TimeArgumentType::any())
@@ -187,7 +188,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
             )
             .then(
                 literal("clear").then(
-                    argument("function", StringArgumentType::GreedyPhrase)
+                    argument("function", FunctionArgumentType)
                         .suggests(ScheduleSuggestionProvider)
                         .executes(ClearExecutor),
                 ),
