@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `061e92323`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `12839a028`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -17,13 +17,13 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 3 | 4 | 9 | |
-| G6 Survival | 29 | 15 | 0 | 13 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 26 | 0 | 6 | |
+| G5 Redstone | 16 | 4 | 5 | 7 | |
+| G6 Survival | 31 | 15 | 0 | 14 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G7 Worlds | 32 | 27 | 0 | 5 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 199 | 79 | 5 | 100 | 15 |
+| Total | 201 | 81 | 6 | 98 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -51,6 +51,8 @@ Landing batch 7 (2026-11-21) also carried, outside the pieces: the Java login pa
 Landing batch 8 (2026-11-21) also carried, outside the pieces: `fix/portal-exit-chunks` from the Bedrock thread (the exit side of a portal keeps its chunks loaded while the portal is found or built, which stopped duplicate portals for Java and Bedrock), and the `bot:eat_restores_food` test reading the food level from the server's player, since on a slow machine the bot's view trails the server by many ticks. That test still fails now and then on the Windows box with the eat never landing; batch 9 adds the server player's item use state to its message. On CT 117 the first tester run hung once at server shutdown after `bot:block_entities_saved_with_unloaded_chunk` passed (every thread idle, the main task parked); the rerun passed in full, so it is logged as a shutdown flake to watch.
 
 Landing batch 9 (2026-11-21) also carried, outside the pieces: `fix/bedrock-riding` (`df3af4ddf`) from the Bedrock thread (players steer saddled mounts and item-steered mobs on both editions; its later rider jumps follow in batch 10), the Bedrock OIDC key test's timing made robust on a busy machine, the attack cooldown bot test retrying a case whose punch the server handled a tick late, and the eat bot test printing the server player's food, saturation, exhaustion and item use each tick when the food level comes out wrong, to catch the Windows eat flake.
+
+Landing batch 10 (2026-11-21) also carried, outside the pieces: the Bedrock thread's `fix/bedrock-riding` up to BP2-09 (`194c88ad5`: rider jumps, a horse rearing and a camel dashing on both editions, plus strider, camel, happy ghast and minecart checks), `pumpkin:armadillo_rolls_up_near_zombie` walled in so the idle armadillo's strolls stay in the box the test checks, and the root cause of the Windows eat flake: an earlier test's chicken drops were picked up into hotbar slot 0 and eaten instead of the bread, so the bot tests now clear dropped items before they empty the bot's inventory and the eat test checks it holds bread. Flakes to watch from five extra Windows runs (each gate run passed): `armadillo_rolls_up_near_zombie` still scared at tick 901 once, `camel_follows_cactus` with the camel outside its box at tick 601 once, and one hang in `bedrock:mixed_play` after the Nether portal fills, before the respawn check, which needs a tick cap.
 
 What holds 2.0 back:
 
@@ -1788,6 +1790,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/neighbor-update-limits
 - Needs decision: D5-2
 - Done when: new tests `multi_neighbor_update_counts_once` and `shape_updates_stop_at_depth_512` in `neighbor_updater.rs` pass and fail on alpha.
+- Status (2026-11-21): landed (branch `fix/neighbor-update-limits`, second lane). Chained neighbour updates stop at `max_chained_neighbor_updates` (new key, default 1000000 like vanilla, added by config migration 6) and shape updates at depth 512, and a multi-direction update counts once, like vanilla `CollectingNeighborUpdater`. Unit tests `multi_neighbor_update_counts_once`, `shape_updates_stop_at_depth_512` and `an_unlimited_stack_never_gives_up`. Landed through merge branch `land/g7-batch-10` (`12839a028`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G5-15 Block entities tick in order and comparators hear container changes at once
 
@@ -1796,6 +1799,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/block-entity-order
 - Needs decision: D5-1
 - Done when: `pumpkin:redstone/hopper_clock_period` and `pumpkin:redstone/item_sorter` pass on both and give the same PEX result in 20 runs; `pumpkin:redstone/comparator_container_race` fails on alpha and passes on both; gameplay-bench tick P95 within 5% of the G0-03 baseline.
+- Status (2026-11-21): built, proof missing (branch `fix/block-entity-order`, second lane, on G5-05). Block entities tick in vanilla's order and comparators are updated after each container change instead of at the end of the tick. The GameTest `pumpkin:redstone/comparator_container_race` fails on `alpha` and passes. Missing: `pumpkin:redstone/hopper_clock_period` and `pumpkin:redstone/item_sorter` with 20 runs each, and the bench tick P95. Landed through merge branch `land/g7-batch-10` (`12839a028`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G5-16 Dual-run versions of the builtin redstone GameTests
 
@@ -2147,7 +2151,25 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/portal-exit-placement
 - Needs decision: none
 - Done when: a bot test lights a portal at 3,201,1 in a fresh Overworld; the Nether exit is within 16 blocks of 0,y,0 on each axis, and walking back in returns the player within 8 blocks of the first portal without building a second one; the same steps on vanilla 26.3 give the same result.
-- Status (2026-11-21): added by the 2.0 loop after the agent harness on `alpha` `7b3ae93e3` saw the portal at 3,201,1 exit in the Nether at 11,94,22 (22 blocks out on z, past vanilla's 16), so the trip back landed about 195 blocks away, outside the 128-block search, and built a second Overworld portal.
+- Status (2026-11-21): dropped. The agent harness's 22-block exit came from a badly built portal frame in its scenario; with a proper frame the round trip on `alpha` `7fae80f33` goes there and back through linked portals, so there is no PEX bug to fix.
+
+#### G6-30 execute if and unless answer on their own
+
+- Scope: in: every `execute if|unless` condition in `core/command/commands/execute.rs` that ends the command (entity, block, blocks, loaded, dimension, biome, data, predicate, function, items) gets an executor like vanilla `ExecuteCommand.addConditional`: "Test passed" or `commands.execute.conditional.fail`, and for `entity` and `blocks` "Test passed, count: N" (`commands.execute.conditional.pass_count`) and the count as the result. The score conditions already do this through `add_conditional`. Out: new conditions.
+- Depends on: none
+- Branch: fix/execute-terminal-conditions
+- Needs decision: none
+- Done when: from the console on PEX and vanilla 26.3, `execute if block 0 -64 0 minecraft:bedrock`, `execute unless block 0 -64 0 minecraft:bedrock`, `execute if entity @e[type=minecraft:pig]` with two pigs and `execute if blocks` with a copy print the same lines; a unit test per condition kind beside `add_conditionals_accept_single_score_holders`.
+- Status (2026-11-21): added by the 2.0 loop after the agent harness found `execute ... if block <pos> <block>` with no `run` answers "Unknown or incomplete command" on `alpha` `7b3ae93e3`; vanilla answers "Test passed".
+
+#### G6-31 forceload add loads the chunks at once
+
+- Scope: in: `/forceload add` (`core/command/commands/forceload.rs`) adds its tickets and waits for the chunks to load before it answers, like vanilla `ForceLoadCommand.changeForceLoad`, which calls `ServerLevel.setChunkForced` and leaves the chunks loaded for the next command. Out: other ticket types.
+- Depends on: none
+- Branch: fix/forceload-sync
+- Needs decision: none
+- Done when: from the console, `forceload add 400 400` then `setblock 400 100 400 minecraft:stone` in the next command succeeds every time on PEX, as on vanilla 26.3; a test that runs the two commands back to back 20 times.
+- Status (2026-11-21): added by the 2.0 loop after the agent harness, and a console check on the batch 9 binary, saw `fill` and `setblock` right after `forceload add` answer "That position is not loaded" for several tries on `alpha` `7b3ae93e3`.
 
 ### Proof
 
@@ -2454,7 +2476,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/entity-nbt-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no entity diff outside the ignore list.
-- Status (2026-11-21): in progress. First part landed with batch 7 (branch `fix/entity-nbt-keys`, second lane): entities keep every saved key PEX doesn't model, base and per-type keys are written like vanilla, saddles moved to `equipment.saddle`. Unit tests `a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla`, `a_saved_skeleton_without_a_bow_loads_without_one`. Batch 9 (`5133576dd`) replaced the round trip's 189-line entity catch-all with 67 `ticking` lines (values that move while the lab's entities live, not lost keys) and dropped the phantom `anchor_pos`. Not done: 41 entity known losses are still tagged G7-24. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+- Status (2026-11-21): in progress. First part landed with batch 7 (branch `fix/entity-nbt-keys`, second lane): entities keep every saved key PEX doesn't model, base and per-type keys are written like vanilla, saddles moved to `equipment.saddle`. Unit tests `a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla`, `a_saved_skeleton_without_a_bow_loads_without_one`. Batch 9 (`5133576dd`) replaced the round trip's 189-line entity catch-all with 67 `ticking` lines (values that move while the lab's entities live, not lost keys) and dropped the phantom `anchor_pos`. Batch 10 (`2153f39a7`) stopped burning mobs saving `HasVisualFire`, which vanilla writes only for the command flag. Not done: 41 entity known losses are still tagged G7-24. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G7-25 Block entity NBT keys
 
@@ -2489,6 +2511,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/old-data-versions
 - Needs decision: D7-2
 - Done when: a world made by an older vanilla jar (piston-meta) and saved by PEX opens in vanilla 26.3 with no G7-04 log errors and no block or item diff, or, if D7-2 picks refusing, PEX refuses it with a message naming the version.
+- Status (2026-11-21): landed (branch `fix/old-data-versions`, second lane; D7-2 picked porting the fixers). Vanilla's 26.x data fixers 4996 to 5016 are ported for chunks, block entities, items and entities (unit tests such as `block_states_rename_their_fields`, `components_split_and_drop`, `old_overworld_chunks_blend_and_statuses_merge`, `custom_data_is_never_touched`), and `tools/world-roundtrip/old_version.py` takes a world made by an older vanilla jar through PEX into 26.3 with no diff. Worlds older than data version 4996 are not converted. Landed through merge branch `land/g7-batch-10` (`12839a028`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G7-29 Plugin custom data per dimension and through vanilla
 
