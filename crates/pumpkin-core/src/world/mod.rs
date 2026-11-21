@@ -3613,6 +3613,69 @@ impl World {
         }
     }
 
+    /// Vanilla `PlayerList.placeNewPlayer` sends `ClientboundLoginPacket` before the player is
+    /// added to the level, so nothing the world sends (entities it now tracks, a saved ender
+    /// pearl) reaches a client that has no level yet.
+    pub(crate) fn send_java_login(&self, player: &Arc<Player>, server: &Server) {
+        if player.client.java().is_none() {
+            return;
+        }
+        let dimensions: Vec<ResourceLocation> = server
+            .dimensions
+            .iter()
+            .map(|d| ResourceLocation::from(d.minecraft_name))
+            .collect();
+        let entity_id = player.entity_id();
+        let gamemode = player.gamemode.load();
+        player.try_send_client_packet(&CLogin::new(
+            entity_id,
+            self.level_info.load().hardcore,
+            &dimensions,
+            server
+                .advanced_config
+                .networking
+                .java
+                .max_players
+                .try_into()
+                .unwrap_or(u16::MAX.into()),
+            server
+                .advanced_config
+                .networking
+                .java
+                .view_distance
+                .get()
+                .into(), //  TODO: view distance
+            server
+                .advanced_config
+                .networking
+                .java
+                .simulation_distance
+                .get()
+                .into(), // TODO: sim view dinstance
+            false,
+            true,
+            false,
+            PlayerSpawnData::new(
+                self.dimension.clone(),
+                biome::hash_seed(self.level.seed.0), // seed
+                gamemode as u8,
+                player
+                    .previous_gamemode
+                    .load()
+                    .map_or(-1, |gamemode| gamemode as i8),
+                false,
+                self.is_flat(),
+                player.death_location_for_client(),
+                VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
+                self.sea_level.into(),
+            ),
+            server.advanced_config.networking.java.online_mode,
+            // This should stay true even when reports are disabled.
+            // It prevents the annoying popup when joining the server.
+            true,
+        ));
+    }
+
     #[expect(clippy::too_many_lines)]
     pub async fn spawn_java_player(
         &self,
@@ -3620,12 +3683,6 @@ impl World {
         player: &Arc<Player>,
         server: &Arc<Server>,
     ) {
-        let dimensions: Vec<ResourceLocation> = server
-            .dimensions
-            .iter()
-            .map(|d| ResourceLocation::from(d.minecraft_name))
-            .collect();
-
         // This code follows the vanilla packet order
         let entity_id = player.entity_id();
         let gamemode = player.gamemode.load();
@@ -3637,56 +3694,7 @@ impl World {
         let Some(client) = player.client.java() else {
             return;
         };
-        // Send the login packet for our new player
-        client
-            .send_packet(&CLogin::new(
-                entity_id,
-                self.level_info.load().hardcore,
-                &dimensions,
-                server
-                    .advanced_config
-                    .networking
-                    .java
-                    .max_players
-                    .try_into()
-                    .unwrap_or(u16::MAX.into()),
-                server
-                    .advanced_config
-                    .networking
-                    .java
-                    .view_distance
-                    .get()
-                    .into(), //  TODO: view distance
-                server
-                    .advanced_config
-                    .networking
-                    .java
-                    .simulation_distance
-                    .get()
-                    .into(), // TODO: sim view dinstance
-                false,
-                true,
-                false,
-                PlayerSpawnData::new(
-                    self.dimension.clone(),
-                    biome::hash_seed(self.level.seed.0), // seed
-                    gamemode as u8,
-                    player
-                        .previous_gamemode
-                        .load()
-                        .map_or(-1, |gamemode| gamemode as i8),
-                    false,
-                    self.is_flat(),
-                    player.death_location_for_client(),
-                    VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
-                    self.sea_level.into(),
-                ),
-                server.advanced_config.networking.java.online_mode,
-                // This should stay true even when reports are disabled.
-                // It prevents the annoying popup when joining the server.
-                true,
-            ))
-            .await;
+        // `Server::add_player` already sent `CLogin`, before the player joined the world.
 
         self.pair_new_player_with_tracked_entities(player);
 

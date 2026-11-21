@@ -853,6 +853,7 @@ impl Server {
             &mut PlayerLoginEvent::new(player.clone(), TextComponent::text("You have been kicked from the server"));
             'after: {
                 player.screen_handler_sync_handler.store_player(player.clone());
+                world.send_java_login(&player, self);
                 world.add_player(&player).is_ok().then(|| {
                     player.spawn_saved_ender_pearls(self);
                     player.spawn_skin_fetch(self);
