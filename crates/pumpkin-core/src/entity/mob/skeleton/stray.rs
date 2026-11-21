@@ -1,4 +1,4 @@
-use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::data_component_impl::{EquipmentSlot, StatusEffectInstance};
 use pumpkin_data::sound::Sound;
 use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
@@ -47,5 +47,10 @@ impl Mob for StraySkeletonEntity {
 
     fn get_ambient_sound(&self) -> Option<Sound> {
         Some(Sound::EntityStrayAmbient)
+    }
+
+    /// Vanilla `Stray.getArrow`: every arrow carries 30 seconds of slowness.
+    fn arrow_effect(&self) -> Option<StatusEffectInstance> {
+        Some(super::arrow_effect_instance("minecraft:slowness", 600))
     }
 }

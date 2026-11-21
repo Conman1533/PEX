@@ -28,6 +28,7 @@ mod redstone_lamps_and_bulbs;
 mod redstone_logic_circuits;
 mod redstone_wire_and_power;
 mod scaffolding;
+mod skeletons;
 mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
@@ -285,6 +286,9 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:villager_claims_job_site_and_bed",
     "pumpkin:zombie_villager_chases_wandering_trader",
     "pumpkin:zombified_piglin_alerts_pack_when_hit",
+    "pumpkin:skeleton_switches_to_melee_without_bow",
+    "pumpkin:skeleton_shoots_with_bow_in_off_hand",
+    "pumpkin:wither_skeleton_targets_piglin",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -303,6 +307,9 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:piglin_brute_attacks_player_in_gold_armor",
     "pumpkin:drowned_throws_trident_at_player",
     "pumpkin:giant_ignores_survival_player",
+    "pumpkin:stray_arrow_applies_slowness",
+    "pumpkin:bogged_arrow_applies_poison",
+    "pumpkin:parched_arrow_applies_weakness",
 ];
 
 #[must_use]
@@ -628,6 +635,48 @@ pub fn ensure_builtin_game_tests_registered() {
             120,
             0,
             zombies::test_giant_ignores_survival_player,
+        );
+        register_function_test(
+            "pumpkin:skeleton_switches_to_melee_without_bow",
+            "pumpkin:empty_11x4x5",
+            200,
+            0,
+            skeletons::test_skeleton_switches_to_melee_without_bow,
+        );
+        register_function_test(
+            "pumpkin:skeleton_shoots_with_bow_in_off_hand",
+            "pumpkin:empty_11x4x5",
+            200,
+            0,
+            skeletons::test_skeleton_shoots_with_bow_in_off_hand,
+        );
+        register_function_test(
+            "pumpkin:stray_arrow_applies_slowness",
+            "pumpkin:empty_11x4x5",
+            300,
+            0,
+            skeletons::test_stray_arrow_applies_slowness,
+        );
+        register_function_test(
+            "pumpkin:bogged_arrow_applies_poison",
+            "pumpkin:empty_11x4x5",
+            300,
+            0,
+            skeletons::test_bogged_arrow_applies_poison,
+        );
+        register_function_test(
+            "pumpkin:parched_arrow_applies_weakness",
+            "pumpkin:empty_11x4x5",
+            300,
+            0,
+            skeletons::test_parched_arrow_applies_weakness,
+        );
+        register_function_test(
+            "pumpkin:wither_skeleton_targets_piglin",
+            "pumpkin:empty_9x4x5",
+            100,
+            0,
+            skeletons::test_wither_skeleton_targets_piglin,
         );
         register_function_test(
             "pumpkin:dragon_fireball_leaves_breath_cloud",

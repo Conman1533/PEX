@@ -1220,8 +1220,9 @@ pub trait Mob: EntityBase + Send + Sync {
         self.get_mob_entity().living_entity.can_attack(target)
     }
 
-    /// The arrow item a bow shot fires, for mobs whose `getArrow` adds effects.
-    fn get_arrow_projectile(&self) -> Option<ItemStack> {
+    /// The effect a vanilla `getArrow` override adds to every arrow this mob shoots from a bow:
+    /// poison for the bogged, slowness for the stray, weakness for the parched.
+    fn arrow_effect(&self) -> Option<pumpkin_data::data_component_impl::StatusEffectInstance> {
         None
     }
 

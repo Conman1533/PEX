@@ -4,7 +4,7 @@ use crate::entity::{
     mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
 };
 use crate::world::loot::{LootContextParameters, generate_loot_from_handle};
-use pumpkin_data::data_component_impl::{EquipmentSlot, PotionContentsImpl, StatusEffectInstance};
+use pumpkin_data::data_component_impl::{EquipmentSlot, StatusEffectInstance};
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::game_event::GameEvent;
 use pumpkin_data::item::Item;
@@ -12,7 +12,6 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_nbt::compound::NbtCompound;
 use rand::RngExt;
-use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -118,23 +117,8 @@ impl Mob for BoggedSkeletonEntity {
     }
 
     /// Vanilla `Bogged.getArrow`: every arrow carries 5 seconds of poison.
-    fn get_arrow_projectile(&self) -> Option<ItemStack> {
-        // A plain arrow, so the tipped-arrow duration scale does not shorten the poison.
-        let mut arrow = ItemStack::new(1, &Item::ARROW);
-        arrow.set_data_component(PotionContentsImpl {
-            potion_id: None,
-            custom_color: None,
-            custom_effects: vec![StatusEffectInstance {
-                effect_id: Cow::Borrowed("minecraft:poison"),
-                amplifier: 0,
-                duration: 100,
-                ambient: false,
-                show_particles: true,
-                show_icon: true,
-            }],
-            custom_name: None,
-        });
-        Some(arrow)
+    fn arrow_effect(&self) -> Option<StatusEffectInstance> {
+        Some(super::arrow_effect_instance("minecraft:poison", 100))
     }
 
     /// Vanilla `Bogged.mobInteract`.
