@@ -18,10 +18,32 @@ pub struct PistonBlockEntity {
     pub last_progress: AtomicCell<f32>,
     pub extending: bool,
     pub source: bool,
+    /// Vanilla `lastTicked`: the game time of the entity's last tick.
+    pub last_ticked: AtomicCell<i64>,
 }
 
 impl PistonBlockEntity {
     pub const ID: &'static str = "minecraft:piston";
+
+    #[must_use]
+    pub fn new(
+        position: BlockPos,
+        pushed_block_state: &'static BlockState,
+        facing: BlockDirection,
+        extending: bool,
+        source: bool,
+    ) -> Self {
+        Self {
+            position,
+            pushed_block_state,
+            facing,
+            current_progress: 0.0.into(),
+            last_progress: 0.0.into(),
+            extending,
+            source,
+            last_ticked: 0.into(),
+        }
+    }
 
     const fn movement_direction(&self) -> BlockDirection {
         if self.extending {
@@ -222,6 +244,7 @@ impl BlockEntity for PistonBlockEntity {
     }
 
     fn tick(&self, world: &Arc<World>) {
+        self.last_ticked.store(world.get_world_age());
         let current_progress = self.current_progress.load();
         self.last_progress.store(current_progress);
         if current_progress >= 1.0 {
@@ -241,6 +264,13 @@ impl BlockEntity for PistonBlockEntity {
                         &pos,
                         updated_state,
                         BlockFlags::NOTIFY_ALL | BlockFlags::MOVED,
+                    );
+                    // Vanilla lands the block with flags 67, which update the neighbours'
+                    // shapes (a piston head whose base has retracted goes).
+                    world.block_registry.update_neighbors(
+                        world,
+                        &pos,
+                        BlockFlags::NOTIFY_LISTENERS,
                     );
                     world.update_neighbors(&pos, None);
                 }
@@ -270,6 +300,7 @@ impl BlockEntity for PistonBlockEntity {
             last_progress: last_progress.into(),
             extending,
             source,
+            last_ticked: 0.into(),
         }
     }
 

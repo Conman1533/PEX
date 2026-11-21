@@ -165,6 +165,9 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:piston_one_stone_leaves_pushed_block",
     "pumpkin:redstone/piston_ignores_power_into_face",
     "pumpkin:piston_stops_at_build_limit",
+    "pumpkin:redstone/sticky_piston_pulls_north",
+    "pumpkin:redstone/sticky_piston_spits_on_short_pulse",
+    "pumpkin:redstone/sticky_piston_pulls_moving_block",
     // dispensers_and_droppers_extended (12)
     "pumpkin:dispenser_lava_bucket_places_and_picks_up",
     "pumpkin:dispenser_powder_snow_bucket_places_and_picks_up",
@@ -1176,6 +1179,27 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             pistons_extended::test_piston_stops_at_build_limit,
+        );
+        register_function_test(
+            "pumpkin:redstone/sticky_piston_pulls_north",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            pistons_extended::test_sticky_piston_pulls_north,
+        );
+        register_function_test(
+            "pumpkin:redstone/sticky_piston_spits_on_short_pulse",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            pistons_extended::test_sticky_piston_spits_on_short_pulse,
+        );
+        register_function_test(
+            "pumpkin:redstone/sticky_piston_pulls_moving_block",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            pistons_extended::test_sticky_piston_pulls_moving_block,
         );
         register_function_test(
             "pumpkin:piston_pushes_downward_and_retracts",

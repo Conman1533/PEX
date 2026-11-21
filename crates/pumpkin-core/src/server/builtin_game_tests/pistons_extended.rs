@@ -505,3 +505,108 @@ pub(super) async fn test_sticky_piston_pulls_redstone_block_cuts_power(
         .then_succeed();
     Ok(())
 }
+
+/// G5-07: a north-facing sticky piston pulls its block back. Alpha took the direction byte for
+/// the event type, and North's byte is 2, vanilla's fast-retraction event.
+pub(super) async fn test_sticky_piston_pulls_north(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let piston = BlockPos::new(2, 1, 3);
+    let front = BlockPos::new(2, 1, 2);
+    let pushed = BlockPos::new(2, 1, 1);
+    let power = BlockPos::new(3, 1, 3);
+    let retracted = piston_state(&Block::STICKY_PISTON, Facing::North);
+
+    helper.set_block(&piston, retracted).await?;
+    helper.set_block_default(&front, &Block::STONE).await?;
+
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .set_block_default(&power, &Block::REDSTONE_BLOCK)
+                .await
+        })
+        .then_execute_after(6, move |helper| async move {
+            helper.assert_block_present(&pushed, &Block::STONE).await?;
+            helper.set_block_default(&power, &Block::AIR).await
+        })
+        .then_execute_after(6, move |helper| async move {
+            helper.assert_block_state(&piston, retracted).await?;
+            helper.assert_block_present(&front, &Block::STONE).await?;
+            helper.assert_block_present(&pushed, &Block::AIR).await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// A sticky piston powered for one tick: when it starts retracting, the block still moving out
+/// two blocks in front is finished there at once and left behind (vanilla `triggerEvent`
+/// `pistonPiece`), and the head goes once the base is back.
+async fn short_pulse_leaves_block(
+    helper: GameTestHelper,
+    piston: BlockPos,
+    facing: Facing,
+    front: BlockPos,
+    left: BlockPos,
+    power: BlockPos,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let retracted = piston_state(&Block::STICKY_PISTON, facing);
+    helper.set_block(&piston, retracted).await?;
+    helper.set_block_default(&front, &Block::STONE).await?;
+
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .set_block_default(&power, &Block::REDSTONE_BLOCK)
+                .await
+        })
+        .then_execute_after(1, move |helper| async move {
+            helper.set_block_default(&power, &Block::AIR).await
+        })
+        .then_execute_after(1, move |helper| async move {
+            helper
+                .assert_block_present(&piston, &Block::MOVING_PISTON)
+                .await?;
+            helper.assert_block_present(&left, &Block::STONE).await
+        })
+        .then_execute_after(6, move |helper| async move {
+            helper.assert_block_state(&piston, retracted).await?;
+            helper.assert_block_present(&front, &Block::AIR).await?;
+            helper.assert_block_present(&left, &Block::STONE).await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// G5-07: a one-tick pulse makes a sticky piston spit its block out.
+pub(super) async fn test_sticky_piston_spits_on_short_pulse(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    short_pulse_leaves_block(
+        helper,
+        BlockPos::new(1, 1, 2),
+        Facing::East,
+        BlockPos::new(2, 1, 2),
+        BlockPos::new(3, 1, 2),
+        BlockPos::new(1, 1, 3),
+    )
+    .await
+}
+
+/// G5-07: an upward sticky piston that retracts while its block is still moving finishes the
+/// block where it is instead of waiting for it.
+pub(super) async fn test_sticky_piston_pulls_moving_block(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    short_pulse_leaves_block(
+        helper,
+        BlockPos::new(2, 1, 2),
+        Facing::Up,
+        BlockPos::new(2, 2, 2),
+        BlockPos::new(2, 3, 2),
+        BlockPos::new(1, 1, 2),
+    )
+    .await
+}

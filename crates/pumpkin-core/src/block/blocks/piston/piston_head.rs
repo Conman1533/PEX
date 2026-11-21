@@ -1,10 +1,14 @@
-use pumpkin_data::block_properties::Facing;
-use pumpkin_data::{Block, BlockState, FacingExt};
+use pumpkin_data::block_properties::{Facing, MovingPistonLikeProperties, PistonType};
+use pumpkin_data::{Block, BlockState, BlockStateId, FacingExt};
 use pumpkin_macros::pumpkin_block;
 use pumpkin_world::world::BlockFlags;
 
 use crate::block::blocks::piston::piston::try_move;
-use crate::block::{BlockBehaviour, BrokenArgs, OnNeighborUpdateArgs, PathComputationType};
+use crate::block::{
+    BlockBehaviour, BrokenArgs, GetStateForNeighborUpdateArgs, OnNeighborUpdateArgs,
+    PathComputationType,
+};
+use crate::world::World;
 
 use super::piston::PistonProps;
 
@@ -54,7 +58,42 @@ impl BlockBehaviour for PistonHeadBlock {
         }
     }
 
+    fn get_state_for_neighbor_update(
+        &self,
+        args: GetStateForNeighborUpdateArgs<'_>,
+    ) -> BlockStateId {
+        let props = PistonHeadProperties::from_state_id(args.state_id);
+        if args.direction.opposite().to_facing() == props.facing
+            && !can_survive(args.world, args.position, props)
+        {
+            return Block::AIR.default_state.id;
+        }
+        args.state_id
+    }
+
     fn is_pathfindable(&self, _state: &BlockState, _computation_type: PathComputationType) -> bool {
         false
     }
+}
+
+/// Vanilla `PistonHeadBlock.canSurvive`: the block behind is the head's extended piston, or a
+/// moving piston facing the same way.
+fn can_survive(
+    world: &World,
+    position: &pumpkin_util::math::position::BlockPos,
+    head: PistonHeadProperties,
+) -> bool {
+    let base_pos = position.offset(head.facing.opposite().to_block_direction().to_offset());
+    let (base, base_state) = world.get_block_and_state_id(&base_pos);
+    let fitting_base = if head.r#type == PistonType::Normal {
+        &Block::PISTON
+    } else {
+        &Block::STICKY_PISTON
+    };
+    if base == fitting_base {
+        let props = PistonProps::from_state_id(base_state);
+        return props.extended && props.facing == head.facing;
+    }
+    base == &Block::MOVING_PISTON
+        && MovingPistonLikeProperties::from_state_id(base_state).facing == head.facing
 }

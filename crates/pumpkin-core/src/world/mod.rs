@@ -257,6 +257,8 @@ pub struct World {
     pub block_registry: Arc<BlockRegistry>,
     pub server: Weak<Server>,
     synced_block_event_queue: std::sync::Mutex<BlockEventQueue>,
+    /// Vanilla `ServerLevel.handlingTick`: set while the scheduled block and fluid ticks run.
+    handling_tick: std::sync::atomic::AtomicBool,
     /// A map of unsent block changes, keyed by block position.
     unsent_block_changes: std::sync::Mutex<HashMap<BlockPos, BlockStateId>>,
     /// Persisted vanilla POI storage for portal and villager lookups.
@@ -448,6 +450,7 @@ impl World {
             sea_level: generation_settings.sea_level,
             min_y: i32::from(generation_settings.shape.min_y),
             synced_block_event_queue: std::sync::Mutex::new(BlockEventQueue::default()),
+            handling_tick: std::sync::atomic::AtomicBool::new(false),
             unsent_block_changes: std::sync::Mutex::new(HashMap::new()),
             portal_poi: std::sync::Mutex::new(portal_poi),
             villager_poi: std::sync::Mutex::new(villager_poi::VillagerPoiStorage::default()),
@@ -2533,6 +2536,7 @@ impl World {
         let handle = server.runtime.clone();
 
         // 1. Parallel Block Ticks via Rayon
+        self.handling_tick.store(true, Relaxed);
         let world = self.clone();
         let block_handle = handle.clone();
         tick_data
@@ -2559,6 +2563,7 @@ impl World {
                     world.run_fluid_tick(scheduled_tick);
                 }
             });
+        self.handling_tick.store(false, Relaxed);
 
         // 3. Parallel Random Ticks via Rayon
         let world = self.clone();
@@ -3017,6 +3022,12 @@ impl World {
             entity.init_data_tracker();
             self.spawn_entity_non_save(entity);
         }
+    }
+
+    /// Vanilla `ServerLevel.isHandlingTick`: whether the scheduled block and fluid ticks are
+    /// running.
+    pub fn is_handling_tick(&self) -> bool {
+        self.handling_tick.load(Relaxed)
     }
 
     pub fn get_world_age(&self) -> i64 {
