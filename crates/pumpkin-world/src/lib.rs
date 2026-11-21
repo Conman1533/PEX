@@ -10,6 +10,7 @@ pub mod chunk_system;
 pub mod clip;
 pub mod cylindrical_chunk_iterator;
 pub mod data;
+pub mod datafix;
 pub mod dimension;
 pub mod generation;
 pub mod level;

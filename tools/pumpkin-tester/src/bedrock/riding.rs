@@ -3,7 +3,11 @@
 
 use std::sync::Arc;
 
-use pumpkin_core::entity::{EntityBase, passive::horse::HorseEntity, player::Player};
+use pumpkin_core::entity::{
+    EntityBase,
+    passive::{camel::CamelEntity, horse::HorseEntity},
+    player::Player,
+};
 use pumpkin_data::entity::EntityType;
 use pumpkin_util::math::{vector2::Vector2, vector3::Vector3};
 
@@ -111,7 +115,285 @@ pub(super) async fn run_riding_checks(
     tick(server, bedrock, Some(&mut *java)).await?;
     pig.get_entity().remove();
     walk_back(server, bedrock, java, start).await?;
-    Ok(())
+
+    run_more_mount_checks(server, bedrock, java, checks, &player, start).await?;
+    run_jump_checks(server, bedrock, java, checks, &player, start).await?;
+    run_minecart_check(server, bedrock, java, checks, &player, start).await
+}
+
+/// A strider with a warped fungus on a stick, a camel and a harnessed happy ghast.
+async fn run_more_mount_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    player: &Arc<Player>,
+    start: Vector3<f32>,
+) -> Result<(), String> {
+    run_console(
+        server,
+        &format!("item replace entity {BEDROCK_NAME} hotbar.0 with warped_fungus_on_a_stick"),
+    );
+    let strider = summon(server, bedrock, java, player, &EntityType::STRIDER).await?;
+    strider
+        .get_mob()
+        .ok_or("the strider is not a mob")?
+        .set_saddled(true);
+    ride_and_steer(
+        server,
+        bedrock,
+        java,
+        checks,
+        [
+            "bedrock mounts a saddled strider with a warped fungus on a stick",
+            "java sees bedrock steer a saddled strider",
+        ],
+        &strider,
+    )
+    .await?;
+    strider.get_entity().remove();
+    walk_back(server, bedrock, java, start).await?;
+
+    run_console(
+        server,
+        &format!("item replace entity {BEDROCK_NAME} hotbar.0 with air"),
+    );
+    let camel = summon(server, bedrock, java, player, &EntityType::CAMEL).await?;
+    as_camel(&camel)?.set_saddled(true);
+    ride_and_steer(
+        server,
+        bedrock,
+        java,
+        checks,
+        [
+            "bedrock mounts a saddled camel",
+            "java sees bedrock steer a saddled camel",
+        ],
+        &camel,
+    )
+    .await?;
+    camel.get_entity().remove();
+    walk_back(server, bedrock, java, start).await?;
+
+    // The first click puts the harness on (it stays in a creative hand), the second rides.
+    run_console(
+        server,
+        &format!("item replace entity {BEDROCK_NAME} hotbar.0 with white_harness"),
+    );
+    let ghast = summon(server, bedrock, java, player, &EntityType::HAPPY_GHAST).await?;
+    bedrock
+        .interact(ghast.get_entity().entity_id as u64)
+        .await?;
+    for _ in 0..2 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    ride_and_steer(
+        server,
+        bedrock,
+        java,
+        checks,
+        [
+            "bedrock rides a harnessed happy ghast",
+            "java sees bedrock fly a happy ghast",
+        ],
+        &ghast,
+    )
+    .await?;
+    ghast.get_entity().remove();
+    run_console(
+        server,
+        &format!("item replace entity {BEDROCK_NAME} hotbar.0 with air"),
+    );
+    walk_back(server, bedrock, java, start).await
+}
+
+fn as_camel(camel: &Arc<dyn EntityBase>) -> Result<&CamelEntity, String> {
+    (camel.as_ref() as &dyn std::any::Any)
+        .downcast_ref::<CamelEntity>()
+        .ok_or_else(|| "the camel is not a CamelEntity".to_string())
+}
+
+/// Clicks the mob and waits until the Bedrock bot rides it.
+async fn mount(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    vehicle: &Arc<dyn EntityBase>,
+) -> Result<(), String> {
+    let vehicle_id = vehicle.get_entity().entity_id;
+    let rider_id = bedrock.unique_id;
+    bedrock.interact(vehicle_id as u64).await?;
+    tick_until(
+        server,
+        bedrock,
+        Some(&mut *java),
+        "a rider link from the Bedrock bot to the mount",
+        |bot, _| {
+            bot.ride_link(rider_id)
+                .is_some_and(|(id, _)| id == i64::from(vehicle_id))
+        },
+    )
+    .await
+}
+
+/// Holds jump for twelve ticks in the saddle and lets go, as a real client charging a jump.
+async fn charge_jump(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+) -> Result<(), String> {
+    bedrock.held_flags = vec![bot::INPUT_JUMPING];
+    for _ in 0..12 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    bedrock.held_flags.clear();
+    tick(server, bedrock, Some(&mut *java)).await
+}
+
+/// A charged jump makes a horse rear and a camel dash, which both editions see.
+async fn run_jump_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    player: &Arc<Player>,
+    start: Vector3<f32>,
+) -> Result<(), String> {
+    let horse = summon(server, bedrock, java, player, &EntityType::HORSE).await?;
+    let tamed = (horse.as_ref() as &dyn std::any::Any)
+        .downcast_ref::<HorseEntity>()
+        .ok_or("the horse is not a HorseEntity")?;
+    tamed.set_tame(true);
+    tamed.set_saddled(true);
+    mount(server, bedrock, java, &horse).await?;
+    charge_jump(server, bedrock, java).await?;
+    checks.record(
+        "a bedrock rider's charged jump makes the horse rear",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the horse's standing flag",
+            |_, _| tamed.has_flag(pumpkin_core::entity::passive::horse::FLAG_STANDING),
+        )
+        .await,
+    );
+    bedrock
+        .stop_riding(horse.get_entity().entity_id as u64)
+        .await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    horse.get_entity().remove();
+    walk_back(server, bedrock, java, start).await?;
+
+    let camel = summon(server, bedrock, java, player, &EntityType::CAMEL).await?;
+    let saddled = as_camel(&camel)?;
+    saddled.set_saddled(true);
+    mount(server, bedrock, java, &camel).await?;
+    charge_jump(server, bedrock, java).await?;
+    checks.record(
+        "a bedrock rider's charged jump makes the camel dash",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the camel dashing with its cooldown running",
+            |_, _| {
+                saddled.is_dashing()
+                    && saddled
+                        .dash_cooldown
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        > 0
+            },
+        )
+        .await,
+    );
+    bedrock
+        .stop_riding(camel.get_entity().entity_id as u64)
+        .await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    camel.get_entity().remove();
+    walk_back(server, bedrock, java, start).await
+}
+
+/// Minecarts aren't predicted by the client: the held forward key pushes the cart the way the
+/// rider looks, from the server.
+async fn run_minecart_check(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    player: &Arc<Player>,
+    start: Vector3<f32>,
+) -> Result<(), String> {
+    // A straight north-south track three blocks east, which a placed rail is on its own.
+    let feet = player.get_entity().pos.load();
+    let (x, y, z) = (
+        feet.x.floor() as i32 + 3,
+        feet.y.floor() as i32,
+        feet.z.floor() as i32,
+    );
+    run_console(
+        server,
+        &format!("fill {x} {} {z} {x} {} {} stone", y - 1, y - 1, z + 12),
+    );
+    run_console(server, &format!("fill {x} {y} {z} {x} {y} {} rail", z + 12));
+    run_console(
+        server,
+        &format!("summon minecraft:minecart {x}.5 {y} {}.5", z + 1),
+    );
+    let cart = tick_until(
+        server,
+        bedrock,
+        Some(&mut *java),
+        "the minecart on the server",
+        |_, _| find_minecart(player).is_some(),
+    )
+    .await
+    .and_then(|()| find_minecart(player).ok_or_else(|| "the minecart is gone".to_string()))?;
+    mount(server, bedrock, java, &cart).await?;
+    let cart_start = cart.get_entity().pos.load();
+    // Looking south, down the track. The push is vanilla's slow one, a thousandth of a block a
+    // tick per tick.
+    bedrock.yaw = 0.0;
+    bedrock.held_flags = vec![bot::INPUT_UP];
+    for _ in 0..60 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    bedrock.held_flags.clear();
+    let moved = cart.get_entity().pos.load().z - cart_start.z;
+    checks.record(
+        "bedrock pushes a minecart with the forward key",
+        if moved > 0.2 {
+            Ok(())
+        } else {
+            Err(format!("the minecart went {moved:.2} blocks south"))
+        },
+    );
+    bedrock
+        .stop_riding(cart.get_entity().entity_id as u64)
+        .await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    cart.get_entity().remove();
+    run_console(
+        server,
+        &format!("fill {x} {} {z} {x} {y} {} air", y - 1, z + 12),
+    );
+    walk_back(server, bedrock, java, start).await
+}
+
+fn find_minecart(player: &Arc<Player>) -> Option<Arc<dyn EntityBase>> {
+    let pos = player.get_entity().pos.load();
+    player
+        .world()
+        .entities
+        .load()
+        .iter()
+        .find(|entity| {
+            let entity = entity.get_entity();
+            entity.entity_type == &EntityType::MINECART
+                && entity.pos.load().squared_distance_to_vec(&pos) < 400.0
+        })
+        .cloned()
 }
 
 /// Moves the rider two blocks east over four ticks with `ClientPredictedVehicle`, as a real

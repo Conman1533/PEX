@@ -435,6 +435,21 @@ impl Mob for HorseEntity {
         crate::entity::mob::player_steers(self)
     }
 
+    fn can_rider_jump(&self) -> bool {
+        self.is_saddled()
+    }
+
+    /// Vanilla `AbstractHorse.handleStartJump`: rear up and play the jump sound.
+    fn handle_start_jump(&self, _power: i32) {
+        // Vanilla `standIfPossible`: rear up.
+        if !self.has_flag(FLAG_STANDING) {
+            self.stand_counter
+                .store(1, std::sync::atomic::Ordering::Relaxed);
+            self.set_flag(FLAG_STANDING, true);
+        }
+        self.get_entity().play_sound(Sound::EntityHorseJump);
+    }
+
     /// Vanilla `AbstractHorse.aiStep`: rearing ends after 20 ticks.
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let stand = self.stand_counter.load(Ordering::Relaxed);

@@ -327,7 +327,7 @@ impl Inventory for CrafterBlockEntity {
 
     fn mark_dirty(&self) {
         self.dirty.store(true, Ordering::Relaxed);
-        self.comparator_dirty.store(true, Ordering::Relaxed);
+        crate::block::entities::mark_changed(self.position, &self.comparator_dirty);
     }
 
     fn as_any(&self) -> &dyn Any {

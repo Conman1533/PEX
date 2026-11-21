@@ -245,8 +245,7 @@ macro_rules! impl_inventory_for_chest {
 
             fn mark_dirty(&self) {
                 self.dirty.store(true, std::sync::atomic::Ordering::Relaxed);
-                self.comparator_dirty
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                $crate::block::entities::mark_changed(self.position, &self.comparator_dirty);
             }
 
             fn as_any(&self) -> &dyn std::any::Any {

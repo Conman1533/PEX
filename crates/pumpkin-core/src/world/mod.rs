@@ -1,4 +1,4 @@
-use crate::block::entities::{BlockEntity, block_entity_from_nbt};
+use crate::block::entities::{BlockEntity, ChangeScope, block_entity_from_nbt};
 use crate::server::metrics::WorldTickReport;
 use dashmap::DashMap;
 use pumpkin_data::chunk::Biome;
@@ -33,7 +33,7 @@ pub mod game_event;
 pub mod generation_cache;
 pub mod loot;
 pub mod map;
-mod neighbor_updater;
+pub(crate) mod neighbor_updater;
 pub mod portal;
 pub mod raid;
 pub mod random_sequences;
@@ -286,6 +286,15 @@ pub struct World {
     /// active chunks instead of scanning every loaded block entity each tick.
     pub block_entities: DashMap<Vector2<i32>, FxHashMap<BlockPos, Arc<dyn BlockEntity>>>,
     pending_block_entity_migrations: crossbeam::queue::SegQueue<Vector2<i32>>,
+    /// Vanilla `Level.blockEntityTickers` and `pendingBlockEntityTickers`: the order block
+    /// entities tick in (roadmap D5-1).
+    block_entity_tickers: std::sync::Mutex<BlockEntityTickers>,
+    /// Vanilla `LevelChunk.tickersInLevel`: the live ticker of each block entity position. A
+    /// list entry whose id no longer matches is a removed ticker.
+    block_entity_ticker_ids: DashMap<BlockPos, u64>,
+    next_block_entity_ticker_id: std::sync::atomic::AtomicU64,
+    /// The [`crate::block::entities::unscoped_changes`] count this world last flushed.
+    flushed_unscoped_changes: std::sync::atomic::AtomicU64,
     /// Block entities the tick has already reported as invalid for their block.
     invalid_ticking_block_entities: std::sync::Mutex<Vec<Weak<dyn BlockEntity>>>,
     /// Persistent custom data for the world (matching Bukkit's `PersistentDataHolder`)
@@ -315,6 +324,26 @@ impl PartialEq for World {
 }
 
 impl Eq for World {}
+
+/// Vanilla `Level`'s ticker lists, as `(position, ticker id)`.
+#[derive(Default)]
+struct BlockEntityTickers {
+    tickers: Vec<(BlockPos, u64)>,
+    /// Tickers added while the list ticks, appended when the next tick starts.
+    pending: Vec<(BlockPos, u64)>,
+    ticking: bool,
+}
+
+impl BlockEntityTickers {
+    /// Vanilla `Level.addBlockEntityTicker`.
+    fn add(&mut self, ticker: (BlockPos, u64)) {
+        if self.ticking {
+            self.pending.push(ticker);
+        } else {
+            self.tickers.push(ticker);
+        }
+    }
+}
 
 impl World {
     const TAB_LIST_ADD_FLAGS: u8 = PlayerInfoFlags::ADD_PLAYER.bits()
@@ -470,6 +499,10 @@ impl World {
             server,
             block_entities: DashMap::new(),
             pending_block_entity_migrations: crossbeam::queue::SegQueue::new(),
+            block_entity_tickers: std::sync::Mutex::default(),
+            block_entity_ticker_ids: DashMap::new(),
+            next_block_entity_ticker_id: std::sync::atomic::AtomicU64::new(0),
+            flushed_unscoped_changes: std::sync::atomic::AtomicU64::new(0),
             invalid_ticking_block_entities: std::sync::Mutex::new(Vec::new()),
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
@@ -935,6 +968,7 @@ impl World {
         let saved: Vec<_> = block_entities
             .into_iter()
             .map(|(position, block_entity)| {
+                self.block_entity_ticker_ids.remove(&position);
                 let mut nbt = NbtCompound::new();
                 block_entity.write_internal(&mut nbt);
                 if let Some((_, (kind, kept))) = self.kept_block_entity_nbt.remove(&position)
@@ -2117,33 +2151,14 @@ impl World {
         let tracker_elapsed = t_tracker.elapsed();
 
         let t_be = std::time::Instant::now();
-        let mut block_entities: Vec<Arc<dyn BlockEntity>> = Vec::new();
-        if self.block_entities.len() < active_chunks.len() {
-            for chunk_block_entities in &self.block_entities {
-                if active_chunks.contains(chunk_block_entities.key()) {
-                    block_entities.extend(chunk_block_entities.values().cloned());
-                }
-            }
-        } else {
-            for chunk_pos in active_chunks.iter() {
-                if let Some(chunk_block_entities) = self.block_entities.get(chunk_pos) {
-                    block_entities.extend(chunk_block_entities.values().cloned());
-                }
-            }
-        }
-        let block_entity_count = block_entities.len();
-
-        let be_handle = handle;
-        block_entities.par_chunks(16).for_each(|batch| {
-            let _guard = be_handle.enter();
-            for be in batch {
-                self.tick_block_entity(be);
-            }
-        });
-        // Drained after all ticks, so changes (hopper -> chest) land in the same tick.
-        let guard = be_handle.enter();
-        self.flush_comparator_updates(&block_entities);
-        drop(guard);
+        let block_entity_count = {
+            let _guard = handle.enter();
+            let _changes = ChangeScope::enter();
+            let count = self.tick_block_entities(&active_chunks);
+            // Changes entities made this tick, like vanilla's before the block entities tick.
+            self.flush_comparator_updates();
+            count
+        };
         let block_entity_elapsed = t_be.elapsed();
 
         let t_phase = std::time::Instant::now();
@@ -2546,12 +2561,17 @@ impl World {
         // `fluidTicks.tick`): a tick sees every change the ticks before it made (roadmap D5-1).
         {
             let _guard = handle.enter();
+            let _changes = ChangeScope::enter();
+            // Container changes made since the last tick, by players for one.
+            self.flush_comparator_updates();
             self.handling_tick.store(true, Relaxed);
             for scheduled_tick in &tick_data.block_ticks {
                 self.run_block_tick(scheduled_tick);
+                self.fire_block_entity_changes();
             }
             for scheduled_tick in &tick_data.fluid_ticks {
                 self.run_fluid_tick(scheduled_tick);
+                self.fire_block_entity_changes();
             }
         }
         self.handling_tick.store(false, Relaxed);
@@ -5628,6 +5648,7 @@ impl World {
                 // The saved NBT holds the kept keys again, and reloading reads them from there.
                 for position in block_entities.keys() {
                     self.kept_block_entity_nbt.remove(position);
+                    self.block_entity_ticker_ids.remove(position);
                 }
             }
         }
@@ -5749,6 +5770,30 @@ impl World {
             .flatten()
     }
 
+    /// The shape-update pass at the end of `Level.setBlock`, which stops at its `updateLimit`.
+    fn update_shapes_after_set(
+        self: &Arc<Self>,
+        position: &BlockPos,
+        (old_block, old_state): (&'static Block, BlockStateId),
+        (new_block, new_state): (&'static Block, BlockStateId),
+        flags: BlockFlags,
+    ) {
+        if flags.intersects(BlockFlags::MOVED | BlockFlags::UPDATE_KNOWN_SHAPE)
+            || neighbor_updater::shape_update_limit() == 0
+        {
+            return;
+        }
+        let mut neighbour_update_flags = flags;
+        neighbour_update_flags.remove(BlockFlags::NOTIFY_NEIGHBORS);
+        neighbour_update_flags.remove(BlockFlags::SKIP_DROPS);
+        self.block_registry
+            .prepare(self, position, old_block, old_state, neighbour_update_flags);
+        self.block_registry
+            .update_neighbors(self, position, neighbour_update_flags);
+        self.block_registry
+            .prepare(self, position, new_block, new_state, neighbour_update_flags);
+    }
+
     /// Everything `set_block_state` does after the chunk write: callbacks, neighbour updates,
     /// client sync, POI and lighting.
     fn on_block_state_set(
@@ -5812,27 +5857,12 @@ impl World {
                 }
             }
 
-            if !flags.intersects(BlockFlags::MOVED | BlockFlags::UPDATE_KNOWN_SHAPE) {
-                let mut neighbour_update_flags = flags;
-                neighbour_update_flags.remove(BlockFlags::NOTIFY_NEIGHBORS);
-                neighbour_update_flags.remove(BlockFlags::SKIP_DROPS);
-                self.block_registry.prepare(
-                    self,
-                    position,
-                    old_block,
-                    replaced_block_state_id,
-                    neighbour_update_flags,
-                );
-                self.block_registry
-                    .update_neighbors(self, position, neighbour_update_flags);
-                self.block_registry.prepare(
-                    self,
-                    position,
-                    new_block,
-                    block_state_id,
-                    neighbour_update_flags,
-                );
-            }
+            self.update_shapes_after_set(
+                position,
+                (old_block, replaced_block_state_id),
+                (new_block, block_state_id),
+                flags,
+            );
 
             self.villager_poi
                 .lock()
@@ -6801,19 +6831,132 @@ impl World {
         );
     }
 
-    /// Sends output-signal updates for block entities changed this tick, in list order.
-    fn flush_comparator_updates(self: &Arc<Self>, block_entities: &[Arc<dyn BlockEntity>]) {
-        for be in block_entities {
-            // Vanilla `BlockEntity.setChanged` -> `Level.updateNeighbourForOutputSignal`.
-            if !be.is_comparator_dirty() {
+    /// Vanilla `Level.tickBlockEntities`: tickers added while it runs wait for the next tick,
+    /// removed ones drop out, and the rest tick in the order they were added. Returns how many
+    /// block entities ticked.
+    fn tick_block_entities(self: &Arc<Self>, active_chunks: &FxHashSet<Vector2<i32>>) -> usize {
+        let tickers = {
+            let mut lists = self
+                .block_entity_tickers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            lists.ticking = true;
+            let pending = std::mem::take(&mut lists.pending);
+            lists.tickers.extend(pending);
+            std::mem::take(&mut lists.tickers)
+        };
+        let mut kept = Vec::with_capacity(tickers.len());
+        let mut ticked = 0;
+        for (position, id) in tickers {
+            let live = self
+                .block_entity_ticker_ids
+                .get(&position)
+                .is_some_and(|live| *live == id);
+            if !live {
                 continue;
             }
-            be.clear_comparator_dirty();
-            let pos = be.get_position();
-            // The list is a snapshot, so the chunk may be gone by now.
-            if let Some(state_id) = self.get_block_state_id_if_loaded(&pos) {
-                self.update_neighbour_for_output_signal(&pos, state_id.to_block());
+            kept.push((position, id));
+            let chunk_pos = position.chunk_position();
+            if !active_chunks.contains(&chunk_pos) {
+                continue;
             }
+            let Some(block_entity) = self
+                .block_entities
+                .get(&chunk_pos)
+                .and_then(|entities| entities.get(&position).cloned())
+            else {
+                continue;
+            };
+            ticked += 1;
+            self.tick_block_entity(&block_entity);
+            self.fire_block_entity_changes();
+        }
+        let mut lists = self
+            .block_entity_tickers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        lists.tickers = kept;
+        lists.ticking = false;
+        ticked
+    }
+
+    /// Vanilla `LevelChunk.updateBlockEntityTicker`: a position without a ticker gets one at the
+    /// end of the list; a block entity replacing a live one keeps its place.
+    fn register_block_entity_ticker(&self, position: BlockPos) {
+        let id = match self.block_entity_ticker_ids.entry(position) {
+            dashmap::mapref::entry::Entry::Occupied(_) => return,
+            dashmap::mapref::entry::Entry::Vacant(slot) => {
+                let id = self
+                    .next_block_entity_ticker_id
+                    .fetch_add(1, Ordering::Relaxed);
+                slot.insert(id);
+                id
+            }
+        };
+        self.block_entity_tickers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .add((position, id));
+    }
+
+    /// Sends the output-signal updates for the block entities changed inside this thread's
+    /// [`ChangeScope`], in the order they changed, as vanilla `BlockEntity.setChanged` does at once.
+    fn fire_block_entity_changes(self: &Arc<Self>) {
+        loop {
+            let changed = crate::block::entities::take_changed();
+            if changed.is_empty() {
+                return;
+            }
+            for position in changed {
+                if let Some(state_id) = self.get_block_state_id_if_loaded(&position)
+                    && !state_id.to_state().is_air()
+                {
+                    self.update_neighbour_for_output_signal(&position, state_id.to_block());
+                }
+            }
+        }
+    }
+
+    /// Sends output-signal updates for block entities changed outside a [`ChangeScope`] (by
+    /// players, entities or commands), in ticker order. Skips the scan when nothing was.
+    fn flush_comparator_updates(self: &Arc<Self>) {
+        let changes = crate::block::entities::unscoped_changes();
+        if self
+            .flushed_unscoped_changes
+            .swap(changes, Ordering::Relaxed)
+            == changes
+        {
+            return;
+        }
+        let tickers: Vec<BlockPos> = {
+            let lists = self
+                .block_entity_tickers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            lists
+                .tickers
+                .iter()
+                .chain(&lists.pending)
+                .map(|(position, _)| *position)
+                .collect()
+        };
+        for position in tickers {
+            let Some(block_entity) = self
+                .block_entities
+                .get(&position.chunk_position())
+                .and_then(|entities| entities.get(&position).cloned())
+            else {
+                continue;
+            };
+            if !block_entity.is_comparator_dirty() {
+                continue;
+            }
+            block_entity.clear_comparator_dirty();
+            // Vanilla `BlockEntity.setChanged` -> `Level.updateNeighbourForOutputSignal`.
+            if let Some(state_id) = self.get_block_state_id_if_loaded(&position) {
+                self.update_neighbour_for_output_signal(&position, state_id.to_block());
+            }
+            self.fire_block_entity_changes();
         }
     }
 
@@ -6939,6 +7082,7 @@ impl World {
             .entry(chunk_pos)
             .or_default()
             .insert(*block_pos, entity.clone());
+        self.register_block_entity_ticker(*block_pos);
         Some(entity)
     }
 
@@ -7029,6 +7173,7 @@ impl World {
             .entry(chunk_pos)
             .or_default()
             .insert(block_pos, block_entity);
+        self.register_block_entity_ticker(block_pos);
 
         if let Some(nbt) = block_entity_nbt {
             let mut full_nbt = nbt;
@@ -7087,6 +7232,7 @@ impl World {
                     chunk_block_entities.remove(block_pos).is_some()
                 });
         if removed || removed_pending {
+            self.block_entity_ticker_ids.remove(block_pos);
             self.custom_block_entity_data.remove(block_pos);
             self.kept_block_entity_nbt.remove(block_pos);
             // Drop the chunk's map once its last block entity is gone.
@@ -7118,7 +7264,13 @@ impl World {
             .level
             .read_chunk_sync(&chunk_pos, |chunk| chunk.block_entity_block_positions())
             .unwrap_or_default();
-        for pos in positions.into_iter().chain(block_entity_blocks) {
+        // Vanilla registers a loaded chunk's block entities in its hash map's order; sorting at
+        // least makes the order the same every run.
+        let mut positions: Vec<BlockPos> =
+            positions.into_iter().chain(block_entity_blocks).collect();
+        positions.sort_unstable_by_key(|pos| (pos.0.y, pos.0.z, pos.0.x));
+        positions.dedup();
+        for pos in positions {
             let already_loaded = self
                 .block_entities
                 .get(&chunk_pos)

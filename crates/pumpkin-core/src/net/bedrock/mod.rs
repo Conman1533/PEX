@@ -149,6 +149,9 @@ pub struct BedrockClient {
     attack_cooldown_shown: AtomicBool,
     /// Whether the charge bar is on screen, so the title times need putting back.
     attack_cooldown_drawn: AtomicBool,
+    /// Ticks the jump key has been held past the first while steering a mount that jumps, or
+    /// -1 when it isn't held.
+    pub(crate) riding_jump_ticks: std::sync::atomic::AtomicI32,
     /// The title times last set for this player (fade in, stay, fade out), put back after the
     /// charge bar. Vanilla's defaults until a plugin or command sets others.
     pub title_times: AtomicCell<(i32, i32, i32)>,
@@ -199,6 +202,7 @@ impl BedrockClient {
             last_block_use_fallthrough_tick: AtomicCell::new(None),
             attack_cooldown_shown: AtomicBool::new(false),
             attack_cooldown_drawn: AtomicBool::new(false),
+            riding_jump_ticks: std::sync::atomic::AtomicI32::new(-1),
             title_times: AtomicCell::new((10, 70, 20)),
             client_cache_supported: AtomicBool::new(false),
             blob_cache: std::sync::Mutex::new(HashMap::new()),

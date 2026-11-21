@@ -222,6 +222,9 @@ impl Server {
             advanced_config.commands.broadcast_console_to_ops,
         );
 
+        crate::world::neighbor_updater::set_max_chained_updates(
+            basic_config.max_chained_neighbor_updates,
+        );
         let world_path = basic_config.get_world_path();
         let session_lock = SessionLock::create(&world_path)?;
 

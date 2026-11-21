@@ -126,6 +126,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:comparator_furnace_slots_signal",
     "pumpkin:comparator_copper_bulb_oxidized_variants",
     "pumpkin:comparator_subtract_clamps_to_zero",
+    "pumpkin:redstone/comparator_container_race",
     // buttons_levers_plates_variants (12)
     "pumpkin:oak_button_30_tick_pulse",
     "pumpkin:polished_blackstone_button_20_tick_pulse",
@@ -1000,6 +1001,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             comparators_extended::test_comparator_subtract_mode_clamps_to_zero,
+        );
+        register_function_test(
+            "pumpkin:redstone/comparator_container_race",
+            "pumpkin:empty_16x4x16",
+            60,
+            0,
+            comparators_extended::test_comparator_container_race,
         );
 
         // buttons_levers_plates_variants (12)

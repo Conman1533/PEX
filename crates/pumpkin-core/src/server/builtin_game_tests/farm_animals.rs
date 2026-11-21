@@ -1,3 +1,4 @@
+use pumpkin_data::Block;
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
@@ -59,6 +60,19 @@ pub(super) async fn test_armadillo_rolls_up_near_zombie(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
     build_stone_floor(&helper, 9, 5).await?;
+    // A wall two blocks high keeps the idle armadillo's random strolls inside the box it is
+    // looked for in.
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..3 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
     helper
         .spawn_entity_at("minecraft:armadillo", Vector3::new(2.5, 1.0, 2.5))
         .await?;

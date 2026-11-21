@@ -106,6 +106,15 @@ pub const OFFLINE_UUID_VERSION: u32 = 2;
 /// of the player file. The server moves PEX 1.x's files before it saves this version.
 pub const VANILLA_PLAYER_FILES_VERSION: u32 = 4;
 
+/// The `config_version` that adds `max_chained_neighbor_updates` (roadmap D5-2).
+pub const MAX_CHAINED_NEIGHBOR_UPDATES_VERSION: u32 = 6;
+
+/// `config_version` 6 adds `max_chained_neighbor_updates`, which the loader fills in from the
+/// defaults like any missing key; the step itself changes nothing else.
+const fn add_max_chained_neighbor_updates(_document: &mut DocumentMut) -> Vec<String> {
+    Vec::new()
+}
+
 /// Keys that changed nothing, which `config_version` 3 removes. Upstream dropped
 /// `write_in_place` from `AnvilChunkConfig`; nothing ever read the others.
 const DEAD_KEYS: &[&str] = &[
@@ -183,10 +192,18 @@ impl LoadConfiguration for PumpkinConfig {
             version: 5,
             step: Step::Config(turn_off_upstream_defaults),
         },
+        Migration {
+            version: MAX_CHAINED_NEIGHBOR_UPDATES_VERSION,
+            step: Step::Config(add_max_chained_neighbor_updates),
+        },
     ];
 
     const ALIASES: &'static [(&'static str, &'static str)] = &[
         ("accepts_transfers", "accepts-transfers"),
+        (
+            "max_chained_neighbor_updates",
+            "max-chained-neighbor-updates",
+        ),
         ("networking.java.keep_alive_time", "keep-alive-time"),
         ("networking.java.keep_alive_time", "keep_alive_interval"),
         ("networking.java.keep_alive_time", "keep-alive-interval"),
@@ -358,6 +375,13 @@ pub struct BasicConfiguration {
     /// Players without operator privileges cannot break or place blocks within this radius.
     /// Set to 0 to disable spawn protection.
     pub spawn_protection: u32,
+    /// How many neighbour updates one block change may chain before the rest are skipped, like
+    /// vanilla's `max-chained-neighbor-updates`. Any negative value means no limit.
+    #[serde(
+        alias = "max-chained-neighbor-updates",
+        alias = "max_chained_neighbor_updates"
+    )]
+    pub max_chained_neighbor_updates: i32,
 }
 
 impl Default for BasicConfiguration {
@@ -381,6 +405,7 @@ impl Default for BasicConfiguration {
             enforce_whitelist: false,
             accepts_transfers: true,
             spawn_protection: 16,
+            max_chained_neighbor_updates: 1_000_000,
         }
     }
 }
