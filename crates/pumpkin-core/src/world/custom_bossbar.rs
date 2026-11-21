@@ -1,7 +1,10 @@
 use crate::entity::player::Player;
 use crate::server::Server;
-use crate::world::bossbar::{Bossbar, BossbarColor, BossbarDivisions};
+use crate::world::bossbar::{Bossbar, BossbarColor, BossbarDivisions, BossbarFlags};
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::text::TextComponent;
+use pumpkin_util::version::JavaMinecraftVersion;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -460,5 +463,174 @@ impl CustomBossbars {
         Err(BossbarUpdateError::InvalidResourceLocation(
             resource_location,
         ))
+    }
+
+    /// The `data` compound of vanilla's `custom_boss_events.dat`, one `CustomBossEvent.Packed`
+    /// per id. Defaults are left out like vanilla's `optionalFieldOf`.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        for (id, bar) in &self.custom_bossbars {
+            let mut tag = NbtCompound::new();
+            tag.put(
+                "Name",
+                bar.bossbar_data
+                    .title
+                    .0
+                    .to_nbt_tag_for_version(&JavaMinecraftVersion::V_26_3),
+            );
+            if bar.visible {
+                tag.put_bool("Visible", true);
+            }
+            if bar.value != 0 {
+                tag.put_int("Value", bar.value);
+            }
+            if bar.max != DEFAULT_MAX {
+                tag.put_int("Max", bar.max);
+            }
+            if bar.bossbar_data.color != BossbarColor::White {
+                tag.put_string("Color", color_name(bar.bossbar_data.color).to_string());
+            }
+            if bar.bossbar_data.division != BossbarDivisions::NoDivision {
+                tag.put_string(
+                    "Overlay",
+                    overlay_name(bar.bossbar_data.division).to_string(),
+                );
+            }
+            for (key, flag) in FLAG_KEYS {
+                if bar.bossbar_data.flags.contains(flag) {
+                    tag.put_bool(key, true);
+                }
+            }
+            if !bar.players.is_empty() {
+                tag.put_list(
+                    "Players",
+                    bar.players.iter().copied().map(NbtTag::from_uuid).collect(),
+                );
+            }
+            data.put_compound(id, tag);
+        }
+        data
+    }
+
+    /// Reads the `data` compound of vanilla's `custom_boss_events.dat`.
+    #[must_use]
+    #[expect(clippy::cast_possible_truncation)]
+    pub fn from_nbt(data: &NbtCompound) -> Self {
+        let mut bars = Self::new();
+        for (id, tag) in &data.child_tags {
+            let NbtTag::Compound(tag) = tag else {
+                continue;
+            };
+            let title = tag
+                .get("Name")
+                .map_or_else(TextComponent::empty, TextComponent::from_nbt);
+            let mut bossbar = Bossbar::new(title);
+            bossbar.color = tag
+                .get_string("Color")
+                .and_then(|name| COLORS.into_iter().find(|c| color_name(*c) == name))
+                .unwrap_or(BossbarColor::White);
+            bossbar.division = tag
+                .get_string("Overlay")
+                .and_then(|name| OVERLAYS.into_iter().find(|o| overlay_name(*o) == name))
+                .unwrap_or(BossbarDivisions::NoDivision);
+            for (key, flag) in FLAG_KEYS {
+                if tag.get_bool(key).unwrap_or(false) {
+                    bossbar.flags |= flag;
+                }
+            }
+            let mut bar = CustomBossbar::new(id.to_string(), bossbar);
+            bar.visible = tag.get_bool("Visible").unwrap_or(false);
+            bar.value = tag.get_int("Value").unwrap_or(0);
+            bar.max = tag.get_int("Max").unwrap_or(DEFAULT_MAX);
+            // `CustomBossEvent.load` sets the progress from value and max.
+            if bar.max > 0 {
+                bar.bossbar_data.health =
+                    (f64::from(bar.value) / f64::from(bar.max)).clamp(0.0, 1.0) as f32;
+            }
+            bar.players = tag
+                .get_list("Players")
+                .unwrap_or_default()
+                .iter()
+                .filter_map(NbtTag::extract_uuid)
+                .collect();
+            bars.custom_bossbars.insert(id.to_string(), bar);
+        }
+        bars
+    }
+}
+
+/// `CustomBossEvent`'s default max.
+const DEFAULT_MAX: i32 = 100;
+
+const COLORS: [BossbarColor; 7] = [
+    BossbarColor::Pink,
+    BossbarColor::Blue,
+    BossbarColor::Red,
+    BossbarColor::Green,
+    BossbarColor::Yellow,
+    BossbarColor::Purple,
+    BossbarColor::White,
+];
+
+const OVERLAYS: [BossbarDivisions; 5] = [
+    BossbarDivisions::NoDivision,
+    BossbarDivisions::Notches6,
+    BossbarDivisions::Notches10,
+    BossbarDivisions::Notches12,
+    BossbarDivisions::Notches20,
+];
+
+const FLAG_KEYS: [(&str, BossbarFlags); 3] = [
+    ("DarkenScreen", BossbarFlags::DARKEN_SKY),
+    ("PlayBossMusic", BossbarFlags::DRAGON_BAR),
+    ("CreateWorldFog", BossbarFlags::CREATE_FOG),
+];
+
+/// `BossEvent.BossBarColor` serialized names.
+const fn color_name(color: BossbarColor) -> &'static str {
+    match color {
+        BossbarColor::Pink => "pink",
+        BossbarColor::Blue => "blue",
+        BossbarColor::Red => "red",
+        BossbarColor::Green => "green",
+        BossbarColor::Yellow => "yellow",
+        BossbarColor::Purple => "purple",
+        BossbarColor::White => "white",
+    }
+}
+
+/// `BossEvent.BossBarOverlay` serialized names.
+const fn overlay_name(division: BossbarDivisions) -> &'static str {
+    match division {
+        BossbarDivisions::NoDivision => "progress",
+        BossbarDivisions::Notches6 => "notched_6",
+        BossbarDivisions::Notches10 => "notched_10",
+        BossbarDivisions::Notches12 => "notched_12",
+        BossbarDivisions::Notches20 => "notched_20",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `testdata/custom_boss_events_vanilla_26_3.dat` is what vanilla 26.3 saved after
+    /// `/bossbar add test:bar "Hello"`, color red, style `notched_10`, max 50 and value 20, and
+    /// `/bossbar add test:plain {"text":"Plain","color":"gold"}`.
+    #[test]
+    fn vanilla_boss_bars_load_and_save_unchanged() {
+        let root = pumpkin_nbt::nbt_compress::read_gzip_compound_tag(std::io::Cursor::new(
+            include_bytes!("testdata/custom_boss_events_vanilla_26_3.dat"),
+        ))
+        .unwrap();
+        let data = root.get_compound("data").unwrap();
+        let bars = CustomBossbars::from_nbt(data);
+        let bar = bars.get_bossbar("test:bar").unwrap();
+        assert_eq!((bar.value, bar.max, bar.visible), (20, 50, true));
+        assert!(bar.bossbar_data.color == BossbarColor::Red);
+        assert!(bar.bossbar_data.division == BossbarDivisions::Notches10);
+        assert!((bar.bossbar_data.health - 0.4).abs() < f32::EPSILON);
+        assert_eq!(bars.to_nbt(), *data);
     }
 }
