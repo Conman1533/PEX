@@ -103,14 +103,29 @@ impl GameProfileResult {
                         _ => Err(Self::unknown_player_syntax_error()),
                     }
                 } else {
-                    let profile = Self::profile_from_uuid_name(offline_uuid(name), name.clone());
+                    // Vanilla `CachedUserNameToIdResolver.get` lowercases the name and asks Mojang
+                    // even in offline mode; a name Mojang doesn't know (or that fails
+                    // `isValidPlayerName`) gets the offline UUID of the lowercased name (D4-1).
+                    let lowercase_name = name.to_lowercase();
+                    let mojang = if is_valid_player_name(&lowercase_name) {
+                        lookup_profile_by_name_blocking(
+                            &lowercase_name,
+                            &server.advanced_config.networking.java.authentication,
+                        )
+                        .ok()
+                        .flatten()
+                    } else {
+                        None
+                    };
+                    let (uuid, resolved_name) =
+                        mojang.unwrap_or_else(|| (offline_uuid(&lowercase_name), lowercase_name));
                     server
                         .data
                         .user_cache
                         .write()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .upsert(profile.id, profile.name.clone());
-                    Ok(vec![profile])
+                        .upsert(uuid, resolved_name.clone());
+                    Ok(vec![Self::profile_from_uuid_name(uuid, resolved_name)])
                 }
             }
             Self::Uuid(uuid) => {

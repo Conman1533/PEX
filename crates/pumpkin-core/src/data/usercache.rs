@@ -94,7 +94,7 @@ impl UserCache {
     }
 
     pub fn get_by_name(&mut self, name: &str) -> Option<UserCacheEntry> {
-        let lowercase_name = name.to_ascii_lowercase();
+        let lowercase_name = name.to_lowercase();
         let mut profile = self.profiles_by_name.get(&lowercase_name).cloned();
         let mut needs_save = false;
 
@@ -102,8 +102,7 @@ impl UserCache {
             && is_expired(entry.expiration_date)
         {
             self.profiles_by_uuid.remove(&entry.uuid);
-            self.profiles_by_name
-                .remove(&entry.name.to_ascii_lowercase());
+            self.profiles_by_name.remove(&entry.name.to_lowercase());
             needs_save = true;
             profile = None;
         }
@@ -111,7 +110,7 @@ impl UserCache {
         if let Some(mut entry) = profile {
             entry.last_access = self.next_operation();
             self.profiles_by_name
-                .insert(entry.name.to_ascii_lowercase(), entry.clone());
+                .insert(entry.name.to_lowercase(), entry.clone());
             self.profiles_by_uuid.insert(entry.uuid, entry.clone());
             return Some(entry);
         }
@@ -127,7 +126,7 @@ impl UserCache {
         let mut entry = self.profiles_by_uuid.get(&uuid).cloned()?;
         entry.last_access = self.next_operation();
         self.profiles_by_name
-            .insert(entry.name.to_ascii_lowercase(), entry.clone());
+            .insert(entry.name.to_lowercase(), entry.clone());
         self.profiles_by_uuid.insert(entry.uuid, entry.clone());
         Some(entry)
     }
@@ -149,7 +148,7 @@ impl UserCache {
     fn safe_add(&mut self, mut entry: UserCacheEntry) {
         entry.last_access = self.next_operation();
         self.profiles_by_name
-            .insert(entry.name.to_ascii_lowercase(), entry.clone());
+            .insert(entry.name.to_lowercase(), entry.clone());
         self.profiles_by_uuid.insert(entry.uuid, entry);
     }
 

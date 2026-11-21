@@ -572,3 +572,46 @@ pub(super) async fn test_execute_if_blocks_compares_states(
         .then_succeed();
     Ok(())
 }
+
+/// `whitelist add` and `op` give a name the server has never seen vanilla's UUID: Mojang's,
+/// or else the offline UUID of the lowercased name (`CachedUserNameToIdResolver.get`, D4-1).
+/// The UUIDs are `UUIDUtil.createOfflinePlayerUUID(name.toLowerCase(Locale.ROOT))`, worked
+/// out with the JDK. Both names fail `isValidPlayerName` (one is not ASCII, the other is over 16
+/// characters), so Mojang is never asked and the test needs no network. Removing each entry by
+/// that UUID only works if the entry was stored under it.
+pub(super) async fn test_unseen_names_get_vanilla_offline_uuids(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    const NON_ASCII_NAME: &str = "ÜNSEEN_Ö";
+    const NON_ASCII_UUID: &str = "71a40931-0171-32ae-9ad7-f1fe3f10bdd5";
+    const ASCII_NAME: &str = "Pex_Unseen_Operator";
+    const ASCII_UUID: &str = "cc0dca9b-f304-394a-b001-6cc071e65d7c";
+    let origin = BlockPos::new(0, 1, 0);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, &format!("whitelist add {NON_ASCII_NAME}"))
+                .await?;
+            helper
+                .execute_command(&origin, &format!("op {ASCII_NAME}"))
+                .await?;
+            let unlisted = helper
+                .execute_command(&origin, &format!("whitelist remove {NON_ASCII_UUID}"))
+                .await;
+            let deopped = helper
+                .execute_command(&origin, &format!("deop {ASCII_UUID}"))
+                .await;
+            helper.assert_true(
+                unlisted.is_ok(),
+                format!("{NON_ASCII_NAME} should be whitelisted as {NON_ASCII_UUID}: {unlisted:?}"),
+            )?;
+            helper.assert_true(
+                deopped.is_ok(),
+                format!("{ASCII_NAME} should be an operator as {ASCII_UUID}: {deopped:?}"),
+            )?;
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}
