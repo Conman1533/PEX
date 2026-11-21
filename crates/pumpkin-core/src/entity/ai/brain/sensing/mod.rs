@@ -8,14 +8,19 @@ use super::{BrainTick, VisibilityContext};
 
 pub mod adult;
 pub mod dummy;
+pub mod golem_detected;
 pub mod hurt_by;
 pub mod mob_sensor;
+pub mod nearest_bed;
 pub mod nearest_items;
 pub mod nearest_living_entities;
 pub mod nearest_players;
 pub mod piglin_brute_specific;
 pub mod piglin_specific;
+pub mod secondary_pois;
 pub mod tempting;
+pub mod villager_babies;
+pub mod villager_hostiles;
 
 pub use adult::AdultSensor;
 pub use dummy::DummySensor;
@@ -28,6 +33,10 @@ pub use tempting::TemptingSensor;
 pub const DEFAULT_SCAN_RATE: i32 = 20;
 /// Vanilla `SensorType.ARMADILLO_SCARE_DETECTED`'s scan rate.
 const ARMADILLO_SCARE_SCAN_RATE: i32 = 5;
+/// Vanilla `SecondaryPoiSensor.SCAN_RATE`.
+const SECONDARY_POIS_SCAN_RATE: i32 = 40;
+/// Vanilla `GolemSensor.GOLEM_SCAN_RATE`.
+const GOLEM_SCAN_RATE: i32 = 200;
 
 pub trait Sensor: Send + Sync {
     fn requires(&self) -> &'static [MemoryModuleId];
@@ -49,6 +58,11 @@ pub enum SensorType {
     ArmadilloScareDetected,
     PiglinBruteSpecific,
     PiglinSpecific,
+    NearestBed,
+    VillagerHostiles,
+    VillagerBabies,
+    SecondaryPois,
+    GolemDetected,
 }
 
 impl SensorType {
@@ -68,6 +82,11 @@ impl SensorType {
             Self::ArmadilloScareDetected => "minecraft:armadillo_scare_detected",
             Self::PiglinBruteSpecific => "minecraft:piglin_brute_specific_sensor",
             Self::PiglinSpecific => "minecraft:piglin_specific_sensor",
+            Self::NearestBed => "minecraft:nearest_bed",
+            Self::VillagerHostiles => "minecraft:villager_hostiles",
+            Self::VillagerBabies => "minecraft:villager_babies",
+            Self::SecondaryPois => "minecraft:secondary_pois",
+            Self::GolemDetected => "minecraft:golem_detected",
         }
     }
 
@@ -85,7 +104,12 @@ impl SensorType {
             | Self::NearestAdult
             | Self::NearestAdultAnyType
             | Self::PiglinBruteSpecific
-            | Self::PiglinSpecific => DEFAULT_SCAN_RATE,
+            | Self::PiglinSpecific
+            | Self::NearestBed
+            | Self::VillagerHostiles
+            | Self::VillagerBabies => DEFAULT_SCAN_RATE,
+            Self::SecondaryPois => SECONDARY_POIS_SCAN_RATE,
+            Self::GolemDetected => GOLEM_SCAN_RATE,
             Self::ArmadilloScareDetected => ARMADILLO_SCARE_SCAN_RATE,
         }
     }
@@ -104,6 +128,11 @@ impl SensorType {
             Self::NearestAdultAnyType => Box::new(AdultSensor::any_type()),
             Self::PiglinBruteSpecific => Box::new(piglin_brute_specific::PiglinBruteSpecificSensor),
             Self::PiglinSpecific => Box::new(piglin_specific::PiglinSpecificSensor),
+            Self::NearestBed => Box::new(nearest_bed::NearestBedSensor::default()),
+            Self::VillagerHostiles => Box::new(villager_hostiles::VillagerHostilesSensor),
+            Self::VillagerBabies => Box::new(villager_babies::VillagerBabiesSensor),
+            Self::SecondaryPois => Box::new(secondary_pois::SecondaryPoiSensor),
+            Self::GolemDetected => Box::new(golem_detected::GolemSensor),
             Self::ArmadilloScareDetected => Box::new(MobSensor::new(
                 crate::entity::passive::armadillo::is_scared_by_mob,
                 crate::entity::passive::armadillo::can_stay_rolled_up_in_brain,

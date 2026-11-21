@@ -4908,7 +4908,7 @@ impl Player {
                 .villager_poi
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get_nearest_job_site(player_pos, 64)
+                .get_nearest_village_poi(player_pos, 64)
                 .or_else(|| {
                     world.raids.try_lock().ok().and_then(|raids| {
                         raids

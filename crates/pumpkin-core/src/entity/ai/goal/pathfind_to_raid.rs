@@ -61,7 +61,7 @@ impl PathfindToRaidGoal {
             .villager_poi
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get_nearest_job_site(pos, 32)
+            .get_nearest_village_poi(pos, 32)
             .is_none()
     }
 }

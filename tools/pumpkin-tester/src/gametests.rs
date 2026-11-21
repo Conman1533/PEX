@@ -36,7 +36,7 @@ const MOB_TEST_GRID_SPACING: i32 = 56;
 /// every mock player within that: the outer cells are 112 blocks out along one axis or lean back
 /// towards the creeper, so the player spots near each cell's origin stay under 126 blocks. More
 /// cells need the creeper made persistent or moved.
-const MOB_TEST_CELLS: [(i32, i32); 17] = [
+const MOB_TEST_CELLS: [(i32, i32); 18] = [
     (0, -1),
     (-1, 0),
     (1, 0),
@@ -54,6 +54,7 @@ const MOB_TEST_CELLS: [(i32, i32); 17] = [
     (1, -2),
     (-2, 1),
     (-1, 2),
+    (2, -1),
 ];
 /// The suite always gets at least this many ticks, plus a margin over the longest test.
 const MIN_GAMETEST_TICKS: usize = 500;

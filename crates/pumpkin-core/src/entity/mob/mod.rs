@@ -1376,11 +1376,25 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
-    fn is_job_site_pending(&self) -> bool {
+    /// A villager's profession, for the village sensors shared through the brain.
+    fn villager_profession(&self) -> Option<pumpkin_data::villager::VillagerProfession> {
+        None
+    }
+
+    /// Vanilla `LivingEntity.isSleeping`.
+    fn is_sleeping(&self) -> bool {
+        self.get_entity().pose.load() == pumpkin_data::entity::EntityPose::Sleeping
+    }
+
+    /// Vanilla `LivingEntity.startSleeping` for mobs that sleep in beds; false if it can't.
+    fn start_sleeping(&self, _pos: BlockPos) -> bool {
         false
     }
 
-    fn release_pending_job_site(&self, _position: BlockPos) {}
+    /// Vanilla `LivingEntity.stopSleeping`; true if the mob was asleep.
+    fn stop_sleeping(&self) -> bool {
+        false
+    }
 
     fn get_trading_player(&self) -> Option<Arc<Player>> {
         None

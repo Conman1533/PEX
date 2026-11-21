@@ -264,6 +264,7 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:blaze_alerts_nearby_blazes_when_hit",
     "pumpkin:strider_walks_back_to_lava",
     "pumpkin:piglin_barters_gold_ingot_for_loot",
+    "pumpkin:villager_claims_job_site_and_bed",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -640,6 +641,13 @@ pub fn ensure_builtin_game_tests_registered() {
             280,
             0,
             entities_and_ai::test_piglin_barters_gold_ingot_for_loot,
+        );
+        register_function_test(
+            "pumpkin:villager_claims_job_site_and_bed",
+            "pumpkin:empty_8x4x8",
+            600,
+            0,
+            entities_and_ai::test_villager_claims_job_site_and_bed,
         );
         register_function_test(
             "pumpkin:zoglin_attacks_any_nearby_mob",

@@ -16,6 +16,13 @@ impl GlobalPos {
         Self { dimension, pos }
     }
 
+    /// `pos` in `world`'s dimension.
+    #[must_use]
+    pub fn in_world(world: &crate::world::World, pos: BlockPos) -> Option<Self> {
+        Dimension::from_name(world.dimension.minecraft_name)
+            .map(|dimension| Self::new(dimension, pos))
+    }
+
     #[must_use]
     pub fn is_close_enough(&self, dimension: &Dimension, pos: BlockPos, max_distance: u32) -> bool {
         self.dimension.id == dimension.id
