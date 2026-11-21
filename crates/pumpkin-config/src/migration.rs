@@ -254,6 +254,33 @@ fn backup_path(path: &Path, version: u32, copy: u32) -> PathBuf {
     })
 }
 
+/// The temporary file [`write_atomically`] writes before renaming it over `path`.
+#[must_use]
+pub fn temp_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    path.with_file_name(name)
+}
+
+/// Writes `contents` to [`temp_path`] and renames it over `path`.
+///
+/// A write that fails or is cut short leaves the old file whole. `pumpkin-world`'s
+/// `write_file_atomically` does the same for world files, but `pumpkin-world` depends on this
+/// crate.
+pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    let temp = temp_path(path);
+    let result = (|| {
+        let mut file = fs::File::create(&temp)?;
+        file.write_all(contents.as_ref())?;
+        file.sync_all()?;
+        fs::rename(&temp, path)
+    })();
+    if result.is_err() && temp.is_file() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
 /// Copies `contents` to `<file name>.v<version>.bak` next to `path` and returns the copy's path.
 /// An existing backup is never overwritten: a taken name gets a counter.
 pub fn write_backup(path: &Path, contents: impl AsRef<[u8]>, version: u32) -> io::Result<PathBuf> {

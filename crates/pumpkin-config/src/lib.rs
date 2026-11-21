@@ -457,7 +457,8 @@ impl PendingSave {
                 &mut messages,
             ),
             None => {
-                if let Err(err) = fs::write(&self.path, self.document.to_string()) {
+                if let Err(err) = migration::write_atomically(&self.path, self.document.to_string())
+                {
                     messages.push(LoadMessage::Warn(format!(
                         "Couldn't write default config to {:?}. Reason: {}",
                         self.path.display(),
@@ -662,17 +663,19 @@ fn save_migrated(
 ) {
     let file_name = file_name(path);
     match migration::write_backup(path, original, version) {
-        Ok(backup) => {
-            messages.push(LoadMessage::Info(format!(
+        Ok(backup) => match migration::write_atomically(path, document.to_string()) {
+            Ok(()) => messages.push(LoadMessage::Info(format!(
                 "Saved a copy of {file_name} as {} before changing it",
                 backup.file_name().unwrap_or_default().to_string_lossy()
-            )));
-            if let Err(err) = fs::write(path, document.to_string()) {
+            ))),
+            Err(err) => {
+                // The file is unchanged, so its copy would only pile up at every start.
+                let _ = fs::remove_file(&backup);
                 messages.push(LoadMessage::Warn(format!(
-                    "Couldn't write the updated {file_name}: {err}. The changes below apply until the next start."
+                    "Couldn't write the updated {file_name}, so it was left unchanged: {err}. The changes below apply until the next start."
                 )));
             }
-        }
+        },
         Err(err) => messages.push(LoadMessage::Warn(format!(
             "Couldn't back up {file_name}, so it was left unchanged: {err}. The changes below apply until the next start."
         ))),

@@ -342,3 +342,30 @@ fn version_5_keeps_a_chosen_bug_report_link_and_comments() {
         "{migrated}"
     );
 }
+
+#[test]
+fn failed_write_leaves_the_file_and_no_new_backup() {
+    let dir = TempDir::new().unwrap();
+    let (_, original) = RELEASE_FILES[2];
+    fs::write(dir.path().join("pumpkin.toml"), original).unwrap();
+    // Root ignores file modes, so a directory in the way is what makes the write fail.
+    fs::create_dir(pumpkin_config::migration::temp_path(
+        &dir.path().join("pumpkin.toml"),
+    ))
+    .unwrap();
+    for start in 0..2 {
+        let messages = load_and_save(dir.path());
+        let warnings = messages
+            .iter()
+            .filter(|message| matches!(message, LoadMessage::Warn(_)))
+            .count();
+        assert_eq!(warnings, 1, "start {start}: {messages:?}");
+        assert_eq!(read(dir.path(), "pumpkin.toml"), original, "start {start}");
+        let backups: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+            .collect();
+        assert!(backups.is_empty(), "start {start}: {backups:?}");
+    }
+}
