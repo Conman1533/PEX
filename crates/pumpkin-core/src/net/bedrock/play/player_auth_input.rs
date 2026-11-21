@@ -196,6 +196,12 @@ impl BedrockClient {
             }
         }
 
+        // Java clients send their held movement keys in `PlayerInput`; minecarts and other
+        // server-driven vehicles read them from here.
+        player
+            .last_input
+            .store(Self::java_input_bits(input_data), Ordering::Relaxed);
+
         if entity.has_vehicle() {
             let paddling_left = input_data.get(InputData::PaddlingLeft as usize);
             let paddling_right = input_data.get(InputData::PaddlingRight as usize);
@@ -206,6 +212,7 @@ impl BedrockClient {
                 .clone();
             if let Some(vehicle) = vehicle {
                 vehicle.set_paddle_state(paddling_left, paddling_right);
+                Self::steer_vehicle(player, &vehicle, &packet, new_pos.sub(&old_pos));
             }
         }
 
@@ -213,6 +220,86 @@ impl BedrockClient {
             for action in &block_actions {
                 self.handle_player_block_action(player, server, action);
             }
+        }
+    }
+
+    /// The Java `PlayerInput` bits for the keys a Bedrock client reports held.
+    fn java_input_bits(input_data: &pumpkin_protocol::codec::bitset::Bitset<66>) -> i8 {
+        use pumpkin_protocol::java::server::play::SPlayerInput;
+        let held = |flag: InputData| input_data.get(flag as usize);
+        let mut bits = 0;
+        for (flags, bit) in [
+            (
+                [InputData::Up, InputData::UpLeft, InputData::UpRight],
+                SPlayerInput::FORWARD,
+            ),
+            (
+                [InputData::Down, InputData::DownLeft, InputData::DownRight],
+                SPlayerInput::BACKWARD,
+            ),
+            (
+                [InputData::Left, InputData::UpLeft, InputData::DownLeft],
+                SPlayerInput::LEFT,
+            ),
+            (
+                [InputData::Right, InputData::UpRight, InputData::DownRight],
+                SPlayerInput::RIGHT,
+            ),
+        ] {
+            if flags.into_iter().any(held) {
+                bits |= bit;
+            }
+        }
+        for (flag, bit) in [
+            (InputData::Jumping, SPlayerInput::JUMP),
+            (InputData::Sneaking, SPlayerInput::SNEAK),
+            (InputData::Sprinting, SPlayerInput::SPRINT),
+        ] {
+            if held(flag) {
+                bits |= bit;
+            }
+        }
+        bits
+    }
+
+    /// A Bedrock driver moves its vehicle itself and says so with `ClientPredictedVehicle`, as a
+    /// Java driver does with `MoveVehicle`: the vehicle follows the rider's move and takes the
+    /// rotation the client predicted. Only the passenger in control moves it.
+    fn steer_vehicle(
+        player: &Arc<Player>,
+        vehicle: &Arc<dyn EntityBase>,
+        packet: &SPlayerAuthInput,
+        movement: pumpkin_util::math::vector3::Vector3<f64>,
+    ) {
+        let vehicle_entity = vehicle.get_entity();
+        let predicted = packet
+            .vehicle_unique_id
+            .as_ref()
+            .is_some_and(|id| id.0 == i64::from(vehicle_entity.entity_id));
+        // Mobs decide who steers them (a saddle, a carrot on a stick); other vehicles take the
+        // first passenger, as vanilla's boats and minecarts do.
+        let controller = vehicle.get_controlling_passenger().or_else(|| {
+            if vehicle.get_living_entity().is_some() {
+                return None;
+            }
+            vehicle_entity
+                .passengers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .first()
+                .cloned()
+        });
+        let in_control =
+            controller.is_some_and(|rider| rider.get_entity().entity_id == player.entity_id());
+        if !predicted || !in_control {
+            return;
+        }
+        if movement.length_squared() > 0.0 {
+            vehicle_entity.set_pos(vehicle_entity.pos.load().add(&movement));
+        }
+        if let Some(rotation) = packet.vehicle_rotation {
+            // Pitch, then yaw, as in `AddActor`.
+            vehicle_entity.set_rotation(rotation.y, rotation.x);
         }
     }
 
