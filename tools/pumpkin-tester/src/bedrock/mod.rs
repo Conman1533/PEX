@@ -3,6 +3,7 @@
 
 mod bot;
 mod dimensions;
+mod held_items;
 mod riding;
 mod transport;
 
@@ -541,6 +542,7 @@ async fn run_mixed_play(
     run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;
     run_place_checks(server, bedrock, &mut java, &mut checks).await?;
     run_item_use_checks(server, bedrock, &mut java, &mut checks).await?;
+    held_items::run_held_item_checks(server, bedrock, &mut java, &mut checks).await?;
     run_chest_checks(server, bedrock, &mut java, &mut checks).await?;
     run_furnace_checks(server, bedrock, &mut java, &mut checks).await?;
     run_craft_checks(server, bedrock, &mut java, &mut checks).await?;

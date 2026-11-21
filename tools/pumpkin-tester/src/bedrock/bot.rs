@@ -132,6 +132,9 @@ pub struct StackMove {
 /// `UseItem` transaction actions.
 const USE_ITEM_CLICK_BLOCK: i32 = 0;
 const USE_ITEM_CLICK_AIR: i32 = 1;
+/// `ReleaseItem` actions: letting go of a drawn bow, and the end of eating or drinking.
+pub const RELEASE_SHOOT: i32 = 0;
+pub const RELEASE_CONSUME: i32 = 1;
 const INTERACT_STOP_RIDING: u8 = 3;
 /// `TextPacketType::Chat`.
 const TEXT_TYPE_CHAT: u8 = 1;
@@ -951,6 +954,33 @@ impl BedrockBot {
             &[],
         )
         .await
+    }
+
+    /// Lets go of the item in use with a `ReleaseItem` transaction: `RELEASE_SHOOT` when the use
+    /// key comes up on a drawn bow, `RELEASE_CONSUME` when the client's own eating or drinking
+    /// animation ends.
+    pub async fn release_item(
+        &self,
+        action: i32,
+        slot: i32,
+        in_hand: &ItemStack,
+    ) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            // No legacy request, no legacy slots, transaction type `ReleaseItem`, no actions.
+            VarInt(0).write(payload)?;
+            false.write(payload)?;
+            VarUInt(4).write(payload)?;
+            VarUInt(0).write(payload)?;
+            VarInt(action).write(payload)?;
+            VarInt(slot).write(payload)?;
+            NetworkItemDescriptor::from(in_hand).write(payload)?;
+            self.position.write(payload)?;
+            // Main hand.
+            0u8.write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(INVENTORY_TRANSACTION_ID, &payload).await
     }
 
     async fn send_use_item(
