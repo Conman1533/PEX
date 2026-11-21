@@ -84,6 +84,7 @@ impl CommandExecutor for ForceloadAddExecutor {
         }
 
         world.update_active_chunks();
+        load_now(world, min_x..=max_x, min_z..=max_z);
 
         let dimension_name = world.dimension.minecraft_name.to_string();
 
@@ -112,6 +113,33 @@ impl CommandExecutor for ForceloadAddExecutor {
 
         Ok(total_chunks)
     }
+}
+
+/// Vanilla `ServerLevel.setChunkForced` loads each newly forced chunk before the command
+/// answers (`getChunk`), so a command run right after it finds the chunks loaded.
+fn load_now(
+    world: &crate::world::World,
+    xs: std::ops::RangeInclusive<i32>,
+    zs: std::ops::RangeInclusive<i32>,
+) {
+    let missing: Vec<_> = xs
+        .flat_map(|x| zs.clone().map(move |z| Vector2::new(x, z)))
+        .filter(|pos| !world.level.is_chunk_loaded(pos))
+        .collect();
+    if missing.is_empty() {
+        return;
+    }
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let level = world.level.clone();
+    tokio::task::block_in_place(|| {
+        handle.block_on(futures::future::join_all(
+            missing
+                .into_iter()
+                .map(|pos| level.get_or_fetch_chunk(pos, |_| ())),
+        ));
+    });
 }
 
 struct ForceloadRemoveExecutor;

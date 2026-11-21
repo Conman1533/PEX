@@ -281,6 +281,7 @@ const MOB_TEST_IDS: &[&str] = &[
 const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
     "pumpkin:quoted_non_ascii_player_name_in_commands",
+    "pumpkin:commands/forceload_add_loads_before_answering",
     "pumpkin:zombie_targets_survival_mock_player",
     "pumpkin:nautilus_follows_tempting_player",
     "pumpkin:zombie_nautilus_charges_survival_player",
@@ -680,6 +681,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_quoted_non_ascii_player_name,
+        );
+        register_function_test(
+            "pumpkin:commands/forceload_add_loads_before_answering",
+            "pumpkin:empty_5x4x5",
+            200,
+            0,
+            commands_and_entities_extended::test_forceload_add_loads_before_answering,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",
