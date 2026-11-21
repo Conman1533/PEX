@@ -3097,7 +3097,13 @@ impl Player {
                 );
                 if finished && matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     p.stop_mining();
-                    p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
+                    // The game mode or held item can change during the dig.
+                    let refused = server_clone.as_deref().is_some_and(|server| {
+                        p.cannot_mine(server, Block::from_state_id(state.id))
+                    });
+                    if !refused {
+                        p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
+                    }
                 }
             }
         }
