@@ -27,6 +27,10 @@ Steps, each in its own folder under --out:
    so vanilla loads and saves its player file; the same visit on PEX, then on vanilla opening
    PEX's save. Each player file is diffed against vanilla's own visit, outside VISIT_IGNORE
    (values a visit changes by how long it lasts) (G7-21).
+8. difficulty: PEX configured `default_difficulty = "Easy"` and vanilla configured
+   `difficulty=easy` each open the fixture with `level.dat` set to hard; both saves must say easy,
+   as vanilla's `DedicatedServer.forceDifficulty` does on every start (G3-07). Step 5 also checks
+   that a hardcore world stays hard.
 
 Every step's saved data files (`scoreboard.dat`, `world_clocks.dat`, `weather.dat`, each
 dimension's `world_border.dat`, `chunk_tickets.dat` and `ender_dragon_fight.dat`) also get
@@ -107,10 +111,13 @@ class Console:
             lines.append(line)
 
 
-def write_pex_config(folder, port, seed=None):
+def write_pex_config(folder, port, seed=None, difficulty=None):
     os.makedirs(folder, exist_ok=True)
+    top = [f'seed = "{seed}"'] if seed is not None else []
+    if difficulty is not None:
+        top.append(f'default_difficulty = "{difficulty.capitalize()}"')
     with open(os.path.join(folder, "pumpkin.toml"), "w") as f:
-        f.write("\n".join(([f'seed = "{seed}"', ""] if seed is not None else []) + [
+        f.write("\n".join((top + [""] if top else []) + [
             "[networking.java]", f'address = "127.0.0.1:{port}"', "online_mode = false",
             # Step 7's bot speaks neither encryption nor more chunks than vanilla's config sends.
             "encryption = false", "view_distance = 4", "simulation_distance = 4", "",
@@ -121,7 +128,7 @@ def write_pex_config(folder, port, seed=None):
         ]))
 
 
-def write_vanilla_config(folder, port):
+def write_vanilla_config(folder, port, difficulty=None):
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, "eula.txt"), "w") as f:
         f.write("eula=true\n")
@@ -129,16 +136,16 @@ def write_vanilla_config(folder, port):
         f.write("\n".join([
             "online-mode=false", f"server-port={port}", "server-ip=127.0.0.1", "level-name=world",
             "view-distance=4", "simulation-distance=4", "spawn-protection=0", "white-list=false",
-        ]) + "\n")
+        ] + ([f"difficulty={difficulty}"] if difficulty is not None else [])) + "\n")
 
 
-def start(args, kind, folder, port, seed=None):
+def start(args, kind, folder, port, seed=None, difficulty=None):
     if kind == "pex":
-        write_pex_config(folder, port, seed)
+        write_pex_config(folder, port, seed, difficulty)
         server = Server([os.path.abspath(args.pex)], folder)
         server.wait_for(PEX_READY, 900)
     else:
-        write_vanilla_config(folder, port)
+        write_vanilla_config(folder, port, difficulty)
         server = Server([args.java, "-Xmx3G", "-jar", os.path.abspath(args.server_jar), "nogui"], folder)
         server.wait_for(VANILLA_READY, 900)
     return server, Console(server, kind)
@@ -345,6 +352,8 @@ def hardcore_check(world, kind):
     settings = data.get("difficulty_settings", {})
     if not int(settings.get("hardcore", 0)):
         return [f"{kind}: level.dat difficulty_settings is not hardcore: {nbt.to_snbt(settings)}"]
+    if settings.get("difficulty") != "hard":
+        return [f"{kind}: a hardcore level.dat is not hard: {nbt.to_snbt(settings)}"]
     return []
 
 
@@ -371,6 +380,31 @@ def hardcore_step(args, report):
         server.stop()
     failures += hardcore_check(os.path.join(vanilla_dir, "world"), "vanilla's save of it")
     report.append("## 5. The hardcore fixture through PEX (configured not hardcore), then vanilla\n")
+    report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
+    return failures
+
+
+def difficulty_step(args, report):
+    """Step 8. Returns failed checks."""
+    fixture_world = os.path.join(args.fixture, "world")
+    failures = []
+    for kind, port in (("pex", args.port + 12), ("vanilla", args.port + 13)):
+        folder = os.path.join(args.out, f"difficulty-{kind}")
+        world = os.path.join(folder, "world")
+        copy_world(fixture_world, world)
+        name, root = nbt.read_file(os.path.join(world, "level.dat"))
+        root["Data"]["difficulty_settings"]["difficulty"] = nbt.String("hard")
+        nbt.write_file(os.path.join(world, "level.dat"), root, name)
+        server, console = start(args, kind, folder, port, difficulty="easy")
+        try:
+            save_and_stop(server, console)
+        finally:
+            server.stop()
+        data = (read_dat(world, "level.dat") or {}).get("Data", {})
+        saved = data.get("difficulty_settings", {}).get("difficulty")
+        if saved != "easy":
+            failures.append(f"{kind}: configured easy on a hard level.dat, saved {saved}")
+    report.append("## 8. Configured difficulty easy on a level.dat saying hard, PEX and vanilla\n")
     report.append("All checks passed.\n" if not failures else "\n".join(f"- {f}" for f in failures) + "\n")
     return failures
 
@@ -544,6 +578,7 @@ def main():
     problems += len(hardcore_step(args, report))
     problems += len(structures_step(args, report))
     problems += player_step(args, report, known, all_groups)
+    problems += len(difficulty_step(args, report))
 
     if args.write_known_losses:
         seen = set()
