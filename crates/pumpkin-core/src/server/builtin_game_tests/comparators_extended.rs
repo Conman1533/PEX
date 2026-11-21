@@ -4,8 +4,8 @@ use pumpkin_data::{
         CakeLikeProperties, ComparatorLikeProperties, ComposterLikeProperties,
         CopperBulbLikeProperties, DispenserLikeProperties, EastRedstone, Facing,
         FurnaceLikeProperties, HopperLikeProperties, HorizontalFacing, ModeComparator,
-        NorthRedstone, RedstoneWireLikeProperties, RespawnAnchorLikeProperties, SouthRedstone,
-        WaterCauldronLikeProperties, WestRedstone,
+        NorthRedstone, RedstoneWireLikeProperties, RepeaterLikeProperties,
+        RespawnAnchorLikeProperties, SouthRedstone, WaterCauldronLikeProperties, WestRedstone,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -525,6 +525,111 @@ pub(super) async fn test_comparator_subtract_mode_clamps_to_zero(
             helper.assert_true(
                 p == 0,
                 format!("Expected subtract comparator with side>=rear to clamp to 0, got {p}"),
+            )
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// A dropper fires into a chest in the same game tick as a comparator chain powers repeater R,
+/// and the chest's comparator K locks R from the side. The dropper's tick comes first, so
+/// vanilla `BlockEntity.setChanged` schedules K's tick before R's (both `HIGH`, two ticks out);
+/// K turns on first and R stays locked off. When the chest's change only reaches K after the
+/// block entities tick, R's tick runs first and R turns on.
+pub(super) async fn test_comparator_container_race(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 8, 6).await?;
+    let dropper = BlockPos::new(1, 1, 3);
+    let chest = BlockPos::new(2, 1, 3);
+    let comparator_k = BlockPos::new(3, 1, 3);
+    let repeater_r = BlockPos::new(4, 1, 3);
+
+    let comparator = |facing| {
+        let mut props = ComparatorLikeProperties::default(&Block::COMPARATOR);
+        props.facing = facing;
+        props.mode = ModeComparator::Compare;
+        props.to_state_id(&Block::COMPARATOR)
+    };
+    let wire = |north, east, south| {
+        let mut props = RedstoneWireLikeProperties::default(&Block::REDSTONE_WIRE);
+        props.north = north;
+        props.east = east;
+        props.south = south;
+        props.west = WestRedstone::None;
+        props.to_state_id(&Block::REDSTONE_WIRE)
+    };
+
+    let mut dropper_props = DispenserLikeProperties::default(&Block::DROPPER);
+    dropper_props.facing = Facing::East;
+    helper
+        .set_block(&dropper, dropper_props.to_state_id(&Block::DROPPER))
+        .await?;
+    helper.set_block_default(&chest, &Block::CHEST).await?;
+    helper
+        .set_container_item(&dropper, 0, "minecraft:cobblestone", 1)
+        .await?;
+    // K reads the chest and outputs east into R's side.
+    helper
+        .set_block(&comparator_k, comparator(HorizontalFacing::West))
+        .await?;
+    let mut repeater_props = RepeaterLikeProperties::default(&Block::REPEATER);
+    repeater_props.facing = HorizontalFacing::North;
+    repeater_props.delay = 1;
+    helper
+        .set_block(&repeater_r, repeater_props.to_state_id(&Block::REPEATER))
+        .await?;
+    // R's input: C0 (reading the redstone block placed later) -> dust -> C1 -> dust -> R, two
+    // comparator ticks so C1 fires in the dropper's game tick, after it. Dust in front keeps
+    // both comparators at `NORMAL` priority.
+    helper
+        .set_block(
+            &BlockPos::new(4, 1, 2),
+            wire(NorthRedstone::Side, EastRedstone::None, SouthRedstone::Side),
+        )
+        .await?;
+    helper
+        .set_block(&BlockPos::new(4, 1, 1), comparator(HorizontalFacing::North))
+        .await?;
+    helper
+        .set_block(
+            &BlockPos::new(4, 1, 0),
+            wire(NorthRedstone::None, EastRedstone::Side, SouthRedstone::Side),
+        )
+        .await?;
+    helper
+        .set_block(&BlockPos::new(5, 1, 0), comparator(HorizontalFacing::East))
+        .await?;
+
+    helper
+        .start_sequence()
+        .then_idle(5)
+        .then_execute(|helper| async move {
+            // The dropper's tick is scheduled first, then C0's.
+            helper
+                .set_block_default(&BlockPos::new(1, 1, 4), &Block::REDSTONE_BLOCK)
+                .await?;
+            helper
+                .set_block_default(&BlockPos::new(6, 1, 0), &Block::REDSTONE_BLOCK)
+                .await?;
+            Ok(())
+        })
+        .then_wait_until(move |helper| async move {
+            let k =
+                ComparatorLikeProperties::from_state_id(helper.block_state_id(&comparator_k).await);
+            helper.assert_true(k.powered, "the chest's comparator should turn on")
+        })
+        .then_execute(move |helper| async move {
+            let r = RepeaterLikeProperties::from_state_id(helper.block_state_id(&repeater_r).await);
+            helper.assert_true(
+                !r.powered,
+                "the chest's comparator should lock the repeater before the repeater's tick",
+            )
+        })
+        .then_idle(4)
+        .then_execute(move |helper| async move {
+            let r = RepeaterLikeProperties::from_state_id(helper.block_state_id(&repeater_r).await);
+            helper.assert_true(
+                !r.powered && r.locked,
+                "the repeater should stay locked off",
             )
         })
         .then_succeed();
