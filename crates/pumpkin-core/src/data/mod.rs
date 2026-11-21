@@ -24,6 +24,7 @@ pub mod datapack;
 pub mod offline_uuid_migration;
 pub mod player_server;
 pub mod usercache;
+pub mod vanilla_player_files;
 pub mod whitelist;
 
 #[derive(Default)]

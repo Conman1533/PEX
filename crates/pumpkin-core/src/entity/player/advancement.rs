@@ -15,19 +15,118 @@ use pumpkin_protocol::java::client::play::{
 };
 use pumpkin_util::identifier::Identifier;
 use pumpkin_util::text::TextComponent;
+use pumpkin_world::chunk::format::anvil::WORLD_DATA_VERSION;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::to_string_pretty;
-use std::collections::{HashMap, HashSet};
+use serde_json::{Map, Value, to_string_pretty};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::read;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+use time::OffsetDateTime;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CriterionProgress(pub Option<SystemTime>);
+
+/// Vanilla `AdvancementProgress.OBTAINED_TIME_FORMAT`, `yyyy-MM-dd HH:mm:ss Z`.
+const OBTAINED_TIME_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
+    "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"
+);
+
+/// The time a criterion was obtained, as vanilla writes it. Vanilla uses the server's time zone;
+/// PEX writes UTC, which vanilla reads the same.
+fn format_obtained(obtained: SystemTime) -> String {
+    let time = OffsetDateTime::from(obtained);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02} +0000",
+        time.year(),
+        u8::from(time.month()),
+        time.day(),
+        time.hour(),
+        time.minute(),
+        time.second()
+    )
+}
+
+/// The time a criterion was obtained: vanilla's text, or the `secs_since_epoch` and
+/// `nanos_since_epoch` PEX 1.x wrote.
+fn parse_obtained(value: &Value) -> Option<SystemTime> {
+    match value {
+        Value::String(text) => OffsetDateTime::parse(text, OBTAINED_TIME_FORMAT)
+            .ok()
+            .map(SystemTime::from),
+        Value::Object(legacy) => {
+            let secs = legacy.get("secs_since_epoch")?.as_u64()?;
+            let nanos = legacy
+                .get("nanos_since_epoch")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            UNIX_EPOCH.checked_add(Duration::new(secs, u32::try_from(nanos).ok()?))
+        }
+        _ => None,
+    }
+}
+
+/// The obtained criteria of one advancement in an advancements file: vanilla's
+/// `{"criteria": {...}, "done": true}`, or PEX 1.x's map of criterion to time.
+fn criteria_from_json(value: &Value) -> HashMap<Arc<str>, CriterionProgress> {
+    let Some(object) = value.as_object() else {
+        return HashMap::new();
+    };
+    let criteria_field = object.get("criteria").and_then(Value::as_object);
+    let vanilla = object.get("done").is_some_and(Value::is_boolean)
+        || criteria_field.is_some_and(|criteria| criteria.values().all(Value::is_string));
+    let criteria = if vanilla {
+        criteria_field
+    } else {
+        Some(object)
+    };
+    criteria
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, obtained)| {
+            Some((
+                Arc::from(name.as_str()),
+                CriterionProgress(Some(parse_obtained(obtained)?)),
+            ))
+        })
+        .collect()
+}
+
+/// Rewrites an advancements file PEX 1.x wrote in vanilla's form.
+///
+/// `None` if the file already is in vanilla's form (vanilla always writes `DataVersion`). An
+/// advancement PEX doesn't know keeps its criteria and isn't marked done; vanilla drops it on load
+/// if it doesn't know it either.
+#[must_use]
+pub fn legacy_advancements_to_vanilla(file: &Value) -> Option<Value> {
+    let file = file.as_object()?;
+    if file.contains_key(DATA_VERSION_KEY) {
+        return None;
+    }
+    let mut vanilla = Map::new();
+    for (id, value) in file {
+        let mut progress = AdvancementProgress {
+            criteria: criteria_from_json(value),
+            requirements: AdvancementRequirement::default(),
+        };
+        if let Some(advancement) = Advancement::from_minecraft_name(id) {
+            progress.update(AdvancementRequirement::from_const(advancement.requirements));
+        }
+        if progress.has_progress() {
+            vanilla.insert(id.clone(), serde_json::to_value(&progress).ok()?);
+        }
+    }
+    vanilla.insert(DATA_VERSION_KEY.to_owned(), Value::from(WORLD_DATA_VERSION));
+    Some(Value::Object(vanilla))
+}
+
+/// The key vanilla writes the data version under in advancement and statistics files.
+const DATA_VERSION_KEY: &str = "DataVersion";
 
 impl CriterionProgress {
     pub fn grant(&mut self) {
@@ -129,28 +228,36 @@ impl AdvancementProgress {
     }
 }
 
+/// Vanilla `AdvancementProgress.CODEC`: the obtained criteria with their times, and whether the
+/// advancement is done. Like vanilla's optional field, an empty `criteria` is left out.
 impl Serialize for AdvancementProgress {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let map: HashMap<&Arc<str>, &CriterionProgress> = self
+        let criteria: BTreeMap<&str, String> = self
             .criteria
             .iter()
-            .filter(|(_key, criteria)| criteria.is_done())
+            .filter_map(|(name, criterion)| Some((name.as_ref(), format_obtained(criterion.0?))))
             .collect();
-        map.serialize(serializer)
+        let mut map = serializer.serialize_map(None)?;
+        if !criteria.is_empty() {
+            map.serialize_entry("criteria", &criteria)?;
+        }
+        map.serialize_entry("done", &self.is_done())?;
+        map.end()
     }
 }
 
+/// Reads vanilla's form and the one PEX 1.x wrote.
 impl<'de> Deserialize<'de> for AdvancementProgress {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let criteria = HashMap::<Arc<str>, CriterionProgress>::deserialize(deserializer)?;
+        let value = Value::deserialize(deserializer)?;
         Ok(Self {
-            criteria,
+            criteria: criteria_from_json(&value),
             requirements: AdvancementRequirement::default(),
         })
     }
@@ -316,11 +423,18 @@ impl PlayerAdvancement {
 
         let json = read(&self.path).map_err(AdvancementDataError::Io)?;
 
-        let loaded_data: HashMap<String, AdvancementProgress> =
+        let loaded_data: Map<String, Value> =
             serde_json::from_slice(&json).map_err(AdvancementDataError::Json)?;
 
         self.progress.clear();
-        for (advancement_id, mut progress) in loaded_data {
+        for (advancement_id, value) in loaded_data {
+            if advancement_id == DATA_VERSION_KEY {
+                continue;
+            }
+            let mut progress = AdvancementProgress {
+                criteria: criteria_from_json(&value),
+                requirements: AdvancementRequirement::default(),
+            };
             if let Some(advancement_ref) = Advancement::from_minecraft_name(&advancement_id) {
                 progress.update(AdvancementRequirement::from_const(
                     advancement_ref.requirements,
@@ -538,23 +652,20 @@ impl PlayerAdvancement {
     }
 }
 
+/// Vanilla `PlayerAdvancements.save`: each advancement with progress, in the order it was
+/// started, then `DataVersion`.
 impl Serialize for PlayerAdvancement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let filtered_map: HashMap<&'static Advancement, &AdvancementProgress> = self
-            .progress
-            .map
-            .iter()
-            .filter(|(_key, value)| value.has_progress())
-            .map(|(&key, val)| (key, val))
-            .collect();
-        let mut map = serializer.serialize_map(Some(filtered_map.len()))?;
-
-        for (advancement, progress) in &filtered_map {
-            map.serialize_entry(&advancement.id, &progress.criteria)?;
+        let mut map = serializer.serialize_map(None)?;
+        for (advancement, progress) in &self.progress.map {
+            if progress.has_progress() {
+                map.serialize_entry(&advancement.id, progress)?;
+            }
         }
+        map.serialize_entry(DATA_VERSION_KEY, &WORLD_DATA_VERSION)?;
         map.end()
     }
 }
@@ -820,7 +931,107 @@ mod tests {
         let content = std::fs::read_to_string(&pa.path).unwrap();
         let saved_data: HashMap<String, AdvancementProgress> =
             serde_json::from_str(&content).unwrap();
-        assert_eq!(saved_data.len(), 2, "Should have saved both advancements");
+        assert_eq!(
+            saved_data
+                .keys()
+                .filter(|id| *id != DATA_VERSION_KEY)
+                .count(),
+            2,
+            "Should have saved both advancements"
+        );
+    }
+
+    /// G7-22: the file is vanilla's `players/advancements/<uuid>.json`.
+    #[tokio::test]
+    async fn advancements_save_in_vanillas_form() {
+        let temp_dir = tempdir().unwrap();
+        let manager = Arc::new(AdvancementManager::new(temp_dir.path(), true));
+        let mut pa = PlayerAdvancement::new(manager, Uuid::new_v4());
+        let obtained = UNIX_EPOCH + Duration::from_hours(489_918);
+        let progress = pa
+            .progress
+            .get_mut_or_start_progress(Advancement::STORY_ROOT);
+        progress.grant_progress("crafting_table");
+        progress.criteria.get_mut("crafting_table").unwrap().0 = Some(obtained);
+        // Started but without progress: vanilla leaves it out.
+        pa.progress
+            .get_mut_or_start_progress(Advancement::NETHER_ROOT);
+        pa.save().await.unwrap();
+
+        let saved: Value = serde_json::from_slice(&std::fs::read(&pa.path).unwrap()).unwrap();
+        assert_eq!(
+            saved,
+            serde_json::json!({
+                "minecraft:story/root": {
+                    "criteria": { "crafting_table": "2025-11-21 06:00:00 +0000" },
+                    "done": true,
+                },
+                "DataVersion": WORLD_DATA_VERSION,
+            })
+        );
+    }
+
+    /// G7-22: a file vanilla wrote loads, whatever time zone its times are in.
+    #[tokio::test]
+    async fn advancements_load_vanillas_file() {
+        let temp_dir = tempdir().unwrap();
+        let manager = Arc::new(AdvancementManager::new(temp_dir.path(), true));
+        let mut pa = PlayerAdvancement::new(manager, Uuid::new_v4());
+        let file = serde_json::json!({
+            "minecraft:story/root": {
+                "criteria": { "crafting_table": "2025-11-21 07:00:00 +0100" },
+                "done": true,
+            },
+            "minecraft:story/mine_stone": {
+                "criteria": {},
+                "done": false,
+            },
+            "DataVersion": 4671,
+        });
+        std::fs::write(&pa.path, file.to_string()).unwrap();
+        pa.load().unwrap();
+
+        let progress = pa
+            .progress
+            .get_mut_or_start_progress(Advancement::STORY_ROOT);
+        assert!(progress.is_done());
+        assert_eq!(
+            progress.criteria["crafting_table"].0,
+            Some(UNIX_EPOCH + Duration::from_hours(489_918))
+        );
+    }
+
+    /// G7-22: the file PEX 1.x wrote still loads, and is rewritten in vanilla's form.
+    #[tokio::test]
+    async fn advancements_pex_1_wrote_load_and_convert() {
+        let temp_dir = tempdir().unwrap();
+        let manager = Arc::new(AdvancementManager::new(temp_dir.path(), true));
+        let mut pa = PlayerAdvancement::new(manager, Uuid::new_v4());
+        let file = serde_json::json!({
+            "minecraft:story/root": {
+                "crafting_table": { "secs_since_epoch": 1_763_704_800, "nanos_since_epoch": 5 },
+            },
+        });
+        std::fs::write(&pa.path, file.to_string()).unwrap();
+        pa.load().unwrap();
+        assert!(
+            pa.progress
+                .get_mut_or_start_progress(Advancement::STORY_ROOT)
+                .is_done()
+        );
+
+        assert_eq!(
+            legacy_advancements_to_vanilla(&file),
+            Some(serde_json::json!({
+                "minecraft:story/root": {
+                    "criteria": { "crafting_table": "2025-11-21 06:00:00 +0000" },
+                    "done": true,
+                },
+                "DataVersion": WORLD_DATA_VERSION,
+            }))
+        );
+        let vanilla = legacy_advancements_to_vanilla(&file).unwrap();
+        assert_eq!(legacy_advancements_to_vanilla(&vanilla), None);
     }
 
     #[tokio::test]

@@ -825,6 +825,7 @@ impl Server {
             // sessions could persist HasPlayedBefore as false and mask a valid Pos.
             player.has_played_before.store(true, Ordering::Relaxed);
         }
+        self.player_data_storage.load_stats(&player);
 
         // Wrap in Arc after data is loaded
         let player = Arc::new(player);
