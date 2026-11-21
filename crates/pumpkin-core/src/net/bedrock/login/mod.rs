@@ -82,17 +82,17 @@ async fn verify_oidc_token_path(
             let _ = tx.send(res);
         });
     } else {
-        let (issuer, jwks) =
-            server
-                .bedrock_oidc_keys
-                .get()
-                .cloned()
-                .ok_or(LoginError::ChainValidationFailed(
-                    AuthError::PublicKeyBuild("OIDC keys not initialized".into()),
-                ))?;
+        let kid =
+            pumpkin_auth::jwt::token_kid(&token).map_err(LoginError::ChainValidationFailed)?;
+        let keys = server.bedrock_oidc_keys.for_kid(&kid).await.ok_or(
+            LoginError::ChainValidationFailed(AuthError::PublicKeyBuild(
+                "OIDC keys not initialized".into(),
+            )),
+        )?;
 
         rayon::spawn(move || {
-            let res = pumpkin_auth::jwt::verify_oidc_token(&token, &issuer, &jwks)
+            let (issuer, jwks) = &*keys;
+            let res = pumpkin_auth::jwt::verify_oidc_token(&token, issuer, jwks)
                 .map_err(LoginError::ChainValidationFailed);
             let _ = tx.send(res);
         });

@@ -201,7 +201,10 @@ impl PacketWrite for Skin {
         self.persona_cape_on_classic.write(writer)?;
         self.is_primary_user.write(writer)?;
         self.override_appearance.write(writer)?;
-        self.is_trusted.to_string().write(writer)?;
+        // The client reads this as the `TrustedSkinFlag` enum by name: "True", "False" or
+        // "Unset". Anything else leaves the skin untrusted, and a client with "Only Allow
+        // Trusted Skins" on swaps it for a default skin.
+        if self.is_trusted { "True" } else { "False" }.write(writer)?;
         self.profile_hash.write(writer)
     }
 }
@@ -281,6 +284,22 @@ mod tests {
         );
         assert!(skin.override_appearance);
         assert!(skin.is_trusted);
+    }
+
+    #[test]
+    fn trusted_flag_is_written_by_enum_name() {
+        use crate::serial::PacketWrite;
+
+        let mut skin = Skin::steve();
+        let mut written = Vec::new();
+        skin.write(&mut written).unwrap();
+        // The flag is the second-to-last string: length 4, "True", then the empty profile hash.
+        assert!(written.ends_with(b"\x04True\x00"));
+
+        skin.is_trusted = false;
+        written.clear();
+        skin.write(&mut written).unwrap();
+        assert!(written.ends_with(b"\x05False\x00"));
     }
 
     #[test]

@@ -11,16 +11,16 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use pumpkin_auth::{jwt::Jwks, p384::ecdsa::SigningKey};
+use pumpkin_auth::p384::ecdsa::SigningKey;
 use pumpkin_world::{CURRENT_BEDROCK_MC_PROTOCOL, CURRENT_BEDROCK_MC_VERSION};
 use serde::Serialize;
 use tokio::{
     net::TcpListener,
-    sync::{Mutex, OnceCell, mpsc},
+    sync::{Mutex, mpsc},
 };
 use tracing::{debug, info, trace, warn};
 
-use crate::{STOP_INTERRUPT, server::Server};
+use crate::{STOP_INTERRUPT, net::bedrock::oidc_keys::OidcKeys, server::Server};
 
 use super::ice_socket::IceSocket;
 use super::state::NetherNetState;
@@ -41,7 +41,7 @@ impl NetherNetListener {
     pub async fn bind(
         server: &Arc<Server>,
         identity_key: Arc<SigningKey>,
-        oidc_verifier: Option<Arc<OnceCell<(String, Jwks)>>>,
+        oidc_verifier: Option<Arc<OidcKeys>>,
         ice_socket: IceSocket,
     ) -> std::io::Result<Self> {
         let config = &server.advanced_config.networking.bedrock.nethernet;

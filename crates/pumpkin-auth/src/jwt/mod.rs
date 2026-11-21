@@ -307,6 +307,20 @@ pub async fn fetch_oidc_jwks(
     Ok((issuer, jwks))
 }
 
+/// The `kid` in a JWT's header: which key signed it. The signature is not checked.
+pub fn token_kid(token: &str) -> Result<String, AuthError> {
+    let header_b64 = token
+        .split('.')
+        .next()
+        .ok_or(AuthError::InvalidTokenFormat)?;
+    let header: Value = serde_json::from_slice(&decode_b64_url_nopad(header_b64)?)?;
+    header
+        .get("kid")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| AuthError::PublicKeyBuild("OIDC header missing kid".into()))
+}
+
 /// Verifies an OIDC token against a provided JWKS key set and expected issuer.
 pub fn verify_oidc_token(
     token: &str,

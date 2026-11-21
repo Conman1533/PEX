@@ -59,6 +59,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 pub mod level_chunk;
 pub mod login;
+pub mod oidc_keys;
 use self::level_chunk::CLevelChunk;
 use self::nethernet::NetherNetSession;
 use crate::{

@@ -7,6 +7,7 @@ use crate::data::player_server::ServerPlayerData;
 use crate::entity::NBTStorage;
 use crate::item::registry::ItemRegistry;
 use crate::net::authentication::fetch_mojang_public_keys;
+use crate::net::bedrock::oidc_keys::OidcKeys;
 use crate::net::{
     ClientPlatform, DisconnectReason, EncryptionError, GameProfile, PlayerConfig, offline_uuid,
 };
@@ -94,8 +95,9 @@ pub struct Server {
 
     /// Handles cryptographic keys for secure communication.
     key_store: OnceCell<Arc<KeyStore>>,
-    /// Bedrock OIDC provider keys, fetched on startup for 1.26.10+ token validation.
-    pub bedrock_oidc_keys: Arc<OnceCell<(String, pumpkin_auth::jwt::Jwks)>>,
+    /// Bedrock OIDC provider keys for 1.26.10+ token validation, fetched on startup when Bedrock
+    /// authentication is on.
+    pub bedrock_oidc_keys: Arc<OidcKeys>,
     /// Cached Bedrock server private key (process-lifetime). Generated on first Bedrock login and reused.
     /// Manages server status information.
     listing: std::sync::Mutex<CachedStatus>,
@@ -319,6 +321,9 @@ impl Server {
 
         memory::spawn_trimmer();
         let metrics = metrics::Metrics::new(&advanced_config.metrics);
+        let bedrock_oidc_keys = Arc::new(OidcKeys::new(
+            &advanced_config.networking.bedrock.authentication,
+        ));
         let server = Self {
             basic_config,
             advanced_config,
@@ -336,7 +341,7 @@ impl Server {
             block_registry: block_registry.clone(),
             item_registry: super::item::items::default_registry(),
             key_store: OnceCell::new(),
-            bedrock_oidc_keys: Arc::new(OnceCell::new()),
+            bedrock_oidc_keys,
             listing,
             branding: CachedBranding::new(),
             bossbars: std::sync::Mutex::new(
@@ -410,36 +415,14 @@ impl Server {
             });
         }
 
-        if server.advanced_config.networking.bedrock.online_mode
-            && server
-                .advanced_config
-                .networking
-                .bedrock
-                .authentication
-                .enabled
-        {
-            let server_clone = server.clone();
+        let bedrock = &server.advanced_config.networking.bedrock;
+        if bedrock.enabled && bedrock.online_mode && bedrock.authentication.enabled {
+            let keys = server.bedrock_oidc_keys.clone();
             server.spawn_task(async move {
-                let auth = server_clone
-                    .advanced_config
-                    .networking
-                    .bedrock
-                    .authentication
-                    .clone();
-                let keys = match pumpkin_auth::jwt::fetch_oidc_jwks(
-                    auth.url.as_deref(),
-                    auth.connect_timeout,
-                    auth.read_timeout,
-                )
-                .await
-                {
-                    Ok(keys) => keys,
-                    Err(error) => {
-                        error!("Failed to fetch Bedrock OIDC keys: {error}");
-                        (String::new(), pumpkin_auth::jwt::Jwks { keys: Vec::new() })
-                    }
-                };
-                let _ = server_clone.bedrock_oidc_keys.set(keys);
+                tokio::select! {
+                    () = keys.fetch_until_ready() => {}
+                    () = crate::STOP_INTERRUPT.cancelled() => {}
+                }
             });
         }
 
@@ -872,6 +855,7 @@ impl Server {
                 player.screen_handler_sync_handler.store_player(player.clone());
                 world.add_player(&player).is_ok().then(|| {
                     player.spawn_saved_ender_pearls(self);
+                    player.spawn_skin_fetch(self);
                     {
                         let mut user_cache = self
                             .data
