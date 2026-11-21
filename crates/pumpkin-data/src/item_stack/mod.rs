@@ -17,9 +17,13 @@ use rand;
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::num::NonZero;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 mod categories;
+mod saved_components;
+
+use saved_components::{SavedComponents, warn_unparsed};
 
 /// The outcome of a [`ItemStack::damage_item`] call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +48,9 @@ pub struct ItemStack {
     // unique ID for Bedrock network; don't serialize
     // Should always be a positive value for non-empty stacks
     pub uid: NonZero<i32>,
+
+    /// The saved components PEX doesn't model, from the NBT this stack was read from.
+    saved: Option<Arc<SavedComponents>>,
 }
 
 // impl Hash for ItemStack {
@@ -106,6 +113,7 @@ impl ItemStack {
             patch: Vec::new(),
 
             uid: ITEM_STACK_ID_GEN.next_id(),
+            saved: None,
         }
     }
 
@@ -121,6 +129,7 @@ impl ItemStack {
             patch: component,
 
             uid: ITEM_STACK_ID_GEN.next_id(),
+            saved: None,
         }
     }
 
@@ -138,6 +147,7 @@ impl ItemStack {
                 Some(v) => v,
                 None => panic!("1 is non-zero"),
             },
+            saved: None,
         }
     }
 
@@ -267,6 +277,7 @@ impl ItemStack {
         patch: Vec::new(),
 
         uid: NonZero::<i32>::MIN, // white lie - Bedrock `uid` is never sent if the stack is empty
+        saved: None,
     };
 
     #[must_use]
@@ -741,7 +752,7 @@ impl ItemStack {
             }
         }
 
-        true
+        SavedComponents::same_unparsed(self.saved.as_deref(), other.saved.as_deref())
     }
 
     #[must_use]
@@ -820,15 +831,25 @@ impl ItemStack {
                 continue;
             }
             if let Some(data) = data {
-                tag.put(id.to_name(), data.write_data());
+                let written = data.write_data();
+                let written = match &self.saved {
+                    Some(saved) => saved.saved_form(id.to_name(), written),
+                    None => written,
+                };
+                tag.put(id.to_name(), written);
             } else {
                 let name = '!'.to_string() + id.to_name();
                 tag.put(name.as_str(), NbtCompound::new());
             }
         }
+        if let Some(saved) = &self.saved {
+            saved.write_unparsed(&mut tag);
+        }
 
-        // Store custom data like enchantments, display name, etc. would go here
-        compound.put_compound("components", tag);
+        // Vanilla leaves `components` out of a stack with nothing patched.
+        if !tag.is_empty() {
+            compound.put_compound("components", tag);
+        }
     }
 
     #[must_use]
@@ -847,22 +868,40 @@ impl ItemStack {
         // Create the item stack
         let mut item_stack = Self::new(count, item);
 
-        // Process any additional data in the components compound
+        // Process any additional data in the components compound. A component PEX doesn't
+        // know or can't parse is kept as it was saved instead of losing the stack (D7-1).
+        let mut saved = SavedComponents::default();
         if let Some(tag) = compound.get_compound("components") {
             for (name, data) in &tag.child_tags {
-                if let Some(name) = name.strip_prefix("!") {
-                    let id = DataComponent::try_from_name(name)?;
-                    if id.is_persistent() {
-                        item_stack.patch.push((id, None));
+                if let Some(removed) = name.strip_prefix('!') {
+                    match DataComponent::try_from_name(removed) {
+                        Some(id) if id.is_persistent() => item_stack.patch.push((id, None)),
+                        Some(_) => {}
+                        None => {
+                            warn_unparsed(removed, "PEX doesn't know it");
+                            saved.keep_unparsed(name, data.clone());
+                        }
                     }
+                    continue;
+                }
+                let Some(id) = DataComponent::try_from_name(name) else {
+                    warn_unparsed(name, "PEX doesn't know it");
+                    saved.keep_unparsed(name, data.clone());
+                    continue;
+                };
+                if !id.is_persistent() {
+                    continue;
+                }
+                if let Some(component) = read_data(id, data) {
+                    saved.keep_parsed(id.to_name(), data.clone(), component.write_data());
+                    item_stack.patch.push((id, Some(component)));
                 } else {
-                    let id = DataComponent::try_from_name(name)?;
-                    if id.is_persistent() {
-                        item_stack.patch.push((id, Some(read_data(id, data)?)));
-                    }
+                    warn_unparsed(id.to_name(), "PEX can't parse it");
+                    saved.keep_unparsed(id.to_name(), data.clone());
                 }
             }
         }
+        item_stack.saved = saved.finish().map(Arc::new);
 
         Some(item_stack)
     }
@@ -889,6 +928,113 @@ mod tests {
     use pumpkin_nbt::Nbt;
     use pumpkin_nbt::deserializer::NbtReadHelperJava;
     use std::io::Cursor;
+
+    fn saved_stack(components: NbtCompound) -> NbtCompound {
+        let mut stack = NbtCompound::new();
+        stack.put_string("id", "minecraft:potion".to_string());
+        stack.put_int("count", 1);
+        stack.put_compound("components", components);
+        stack
+    }
+
+    fn written(stack: &ItemStack) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        stack.write_item_stack(&mut nbt);
+        nbt
+    }
+
+    #[test]
+    fn an_unknown_component_is_kept_and_written_back() {
+        let mut modded = NbtCompound::new();
+        modded.put_int("level", 3);
+        let mut components = NbtCompound::new();
+        components.put_compound("mymod:glow", modded.clone());
+        components.put("!mymod:sparkle", NbtTag::Compound(NbtCompound::new()));
+        let saved = saved_stack(components.clone());
+
+        let stack = ItemStack::read_item_stack(&saved).expect("the stack survives");
+        assert_eq!(stack.item, &Item::POTION);
+        assert_eq!(written(&stack), saved);
+
+        // It doesn't stack with a potion that lacks it.
+        assert!(!stack.are_items_and_components_equal(&ItemStack::new(1, &Item::POTION)));
+        assert!(stack.are_items_and_components_equal(&stack.clone()));
+    }
+
+    #[test]
+    fn a_malformed_known_component_is_kept_and_written_back() {
+        let mut components = NbtCompound::new();
+        components.put_string("minecraft:damage", "not a number".to_string());
+        components.put_int("minecraft:repair_cost", 3);
+        let saved = saved_stack(components);
+
+        let stack = ItemStack::read_item_stack(&saved).expect("the stack survives");
+        assert_eq!(stack.get_repair_cost(), 3);
+        assert_eq!(written(&stack), saved);
+
+        // A value PEX sets replaces the kept one.
+        let mut damaged = stack;
+        damaged.set_damage(5);
+        assert_eq!(
+            written(&damaged)
+                .get_compound("components")
+                .and_then(|c| c.get_int("minecraft:damage")),
+            Some(5)
+        );
+    }
+
+    #[test]
+    fn an_unchanged_component_keeps_its_saved_form() {
+        let mut contents = NbtCompound::new();
+        contents.put_string("potion", "minecraft:strong_healing".to_string());
+        let mut components = NbtCompound::new();
+        components.put_compound("minecraft:potion_contents", contents);
+        let saved = saved_stack(components);
+
+        let stack = ItemStack::read_item_stack(&saved).expect("parses");
+        assert_eq!(written(&stack), saved);
+    }
+
+    #[test]
+    fn potion_contents_save_like_vanilla() {
+        use crate::data_component_impl::{
+            DataComponentImpl, PotionContentsImpl, StatusEffectInstance,
+        };
+        let awkward = crate::potion::Potion::from_name("awkward").expect("awkward");
+        let contents = PotionContentsImpl {
+            potion_id: Some(i32::from(awkward.id)),
+            custom_color: None,
+            custom_effects: vec![StatusEffectInstance {
+                effect_id: Cow::Borrowed("minecraft:speed"),
+                amplifier: 1,
+                duration: 200,
+                ambient: false,
+                show_particles: true,
+                show_icon: true,
+            }],
+            custom_name: None,
+        };
+        let mut effect = NbtCompound::new();
+        effect.put_string("id", "minecraft:speed".to_string());
+        effect.put_byte("amplifier", 1);
+        effect.put_int("duration", 200);
+        effect.put_bool("show_icon", true);
+        let mut expected = NbtCompound::new();
+        expected.put_string("potion", "minecraft:awkward".to_string());
+        expected.put("custom_effects", NbtTag::List(vec![NbtTag::Compound(effect)]));
+        assert_eq!(contents.write_data(), NbtTag::Compound(expected));
+
+        let bare = PotionContentsImpl::read_data(&NbtTag::String("minecraft:awkward".into()))
+            .expect("a bare potion name parses");
+        assert_eq!(bare.potion_id, contents.potion_id);
+    }
+
+    #[test]
+    fn a_plain_stack_saves_no_components() {
+        let mut nbt = NbtCompound::new();
+        ItemStack::new(1, &Item::STONE).write_item_stack(&mut nbt);
+        assert!(nbt.get_compound("components").is_none());
+    }
 
     /// Helper: creates a fresh Iron Sword (max_damage 250, damage 0).
     fn iron_sword() -> ItemStack {

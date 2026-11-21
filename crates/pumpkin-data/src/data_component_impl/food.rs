@@ -572,12 +572,20 @@ pub struct PotionContentsImpl {
 }
 impl PotionContentsImpl {
     pub fn read_data(tag: &NbtTag) -> Option<Self> {
+        // Vanilla `PotionContents.CODEC` also takes a bare potion name.
+        if let Some(name) = tag.extract_string() {
+            return Some(Self {
+                potion_id: Some(Self::potion_id_from_name(name)?),
+                custom_color: None,
+                custom_effects: Vec::new(),
+                custom_name: None,
+            });
+        }
         let compound = tag.extract_compound()?;
         let potion_id = if let Some(id) = compound.get_int("potion") {
             Some(id)
         } else if let Some(name) = compound.get_string("potion") {
-            let name = name.strip_prefix("minecraft:").unwrap_or(name);
-            crate::potion::Potion::from_name(name).map(|p| p.id as i32)
+            Some(Self::potion_id_from_name(name)?)
         } else {
             None
         };
@@ -601,7 +609,7 @@ impl PotionContentsImpl {
                             .unwrap_or(0);
                         let ambient = effect_tag.get_bool("ambient").unwrap_or(false);
                         let show_particles = effect_tag.get_bool("show_particles").unwrap_or(true);
-                        let show_icon = effect_tag.get_bool("show_icon").unwrap_or(true);
+                        let show_icon = effect_tag.get_bool("show_icon").unwrap_or(show_particles);
                         Some(StatusEffectInstance {
                             effect_id: id,
                             amplifier,
@@ -621,12 +629,23 @@ impl PotionContentsImpl {
             custom_name,
         })
     }
+
+    fn potion_id_from_name(name: &str) -> Option<i32> {
+        let name = name.strip_prefix("minecraft:").unwrap_or(name);
+        crate::potion::Potion::from_name(name).map(|p| i32::from(p.id))
+    }
 }
 impl DataComponentImpl for PotionContentsImpl {
     fn write_data(&self) -> NbtTag {
         let mut compound = NbtCompound::new();
         if let Some(potion_id) = self.potion_id {
-            compound.put_int("potion", potion_id);
+            match u8::try_from(potion_id)
+                .ok()
+                .and_then(crate::potion::Potion::from_id)
+            {
+                Some(potion) => compound.put_string("potion", format!("minecraft:{}", potion.name)),
+                None => compound.put_int("potion", potion_id),
+            }
         }
         if let Some(color) = self.custom_color {
             compound.put_int("custom_color", color);
@@ -636,11 +655,19 @@ impl DataComponentImpl for PotionContentsImpl {
             for effect in &self.custom_effects {
                 let mut effect_compound = NbtCompound::new();
                 effect_compound.put_string("id", effect.effect_id.to_string());
-                effect_compound.put_int("amplifier", effect.amplifier);
-                effect_compound.put_int("duration", effect.duration);
-                effect_compound.put_byte("ambient", effect.ambient as i8);
-                effect_compound.put_byte("show_particles", effect.show_particles as i8);
-                effect_compound.put_byte("show_icon", effect.show_icon as i8);
+                if effect.amplifier != 0 {
+                    effect_compound.put_byte("amplifier", effect.amplifier as i8);
+                }
+                if effect.duration != 0 {
+                    effect_compound.put_int("duration", effect.duration);
+                }
+                if effect.ambient {
+                    effect_compound.put_bool("ambient", true);
+                }
+                if !effect.show_particles {
+                    effect_compound.put_bool("show_particles", false);
+                }
+                effect_compound.put_bool("show_icon", effect.show_icon);
                 effects_list.push(NbtTag::Compound(effect_compound));
             }
             compound.put("custom_effects", NbtTag::List(effects_list));
