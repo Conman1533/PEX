@@ -44,7 +44,26 @@ impl JavaClient {
             }
             Action::LeaveBed => player.wake_up(),
 
-            Action::StartHorseJump | Action::StopHorseJump | Action::OpenVehicleInventory => {
+            // Vanilla `handlePlayerCommand`: the client makes the jump itself; the mount plays
+            // its part (a horse rears, a camel dashes).
+            Action::StartHorseJump => {
+                let power = command.jump_boost.0;
+                if let Some(vehicle) = entity.get_vehicle()
+                    && let Some(mob) = vehicle.get_mob()
+                    && power > 0
+                    && mob.can_rider_jump()
+                {
+                    mob.handle_start_jump(power);
+                }
+            }
+            Action::StopHorseJump => {
+                if let Some(vehicle) = entity.get_vehicle()
+                    && let Some(mob) = vehicle.get_mob()
+                {
+                    mob.handle_stop_jump();
+                }
+            }
+            Action::OpenVehicleInventory => {
                 debug!("todo");
             }
             Action::StartFlyingElytra => {

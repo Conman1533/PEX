@@ -152,6 +152,15 @@ impl Mob for ZombieHorseEntity {
         crate::entity::mob::player_steers(self)
     }
 
+    fn can_rider_jump(&self) -> bool {
+        self.is_saddled()
+    }
+
+    /// Vanilla `AbstractHorse.handleStartJump`: rear up and play the jump sound.
+    fn handle_start_jump(&self, _power: i32) {
+        self.get_entity().play_sound(Sound::EntityHorseJump);
+    }
+
     fn get_sound_volume(&self) -> f32 {
         0.8
     }

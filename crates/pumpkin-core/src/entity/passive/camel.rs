@@ -402,7 +402,7 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
-    fn mob_controlling_passenger(&self) -> Option<std::sync::Arc<dyn crate::entity::EntityBase>> {
+    fn mob_controlling_passenger(&self) -> Option<Arc<dyn EntityBase>> {
         crate::entity::mob::saddled_player_controller(self.get_entity(), self.is_saddled()).or_else(
             || {
                 crate::entity::mob::mob_rider_controller(
@@ -413,8 +413,25 @@ impl Mob for CamelEntity {
         )
     }
 
-    fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
+    fn travel(&self, _caller: &dyn EntityBase) -> bool {
         crate::entity::mob::player_steers(self)
+    }
+
+    /// Vanilla `Camel.canJump`: not while sitting or getting up, or before the last dash's
+    /// cooldown is over.
+    fn can_rider_jump(&self) -> bool {
+        self.is_saddled()
+            && !self.refuse_to_move()
+            && self.dash_cooldown.load(Ordering::Relaxed) <= 0
+    }
+
+    /// Vanilla `Camel.handleStartJump`: the dash sound, and the dash flag others see, which
+    /// starts the cooldown.
+    fn handle_start_jump(&self, _power: i32) {
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityCamelDash);
+        self.set_dashing(true);
     }
 
     fn get_sound_volume(&self) -> f32 {
