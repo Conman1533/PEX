@@ -189,6 +189,14 @@ pub trait InventoryPlayer: Send + Sync {
     /// Increments a statistic for the player.
     fn increment_stat(&self, category: StatisticCategory, stat_id: i32, amount: i32);
 
+    /// Vanilla `CriteriaTriggers.ENCHANTED_ITEM`: an enchanting table enchanted `stack` for
+    /// `levels` levels.
+    fn on_item_enchanted(&self, _stack: &ItemStack, _levels: i32) {}
+
+    /// Vanilla `CriteriaTriggers.BREWED_POTION`: the player took `stack` out of a brewing stand's
+    /// potion slot.
+    fn on_potion_brewed(&self, _stack: &ItemStack) {}
+
     /// Plays a block sound at the open container position.
     fn play_block_sound(&self, sound: Sound, pitch: f32);
 

@@ -149,6 +149,15 @@ impl FireworkRocketEntity {
         entity.remove();
     }
 
+    /// Vanilla `FireworkRocketEntity.hasExplosion`.
+    fn has_explosion(&self) -> bool {
+        self.item_stack
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get_data_component::<FireworksImpl>()
+            .is_some_and(|fw| !fw.explosions.is_empty())
+    }
+
     fn deal_explosion_damage(&self, world: &World) {
         let explosion_count = {
             let stack = self
@@ -222,6 +231,45 @@ impl FireworkRocketEntity {
 impl EntityBase for FireworkRocketEntity {
     fn get_owner_id(&self) -> Option<i32> {
         self.entity.owner_id
+    }
+
+    /// Vanilla `FireworkRocketEntity.addAdditionalSaveData`.
+    fn write_custom_nbt(&self, nbt: &mut pumpkin_nbt::compound::NbtCompound) {
+        nbt.put_int(
+            "Life",
+            i32::try_from(self.life.load(Ordering::Relaxed)).unwrap_or(i32::MAX),
+        );
+        nbt.put_int(
+            "LifeTime",
+            i32::try_from(self.life_time.load(Ordering::Relaxed)).unwrap_or(i32::MAX),
+        );
+        let mut item = pumpkin_nbt::compound::NbtCompound::new();
+        self.item_stack
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .write_item_stack(&mut item);
+        nbt.put_compound("FireworksItem", item);
+        nbt.put_bool("ShotAtAngle", self.shot_at_angle.load(Ordering::Relaxed));
+    }
+
+    /// Vanilla `FireworkRocketEntity.readAdditionalSaveData`: a rocket without `LifeTime`
+    /// explodes on its first tick.
+    fn read_custom_nbt(&self, nbt: &pumpkin_nbt::compound::NbtCompound) {
+        let ticks = |key| u32::try_from(nbt.get_int(key).unwrap_or(0).max(0)).unwrap_or(0);
+        self.life.store(ticks("Life"), Ordering::Relaxed);
+        self.life_time.store(ticks("LifeTime"), Ordering::Relaxed);
+        let stack = nbt
+            .get_compound("FireworksItem")
+            .and_then(ItemStack::read_item_stack)
+            .unwrap_or_else(|| ItemStack::new(1, &Item::FIREWORK_ROCKET));
+        *self
+            .item_stack
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = stack;
+        self.shot_at_angle.store(
+            nbt.get_bool("ShotAtAngle").unwrap_or(false),
+            Ordering::Relaxed,
+        );
     }
 
     fn init_data_tracker(&self) {
@@ -323,7 +371,14 @@ impl EntityBase for FireworkRocketEntity {
         self
     }
 
-    fn on_hit(&self, _hit: crate::entity::projectile::ProjectileHit) {
+    /// Vanilla `FireworkRocketEntity.onHitEntity` and `onHitBlock`: hitting an entity always
+    /// explodes the rocket, hitting a block only when it has explosions.
+    fn on_hit(&self, hit: crate::entity::projectile::ProjectileHit) {
+        if matches!(hit, crate::entity::projectile::ProjectileHit::Block { .. })
+            && !self.has_explosion()
+        {
+            return;
+        }
         let world = self.get_entity().world.load();
         self.explode_and_remove(&world);
     }

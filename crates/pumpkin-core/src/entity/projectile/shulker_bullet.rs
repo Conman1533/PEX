@@ -41,8 +41,6 @@ pub struct ShulkerBulletEntity {
     target_delta_y: AtomicCell<f64>,
     target_delta_z: AtomicCell<f64>,
     has_hit: AtomicBool,
-    /// Tick counter; bullet is discarded after ~150 ticks if it never reaches its target
-    age: AtomicI32,
 }
 
 use std::sync::atomic::AtomicU8;
@@ -81,7 +79,6 @@ impl ShulkerBulletEntity {
             target_delta_y: AtomicCell::new(0.0),
             target_delta_z: AtomicCell::new(0.0),
             has_hit: AtomicBool::new(false),
-            age: AtomicI32::new(0),
         };
 
         // Prime target_delta and flight_steps so movement begins on tick 1.
@@ -264,7 +261,6 @@ impl ShulkerBulletEntity {
             target_delta_y: AtomicCell::new(0.0),
             target_delta_z: AtomicCell::new(0.0),
             has_hit: AtomicBool::new(false),
-            age: AtomicI32::new(0),
         }
     }
 }
@@ -330,32 +326,7 @@ impl EntityBase for ShulkerBulletEntity {
             return;
         }
 
-        // Discard bullet after 150 ticks if it never hits anything
-        let age = self.age.fetch_add(1, Ordering::Relaxed) + 1;
-        if age > 150 {
-            if !self.has_hit.swap(true, Ordering::SeqCst) {
-                let entity = &self.entity;
-                let world = entity.world.load();
-                let pos = entity.pos.load();
-                world.play_sound_fine(
-                    Sound::EntityShulkerBulletHit,
-                    SoundCategory::Hostile,
-                    &pos,
-                    1.0,
-                    1.0,
-                );
-                world.spawn_particle(
-                    pos,
-                    Vector3::new(0.2, 0.2, 0.2),
-                    0.0,
-                    2,
-                    Particle::Explosion,
-                );
-                entity.remove();
-            }
-            return;
-        }
-
+        // Vanilla `ShulkerBullet` has no lifetime: it flies until it hits something.
         let entity = &self.entity;
         let world = entity.world.load();
 
@@ -407,10 +378,12 @@ impl EntityBase for ShulkerBulletEntity {
             vel.z += (tdz - vel.z) * 0.2;
             entity.velocity.store(vel);
         } else {
-            // No live target – apply gravity and drift
-            let mut vel = entity.velocity.load();
-            vel.y -= 0.04;
-            entity.velocity.store(vel);
+            // No live target: vanilla `applyGravity`, which `NoGravity` turns off.
+            if !entity.has_no_gravity() {
+                let mut vel = entity.velocity.load();
+                vel.y -= 0.04;
+                entity.velocity.store(vel);
+            }
         }
 
         let vel = entity.velocity.load();

@@ -28,6 +28,54 @@ type RTorchProps = pumpkin_data::block_properties::RedstoneOreLikeProperties;
 
 use crate::block::{BlockBehaviour, BlockMetadata};
 use crate::world::World;
+use pumpkin_data::world::WorldEvent;
+
+/// Vanilla `RedstoneTorchBlock.RECENT_TOGGLE_TIMER`: how long a toggle counts, in game ticks.
+const RECENT_TOGGLE_TIMER: i64 = 60;
+/// Vanilla `RedstoneTorchBlock.MAX_RECENT_TOGGLES`.
+const MAX_RECENT_TOGGLES: usize = 8;
+/// Vanilla `RedstoneTorchBlock.RESTART_DELAY`.
+const RESTART_DELAY: u8 = 160;
+
+/// `state` of a torch or wall torch with `lit` set.
+fn with_lit(block: &Block, state: BlockStateId, lit: bool) -> BlockStateId {
+    if block == &Block::REDSTONE_WALL_TORCH {
+        let mut props = RWallTorchProps::from_state_id(state);
+        props.lit = lit;
+        props.to_state_id(block)
+    } else {
+        let mut props = RTorchProps::from_state_id(state);
+        props.lit = lit;
+        props.to_state_id(block)
+    }
+}
+
+/// Drops the toggles older than [`RECENT_TOGGLE_TIMER`], as each torch tick does in vanilla.
+fn forget_old_toggles(world: &World, now: i64) {
+    let mut toggles = world
+        .recent_torch_toggles
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    while toggles
+        .front()
+        .is_some_and(|(_, when)| now - when > RECENT_TOGGLE_TIMER)
+    {
+        toggles.pop_front();
+    }
+}
+
+/// Vanilla `RedstoneTorchBlock.isToggledTooFrequently`: records a toggle at `pos` when `now` is
+/// given, then whether `pos` has [`MAX_RECENT_TOGGLES`] recent ones.
+fn toggled_too_frequently(world: &World, pos: BlockPos, now: Option<i64>) -> bool {
+    let mut toggles = world
+        .recent_torch_toggles
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(now) = now {
+        toggles.push_back((pos, now));
+    }
+    toggles.iter().filter(|(at, _)| *at == pos).count() >= MAX_RECENT_TOGGLES
+}
 
 use super::get_redstone_power;
 
@@ -206,36 +254,50 @@ impl BlockBehaviour for RedstoneTorchBlock {
         0
     }
 
+    /// Vanilla `RedstoneTorchBlock.tick`: a torch that turns off too often burns out, stays off
+    /// and tries again 160 ticks later.
     fn on_scheduled_tick(&self, args: OnScheduledTickArgs<'_>) {
         let (block, state) = args.world.get_block_and_state(args.position);
-        if block == &Block::REDSTONE_WALL_TORCH {
-            let mut props = RWallTorchProps::from_state_id(state.id);
-            let should_be_lit_now = should_be_lit(
-                args.world,
-                args.position,
-                props.facing.to_block_direction().opposite(),
-            );
-            if props.lit != should_be_lit_now {
-                props.lit = should_be_lit_now;
-                args.world.set_block_state(
-                    args.position,
-                    props.to_state_id(block),
-                    BlockFlags::NOTIFY_ALL,
-                );
-                update_neighbors(args.world, args.position);
-            }
+        let (lit, should_be_lit_now) = if block == &Block::REDSTONE_WALL_TORCH {
+            let props = RWallTorchProps::from_state_id(state.id);
+            let facing = props.facing.to_block_direction().opposite();
+            (props.lit, should_be_lit(args.world, args.position, facing))
         } else if block == &Block::REDSTONE_TORCH {
-            let mut props = RTorchProps::from_state_id(state.id);
-            let should_be_lit_now = should_be_lit(args.world, args.position, BlockDirection::Down);
-            if props.lit != should_be_lit_now {
-                props.lit = should_be_lit_now;
-                args.world.set_block_state(
-                    args.position,
-                    props.to_state_id(block),
-                    BlockFlags::NOTIFY_ALL,
-                );
+            let props = RTorchProps::from_state_id(state.id);
+            (
+                props.lit,
+                should_be_lit(args.world, args.position, BlockDirection::Down),
+            )
+        } else {
+            return;
+        };
+        let set_lit = |lit| with_lit(block, state.id, lit);
+
+        let now = args.world.get_world_age();
+        forget_old_toggles(args.world, now);
+        if lit {
+            if !should_be_lit_now {
+                args.world
+                    .set_block_state(args.position, set_lit(false), BlockFlags::NOTIFY_ALL);
                 update_neighbors(args.world, args.position);
+                if toggled_too_frequently(args.world, *args.position, Some(now)) {
+                    args.world.sync_world_event(
+                        WorldEvent::RedstoneTorchBurnout,
+                        *args.position,
+                        0,
+                    );
+                    args.world.schedule_block_tick(
+                        block,
+                        *args.position,
+                        RESTART_DELAY,
+                        TickPriority::Normal,
+                    );
+                }
             }
+        } else if should_be_lit_now && !toggled_too_frequently(args.world, *args.position, None) {
+            args.world
+                .set_block_state(args.position, set_lit(true), BlockFlags::NOTIFY_ALL);
+            update_neighbors(args.world, args.position);
         }
     }
 

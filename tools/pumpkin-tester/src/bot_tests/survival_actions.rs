@@ -163,13 +163,14 @@ async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
             "The food level kept changing after the hunger effect was cleared (now {before})"
         ));
     }
-    stage.eat().await?;
+    let trace = stage.eat().await?;
     // Bread gives 5 food.
     let after = server_food(stage);
     if after != before + 5 {
         return Err(format!(
-            "Eating bread took the food level from {before} to {after}, expected {}",
-            before + 5
+            "Eating bread took the food level from {before} to {after}, expected {} (now {}; {trace})",
+            before + 5,
+            stage.hunger_state()
         ));
     }
     stage

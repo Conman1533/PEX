@@ -335,28 +335,76 @@ impl<'a> StageContext<'a> {
     }
 
     /// Eats the held food until the server raises the bot's food level. The bot can't be full.
-    pub async fn eat(&mut self) -> Result<(), String> {
+    /// Returns the server player's hunger at each step, for a test that finds the wrong food level.
+    pub async fn eat(&mut self) -> Result<String, String> {
         self.sync().await?;
         let food = |stage: &Self| stage.player.hunger_manager.level.load();
         let before = food(self);
+        let mut trace = vec![format!("before use: {}", self.hunger_state())];
         let sequence = self.bot.next_sequence();
         self.bot.use_item(sequence).await?;
         // Once the ping is answered the server has the use packet, so the eat has started. The
         // server player is read because the bot's view can trail it on a slow machine.
         self.sync().await?;
-        for _ in 0..MAX_EAT_TICKS {
+        trace.push(format!("use received: {}", self.hunger_state()));
+        for tick in 0..MAX_EAT_TICKS {
             if food(self) > before {
-                return Ok(());
+                trace.push(format!("risen after {tick} ticks"));
+                return Ok(trace.join("; "));
             }
             self.tick().await?;
+            trace.push(format!("tick {}: {}", tick + 1, self.hunger_state()));
         }
         if food(self) > before {
-            Ok(())
+            Ok(trace.join("; "))
         } else {
             Err(format!(
-                "Waited {MAX_EAT_TICKS} ticks for the food level to rise above {before}"
+                "Waited {MAX_EAT_TICKS} ticks for the food level to rise above {before} ({}); {}",
+                self.item_use_state(),
+                trace.join("; ")
             ))
         }
+    }
+
+    /// The server player's food, saturation, exhaustion and item use time.
+    pub fn hunger_state(&self) -> String {
+        let hunger = &self.player.hunger_manager;
+        format!(
+            "food {} sat {:.1} exh {:.2} use {}",
+            hunger.level.load(),
+            hunger.saturation.load(),
+            hunger.exhaustion.load(),
+            self.player
+                .living_entity
+                .item_use_time
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    /// What the server's player is holding and using, for a failed eat or draw.
+    fn item_use_state(&self) -> String {
+        let living = &self.player.living_entity;
+        let inventory = self.player.inventory();
+        let in_use = living
+            .item_in_use
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .map(|stack| stack.item.registry_key.to_string());
+        format!(
+            "selected slot {}, held {}, item in use {in_use:?}, active hand {:?}, use ticks left {}, \
+             client loaded {}",
+            inventory.get_selected_slot(),
+            inventory.held_item().item.registry_key,
+            *living
+                .active_hand
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            living
+                .item_use_time
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.player.has_client_loaded(),
+        )
     }
 
     /// Draws the held bow fully at `target` and lets go. Returns the arrow's entity id.

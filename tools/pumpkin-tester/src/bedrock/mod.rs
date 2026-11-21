@@ -3,6 +3,7 @@
 
 mod bot;
 mod dimensions;
+mod riding;
 mod transport;
 
 use std::{
@@ -534,6 +535,7 @@ async fn run_mixed_play(
     run_move_checks(server, bedrock, &mut java, &mut checks).await?;
     run_pose_checks(server, bedrock, &mut java, &mut checks).await?;
     run_mount_checks(server, bedrock, &mut java, &mut checks).await?;
+    riding::run_riding_checks(server, bedrock, &mut java, &mut checks).await?;
     // Before `run_block_checks`, which puts both players in creative.
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;

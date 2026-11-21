@@ -79,6 +79,7 @@ impl CommandExecutor for OnExecutor {
                 true,
             );
             kick_non_whitelisted_players(server);
+            crate::server::config_write_back::write_back("white_list", true);
             Ok(1)
         }
     }
@@ -98,6 +99,7 @@ impl CommandExecutor for OffExecutor {
                 ),
                 true,
             );
+            crate::server::config_write_back::write_back("white_list", false);
             Ok(1)
         } else {
             Err(ERROR_ALREADY_OFF.create_without_context())

@@ -253,6 +253,9 @@ pub struct World {
     pub min_y: i32,
     /// The world's weather, including rain and thunder levels.
     pub weather: std::sync::Mutex<Weather>,
+    /// Vanilla `RedstoneTorchBlock.RECENT_TOGGLES`: each torch that turned off, with the game time,
+    /// oldest first.
+    pub(crate) recent_torch_toggles: std::sync::Mutex<std::collections::VecDeque<(BlockPos, i64)>>,
     /// Block Behaviour
     pub block_registry: Arc<BlockRegistry>,
     pub server: Weak<Server>,
@@ -446,6 +449,7 @@ impl World {
             level_time: std::sync::Mutex::new(level_time),
             dimension,
             weather: std::sync::Mutex::new(weather),
+            recent_torch_toggles: std::sync::Mutex::new(std::collections::VecDeque::new()),
             block_registry,
             sea_level: generation_settings.sea_level,
             min_y: i32::from(generation_settings.shape.min_y),
@@ -856,7 +860,9 @@ impl World {
         let mut groups: FxHashMap<Vector2<i32>, Vec<NbtCompound>> = FxHashMap::default();
         for entity in entities {
             let base_entity = entity.get_entity();
-            if base_entity.is_removed() {
+            // Vanilla `EntityType.canSerialize`: leash knots, lightning bolts, fishing bobbers and
+            // the like are never saved.
+            if base_entity.is_removed() || !base_entity.entity_type.saveable {
                 continue;
             }
             let mut nbt = NbtCompound::new();
@@ -2535,34 +2541,19 @@ impl World {
         let tick_data = self.level.get_tick_data(&active_chunks, random_tick_speed);
         let handle = server.runtime.clone();
 
-        // 1. Parallel Block Ticks via Rayon
-        self.handling_tick.store(true, Relaxed);
-        let world = self.clone();
-        let block_handle = handle.clone();
-        tick_data
-            .block_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = block_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    world.run_block_tick(scheduled_tick);
-                }
-            });
-
-        // 2. Parallel Fluid Ticks via Rayon
-        let world = self.clone();
-        let fluid_handle = handle.clone();
-        tick_data
-            .fluid_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = fluid_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    world.run_fluid_tick(scheduled_tick);
-                }
-            });
+        // 1 and 2. Scheduled block ticks, then fluid ticks, one at a time in the sorted order
+        // `get_tick_data` gives them, like vanilla `ServerLevel.tick` (`blockTicks.tick`, then
+        // `fluidTicks.tick`): a tick sees every change the ticks before it made (roadmap D5-1).
+        {
+            let _guard = handle.enter();
+            self.handling_tick.store(true, Relaxed);
+            for scheduled_tick in &tick_data.block_ticks {
+                self.run_block_tick(scheduled_tick);
+            }
+            for scheduled_tick in &tick_data.fluid_ticks {
+                self.run_fluid_tick(scheduled_tick);
+            }
+        }
         self.handling_tick.store(false, Relaxed);
 
         // 3. Parallel Random Ticks via Rayon

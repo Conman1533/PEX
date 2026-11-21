@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6bdf5476b`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `061e92323`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
 | G1 Mob AI | 45 | 12 | 1 | 32 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
-| G3 Config | 10 | 3 | 0 | 7 | |
+| G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 2 | 2 | 12 | |
-| G6 Survival | 27 | 14 | 0 | 12 | G6-26 dropped (no code) |
+| G5 Redstone | 16 | 3 | 4 | 9 | |
+| G6 Survival | 29 | 15 | 0 | 13 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 26 | 0 | 6 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 197 | 73 | 3 | 106 | 15 |
+| Total | 199 | 79 | 5 | 100 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -49,6 +49,8 @@ Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4
 Landing batch 7 (2026-11-21) also carried, outside the pieces: the Java login packet sent before the player joins the world (a client could get entity data before it had a level and hang on its first join; every bot join now checks it), held item attributes applied the tick they change like vanilla `detectEquipmentUpdates` (a sword given by `/give` hit with fist damage until the next hand sync), `fix/bedrock-dimensions` from the Bedrock thread, and a longer timeout for the flaky armadillo GameTest.
 
 Landing batch 8 (2026-11-21) also carried, outside the pieces: `fix/portal-exit-chunks` from the Bedrock thread (the exit side of a portal keeps its chunks loaded while the portal is found or built, which stopped duplicate portals for Java and Bedrock), and the `bot:eat_restores_food` test reading the food level from the server's player, since on a slow machine the bot's view trails the server by many ticks. That test still fails now and then on the Windows box with the eat never landing; batch 9 adds the server player's item use state to its message. On CT 117 the first tester run hung once at server shutdown after `bot:block_entities_saved_with_unloaded_chunk` passed (every thread idle, the main task parked); the rerun passed in full, so it is logged as a shutdown flake to watch.
+
+Landing batch 9 (2026-11-21) also carried, outside the pieces: `fix/bedrock-riding` (`df3af4ddf`) from the Bedrock thread (players steer saddled mounts and item-steered mobs on both editions; its later rider jumps follow in batch 10), the Bedrock OIDC key test's timing made robust on a busy machine, the attack cooldown bot test retrying a case whose punch the server handled a tick late, and the eat bot test printing the server player's food, saturation, exhaustion and item use each tick when the food level comes out wrong, to catch the Windows eat flake.
 
 What holds 2.0 back:
 
@@ -1326,6 +1328,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
 - Done when:
   - New `failed_write_leaves_the_file_and_no_new_backup`: block the write with a directory at the temporary file's path, because root ignores file modes. Two loads leave the original bytes and no `.bak` file.
   - The 5 existing `config_version.rs` tests pass.
+- Status (2026-11-21): landed (branch `fix/config-safe-save`, 2.0 loop). Migrated config files are written to `<name>.tmp`, synced and renamed over the original (`migration::write_atomically`); if the write fails the new backup is removed and the file is left as it was, with a warning. Unit test `failed_write_leaves_the_file_and_no_new_backup` and the `config_version.rs` tests pass. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G3-05 Pelican egg matches the config
 
@@ -1354,6 +1357,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
 - Done when:
   - Unit test `set_key_changes_only_that_line`: in a file with comments, only the set line differs afterwards.
   - Boot test: console `whitelist on`, `stop`, start again. A second `whitelist on` then fails with "Whitelist is already turned on" (`ERROR_ALREADY_ON`), and `pumpkin.toml` differs from before only in `white_list = true`.
+- Status (2026-11-21): landed (branch `feat/config-write-back`, 2.0 loop). `pumpkin_config::set_config_key` sets one dotted key with `toml_edit`, keeping comments, order and the comment after the value, and saves through `write_atomically`; a thread of its own (`server/config_write_back.rs`) writes `/whitelist on|off` and the management API's difficulty, allowlist, max players, MOTD, spawn protection, game mode, view and simulation distance, transfers, heartbeat and op level setters back to `pumpkin.toml` (D3-4). Unit test `set_key_changes_only_that_line`; boot test on the batch binary: `whitelist on`, `stop`, start, a second `whitelist on` says "Whitelist is already turned on" and `pumpkin.toml` differs only in `white_list = true`. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G3-07 default_difficulty does something
 
@@ -1364,6 +1368,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
 - Branch: fix/default-difficulty
 - Needs decision: D3-3
 - Done when, for option (a): boot test with a world whose `level.dat` says Hard and `default_difficulty = "Easy"`. After start, console `difficulty` reports Easy, as vanilla 26.3 does with `difficulty=easy` in `server.properties` (run both). With `hardcore = true` it stays Hard.
+- Status (2026-11-21): landed. The code (`set_difficulty(default_difficulty, true)` at every start, D3-3) came with `e8b8878bf`; the proof is the round trip's new step 8 (branch `fix/default-difficulty`): PEX with `default_difficulty = "Easy"` and vanilla 26.3 with `difficulty=easy` each open the fixture with `level.dat` set to hard and both save easy, and step 5 checks a hardcore world stays hard. It reads the saved `level.dat` rather than the console `difficulty` reply, which reports the same value. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G3-08 Defaults that point at upstream
 
@@ -1377,6 +1382,7 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - Boot test in an empty directory: the log has no "Anonymous server telemetry is enabled" line (written by `start_telemetry_with_config`), and the generated file has `[telemetry] enabled = false`.
   - `current_file_is_left_byte_for_byte` still passes.
   - With a migration, the release fixtures test expects its log line.
+- Status (2026-11-21): landed (branch `fix/telemetry-default-off`, 2.0 loop). Telemetry is off by default and `server_links.bug_report` is empty (D3-5); config migration 5 turns telemetry off and clears a bug report link still pointing at upstream Pumpkin, each with a log line, and keeps a link the owner chose (`version_5_keeps_a_chosen_bug_report_link_and_comments`). Boot test in an empty directory on the batch binary: no "Anonymous server telemetry is enabled" line and the new file has `[telemetry] enabled = false`. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G3-09 Versioned plugin configs in pex_common
 
@@ -1706,6 +1712,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/ordered-block-ticks
 - Needs decision: D5-1
 - Done when: `pumpkin:redstone/many_ticks_one_tick` (64 or more diodes due in the same game tick with an outcome that depends on their order) passes on both and PEX gives the same result in 20 runs; the PR records MSPT of a redstone stress world and a gameplay-bench run before and after, with tick P95 within 5% of the G0-03 baseline.
+- Status (2026-11-21): built, proof missing (branch `fix/ordered-block-ticks`, second lane). Block and fluid ticks due this tick run one at a time in vanilla's sorted order instead of in parallel batches (D5-1). The GameTest `pumpkin:redstone/many_ticks_one_tick` (32 repeater pairs, 64 ticks due in one game tick) fails on `alpha` and passes. Missing: the 20 runs and the MSPT and tick P95 numbers before and after, which need the 60-minute bench on CT 117. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G5-06 Block events run like vanilla
 
@@ -1731,6 +1738,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/piston-activation
 - Needs decision: none
 - Done when: `pumpkin:redstone/piston_ignores_power_into_face` fails on alpha and passes on both; `pumpkin:redstone/piston_qc_needs_update` and `pumpkin:redstone/dropper_qc` pass on both before and after; builtin GameTest `piston_stops_at_build_limit` passes.
+- Status (2026-11-21): built, proof missing (branch `fix/piston-activation`, second lane). Pistons ignore power into their own face and stop at the build limit and the world border. GameTests `pumpkin:redstone/piston_ignores_power_into_face` (fails on `alpha`) and `pumpkin:piston_stops_at_build_limit` pass. Missing: `pumpkin:redstone/piston_qc_needs_update` and `pumpkin:redstone/dropper_qc` are not written yet. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G5-09 Wire removal updates and horizontal order
 
@@ -1771,6 +1779,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: feat/torch-burnout
 - Needs decision: none
 - Done when: `pumpkin:redstone/torch_burnout` (a torch wired to toggle itself, ACCEPT once it stays off past the window) fails on alpha and passes on both.
+- Status (2026-11-21): landed (branch `feat/torch-burnout`, second lane). A torch turned off eight times within 60 ticks burns out and stays off until its 160-tick restart, like vanilla `RedstoneTorchBlock.tick`. The GameTest `pumpkin:redstone/torch_burnout` fails on `alpha` and passes. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G5-14 Neighbour updater limits
 
@@ -2120,7 +2129,25 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/advancement-triggers
 - Needs decision: none
 - Done when: the round trip's bot visit no longer grants `minecraft:story/enchant_item` on PEX, and unit tests show each changed advancement is granted by its trigger and not by holding the item.
-- Status (2026-11-21): added by the 2.0 loop after the second lane saw the round trip's bot visit granted `story/enchant_item` on PEX without an enchanting table.
+- Status (2026-11-21): landed (branch `fix/advancement-triggers`, 2.0 loop). New triggers `EnchantedItem` (enchanting table), `BrewedPotion` (taking a potion out of a brewing stand), `ConstructBeacon` (a beacon turning on, for players in vanilla's box), `FilledBucket` (bucketing an axolotl, tadpole or fish) and `Location` (every 20 ticks: `explore_nether`, `adventuring_time`, and `find_end_city` from the chunk's structure references, `Level::is_inside_structure`) replace the inventory scans; `mine_stone` checks `#stone_tool_materials`. Beacons also play their activate and deactivate sounds. Six unit tests in `trigger.rs` and `a_position_is_inside_a_structure_only_within_a_piece`; after the round trip's bot visit PEX and vanilla hold the same advancements, without `story/enchant_item`. It was added by the 2.0 loop after the second lane saw that grant. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+
+#### G6-28 Block arguments take block states and NBT
+
+- Scope: in: `/setblock`, `/fill` and `/clone`'s block argument (`pumpkin-command` `argument_types/block.rs`, which returns only a `&Block`) parses `[property=value,...]` and `{nbt}` like vanilla `BlockStateParser` for `BlockStateArgument`, places that state and loads the NBT into the new block entity; the predicate argument (`block_predicate.rs`) already parses both. Out: new commands.
+- Depends on: none
+- Branch: fix/block-state-argument
+- Needs decision: none
+- Done when: from the console, `setblock 3 200 0 minecraft:piston[facing=east]` places an east-facing piston and `setblock 3 201 0 minecraft:chest{Items:[{Slot:0b,id:"minecraft:stone",count:3}]}` a chest holding 3 stone, as vanilla 26.3 does (run both); an unknown property or value fails with vanilla's `argument.block.property.unknown` / `argument.block.property.invalid` messages; `fill` with a state fills that state; unit tests for the parser.
+- Status (2026-11-21): added by the 2.0 loop after the agent harness found `/setblock 3 200 0 minecraft:piston[facing=east]` fails with "Expected whitespace to end one argument, but found trailing data" on `alpha` `7b3ae93e3`, which vanilla accepts.
+
+#### G6-29 Nether portal exits are placed where vanilla places them
+
+- Scope: in: `world/portal/nether.rs`: the existing-portal search (`get_in_square` with 16 in the Nether and 128 in the Overworld) and the new-portal placement, which must follow vanilla `PortalForcer.findClosestPortalPosition` and `createPortal` (search the column within 16 blocks of the scaled position, clamped to the world border, best spot first, then the forced platform). Out: End portals.
+- Depends on: none
+- Branch: fix/portal-exit-placement
+- Needs decision: none
+- Done when: a bot test lights a portal at 3,201,1 in a fresh Overworld; the Nether exit is within 16 blocks of 0,y,0 on each axis, and walking back in returns the player within 8 blocks of the first portal without building a second one; the same steps on vanilla 26.3 give the same result.
+- Status (2026-11-21): added by the 2.0 loop after the agent harness on `alpha` `7b3ae93e3` saw the portal at 3,201,1 exit in the Nether at 11,94,22 (22 blocks out on z, past vanilla's 16), so the trip back landed about 195 blocks away, outside the 128-block search, and built a second Overworld portal.
 
 ### Proof
 
@@ -2427,7 +2454,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/entity-nbt-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no entity diff outside the ignore list.
-- Status (2026-11-21): in progress. First part landed (branch `fix/entity-nbt-keys`, second lane): entities keep every saved key PEX doesn't model, base and per-type keys are written like vanilla, saddles moved to `equipment.saddle`. Unit tests `a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla`, `a_saved_skeleton_without_a_bow_loads_without_one`. Not done: the round trip still lists 189 entity known losses tagged G7-24 (many shown once force-loaded chunks started loading their entities), including a phantom `anchor_pos` PEX invents. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): in progress. First part landed with batch 7 (branch `fix/entity-nbt-keys`, second lane): entities keep every saved key PEX doesn't model, base and per-type keys are written like vanilla, saddles moved to `equipment.saddle`. Unit tests `a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla`, `a_saved_skeleton_without_a_bow_loads_without_one`. Batch 9 (`5133576dd`) replaced the round trip's 189-line entity catch-all with 67 `ticking` lines (values that move while the lab's entities live, not lost keys) and dropped the phantom `anchor_pos`. Not done: 41 entity known losses are still tagged G7-24. Landed through merge branch `land/g7-batch-9` (`061e92323`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G7-25 Block entity NBT keys
 

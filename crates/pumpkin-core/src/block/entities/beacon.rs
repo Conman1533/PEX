@@ -11,7 +11,9 @@ use pumpkin_util::math::boundingbox::BoundingBox;
 use pumpkin_util::math::position::BlockPos;
 
 use crate::block::entities::BlockEntity;
+use crate::entity::player::advancement::trigger::AdvancementTrigger;
 use crate::world::World;
+use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_inventory::{Clearable, Inventory};
 
 pub struct BeaconBlockEntity {
@@ -115,6 +117,29 @@ impl BeaconBlockEntity {
         }
 
         true
+    }
+
+    /// Vanilla `BeaconBlockEntity.tick` after a level check: the activate or deactivate sound, and
+    /// `CriteriaTriggers.CONSTRUCT_BEACON` for the players near a beacon that just turned on.
+    fn announce_activation(&self, world: &Arc<World>, previous: i32, levels: i32) {
+        let center = self.position.to_centered_f64();
+        if previous <= 0 && levels > 0 {
+            world.play_sound(Sound::BlockBeaconActivate, SoundCategory::Blocks, &center);
+            let pos = self.position.0.to_f64();
+            // new AABB(x, y, z, x, y - 4, z).inflate(10, 5, 10)
+            let bounds = BoundingBox::new_array(
+                [pos.x - 10.0, pos.y - 9.0, pos.z - 10.0],
+                [pos.x + 10.0, pos.y + 5.0, pos.z + 10.0],
+            );
+            for player in world.players.load().iter() {
+                if bounds.intersects(&player.living_entity.entity.bounding_box.load()) {
+                    player
+                        .trigger_advancement(AdvancementTrigger::ConstructBeacon { level: levels });
+                }
+            }
+        } else if previous > 0 && levels <= 0 {
+            world.play_sound(Sound::BlockBeaconDeactivate, SoundCategory::Blocks, &center);
+        }
     }
 
     pub fn update_base(&self, world: &Arc<World>) -> i32 {
@@ -315,11 +340,12 @@ impl BlockEntity for BeaconBlockEntity {
         // Check properties every 80 ticks matching Java
         if world.get_time_of_day() % 80 == 0 {
             let levels = self.update_base(world);
-            self.levels.store(levels, Ordering::Relaxed);
+            let previous = self.levels.swap(levels, Ordering::Relaxed);
 
             if levels > 0 {
                 self.apply_effects(world, levels);
             }
+            self.announce_activation(world, previous, levels);
         }
     }
 
