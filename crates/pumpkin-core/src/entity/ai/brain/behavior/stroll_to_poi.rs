@@ -1,4 +1,5 @@
 use pumpkin_util::math::vector3::Vector3;
+use rand::RngExt;
 
 use super::super::BrainTick;
 use super::super::memory::global_pos::GlobalPos;
@@ -89,6 +90,53 @@ pub fn stroll_around_poi(
                 land_pos.map(|pos| WalkTarget::from_vec(pos, speed_modifier, 1)),
             );
             next_ok_start_time = tick.time + MIN_TIME_BETWEEN_STROLLS_AROUND;
+            true
+        },
+    )
+}
+
+/// Vanilla `StrollToPoiList`'s wait before it sets a new walk target.
+const MIN_TIME_BETWEEN_STROLLS_TO_LIST: i64 = 100;
+
+/// Vanilla `StrollToPoiList.create`: every 5 seconds, walks to a random point of interest from
+/// `list_memory` while within `max_distance_from_poi` of `must_be_close_to`.
+#[must_use]
+pub fn stroll_to_poi_list(
+    list_memory: MemoryModuleType<Vec<GlobalPos>>,
+    speed_modifier: f32,
+    close_enough_dist: i32,
+    max_distance_from_poi: i32,
+    must_be_close_to: MemoryModuleType<GlobalPos>,
+) -> OneShot {
+    let mut next_ok_start_time = 0i64;
+    OneShot::new(
+        "StrollToPoiList",
+        vec![
+            (types::WALK_TARGET.id(), MemoryStatus::Registered),
+            (list_memory.id(), MemoryStatus::ValuePresent),
+            (must_be_close_to.id(), MemoryStatus::ValuePresent),
+        ],
+        move |tick| {
+            let Some(list) = tick.state.get(list_memory) else {
+                return false;
+            };
+            if list.is_empty() {
+                return false;
+            }
+            let index = tick.mob.get_random().random_range(0..list.len());
+            let target = list[index];
+            if target.dimension.minecraft_name != tick.world.dimension.minecraft_name
+                || poi_in_reach(tick, must_be_close_to, max_distance_from_poi).is_none()
+            {
+                return false;
+            }
+            if tick.time > next_ok_start_time {
+                tick.state.set(
+                    types::WALK_TARGET,
+                    WalkTarget::from_block_pos(target.pos, speed_modifier, close_enough_dist),
+                );
+                next_ok_start_time = tick.time + MIN_TIME_BETWEEN_STROLLS_TO_LIST;
+            }
             true
         },
     )

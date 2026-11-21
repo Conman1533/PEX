@@ -486,3 +486,78 @@ pub(super) async fn test_piglin_barters_gold_ingot_for_loot(
         .then_succeed();
     Ok(())
 }
+
+/// Vanilla `VillagerGoalPackages`' core activity: an unemployed villager claims a lectern
+/// (`AcquirePoi` into `potential_job_site`), walks to it and becomes a librarian
+/// (`AssignProfessionFromJobSite`), and claims a bed as `home`. Both are brain memories, saved
+/// under `Brain.memories` like vanilla.
+pub(super) async fn test_villager_claims_job_site_and_bed(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    use crate::entity::passive::villager::{VillagerData, VillagerProfession, VillagerType};
+    use pumpkin_data::block_properties::{BedPart, HorizontalFacing, WhiteBedLikeProperties};
+
+    build_stone_floor(&helper, 7, 7).await?;
+    let lectern = BlockPos::new(1, 1, 1);
+    helper.set_block_default(&lectern, &Block::LECTERN).await?;
+    let bed = |part| {
+        WhiteBedLikeProperties {
+            facing: HorizontalFacing::South,
+            occupied: false,
+            part,
+        }
+        .to_state_id(&Block::WHITE_BED)
+    };
+    let bed_head = BlockPos::new(5, 1, 5);
+    helper
+        .set_block(&BlockPos::new(5, 1, 4), bed(BedPart::Foot))
+        .await?;
+    helper.set_block(&bed_head, bed(BedPart::Head)).await?;
+    helper
+        .spawn_entity_at("minecraft:villager", Vector3::new(3.5, 1.0, 3.5))
+        .await?;
+
+    let int_array = |pos: BlockPos| NbtTag::IntArray(vec![pos.0.x, pos.0.y, pos.0.z]);
+    let lectern_tag = int_array(helper.absolute_pos(&lectern));
+    let bed_tag = int_array(helper.absolute_pos(&bed_head));
+    let librarian = NbtTag::Int(
+        VillagerData::new(VillagerType::Plains, VillagerProfession::Librarian, 1)
+            .profession
+            .0,
+    );
+    let (min, max) = (BlockPos::new(0, 1, 0), BlockPos::new(6, 3, 6));
+    helper.succeed_when(move |helper| {
+        let (lectern_tag, bed_tag, librarian) =
+            (lectern_tag.clone(), bed_tag.clone(), librarian.clone());
+        async move {
+            helper
+                .assert_entity_nbt(
+                    "minecraft:villager",
+                    min,
+                    max,
+                    "VillagerData.Profession",
+                    &librarian,
+                )
+                .await?;
+            helper
+                .assert_entity_nbt(
+                    "minecraft:villager",
+                    min,
+                    max,
+                    "Brain.memories.\"minecraft:job_site\".value.pos",
+                    &lectern_tag,
+                )
+                .await?;
+            helper
+                .assert_entity_nbt(
+                    "minecraft:villager",
+                    min,
+                    max,
+                    "Brain.memories.\"minecraft:home\".value.pos",
+                    &bed_tag,
+                )
+                .await
+        }
+    })?;
+    Ok(())
+}
