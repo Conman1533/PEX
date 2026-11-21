@@ -1560,6 +1560,24 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn on_attack(&self, _target: &dyn EntityBase) {}
 
+    /// Runs after the living entity's `causeFallDamage`, like a vanilla override calling super
+    /// first.
+    fn mob_cause_fall_damage(&self, _fall_distance: f32) {}
+
+    /// Vanilla `Mob.doHurtTarget`: a melee hit on `target`, `true` when it landed.
+    fn do_hurt_target(&self, target: &dyn EntityBase) -> bool {
+        self.before_melee_attack(target);
+        let damaged = self.get_mob_entity().try_attack_with(
+            self.get_entity(),
+            target,
+            self.melee_damage_type(),
+        );
+        if damaged {
+            self.on_attack(target);
+        }
+        damaged
+    }
+
     /// Damage type of the mob's melee hit; vanilla `doHurtTarget` overrides pick another.
     fn melee_damage_type(&self) -> DamageType {
         DamageType::MOB_ATTACK

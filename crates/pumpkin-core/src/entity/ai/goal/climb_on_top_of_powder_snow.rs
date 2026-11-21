@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering::{Relaxed, SeqCst};
+use std::sync::atomic::Ordering::Relaxed;
 
 use pumpkin_data::Block;
 use pumpkin_data::tag::{self, Taggable};
@@ -31,18 +31,14 @@ impl Goal for ClimbOnTopOfPowderSnowGoal {
                 .is_none()
     }
 
+    // Vanilla `getJumpControl().jump()`: the jump control writes the jumping flag after the
+    // goals every tick, so setting it here directly was cleared before the mob moved.
     fn tick(&mut self, mob: &dyn Mob) {
         mob.get_mob_entity()
-            .living_entity
-            .jumping
-            .store(true, SeqCst);
-    }
-
-    fn stop(&mut self, mob: &dyn Mob) {
-        mob.get_mob_entity()
-            .living_entity
-            .jumping
-            .store(false, SeqCst);
+            .jump_control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .jump();
     }
 
     fn should_run_every_tick(&self) -> bool {
