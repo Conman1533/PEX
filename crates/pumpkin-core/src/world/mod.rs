@@ -22,6 +22,7 @@ use std::{
 use tracing::{debug, error, info, trace, warn};
 
 mod active_chunks;
+mod block_events;
 pub mod brightness;
 pub mod chunker;
 mod entity_index;
@@ -64,6 +65,7 @@ use crate::{
 };
 use active_chunks::{ActiveChunkTracker, ActivePlayerArea};
 use arc_swap::ArcSwap;
+use block_events::BlockEventQueue;
 use border::Worldborder;
 use bytes::BufMut;
 pub use explosion::{
@@ -254,7 +256,7 @@ pub struct World {
     /// Block Behaviour
     pub block_registry: Arc<BlockRegistry>,
     pub server: Weak<Server>,
-    synced_block_event_queue: std::sync::Mutex<Vec<BlockEvent>>,
+    synced_block_event_queue: std::sync::Mutex<BlockEventQueue>,
     /// A map of unsent block changes, keyed by block position.
     unsent_block_changes: std::sync::Mutex<HashMap<BlockPos, BlockStateId>>,
     /// Persisted vanilla POI storage for portal and villager lookups.
@@ -445,7 +447,7 @@ impl World {
             block_registry,
             sea_level: generation_settings.sea_level,
             min_y: i32::from(generation_settings.shape.min_y),
-            synced_block_event_queue: std::sync::Mutex::new(Vec::new()),
+            synced_block_event_queue: std::sync::Mutex::new(BlockEventQueue::default()),
             unsent_block_changes: std::sync::Mutex::new(HashMap::new()),
             portal_poi: std::sync::Mutex::new(portal_poi),
             villager_poi: std::sync::Mutex::new(villager_poi::VillagerPoiStorage::default()),
@@ -1221,52 +1223,90 @@ impl World {
         }
     }
 
+    /// Queues an event for the block now at `pos`, vanilla `Level.blockEvent`. It runs in this
+    /// tick's block event phase, or the next one when that phase has passed.
     pub fn add_synced_block_event(&self, pos: BlockPos, r#type: u8, data: u8) {
-        let mut queue = self
-            .synced_block_event_queue
+        let block = self.get_block(&pos);
+        self.synced_block_event_queue
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        queue.push(BlockEvent { pos, r#type, data });
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(BlockEvent {
+                pos,
+                block,
+                r#type,
+                data,
+            });
     }
 
-    pub fn flush_synced_block_events(self: &Arc<Self>) {
-        // THIS IS IMPORTANT
-        // it prevents deadlocks and also removes the need to wait for a lock when adding a new synced block
-        let events = {
+    /// Vanilla `ServerLevel.runBlockEvents`: runs the queued block events in order until none are
+    /// left, including those the events themselves queue.
+    ///
+    /// An event outside the block-ticking chunks waits for a later tick.
+    pub fn run_block_events(self: &Arc<Self>) {
+        let active_chunks = self
+            .active_chunks
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let mut reschedule = Vec::new();
+        loop {
+            // Never hold the lock while an event runs: it may queue more events.
+            let Some(event) = self
+                .synced_block_event_queue
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .pop()
+            else {
+                break;
+            };
+            let chunk = event.pos.chunk_position();
+            if active_chunks.contains(&chunk) && self.level.is_chunk_loaded(&chunk) {
+                self.run_block_event(event);
+            } else {
+                reschedule.push(event);
+            }
+        }
+        if !reschedule.is_empty() {
             let mut queue = self
                 .synced_block_event_queue
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            std::mem::take(&mut *queue)
-        };
+            for event in reschedule {
+                queue.push(event);
+            }
+        }
+    }
 
-        for event in events {
-            let block = self.get_block(&event.pos);
-            if !self.block_registry.on_synced_block_event(
+    /// Vanilla `ServerLevel.doBlockEvent` plus the broadcast: the event runs only while its block
+    /// is still at its position.
+    fn run_block_event(self: &Arc<Self>, event: BlockEvent) {
+        let block = self.get_block(&event.pos);
+        if block.id != event.block.id
+            || !self.block_registry.on_synced_block_event(
                 block,
                 self,
                 &event.pos,
                 event.r#type,
                 event.data,
-            ) {
-                continue;
-            }
-            let chunk_pos = event.pos.chunk_position();
-            self.broadcast_to_chunk_editioned(
-                chunk_pos,
-                &CBlockEvent::new(
-                    event.pos,
-                    event.r#type,
-                    event.data,
-                    VarInt(block.id.as_u16() as i32),
-                ),
-                &CBedrockBlockEvent {
-                    block_position: event.pos,
-                    event_type: event.r#type.into(),
-                    event_value: event.data.into(),
-                },
-            );
+            )
+        {
+            return;
         }
+        let chunk_pos = event.pos.chunk_position();
+        self.broadcast_to_chunk_editioned(
+            chunk_pos,
+            &CBlockEvent::new(
+                event.pos,
+                event.r#type,
+                event.data,
+                VarInt(block.id.as_u16() as i32),
+            ),
+            &CBedrockBlockEvent {
+                block_position: event.pos,
+                event_type: event.r#type.into(),
+                event_value: event.data.into(),
+            },
+        );
     }
 
     /// Keyed by encode version: always `CURRENT_MC_VERSION`, older clients are converted
@@ -1874,7 +1914,6 @@ impl World {
         let start = std::time::Instant::now();
 
         self.flush_block_updates();
-        self.flush_synced_block_events();
         let block_update_elapsed = start.elapsed();
         let t_phase = std::time::Instant::now();
         self.update_active_chunks();
@@ -1906,6 +1945,8 @@ impl World {
 
         let t_chunks = std::time::Instant::now();
         self.tick_chunks(server);
+        // Vanilla runs block events after the scheduled and random ticks, before entities.
+        self.run_block_events();
         let chunk_elapsed = t_chunks.elapsed();
 
         let handle = server.runtime.clone();
@@ -8329,6 +8370,115 @@ mod tests {
 
         world.run_block_tick(&ticks.block_ticks[0]);
         assert!(!world.will_block_tick_this_tick(&pos, &Block::REPEATER));
+    }
+
+    fn queued_block_events(world: &World) -> usize {
+        world
+            .synced_block_event_queue
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
+
+    fn activate_chunk(world: &World) {
+        let mut active = world
+            .active_chunks
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::sync::Arc::make_mut(&mut active)
+            .insert(pumpkin_util::math::vector2::Vector2::new(0, 0));
+    }
+
+    /// A powered piston facing north at (4, 64, 4), placed without block updates or the place
+    /// callback, which would queue its own extend event.
+    fn world_with_powered_piston(piston: &'static Block) -> (std::sync::Arc<World>, BlockPos) {
+        use pumpkin_world::world::BlockFlags;
+
+        let world = world_with_chunk();
+        activate_chunk(&world);
+        let pos = BlockPos::new(4, 64, 4);
+        world.set_block_state(
+            &pos,
+            piston.default_state.id,
+            BlockFlags::SKIP_BLOCK_ADDED_CALLBACK,
+        );
+        world.set_block_state(
+            &pos.down(),
+            Block::REDSTONE_BLOCK.default_state.id,
+            BlockFlags::empty(),
+        );
+        (world, pos)
+    }
+
+    fn extended(world: &World, pos: &BlockPos) -> bool {
+        pumpkin_data::block_properties::StickyPistonLikeProperties::from_state_id(
+            world.get_block_state(pos).id,
+        )
+        .extended
+    }
+
+    /// G5-06: a piston's extend event runs in the block event phase.
+    #[tokio::test]
+    async fn a_block_event_runs_for_its_block() {
+        let (world, pos) = world_with_powered_piston(&Block::PISTON);
+        world.add_synced_block_event(pos, 0, pumpkin_data::BlockDirection::North.to_index());
+        assert!(!extended(&world, &pos));
+        world.run_block_events();
+        assert!(extended(&world, &pos), "the piston extends");
+        assert_eq!(queued_block_events(&world), 0);
+    }
+
+    /// G5-06: an event queued for a piston doesn't run for the sticky piston that replaced it,
+    /// like vanilla `ServerLevel.doBlockEvent`.
+    #[tokio::test]
+    async fn a_block_event_skips_a_replaced_block() {
+        use pumpkin_world::world::BlockFlags;
+
+        let (world, pos) = world_with_powered_piston(&Block::PISTON);
+        world.add_synced_block_event(pos, 0, pumpkin_data::BlockDirection::North.to_index());
+        world.set_block_state(
+            &pos,
+            Block::STICKY_PISTON.default_state.id,
+            BlockFlags::SKIP_BLOCK_ADDED_CALLBACK,
+        );
+        assert_eq!(queued_block_events(&world), 1);
+        world.run_block_events();
+        assert!(
+            !extended(&world, &pos),
+            "the piston's event ran for the sticky piston"
+        );
+        assert_eq!(queued_block_events(&world), 0);
+    }
+
+    /// G5-06: an event outside the block-ticking chunks waits until its chunk ticks.
+    #[tokio::test]
+    async fn a_block_event_waits_for_its_chunk_to_tick() {
+        use pumpkin_world::world::BlockFlags;
+
+        let world = world_with_chunk();
+        let pos = BlockPos::new(4, 64, 4);
+        world.set_block_state(
+            &pos,
+            Block::PISTON.default_state.id,
+            BlockFlags::SKIP_BLOCK_ADDED_CALLBACK,
+        );
+        world.set_block_state(
+            &pos.down(),
+            Block::REDSTONE_BLOCK.default_state.id,
+            BlockFlags::empty(),
+        );
+        world.add_synced_block_event(pos, 0, pumpkin_data::BlockDirection::North.to_index());
+        world.run_block_events();
+        assert!(!extended(&world, &pos));
+        assert_eq!(queued_block_events(&world), 1, "the event waits");
+
+        activate_chunk(&world);
+        world.run_block_events();
+        assert!(
+            extended(&world, &pos),
+            "the event runs once its chunk ticks"
+        );
+        assert_eq!(queued_block_events(&world), 0);
     }
 
     /// G5-02: a tick scheduled for water doesn't run for lava now in its place

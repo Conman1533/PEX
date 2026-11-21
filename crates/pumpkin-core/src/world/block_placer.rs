@@ -9,19 +9,10 @@ use crate::world::World;
 
 impl World {
     pub fn clear_synced_block_events_in_box(&self, min: &BlockPos, max: &BlockPos) {
-        let mut events = self
-            .synced_block_event_queue
+        self.synced_block_event_queue
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        events.retain(|event| {
-            let pos = event.pos;
-            pos.0.x < min.0.x
-                || pos.0.x >= max.0.x
-                || pos.0.y < min.0.y
-                || pos.0.y >= max.0.y
-                || pos.0.z < min.0.z
-                || pos.0.z >= max.0.z
-        });
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear_box(min, max);
     }
 }
 
