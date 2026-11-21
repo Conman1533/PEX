@@ -276,6 +276,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
 /// tests, so a mob doesn't target or follow anything in the next test.
 const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_pathfinds_to_villager",
+    "pumpkin:zombie_tramples_turtle_egg",
     "pumpkin:armadillo_rolls_up_near_zombie",
     "pumpkin:zoglin_attacks_any_nearby_mob",
     "pumpkin:blaze_alerts_nearby_blazes_when_hit",
@@ -595,6 +596,13 @@ pub fn ensure_builtin_game_tests_registered() {
             3,
             1,
             entities_and_ai::test_zombie_pathfinds_to_villager,
+        );
+        register_function_test(
+            "pumpkin:zombie_tramples_turtle_egg",
+            "pumpkin:empty_9x4x5",
+            400,
+            0,
+            entities_and_ai::test_zombie_tramples_turtle_egg,
         );
         register_function_test(
             "pumpkin:dragon_fireball_leaves_breath_cloud",

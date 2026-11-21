@@ -205,6 +205,37 @@ impl MovementEmission {
     }
 }
 
+/// Vanilla `Entity.collideWithShapes`: `movement` resolved one axis at a time, vertical first,
+/// then the longer horizontal one, each against `bounding_box` moved by the axes before it.
+fn collide_with_boxes(
+    movement: Vector3<f64>,
+    bounding_box: BoundingBox,
+    colliders: &[BoundingBox],
+) -> Vector3<f64> {
+    let order = if movement.x.abs() < movement.z.abs() {
+        [Axis::Y, Axis::Z, Axis::X]
+    } else {
+        [Axis::Y, Axis::X, Axis::Z]
+    };
+    let mut resolved = Vector3::new(0.0, 0.0, 0.0);
+    for axis in order {
+        let along = movement.get_axis(axis);
+        if along == 0.0 {
+            continue;
+        }
+        let moved = bounding_box.shift(resolved);
+        let mut axis_movement = Vector3::new(0.0, 0.0, 0.0);
+        axis_movement.set_axis(axis, along);
+        let time = colliders.iter().fold(1.0, |max_time, collider| {
+            moved
+                .calculate_collision_time(collider, axis_movement, axis, max_time)
+                .unwrap_or(max_time)
+        });
+        resolved.set_axis(axis, along * time);
+    }
+    resolved
+}
+
 /// Keeps the `saddle` equipment slot of a saved mob in step with whether it is saddled:
 /// vanilla 26.3 saves the saddle there, not as a flag.
 pub fn write_saddle_equipment(nbt: &mut NbtCompound, saddled: bool) {
@@ -1594,6 +1625,7 @@ impl Entity {
     }
 
     #[expect(clippy::float_cmp)]
+    #[expect(clippy::too_many_lines)]
     fn adjust_movement_for_collisions(
         &self,
         movement: Vector3<f64>,
@@ -1604,6 +1636,7 @@ impl Entity {
             return movement;
         }
 
+        let was_on_ground = self.on_ground.load(Ordering::SeqCst);
         self.on_ground.store(false, Ordering::SeqCst);
         self.supporting_block_pos.store(None);
         self.horizontal_collision.store(false, Ordering::SeqCst);
@@ -1711,12 +1744,82 @@ impl Entity {
             }
         }
 
+        if let Some(stepped) = self.step_up(
+            caller,
+            movement,
+            adjusted_movement,
+            bounding_box,
+            was_on_ground,
+        ) {
+            adjusted_movement = stepped;
+            horizontal_collision = movement.x != stepped.x || movement.z != stepped.z;
+            if movement.y < 0.0 {
+                self.on_ground.store(true, Ordering::SeqCst);
+            }
+        }
+
         self.horizontal_collision
             .store(horizontal_collision, Ordering::SeqCst);
         self.vertical_collision
             .store(movement.y != adjusted_movement.y, Ordering::SeqCst);
 
         adjusted_movement
+    }
+
+    /// The step up in vanilla `Entity.collide`: an entity on the ground that a collider stops
+    /// sideways tries each height up to its `step_height` where a collider's top or bottom is,
+    /// lowest first, and takes the first that lets it move further. Without it a mob walks into
+    /// a turtle egg, slab or carpet edge and stays there.
+    fn step_up(
+        &self,
+        caller: &dyn EntityBase,
+        movement: Vector3<f64>,
+        collided: Vector3<f64>,
+        bounding_box: BoundingBox,
+        was_on_ground: bool,
+    ) -> Option<Vector3<f64>> {
+        let max_up_step = caller.get_living_entity().map_or(0.0, |living| {
+            living.get_attribute_value(&pumpkin_data::attributes::Attributes::STEP_HEIGHT) as f32
+        });
+        let on_ground_after = movement.y != collided.y && movement.y < 0.0;
+        if max_up_step <= 0.0
+            || !(on_ground_after || was_on_ground)
+            || (movement.x == collided.x && movement.z == collided.z)
+        {
+            return None;
+        }
+        let grounded = if on_ground_after {
+            bounding_box.shift(Vector3::new(0.0, collided.y, 0.0))
+        } else {
+            bounding_box
+        };
+        let mut step_area =
+            grounded.stretch(Vector3::new(movement.x, f64::from(max_up_step), movement.z));
+        if !on_ground_after {
+            step_area = step_area.stretch(Vector3::new(0.0, -1.0e-5, 0.0));
+        }
+        let (mut colliders, _) = self.world.load().get_block_collisions(step_area, caller);
+        colliders.extend(self.entity_collisions(caller, step_area));
+
+        let skip = collided.y as f32;
+        let mut heights: Vec<f32> = colliders
+            .iter()
+            .flat_map(|collider| [collider.min.y, collider.max.y])
+            .map(|y| (y - grounded.min.y) as f32)
+            .filter(|height| *height >= 0.0 && *height != skip && *height <= max_up_step)
+            .collect();
+        heights.sort_by(f32::total_cmp);
+        heights.dedup();
+
+        heights.into_iter().find_map(|height| {
+            let step = collide_with_boxes(
+                Vector3::new(movement.x, f64::from(height), movement.z),
+                grounded,
+                &colliders,
+            );
+            (step.horizontal_length_squared() > collided.horizontal_length_squared())
+                .then(|| step - Vector3::new(0.0, bounding_box.min.y - grounded.min.y, 0.0))
+        })
     }
 
     // Part of LivingEntity.tickMovement() in yarn
