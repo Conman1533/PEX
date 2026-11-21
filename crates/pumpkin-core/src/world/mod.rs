@@ -272,6 +272,9 @@ pub struct World {
     tick_spawns: std::sync::Mutex<Vec<(u64, i32)>>,
     active_chunk_tracker: std::sync::Mutex<ActiveChunkTracker>,
     pub forced_chunks: std::sync::Mutex<FxHashSet<Vector2<i32>>>,
+    /// Vanilla `TicketType.ENDER_PEARL`: chunks a player's pearl keeps loaded, with the ticks
+    /// left before the ticket times out.
+    ender_pearl_tickets: std::sync::Mutex<FxHashMap<Vector2<i32>, u32>>,
     /// Block entities indexed by chunk, so ticking only visits the currently
     /// active chunks instead of scanning every loaded block entity each tick.
     pub block_entities: DashMap<Vector2<i32>, FxHashMap<BlockPos, Arc<dyn BlockEntity>>>,
@@ -450,6 +453,7 @@ impl World {
             tick_spawns: std::sync::Mutex::new(Vec::new()),
             active_chunk_tracker: std::sync::Mutex::new(ActiveChunkTracker::default()),
             forced_chunks: std::sync::Mutex::new(forced_chunks),
+            ender_pearl_tickets: std::sync::Mutex::new(FxHashMap::default()),
             server,
             block_entities: DashMap::new(),
             pending_block_entity_migrations: crossbeam::queue::SegQueue::new(),
@@ -467,11 +471,21 @@ impl World {
             s.advanced_config.networking.java.simulation_distance.get()
         }) as i32;
         let players = self.players.load();
-        let forced_chunks = self
+        let mut forced_chunks = self
             .forced_chunks
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
+        let mut pearl_tickets = self
+            .ender_pearl_tickets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        pearl_tickets.retain(|_, ticks| {
+            *ticks = ticks.saturating_sub(1);
+            *ticks > 0
+        });
+        forced_chunks.extend(pearl_tickets.keys().copied());
+        drop(pearl_tickets);
         let mut tracker = self
             .active_chunk_tracker
             .lock()
@@ -573,6 +587,16 @@ impl World {
             &self.entities,
             self,
         )));
+    }
+
+    /// Vanilla `ServerPlayer.placeEnderPearlTicket`: keeps a player's pearl's chunk loaded for
+    /// the next 40 ticks.
+    pub fn place_ender_pearl_ticket(&self, chunk: Vector2<i32>) {
+        const ENDER_PEARL_TICKET_TICKS: u32 = 40;
+        self.ender_pearl_tickets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(chunk, ENDER_PEARL_TICKET_TICKS);
     }
 
     /// Vanilla `ServerChunkCache.updateChunkForced`: a forced chunk holds a ticket, so it loads
@@ -3518,7 +3542,7 @@ impl World {
                         .map_or(-1, |gamemode| gamemode as i8),
                     false,
                     self.is_flat(),
-                    None,
+                    player.death_location_for_client(),
                     VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                     self.sea_level.into(),
                 ),
@@ -4201,13 +4225,7 @@ impl World {
 
     #[allow(clippy::too_many_lines)]
     pub async fn respawn_player(self: &Arc<Self>, player: &Arc<Player>, alive: bool) {
-        let last_pos = player.get_entity().last_pos.load();
-        let death_dimension = ResourceLocation::from(player.world().dimension.minecraft_name);
-        let death_location = BlockPos(Vector3::new(
-            last_pos.x.round() as i32,
-            last_pos.y.round() as i32,
-            last_pos.z.round() as i32,
-        ));
+        let death_location = player.death_location_for_client();
 
         let data_kept = u8::from(alive);
 
@@ -4412,7 +4430,7 @@ impl World {
                     player.gamemode.load() as i8,
                     false,
                     target_world.is_flat(),
-                    Some((death_dimension, death_location)),
+                    death_location,
                     VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                     target_world.sea_level.into(),
                 ),
@@ -4467,6 +4485,7 @@ impl World {
 
         if !keep_inventory && !alive {
             player.set_experience(0, 0.0, 0);
+            player.total_experience.store(0, Ordering::Relaxed);
             player.inventory.clear();
         }
 

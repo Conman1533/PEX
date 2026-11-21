@@ -1,4 +1,5 @@
 pub mod advancement;
+pub mod saved_keys;
 pub mod statistics;
 
 use core::f32;
@@ -546,6 +547,8 @@ pub struct Player {
     pub experience_progress: AtomicCell<f32>,
     /// The player's total experience points.
     pub experience_points: AtomicI32,
+    /// Vanilla `Player.totalExperience`: every point ever gained, saved as `XpTotal`.
+    pub total_experience: AtomicI32,
     pub item_cooldowns: std::sync::Mutex<HashMap<String, ItemCooldown>>,
     pub experience_pick_up_delay: Mutex<u32>,
     pub chunk_sender: Mutex<crate::net::ChunkSender>,
@@ -554,6 +557,12 @@ pub struct Player {
     pub chunk_send_epoch: AtomicU32,
     pub has_played_before: AtomicBool,
     root_vehicle_uuid: AtomicCell<Option<Uuid>>,
+    /// Vanilla `Player.lastDeathLocation`.
+    last_death_location: std::sync::Mutex<Option<saved_keys::DeathLocation>>,
+    /// Loaded player file keys PEX doesn't model, written back unchanged (D7-1).
+    kept_nbt: std::sync::Mutex<NbtCompound>,
+    /// Pearls from the player file, spawned once the player is in its world.
+    saved_ender_pearls: std::sync::Mutex<Vec<NbtCompound>>,
     pub chat_session: Arc<Mutex<ChatSession>>,
     pub signature_cache: Mutex<MessageCache>,
     pub player_screen_handler: Arc<std::sync::Mutex<PlayerScreenHandler>>,
@@ -859,6 +868,7 @@ impl Player {
             experience_level: AtomicI32::new(0),
             experience_progress: AtomicCell::new(0.0),
             experience_points: AtomicI32::new(0),
+            total_experience: AtomicI32::new(0),
             item_cooldowns: std::sync::Mutex::new(HashMap::new()),
             chunk_sender: Mutex::new(crate::net::ChunkSender::new()),
             chunk_listener: Mutex::new(world.level.chunk_listener.add_global_chunk_listener()),
@@ -871,6 +881,9 @@ impl Player {
             subscribed_debug_sample: AtomicBool::new(false),
             has_played_before: AtomicBool::new(false),
             root_vehicle_uuid: AtomicCell::new(None),
+            last_death_location: std::sync::Mutex::new(None),
+            kept_nbt: std::sync::Mutex::new(NbtCompound::new()),
+            saved_ender_pearls: std::sync::Mutex::new(Vec::new()),
             chat_session: Arc::new(Mutex::new(ChatSession::default())), // Placeholder value until the player actually sets their session id
             signature_cache: Mutex::new(MessageCache::default()),
             player_screen_handler: player_screen_handler.clone(),
@@ -2037,6 +2050,7 @@ impl Player {
             dimension,
             position: final_block_pos,
             yaw,
+            pitch,
             force: forced,
         });
         true
@@ -4343,13 +4357,7 @@ impl Player {
                     });
                 }
 
-                let last_pos = self.living_entity.entity.last_pos.load();
-                let death_dimension = ResourceLocation::from(self.world().dimension.minecraft_name);
-                let death_location = BlockPos(Vector3::new(
-                    last_pos.x.round() as i32,
-                    last_pos.y.round() as i32,
-                    last_pos.z.round() as i32,
-                ));
+                let death_location = self.death_location_for_client();
                 match self.client.as_ref() {
                     ClientPlatform::Java(java) => {
                         let packet = CRespawn::new(
@@ -4360,7 +4368,7 @@ impl Player {
                                 self.previous_gamemode.load().unwrap_or(self.gamemode.load()) as i8,
                                 false,
                                 new_world.is_flat(),
-                                Some((death_dimension, death_location)),
+                                death_location,
                                 VarInt(self.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                                 new_world.sea_level.into(),
                             ),
@@ -5944,6 +5952,13 @@ impl Player {
         let current_level = self.experience_level.load(Ordering::Relaxed);
         let current_points = self.experience_points.load(Ordering::Relaxed);
 
+        // Vanilla `Player.giveExperiencePoints`.
+        let _ = self
+            .total_experience
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |total| {
+                Some(total.saturating_add(added_points).max(0))
+            });
+
         let total_exp = experience::points_to_level(current_level) as i64 + current_points as i64;
         let new_total_exp = total_exp + added_points as i64;
         let safe_new_total = new_total_exp.clamp(0, i32::MAX as i64) as i32;
@@ -7046,35 +7061,15 @@ impl NBTStorage for PlayerInventory {
                 if !stack.is_empty() {
                     let mut item_compound = NbtCompound::new();
                     stack.write_item_stack(&mut item_compound);
-                    let vanilla_slot = match slot {
-                        EquipmentSlot::Feet(_) => {
-                            equipment_compound.put_compound("feet", item_compound.clone());
-                            Some(100i8)
-                        }
-                        EquipmentSlot::Legs(_) => {
-                            equipment_compound.put_compound("legs", item_compound.clone());
-                            Some(101i8)
-                        }
-                        EquipmentSlot::Chest(_) => {
-                            equipment_compound.put_compound("chest", item_compound.clone());
-                            Some(102i8)
-                        }
-                        EquipmentSlot::Head(_) => {
-                            equipment_compound.put_compound("head", item_compound.clone());
-                            Some(103i8)
-                        }
-                        EquipmentSlot::OffHand(_) => {
-                            equipment_compound.put_compound("offhand", item_compound.clone());
-                            Some(-106i8)
-                        }
-                        _ => None,
+                    let key = match slot {
+                        EquipmentSlot::Feet(_) => "feet",
+                        EquipmentSlot::Legs(_) => "legs",
+                        EquipmentSlot::Chest(_) => "chest",
+                        EquipmentSlot::Head(_) => "head",
+                        EquipmentSlot::OffHand(_) => "offhand",
+                        _ => continue,
                     };
-                    if let Some(slot_byte) = vanilla_slot {
-                        let mut inv_item_compound = NbtCompound::new();
-                        inv_item_compound.put_byte("Slot", slot_byte);
-                        stack.write_item_stack(&mut inv_item_compound);
-                        items.push(NbtTag::Compound(inv_item_compound));
-                    }
+                    equipment_compound.put_compound(key, item_compound);
                 }
             }
         }
@@ -7349,11 +7344,9 @@ impl EntityBase for Player {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .write_nbt(nbt);
 
-        let total_exp = experience::points_to_level(self.experience_level.load(Ordering::Relaxed))
-            + self.experience_points.load(Ordering::Relaxed);
         nbt.put_float("XpP", self.experience_progress.load());
         nbt.put_int("XpLevel", self.experience_level.load(Ordering::Relaxed));
-        nbt.put_int("XpTotal", total_exp);
+        nbt.put_int("XpTotal", self.total_experience.load(Ordering::Relaxed));
         nbt.put_int("XpSeed", self.enchantment_seed.load(Ordering::Relaxed));
         nbt.put_int("Score", self.score.load(Ordering::Relaxed));
         nbt.put_short("SleepTimer", self.sleeping_since.load().unwrap_or(0) as i16);
@@ -7375,10 +7368,6 @@ impl EntityBase for Player {
             "spawn_extra_particles_on_fall",
             self.spawn_extra_particles_on_fall.load(Ordering::Relaxed),
         );
-        nbt.put_bool(
-            "HasPlayedBefore",
-            self.has_played_before.load(Ordering::Relaxed),
-        );
 
         // Store food level, saturation, exhaustion, and tick timer
         self.hunger_manager.write_nbt(nbt);
@@ -7389,14 +7378,6 @@ impl EntityBase for Player {
             .load(Ordering::Relaxed)
             .clamp(0, super::breath::MAX_AIR);
         nbt.put_short("Air", air_supply as i16);
-        nbt.put_int("AirSupply", air_supply);
-        nbt.put_int(
-            "DrowningTick",
-            self.breath_manager
-                .drowning_tick
-                .load(Ordering::Relaxed)
-                .clamp(0, super::breath::DROWNING_INTERVAL - 1),
-        );
 
         nbt.put_string(
             "Dimension",
@@ -7409,15 +7390,6 @@ impl EntityBase for Player {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
         {
-            nbt.put_int("SpawnX", respawn.position.0.x);
-            nbt.put_int("SpawnY", respawn.position.0.y);
-            nbt.put_int("SpawnZ", respawn.position.0.z);
-            nbt.put_string(
-                "SpawnDimension",
-                respawn.dimension.minecraft_name.to_owned(),
-            );
-            nbt.put_bool("SpawnForced", respawn.force);
-
             let mut respawn_compound = NbtCompound::new();
             respawn_compound.put_string("dimension", respawn.dimension.minecraft_name.to_string());
             respawn_compound.put(
@@ -7428,7 +7400,8 @@ impl EntityBase for Player {
                     respawn.position.0.z,
                 ]),
             );
-            respawn_compound.put_float("angle", respawn.yaw);
+            respawn_compound.put_float("yaw", respawn.yaw);
+            respawn_compound.put_float("pitch", respawn.pitch);
             respawn_compound.put_bool("forced", respawn.force);
             nbt.put_compound("respawn", respawn_compound);
         }
@@ -7449,6 +7422,7 @@ impl EntityBase for Player {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .write_nbt(nbt);
+        self.write_saved_keys(nbt);
     }
 
     #[expect(clippy::too_many_lines)]
@@ -7461,6 +7435,7 @@ impl EntityBase for Player {
         let xp_p = nbt.get_float("XpP").unwrap_or(0.0);
         let xp_level = nbt.get_int("XpLevel");
         let total_exp = nbt.get_int("XpTotal").unwrap_or(0);
+        self.total_experience.store(total_exp, Ordering::Relaxed);
 
         if let Some(level) = xp_level {
             self.experience_level.store(level, Ordering::Relaxed);
@@ -7476,7 +7451,9 @@ impl EntityBase for Player {
         }
 
         self.enchantment_seed.store(
-            nbt.get_int("XpSeed").unwrap_or_else(rand::random),
+            nbt.get_int("XpSeed")
+                .filter(|seed| *seed != 0)
+                .unwrap_or_else(rand::random),
             Ordering::Relaxed,
         );
 
@@ -7588,7 +7565,11 @@ impl EntityBase for Player {
             } else {
                 BlockPos(Vector3::new(0, 0, 0))
             };
-            let yaw = respawn_compound.get_float("angle").unwrap_or(0.0);
+            let yaw = respawn_compound
+                .get_float("yaw")
+                .or_else(|| respawn_compound.get_float("angle"))
+                .unwrap_or(0.0);
+            let pitch = respawn_compound.get_float("pitch").unwrap_or(0.0);
             let force = respawn_compound.get_bool("forced").unwrap_or(false);
             *self
                 .respawn_point
@@ -7597,6 +7578,7 @@ impl EntityBase for Player {
                 dimension: dim,
                 position: pos,
                 yaw,
+                pitch,
                 force,
             });
         } else if let (Some(x), Some(y), Some(z)) = (
@@ -7616,6 +7598,7 @@ impl EntityBase for Player {
                 dimension: dim,
                 position: BlockPos(Vector3::new(x, y, z)),
                 yaw: 0.0,
+                pitch: 0.0,
                 force,
             });
         }
@@ -7624,6 +7607,7 @@ impl EntityBase for Player {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .read_nbt(nbt);
+        self.read_saved_keys(nbt);
     }
 
     fn get_experience_reward(&self, _killer: Option<&dyn EntityBase>) -> u32 {
@@ -7752,6 +7736,7 @@ pub struct RespawnPoint {
     pub dimension: Dimension,
     pub position: BlockPos,
     pub yaw: f32,
+    pub pitch: f32,
     pub force: bool,
 }
 

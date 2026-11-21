@@ -2247,6 +2247,17 @@ impl LivingEntity {
         {
             self.movement_input.store(Vector3::default());
             self.jumping.store(false, Relaxed);
+            if let Some(player) = dyn_self.get_player() {
+                // Vanilla `ServerPlayer.die`.
+                player.set_last_death_location(Some(
+                    crate::entity::player::saved_keys::DeathLocation {
+                        dimension: world.dimension.minecraft_name.to_string(),
+                        pos: pumpkin_util::math::position::BlockPos::floored_v(
+                            self.entity.pos.load(),
+                        ),
+                    },
+                ));
+            }
             world.game_event(
                 pumpkin_data::game_event::GameEvent::EntityDie,
                 self.entity.pos.load(),
