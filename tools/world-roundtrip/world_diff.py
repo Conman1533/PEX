@@ -7,7 +7,8 @@ Chunks in region/, entities/ and poi/ files are matched by chunk position. Insid
 NBT or JSON value, compounds compare key by key and lists of compounds are matched by
 what identifies an element: entities and passengers by UUID, block entities and block
 ticks by x, y and z, items by Slot (or slot in item components), POI records by pos,
-sections by Y, attributes and effects by id. Other lists compare by index. level.dat,
+sections by Y, attributes and effects by id. The recipe book's recipe lists (SETS) compare as
+sets. Other lists compare by index. level.dat,
 the data/ files, player files, advancements and stats compare this way too; other files
 compare by bytes. Region timestamps and how a file lays out its bytes are not compared.
 
@@ -53,6 +54,9 @@ IGNORE = [
 # `chunk_pos` and `type` name chunk_tickets.dat entries, `Name` scoreboard objectives and teams.
 IDENTITY = [("UUID",), ("x", "y", "z"), ("Slot",), ("slot",), ("pos",), ("Y",), ("chunk_pos", "type"),
             ("Name",), ("id",)]
+# Lists of strings that hold a set, so their order means nothing. Vanilla's recipe book writes
+# its recipe sets in hash order, which changes from one start to the next.
+SETS = ("recipeBook.recipes", "recipeBook.toBeDisplayed")
 Diff = collections.namedtuple("Diff", "file chunk path a b")
 
 
@@ -182,6 +186,12 @@ class Differ:
 
     def compare_list(self, a, b, path):
         a, b = [unwrap(v) for v in a], [unwrap(v) for v in b]
+        if path in SETS and all(isinstance(v, str) for v in a + b):
+            for value in sorted(set(a) - set(b)):
+                self.add(f"{path}[{nbt.to_snbt(value)}]", show(value), MISSING)
+            for value in sorted(set(b) - set(a)):
+                self.add(f"{path}[{nbt.to_snbt(value)}]", MISSING, show(value))
+            return
         fields = identity(a, b)
         if fields is None:
             for i in range(max(len(a), len(b))):
