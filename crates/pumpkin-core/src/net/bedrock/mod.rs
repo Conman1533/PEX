@@ -816,7 +816,7 @@ impl BedrockClient {
             }
             SInteract::PACKET_ID => {
                 let packet = SInteract::read(reader)?;
-                self.handle_interaction(&packet);
+                self.handle_interaction(player, &packet);
             }
             SContainerClose::PACKET_ID => {
                 let packet = SContainerClose::read(reader)?;

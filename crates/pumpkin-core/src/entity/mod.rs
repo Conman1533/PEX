@@ -3870,24 +3870,22 @@ impl Entity {
             holder_entity_id,
             true,
         );
-        let be_packet = pumpkin_protocol::bedrock::client::CSetActorLink {
-            link: pumpkin_protocol::bedrock::client::common::ActorLink {
-                ridden_unique_id: pumpkin_protocol::codec::var_long::VarLong(self.entity_id as i64),
-                rider_unique_id: pumpkin_protocol::codec::var_long::VarLong(
-                    holder_entity_id as i64,
-                ),
-                link_type: 1, // Leash link
-                immediate: true,
-                rider_initiated: false,
-                vehicle_angular_velocity: 0.0,
-            },
-        };
+        self.world
+            .load()
+            .broadcast_to_chunk(self.chunk_pos.load(), &je_packet);
+        self.send_bedrock_leash_holder(i64::from(holder_entity_id));
+    }
 
-        self.world.load().broadcast_to_chunk_editioned(
-            self.chunk_pos.load(),
-            &je_packet,
-            &be_packet,
+    /// Bedrock draws a lead from the `LEASH_HOLDER` actor data (-1 for none) and the `LEASHED`
+    /// flag. An actor link would seat the holder on the mob instead.
+    fn send_bedrock_leash_holder(&self, holder_id: i64) {
+        let mut bedrock_meta = SyncedActorDataList::new();
+        bedrock_meta.set(
+            entity_data_key::LEASH_HOLDER,
+            MetadataValue::Int64(holder_id),
         );
+        self.send_bedrock_actor_data(&bedrock_meta);
+        self.set_bedrock_flag(entity_data_flag::LEASHED, holder_id >= 0);
     }
 
     pub fn unleash(&self) {
@@ -3928,22 +3926,10 @@ impl Entity {
 
         let je_packet =
             pumpkin_protocol::java::client::play::CSetEntityLink::new(self.entity_id, -1, true);
-        let be_packet = pumpkin_protocol::bedrock::client::CSetActorLink {
-            link: pumpkin_protocol::bedrock::client::common::ActorLink {
-                ridden_unique_id: pumpkin_protocol::codec::var_long::VarLong(self.entity_id as i64),
-                rider_unique_id: pumpkin_protocol::codec::var_long::VarLong(-1),
-                link_type: 0, // Unlink
-                immediate: true,
-                rider_initiated: false,
-                vehicle_angular_velocity: 0.0,
-            },
-        };
-
-        self.world.load().broadcast_to_chunk_editioned(
-            self.chunk_pos.load(),
-            &je_packet,
-            &be_packet,
-        );
+        self.world
+            .load()
+            .broadcast_to_chunk(self.chunk_pos.load(), &je_packet);
+        self.send_bedrock_leash_holder(-1);
     }
 
     // Vanilla `LivingEntity.isAlive` where it exists, so a dying mob or holder counts as gone.
@@ -4088,6 +4074,33 @@ impl Entity {
             .is_some()
     }
 
+    /// Bedrock's `SetActorLink` for one rider of this vehicle. `seat` is the rider's index in
+    /// the passenger list, or `None` to remove the link. The first passenger controls the
+    /// vehicle, as `getControllingPassenger` picks for most vehicles, so Bedrock gets a rider
+    /// link for it and passenger links for the rest.
+    pub(crate) fn bedrock_ride_link(
+        &self,
+        rider_id: i32,
+        seat: Option<usize>,
+        immediate: bool,
+    ) -> pumpkin_protocol::bedrock::client::CSetActorLink {
+        let link_type = match seat {
+            None => BEDROCK_LINK_REMOVE,
+            Some(0) => BEDROCK_LINK_RIDER,
+            Some(_) => BEDROCK_LINK_PASSENGER,
+        };
+        pumpkin_protocol::bedrock::client::CSetActorLink {
+            link: pumpkin_protocol::bedrock::client::common::ActorLink {
+                ridden_unique_id: VarLong(i64::from(self.entity_id)),
+                rider_unique_id: VarLong(i64::from(rider_id)),
+                link_type,
+                immediate,
+                rider_initiated: false,
+                vehicle_angular_velocity: 0.0,
+            },
+        }
+    }
+
     pub fn add_passenger(&self, vehicle: Arc<dyn EntityBase>, passenger: Arc<dyn EntityBase>) {
         let mut mount_event =
             crate::plugin::api::events::entity::entity_mount::EntityMountEvent::new(
@@ -4117,11 +4130,13 @@ impl Entity {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(vehicle);
 
+        let passenger_id = passenger_entity.entity_id;
         let mut passengers = self
             .passengers
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         passengers.push(passenger);
+        let seat = passengers.len() - 1;
 
         let passenger_ids: Vec<VarInt> = passengers
             .iter()
@@ -4134,6 +4149,10 @@ impl Entity {
             chunk_pos,
             &CSetPassengers::new(VarInt(self.entity_id), &passenger_ids),
         );
+        world.broadcast_to_chunk_bedrock(
+            chunk_pos,
+            &self.bedrock_ride_link(passenger_id, Some(seat), false),
+        );
     }
 
     pub(crate) fn remove_passenger_on_disconnect(&self, passenger_id: i32) {
@@ -4141,6 +4160,9 @@ impl Entity {
             .passengers
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let was_riding = passengers
+            .iter()
+            .any(|passenger| passenger.get_entity().entity_id == passenger_id);
         if let Some(index) = passengers
             .iter()
             .position(|passenger| passenger.get_entity().entity_id == passenger_id)
@@ -4159,10 +4181,17 @@ impl Entity {
             .collect();
         drop(passengers);
 
-        self.world.load().broadcast_to_chunk(
+        let world = self.world.load();
+        world.broadcast_to_chunk(
             self.chunk_pos.load(),
             &CSetPassengers::new(VarInt(self.entity_id), &passenger_ids),
         );
+        if was_riding {
+            world.broadcast_to_chunk_bedrock(
+                self.chunk_pos.load(),
+                &self.bedrock_ride_link(passenger_id, None, true),
+            );
+        }
     }
 
     pub fn remove_passenger_sync(&self, passenger_id: i32) {
@@ -4267,6 +4296,10 @@ impl Entity {
             } else {
                 world.broadcast_to_chunk(chunk_pos, &passengers_packet);
             }
+            world.broadcast_to_chunk_bedrock(
+                chunk_pos,
+                &self.bedrock_ride_link(passenger_id, None, false),
+            );
 
             if !reposition {
                 return;
@@ -4453,8 +4486,8 @@ impl Entity {
                 // send order.
                 // Vanilla uses DELTA | ROT flags: position absolute, delta/rotation relative.
                 // With rotation relative and yaw/pitch=0, the client preserves its current look.
-                if let ClientPlatform::Java(client) = player.client.as_ref() {
-                    client.teleport(
+                match player.client.as_ref() {
+                    ClientPlatform::Java(client) => client.teleport(
                         player,
                         dismount_pos,
                         0.0,
@@ -4466,7 +4499,15 @@ impl Entity {
                             PositionFlag::YRot,
                             PositionFlag::XRot,
                         ],
-                    );
+                    ),
+                    // Bedrock clients pick their own dismount spot; put them where the server
+                    // did, keeping their look.
+                    ClientPlatform::Bedrock(client) => player.send_bedrock_teleport(
+                        client,
+                        dismount_pos,
+                        player.get_entity().yaw.load(),
+                        player.get_entity().pitch.load(),
+                    ),
                 }
 
                 // Vanilla: setSneaking(false) after dismount via sneak input
@@ -4917,6 +4958,11 @@ impl Flag {
         }
     }
 }
+
+/// Bedrock `ActorLinkType`s: remove, rider (controls the vehicle) and passenger.
+const BEDROCK_LINK_REMOVE: u8 = 0;
+const BEDROCK_LINK_RIDER: u8 = 1;
+const BEDROCK_LINK_PASSENGER: u8 = 2;
 
 #[cfg(test)]
 mod tests {

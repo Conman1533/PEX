@@ -2396,6 +2396,10 @@ impl Player {
         }
         self.get_entity().set_sneaking(event.is_sneaking);
         self.update_bedrock_shield_sneaking();
+        // Sneaking gets off a vehicle, as in the Java input path.
+        if event.is_sneaking {
+            self.dismount();
+        }
     }
 
     /// A Bedrock client's start or stop sprinting, with the `PlayerToggleSprintEvent` the Java
@@ -4504,27 +4508,52 @@ impl Player {
         match self.client.as_ref() {
             ClientPlatform::Java(client) => client.teleport(self, position, yaw, pitch, Vec::new()),
             ClientPlatform::Bedrock(client) => {
-                let packet = CBedrockMovePlayer::new(
-                    VarULong(self.entity_id() as u64),
-                    Vector3::new(
-                        position.x as f32,
-                        position.y as f32 + entity.entity_type.eye_height,
-                        position.z as f32,
-                    ),
-                    pitch,
-                    yaw,
-                    yaw,
-                    CBedrockMovePlayer::MODE_TELEPORT,
-                    false,
-                    VarULong(0),
-                    0,
-                    0,
-                    VarULong(self.tick_counter.load(Ordering::Relaxed).max(0) as u64),
-                );
-                if let Ok(data) = client.serialize_packet(&packet) {
-                    client.try_enqueue_packet(data);
-                }
+                self.send_bedrock_teleport(client, position, yaw, pitch);
             }
+        }
+    }
+
+    /// Moves a Bedrock client to `position` (feet) with a teleport `MovePlayer`. Only the
+    /// packet: the caller has already moved the server-side player.
+    pub fn send_bedrock_teleport(
+        &self,
+        client: &crate::net::bedrock::BedrockClient,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) {
+        let packet = CBedrockMovePlayer::new(
+            VarULong(self.entity_id() as u64),
+            Vector3::new(
+                position.x as f32,
+                position.y as f32 + self.get_entity().entity_type.eye_height,
+                position.z as f32,
+            ),
+            pitch,
+            yaw,
+            yaw,
+            CBedrockMovePlayer::MODE_TELEPORT,
+            false,
+            VarULong(0),
+            0,
+            0,
+            VarULong(self.tick_counter.load(Ordering::Relaxed).max(0) as u64),
+        );
+        if let Ok(data) = client.serialize_packet(&packet) {
+            client.try_enqueue_packet(data);
+        }
+    }
+
+    /// Takes the player off its vehicle, as sneaking or a Bedrock `StopRiding` does.
+    pub fn dismount(&self) {
+        let vehicle = self
+            .get_entity()
+            .vehicle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Some(vehicle) = vehicle {
+            vehicle.get_entity().remove_passenger(self.entity_id());
         }
     }
 
