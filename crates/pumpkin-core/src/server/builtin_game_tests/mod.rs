@@ -32,6 +32,7 @@ mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
 mod water_mobs;
+mod zombies;
 
 use std::sync::Once;
 
@@ -282,6 +283,8 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:strider_walks_back_to_lava",
     "pumpkin:piglin_barters_gold_ingot_for_loot",
     "pumpkin:villager_claims_job_site_and_bed",
+    "pumpkin:zombie_villager_chases_wandering_trader",
+    "pumpkin:zombified_piglin_alerts_pack_when_hit",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -298,6 +301,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:camel_follows_cactus",
     "pumpkin:husk_rider_steers_camel_husk_to_target",
     "pumpkin:piglin_brute_attacks_player_in_gold_armor",
+    "pumpkin:drowned_throws_trident_at_player",
+    "pumpkin:giant_ignores_survival_player",
 ];
 
 #[must_use]
@@ -595,6 +600,34 @@ pub fn ensure_builtin_game_tests_registered() {
             3,
             1,
             entities_and_ai::test_zombie_pathfinds_to_villager,
+        );
+        register_function_test(
+            "pumpkin:zombie_villager_chases_wandering_trader",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            zombies::test_zombie_villager_chases_wandering_trader,
+        );
+        register_function_test(
+            "pumpkin:zombified_piglin_alerts_pack_when_hit",
+            "pumpkin:empty_9x4x5",
+            100,
+            0,
+            zombies::test_zombified_piglin_alerts_pack_when_hit,
+        );
+        register_function_test(
+            "pumpkin:drowned_throws_trident_at_player",
+            "pumpkin:empty_11x4x5",
+            200,
+            0,
+            zombies::test_drowned_throws_trident_at_player,
+        );
+        register_function_test(
+            "pumpkin:giant_ignores_survival_player",
+            "pumpkin:empty_11x4x7",
+            120,
+            0,
+            zombies::test_giant_ignores_survival_player,
         );
         register_function_test(
             "pumpkin:dragon_fireball_leaves_breath_cloud",

@@ -1,13 +1,7 @@
 use std::sync::Arc;
 
-use pumpkin_data::entity::EntityType;
-
 use crate::entity::{
     Entity,
-    ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        melee_attack::MeleeAttackGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
-    },
     mob::{Mob, MobEntity},
 };
 
@@ -51,25 +45,8 @@ impl GiantEntity {
         }
         mob_entity.living_entity.health.store(100.0);
 
-        let giant = Self { mob_entity };
-        let mob_arc = Arc::new(giant);
-
-        {
-            let goal_selector = &mob_arc.mob_entity.goals_selector;
-
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, Box::new(MeleeAttackGoal::new(1.0, true)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
-
-            let target_selector = &mob_arc.mob_entity.target_selector;
-            target_selector.add_goal(
-                1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
-            );
-        };
-
-        mob_arc
+        // Vanilla `Giant` registers no goals: it stands still and attacks nothing.
+        Arc::new(Self { mob_entity })
     }
 }
 

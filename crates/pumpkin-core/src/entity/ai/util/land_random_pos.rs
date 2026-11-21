@@ -93,12 +93,32 @@ pub fn get_pos_away(
     vertical_dist: i32,
     avoid_pos: Vector3<f64>,
 ) -> Option<Vector3<f64>> {
+    get_pos_away_between(
+        mob,
+        0.0,
+        f64::from(horizontal_dist),
+        vertical_dist,
+        avoid_pos,
+    )
+}
+
+/// Vanilla `LandRandomPos.getPosAway` with a minimum distance: a land position between
+/// `min_horizontal_dist` and `max_horizontal_dist` away, within 90 degrees of the direction
+/// away from `avoid_pos`.
+#[must_use]
+pub fn get_pos_away_between(
+    mob: &dyn Mob,
+    min_horizontal_dist: f64,
+    max_horizontal_dist: f64,
+    vertical_dist: i32,
+    avoid_pos: Vector3<f64>,
+) -> Option<Vector3<f64>> {
     let mut rng = mob.get_random();
     let mut dir_away = mob.get_entity().pos.load() - avoid_pos;
     if dir_away.length() == 0.0 {
         dir_away = Vector3::new(rng.random::<f64>() - 0.5, 0.0, rng.random::<f64>() - 0.5);
     }
-    let restrict = goal_utils::mob_restricted(mob, f64::from(horizontal_dist));
+    let restrict = goal_utils::mob_restricted(mob, max_horizontal_dist);
     let world = mob.get_entity().world.load_full();
     let block_pos = mob.get_entity().block_pos.load();
     let mut context = PathfindingContext::new(
@@ -110,8 +130,8 @@ pub fn get_pos_away(
         || {
             let direction = random_pos::generate_random_direction_within_radians(
                 &mut rng,
-                0.0,
-                f64::from(horizontal_dist),
+                min_horizontal_dist,
+                max_horizontal_dist,
                 vertical_dist,
                 0,
                 dir_away.x,
@@ -121,7 +141,7 @@ pub fn get_pos_away(
             let pos = toward_direction(
                 mob,
                 &world,
-                f64::from(horizontal_dist),
+                max_horizontal_dist,
                 restrict,
                 direction,
                 &mut rng,
