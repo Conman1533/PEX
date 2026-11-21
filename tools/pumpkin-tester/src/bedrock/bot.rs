@@ -90,6 +90,9 @@ pub const LINK_PASSENGER: u8 = 2;
 const INTERACT_ID: i32 = 33;
 /// `InventoryTransaction`.
 const INVENTORY_TRANSACTION_ID: i32 = 30;
+/// `UseItem` transaction actions.
+const USE_ITEM_CLICK_BLOCK: i32 = 0;
+const USE_ITEM_CLICK_AIR: i32 = 1;
 const INTERACT_STOP_RIDING: u8 = 3;
 /// `TextPacketType::Chat`.
 const TEXT_TYPE_CHAT: u8 = 1;
@@ -696,6 +699,33 @@ impl BedrockBot {
         in_hand: &ItemStack,
         actions: &[(u32, ItemStack, ItemStack)],
     ) -> Result<(), String> {
+        self.send_use_item(USE_ITEM_CLICK_BLOCK, block, face, slot, in_hand, actions)
+            .await
+    }
+
+    /// Uses the item in hotbar slot `slot` without a block, as a real client's click-air
+    /// `UseItem` transaction.
+    pub async fn use_item_in_air(&self, slot: i32, in_hand: &ItemStack) -> Result<(), String> {
+        self.send_use_item(
+            USE_ITEM_CLICK_AIR,
+            BlockPos::new(0, 0, 0),
+            u8::MAX,
+            slot,
+            in_hand,
+            &[],
+        )
+        .await
+    }
+
+    async fn send_use_item(
+        &self,
+        action: i32,
+        block: BlockPos,
+        face: u8,
+        slot: i32,
+        in_hand: &ItemStack,
+        actions: &[(u32, ItemStack, ItemStack)],
+    ) -> Result<(), String> {
         let mut payload = Vec::new();
         let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
             // No legacy request, no legacy slots, transaction type `UseItem`.
@@ -713,8 +743,8 @@ impl BedrockBot {
                 NetworkItemDescriptor::from(old).write(payload)?;
                 NetworkItemDescriptor::from(new).write(payload)?;
             }
-            // Click block, triggered by player input.
-            VarInt(0).write(payload)?;
+            // The action, triggered by player input.
+            VarInt(action).write(payload)?;
             1u8.write(payload)?;
             block.write(payload)?;
             face.write(payload)?;

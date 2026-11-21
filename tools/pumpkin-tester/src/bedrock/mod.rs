@@ -534,6 +534,7 @@ async fn run_mixed_play(
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;
     run_place_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_item_use_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -1736,6 +1737,208 @@ async fn run_refused_place_checks(
         setblock(pos, "air");
     }
     tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// One tool or bucket use in `run_item_use_checks`.
+#[derive(Clone, Copy)]
+struct ItemUseCase {
+    name: &'static str,
+    /// The block clicked on its top face.
+    under: &'static str,
+    item: &'static Item,
+    /// Whether the result lands on top of the clicked block rather than replacing it.
+    on_top: bool,
+    block: &'static Block,
+    /// What the hand holds afterwards.
+    after: &'static Item,
+}
+
+const ITEM_USE_CASES: [ItemUseCase; 5] = [
+    ItemUseCase {
+        name: "bedrock tills dirt with a hoe",
+        under: "dirt",
+        item: &Item::WOODEN_HOE,
+        on_top: false,
+        block: &Block::FARMLAND,
+        after: &Item::WOODEN_HOE,
+    },
+    ItemUseCase {
+        name: "bedrock strips a log with an axe",
+        under: "oak_log",
+        item: &Item::WOODEN_AXE,
+        on_top: false,
+        block: &Block::STRIPPED_OAK_LOG,
+        after: &Item::WOODEN_AXE,
+    },
+    ItemUseCase {
+        name: "bedrock makes a path with a shovel",
+        under: "grass_block",
+        item: &Item::WOODEN_SHOVEL,
+        on_top: false,
+        block: &Block::DIRT_PATH,
+        after: &Item::WOODEN_SHOVEL,
+    },
+    ItemUseCase {
+        name: "bedrock empties a water bucket",
+        under: "stone",
+        item: &Item::WATER_BUCKET,
+        on_top: true,
+        block: &Block::WATER,
+        after: &Item::BUCKET,
+    },
+    ItemUseCase {
+        name: "bedrock lights a fire with flint and steel",
+        under: "stone",
+        item: &Item::FLINT_AND_STEEL,
+        on_top: true,
+        block: &Block::FIRE,
+        after: &Item::FLINT_AND_STEEL,
+    },
+];
+
+/// Tools and buckets used on a block from Bedrock, in survival: each must change the block (and
+/// the held item) as it does for Java.
+async fn run_item_use_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    run_console(server, &format!("op {BEDROCK_NAME}"));
+    run_console(server, &format!("gamemode survival {BEDROCK_NAME}"));
+
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java.position.x > f64::from(bedrock.position.x) {
+        -1.0
+    } else {
+        1.0
+    };
+    let target = BlockPos::floored(
+        f64::from(bedrock.position.x) + side * 2.0,
+        feet,
+        f64::from(bedrock.position.z),
+    );
+    let above = target.up();
+    let setblock = |pos: BlockPos, block: &str| {
+        run_console(
+            server,
+            &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+        );
+    };
+
+    // Look at the top of the clicked block: buckets aim with the player's view, as in vanilla.
+    let (old_yaw, old_pitch) = (bedrock.yaw, bedrock.pitch);
+    let aim = Vector3::new(
+        f64::from(target.0.x) + 0.5,
+        f64::from(target.0.y) + 1.0,
+        f64::from(target.0.z) + 0.5,
+    ) - bedrock.position.to_f64();
+    bedrock.yaw = (-aim.x.atan2(aim.z)).to_degrees() as f32;
+    bedrock.pitch = (-aim.y.atan2(aim.horizontal_length())).to_degrees() as f32;
+    tick(server, bedrock, Some(&mut *java)).await?;
+    for case in &ITEM_USE_CASES {
+        let ItemUseCase {
+            name,
+            under,
+            item,
+            on_top,
+            block: expect_block,
+            after: expect_item,
+        } = *case;
+        let expect_at = if on_top { above } else { target };
+        run_console(server, &format!("clear {BEDROCK_NAME}"));
+        run_console(
+            server,
+            &format!("give {BEDROCK_NAME} {}", item.registry_key),
+        );
+        setblock(above, "air");
+        setblock(target, under);
+        for _ in 0..3 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        let stack = ItemStack::new(1, item);
+        bedrock.use_item_on_block(target, 1, 0, &stack, &[]).await?;
+        for _ in 0..3 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        let found = world.get_block(&expect_at);
+        let held = bedrock_player.inventory().held_item();
+        checks.record(
+            name,
+            if found.id != expect_block.id {
+                Err(format!(
+                    "found {} instead of {}",
+                    found.name, expect_block.name
+                ))
+            } else if held.item.id != expect_item.id {
+                Err(format!(
+                    "holding {} instead of {}",
+                    held.item.registry_key, expect_item.registry_key
+                ))
+            } else {
+                Ok(())
+            },
+        );
+    }
+    run_bucket_press_check(server, bedrock, java, checks, target).await?;
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    setblock(above, "air");
+    setblock(target, "air");
+    (bedrock.yaw, bedrock.pitch) = (old_yaw, old_pitch);
+    tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// A client that follows its click on a block with a click-air for the same press must not get
+/// the item's use twice: a second bucket use would pick the water straight back up.
+async fn run_bucket_press_check(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    target: BlockPos,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} water_bucket"));
+    for (pos, block) in [(target.up(), "air"), (target, "stone")] {
+        run_console(
+            server,
+            &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+        );
+    }
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let bucket = ItemStack::new(1, &Item::WATER_BUCKET);
+    bedrock
+        .use_item_on_block(target, 1, 0, &bucket, &[])
+        .await?;
+    bedrock.use_item_in_air(0, &bucket).await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let held = bedrock_player.inventory().held_item();
+    checks.record(
+        "one bedrock bucket press is one use",
+        if world.get_block(&target.up()).id != Block::WATER.id {
+            Err("the water is gone".to_string())
+        } else if held.item.id != Item::BUCKET.id {
+            Err(format!("holding {}", held.item.registry_key))
+        } else {
+            Ok(())
+        },
+    );
     Ok(())
 }
 
