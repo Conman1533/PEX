@@ -11,7 +11,7 @@ use pumpkin_world::world::BlockFlags;
 use crate::command::argument_builder::{
     ArgumentBuilder, RequiredArgumentBuilder, argument, command, literal,
 };
-use crate::command::argument_types::block::BlockArgumentType;
+use crate::command::argument_types::block::{BlockArgumentType, BlockInput};
 use crate::command::argument_types::block_predicate::{BlockPredicate, BlockPredicateArgumentType};
 use crate::command::argument_types::coordinates::block_pos::BlockPosArgumentType;
 use crate::command::context::command_context::CommandContext;
@@ -55,7 +55,7 @@ fn fill_blocks(
     source: &CommandSource,
     from: BlockPos,
     to: BlockPos,
-    target_block: &'static Block,
+    target: &BlockInput,
     mode: FillMode,
     filter: Option<&BlockPredicate>,
     strict: bool,
@@ -85,7 +85,7 @@ fn fill_blocks(
         ));
     }
 
-    let target_state_id = target_block.default_state.id;
+    let target_state_id = target.state;
     let mut changed_positions = Vec::new();
 
     let min_chunk_x = min_x >> 4;
@@ -235,10 +235,17 @@ fn fill_blocks(
 
     // Vanilla runs onPlace for every placed block unless strict sets UPDATE_SKIP_ON_PLACE.
     if !strict {
-        for (pos, old_id, new_id) in changed_positions {
+        for &(pos, old_id, new_id) in &changed_positions {
             let new_block = Block::from_state_id(new_id);
             if Block::from_state_id(old_id) != new_block && world.get_block(&pos) == new_block {
                 world.on_block_placed(&pos, new_block, new_id, old_id, false);
+            }
+        }
+    }
+    if let Some(data) = &target.nbt {
+        for &(pos, _, new_id) in &changed_positions {
+            if new_id == target_state_id {
+                super::setblock::load_block_entity_data(&world, &pos, data);
             }
         }
     }
@@ -266,7 +273,7 @@ impl CommandExecutor for FillExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
         let from = BlockPosArgumentType::get_loaded_block_pos(context, "from")?;
         let to = BlockPosArgumentType::get_loaded_block_pos(context, "to")?;
-        let block = BlockArgumentType::get(context, "block")?;
+        let block = BlockArgumentType::get_input(context, "block")?;
 
         let filter = if matches!(self.filter_mode, FilterMode::WithFilter) {
             Some(BlockPredicateArgumentType::get(context, "filter")?)
@@ -278,7 +285,7 @@ impl CommandExecutor for FillExecutor {
             &context.source,
             from,
             to,
-            block,
+            &block,
             self.mode,
             filter.as_ref(),
             self.strict,
