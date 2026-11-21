@@ -117,7 +117,6 @@ pub struct Server {
     pub datapack_manager: Arc<crate::data::datapack::DatapackManager>,
     pub enchantment_manager: Arc<enchantment::EnchantmentManager>,
     /// Assigns unique IDs to maps.
-    map_id: AtomicI32,
     /// Mojang's public keys, used for chat session signing
     /// Pulled from Mojang API on startup
     pub mojang_public_keys: ArcSwap<Vec<RsaPublicKey>>,
@@ -306,7 +305,6 @@ impl Server {
             recipe_manager: Arc::new(recipe::RecipeManager::new()),
             datapack_manager: Arc::new(crate::data::datapack::DatapackManager::new()),
             enchantment_manager: Arc::new(enchantment::EnchantmentManager::new()),
-            map_id: level_info.load().map_id.into(),
             worlds: ArcSwap::from_pointee(vec![]),
             dimensions,
             command_dispatcher,
@@ -321,7 +319,7 @@ impl Server {
                     .map(|data| CustomBossbars::from_nbt(&data))
                     .unwrap_or_default(),
             ),
-            map_manager: MapManager::new(),
+            map_manager: MapManager::new(world_path.clone(), level_info.load().map_id),
             defaultgamemode,
             player_data_storage,
             command_storage: std::sync::Mutex::new(command_storage::load(&world_path)),
@@ -685,6 +683,7 @@ impl Server {
                 error!("Failed to save {name}: {err}");
             }
         }
+        self.map_manager.save();
         command_storage::save(
             &world_path,
             &self
@@ -1203,13 +1202,7 @@ impl Server {
 
     /// Generates a new map id.
     pub fn next_map_id(&self) -> i32 {
-        let id = self.map_id.fetch_add(1, Ordering::SeqCst);
-        self.level_info.rcu(|level_info| {
-            let mut new_level_info = (**level_info).clone();
-            new_level_info.map_id = self.map_id.load(Ordering::SeqCst);
-            new_level_info
-        });
-        id
+        self.map_manager.next_id()
     }
 
     pub const fn get_branding(&self) -> CPluginMessage<'_> {
