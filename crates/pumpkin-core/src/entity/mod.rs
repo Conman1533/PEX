@@ -3045,7 +3045,16 @@ impl Entity {
             }
             self.swimming.store(event.is_swimming, Relaxed);
             self.set_flag(Flag::Swimming, event.is_swimming);
+            self.update_bedrock_crawling();
         }
+    }
+
+    /// Bedrock shows crawling with its own actor flag, where Java only has the swimming pose:
+    /// vanilla `isVisuallyCrawling` is that pose without the swimming flag.
+    fn update_bedrock_crawling(&self) {
+        let crawling =
+            self.pose.load() == EntityPose::Swimming && !self.swimming.load(Ordering::Relaxed);
+        self.set_bedrock_flag(entity_data_flag::CRAWLING, crawling);
     }
 
     /// Sets whether the entity is invisible and sends updated metadata.
@@ -3216,28 +3225,28 @@ impl Entity {
         self.set_synced_data(tracked_data::entity::DATA_SHARED_FLAGS_ID, new_je_flags);
 
         if let Some(bedrock_flag) = flag.to_bedrock() {
-            let (key, index) = if bedrock_flag >= 64 {
-                (entity_data_key::FLAGS_TWO, (bedrock_flag - 64) as u8)
-            } else {
-                (entity_data_key::FLAGS, bedrock_flag as u8)
-            };
+            self.set_bedrock_flag(bedrock_flag, value);
+        }
+    }
 
-            if value {
-                let mask = 1i64 << index;
-                if key == entity_data_key::FLAGS {
-                    self.bedrock_flags.fetch_or(mask, Ordering::Relaxed);
-                } else {
-                    self.bedrock_flags_two.fetch_or(mask, Ordering::Relaxed);
-                }
-            } else {
-                let mask = !(1i64 << index);
-                if key == entity_data_key::FLAGS {
-                    self.bedrock_flags.fetch_and(mask, Ordering::Relaxed);
-                } else {
-                    self.bedrock_flags_two.fetch_and(mask, Ordering::Relaxed);
-                }
-            }
-
+    /// Sets one Bedrock actor flag and sends both flag words to Bedrock players near the
+    /// entity. Unchanged flags send nothing.
+    fn set_bedrock_flag(&self, bedrock_flag: u32, value: bool) {
+        let (word, index) = if bedrock_flag >= 64 {
+            (&self.bedrock_flags_two, bedrock_flag - 64)
+        } else {
+            (&self.bedrock_flags, bedrock_flag)
+        };
+        let mask = 1i64 << index;
+        let old = if value {
+            word.fetch_or(mask, Ordering::Relaxed)
+        } else {
+            word.fetch_and(!mask, Ordering::Relaxed)
+        };
+        if (old & mask != 0) == value {
+            return;
+        }
+        {
             let world = self.world.load();
             let chunk_pos = self.chunk_pos.load();
             let mut metadata = SyncedActorDataList(std::collections::HashMap::new());
@@ -3545,6 +3554,7 @@ impl Entity {
         );
         self.set_synced_data(tracked_data::entity::DATA_POSE, VarInt(pose));
         self.send_bedrock_actor_data(&bedrock_meta);
+        self.update_bedrock_crawling();
     }
 
     /// Vanilla `Entity.fireImmune`: the entity type.

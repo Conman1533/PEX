@@ -253,25 +253,18 @@ impl BedrockClient {
                 player.update_player_pose();
             }
             PlayerAction::StartSprinting => {
-                player.set_sprinting(true);
+                player.set_sprinting_from_bedrock(server, true);
             }
             PlayerAction::StopSprinting => {
-                player.set_sprinting(false);
+                player.set_sprinting_from_bedrock(server, false);
             }
             PlayerAction::StartSneaking => {
-                player.get_entity().set_sneaking(true);
-                player.update_bedrock_shield_sneaking();
+                player.set_sneaking_from_bedrock(server, true);
             }
             PlayerAction::StopSneaking => {
-                player.get_entity().set_sneaking(false);
-                player.update_bedrock_shield_sneaking();
+                player.set_sneaking_from_bedrock(server, false);
             }
-            PlayerAction::StartCrawling => {
-                player
-                    .get_entity()
-                    .set_pose(pumpkin_data::entity::EntityPose::Swimming);
-            }
-            PlayerAction::StopCrawling => {
+            PlayerAction::StartCrawling | PlayerAction::StopCrawling => {
                 player.update_player_pose();
             }
             PlayerAction::StopSleeping => {

@@ -109,22 +109,21 @@ impl BedrockClient {
         crate::entity::client_push::send_bedrock_client_push(player, packet.delta.to_f64());
 
         if input_data.get(InputData::StartSprinting as usize) {
-            player.set_sprinting(true);
+            player.set_sprinting_from_bedrock(server, true);
         } else if input_data.get(InputData::StopSprinting as usize) {
-            player.set_sprinting(false);
+            player.set_sprinting_from_bedrock(server, false);
         }
 
         if input_data.get(InputData::StartSneaking as usize) {
-            entity.set_sneaking(true);
-            player.update_bedrock_shield_sneaking();
+            player.set_sneaking_from_bedrock(server, true);
         } else if input_data.get(InputData::StopSneaking as usize) {
-            entity.set_sneaking(false);
-            player.update_bedrock_shield_sneaking();
+            player.set_sneaking_from_bedrock(server, false);
         }
 
-        if input_data.get(InputData::StartCrawling as usize) {
-            entity.set_pose(EntityPose::Swimming);
-        } else if input_data.get(InputData::StopCrawling as usize) {
+        // The server decides the pose from the space around the player, as for Java players.
+        if input_data.get(InputData::StartCrawling as usize)
+            || input_data.get(InputData::StopCrawling as usize)
+        {
             player.update_player_pose();
         }
 

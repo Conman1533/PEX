@@ -2379,6 +2379,44 @@ impl Player {
         self.living_entity.set_sprinting(is_sprinting);
     }
 
+    /// A Bedrock client's start or stop sneaking, with the `PlayerToggleSneakEvent` the Java
+    /// input path fires, so plugins see and can cancel it on both editions.
+    pub fn set_sneaking_from_bedrock(self: &Arc<Self>, server: &Arc<Server>, sneaking: bool) {
+        if self.get_entity().is_sneaking() == sneaking {
+            return;
+        }
+        let mut event =
+            crate::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent::new(
+                self.clone(),
+                sneaking,
+            );
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        self.get_entity().set_sneaking(event.is_sneaking);
+        self.update_bedrock_shield_sneaking();
+    }
+
+    /// A Bedrock client's start or stop sprinting, with the `PlayerToggleSprintEvent` the Java
+    /// player command path fires.
+    pub fn set_sprinting_from_bedrock(self: &Arc<Self>, server: &Arc<Server>, sprinting: bool) {
+        if self.get_entity().is_sprinting() == sprinting {
+            return;
+        }
+        let mut event =
+            crate::plugin::player::player_toggle_sprint_event::PlayerToggleSprintEvent::new(
+                self.clone(),
+                sprinting,
+            );
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        self.set_sprinting(event.is_sprinting);
+        self.update_player_pose();
+    }
+
     pub fn try_start_fall_flying(&self, server: &Arc<Server>) {
         let entity = self.get_entity();
         let has_glider = self
