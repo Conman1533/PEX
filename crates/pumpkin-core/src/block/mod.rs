@@ -463,9 +463,12 @@ pub struct GetInsideCollisionShapeArgs<'a> {
     pub position: &'a BlockPos,
 }
 
-#[derive(Clone)]
+/// Vanilla `BlockEventData`: an event for the block at `pos`, which runs only while that block
+/// is still there.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct BlockEvent {
     pub pos: BlockPos,
+    pub block: &'static Block,
     pub r#type: u8,
     pub data: u8,
 }

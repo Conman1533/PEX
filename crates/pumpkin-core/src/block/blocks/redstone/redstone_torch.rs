@@ -135,7 +135,7 @@ impl BlockBehaviour for RedstoneTorchBlock {
 
             if args
                 .world
-                .is_block_tick_scheduled(args.position, args.block)
+                .will_block_tick_this_tick(args.position, args.block)
             {
                 return;
             }

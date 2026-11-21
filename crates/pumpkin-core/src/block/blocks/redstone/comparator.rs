@@ -167,7 +167,7 @@ impl RedstoneGateBlock<ComparatorLikeProperties> for ComparatorBlock {
     }
 
     fn update_powered(&self, world: &World, pos: BlockPos, state: &BlockState, block: &Block) {
-        if world.is_block_tick_scheduled(&pos, block) {
+        if world.will_block_tick_this_tick(&pos, block) {
             return;
         }
         let i = self.calculate_output_signal(world, pos, state, block);

@@ -1378,7 +1378,6 @@ impl Server {
 
         for world in worlds.iter() {
             world.flush_block_updates();
-            world.flush_synced_block_events();
 
             let players = world.players.load();
             let player_handle = handle.clone();

@@ -1,9 +1,9 @@
 use pumpkin_data::{
     Block,
     block_properties::{
-        ComparatorLikeProperties, CopperBulbLikeProperties, EastRedstone, HorizontalFacing,
-        ModeComparator, NorthRedstone, RedstoneOreLikeProperties, RedstoneWireLikeProperties,
-        SouthRedstone, WestRedstone,
+        ComparatorLikeProperties, CopperBulbLikeProperties, EastRedstone, Facing, HorizontalFacing,
+        ModeComparator, NorthRedstone, ObserverLikeProperties, RedstoneOreLikeProperties,
+        RedstoneWireLikeProperties, SouthRedstone, WestRedstone,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -92,6 +92,42 @@ pub(super) async fn test_copper_bulb_toggles_and_comparator(
                 wire_power == 0,
                 format!("Expected comparator output 0 from unlit copper bulb, got {wire_power}"),
             )
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// G5-02: a lit lamp loses power, which schedules its 4-tick turn-off tick, and an observer
+/// replaces it before the tick is due. Vanilla `ServerLevel.tickBlock` runs a tick only for the
+/// block it was scheduled for, so the lamp's tick must not pulse the observer.
+pub(super) async fn test_tick_skips_replaced_block(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+
+    let power_pos = BlockPos::new(2, 1, 1);
+    let lamp_pos = BlockPos::new(2, 1, 2);
+
+    let mut lamp_props = RedstoneOreLikeProperties::default(&Block::REDSTONE_LAMP);
+    lamp_props.lit = true;
+    let lit_lamp = lamp_props.to_state_id(&Block::REDSTONE_LAMP);
+    let mut observer_props = ObserverLikeProperties::default(&Block::OBSERVER);
+    observer_props.facing = Facing::Up;
+    observer_props.powered = false;
+    let idle_observer = observer_props.to_state_id(&Block::OBSERVER);
+
+    helper
+        .set_block_default(&power_pos, &Block::REDSTONE_BLOCK)
+        .await?;
+    helper.set_block(&lamp_pos, lit_lamp).await?;
+    helper.assert_block_state(&lamp_pos, lit_lamp).await?;
+
+    // Removing power schedules the lamp's turn-off tick, then the observer takes its place.
+    helper.set_block_default(&power_pos, &Block::AIR).await?;
+    helper.set_block(&lamp_pos, idle_observer).await?;
+
+    helper
+        .start_sequence()
+        .then_execute_for(10, move |helper| async move {
+            helper.assert_block_state(&lamp_pos, idle_observer).await
         })
         .then_succeed();
     Ok(())

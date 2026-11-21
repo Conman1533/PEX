@@ -57,6 +57,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:target_block_projectile_hit",
     "pumpkin:copper_bulb_toggles_and_comparator",
     "pumpkin:redstone_lamp_delayed_off",
+    "pumpkin:redstone/tick_skips_replaced_block",
     "pumpkin:piston_and_sticky_piston",
     "pumpkin:dispenser_and_dropper",
     "pumpkin:dispenser_honeycomb_beehive_and_shulker",
@@ -394,6 +395,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             redstone_lamps_and_bulbs::test_redstone_lamp_delayed_off,
+        );
+        register_function_test(
+            "pumpkin:redstone/tick_skips_replaced_block",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            redstone_lamps_and_bulbs::test_tick_skips_replaced_block,
         );
         register_function_test(
             "pumpkin:piston_and_sticky_piston",

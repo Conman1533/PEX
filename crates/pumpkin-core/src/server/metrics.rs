@@ -33,12 +33,13 @@ pub struct WorldTickReport {
     /// spent waiting for a Rayon worker.
     pub queued: Duration,
     pub total: Duration,
-    /// `flush_block_updates` and `flush_synced_block_events`.
+    /// `flush_block_updates`.
     pub block_updates: Duration,
     pub active_chunks: Duration,
     /// `tick_environment`: time, weather, spawning, and the autosave and memory cleanup triggers.
     pub environment: Duration,
     pub raids: Duration,
+    /// `tick_chunks` and the block event phase after it.
     pub chunks: Duration,
     /// Player ticks and the pickup boxes taken after them.
     pub players: Duration,
