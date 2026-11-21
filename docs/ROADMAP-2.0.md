@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4a500f1fd`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6bdf5476b`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -17,13 +17,13 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 1 | 1 | 14 | |
+| G5 Redstone | 16 | 2 | 2 | 12 | |
 | G6 Survival | 27 | 14 | 0 | 12 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 26 | 0 | 6 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 197 | 72 | 2 | 108 | 15 |
+| Total | 197 | 73 | 3 | 106 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -48,10 +48,12 @@ Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4
 
 Landing batch 7 (2026-11-21) also carried, outside the pieces: the Java login packet sent before the player joins the world (a client could get entity data before it had a level and hang on its first join; every bot join now checks it), held item attributes applied the tick they change like vanilla `detectEquipmentUpdates` (a sword given by `/give` hit with fist damage until the next hand sync), `fix/bedrock-dimensions` from the Bedrock thread, and a longer timeout for the flaky armadillo GameTest.
 
+Landing batch 8 (2026-11-21) also carried, outside the pieces: `fix/portal-exit-chunks` from the Bedrock thread (the exit side of a portal keeps its chunks loaded while the portal is found or built, which stopped duplicate portals for Java and Bedrock), and the `bot:eat_restores_food` test reading the food level from the server's player, since on a slow machine the bot's view trails the server by many ticks. That test still fails now and then on the Windows box with the eat never landing; batch 9 adds the server player's item use state to its message. On CT 117 the first tester run hung once at server shutdown after `bot:block_entities_saved_with_unloaded_chunk` passed (every thread idle, the main task parked); the rerun passed in full, so it is logged as a shutdown flake to watch.
+
 What holds 2.0 back:
 
 1. GitHub Actions: the newest run on the repository is from 2026-10-14 (D0-1's support ticket). G0-01, G0-02 and Goal 10's release pieces wait on it.
-2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4, D7-1 and D7-4 on 2026-11-20), so 18 are open and 6 more partly or except a sub-question.
+2. Decisions: after 2026-10-31 only the 2.0 loop's answers are recorded (D6-4, D7-1 and D7-4 on 2026-11-20; D3-3 to D3-6, D4-1 to D4-3, D5-1, D5-2, D5-4, D6-5, D6-6, D7-2, D7-5, D9-3, D9-4 and D10-2 on 2026-11-21), so 3 are open and 1 more partly or except a sub-question.
 3. The proofs: 1 piece has its code on `alpha` but not the test its Done when asks for. The world round trip (2026-11-20) proved G7-14, G7-15 and G7-17. Proof batch 1 (2026-11-20) landed five (G4-05, G6-05, G6-09, G6-12, G7-09) and fixed the two bugs they found: spawner light rules and frogspawn never hatching. Proof batch 2 (2026-11-20) landed five more (G1-36, G6-14, G6-16, G6-17, G6-19) and fixed the seven bugs they found: zombie nautilus anger and charges never reaching players, arrows hitting the dragon instead of its parts, a hovering dragon shrugging off arrows, the dragon ignoring `NoAI`, an eye of ender thrown right after startup doing nothing, and the fight file's gateway and crystal fields.
 4. Fixed 2026-11-20 in proof batch 1: GameTest `scaffolding_distance_and_collapse` checked the overhang before its scheduled tick had run; it now waits for it, and the full tester passes on `alpha`.
 
@@ -104,13 +106,13 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D2-2 | When v0.1 goes, what do Wasm plugin authors get? | Answered: follow upstream, v0.1 stays until upstream drops it (Q2.2). G2-07 to G2-10 not started | G2-07, G2-08, G2-09, G2-10 |
 | D3-1 | What happens when a config value is bad? | Answered: per-key default and a warning, a syntax error refuses to start (Q3.1). Open: the two-key sub-question | G3-01, G3-09 |
 | D3-2 | Remove or wire the keys that nothing reads? | Answered: remove them all in G3-03 | G3-03 |
-| D3-3 | What should `default_difficulty` do? | Open | G3-07 |
-| D3-4 | Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? | Open | G3-06 |
-| D3-5 | What should happen to the defaults that point at upstream Pumpkin? | Partly (Q3.6): telemetry off by default. Open: (a) or (b), and `bug_report` | G3-08 |
-| D3-6 | How should the egg set the port? | Open | G3-05 |
-| D4-1 | In offline mode, which UUID should `op`, `whitelist add`, `ban`, `pardon` and `fetchprofile` use for a name the server hasn't seen? | Open | G4-03 |
-| D4-2 | Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? | Open | G4-06 |
-| D4-3 | Should plugins get the old-to-new UUID mapping through the plugin API? | Open | G4-04 |
+| D3-3 | What should `default_difficulty` do? | Answered by the 2.0 loop (2026-11-21): apply it at every start, as vanilla `DedicatedServer.forceDifficulty` does, because vanilla's `/difficulty` changes only `level.dat` and `server.properties` wins at the next start, so this is the parity choice; G3-07 logs the difficulty it applies so an admin sees why a changed one came back. | G3-07 |
+| D3-4 | Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? | Answered by the 2.0 loop (2026-11-21): yes, for every setting vanilla writes back that has a PEX key, because it matches vanilla and fixes the whitelist turning itself off at restart; G3-06 edits the keys in place the way the `config_version` steps do, so comments and order stay. | G3-06 |
+| D3-5 | What should happen to the defaults that point at upstream Pumpkin? | Answered by the 2.0 loop (2026-11-21): (b), a migration that turns telemetry off in existing files and logs how to turn it back on, and `server_links.bug_report` left empty, because a generated `true` reports to a project PEX is not, which is worse for existing servers than one logged line, and vanilla sends no server links by default. | G3-08 |
+| D3-6 | How should the egg set the port? | Answered by the 2.0 loop (2026-11-21): keep the `file` parser, matched on the key so the port in the line doesn't matter, because it needs no server change, and the query address following the game port is what vanilla's default `query.port` does; G3-05 checks the egg against a Pelican test server. | G3-05 |
+| D4-1 | In offline mode, which UUID should `op`, `whitelist add`, `ban`, `pardon` and `fetchprofile` use for a name the server hasn't seen? | Answered by the 2.0 loop (2026-11-21): vanilla's rule: ask Mojang first, then the offline UUID of the lowercased name, because the lists then match vanilla's and a server moved to or from vanilla keeps its ops, whitelist and bans; entries already in the lists are not changed. | G4-03 |
+| D4-2 | Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? | Answered by the 2.0 loop (2026-11-21): move them to the server root with a one-time move and backups, because it is the only option that works in both directions between PEX and vanilla; the same piece updates the benchmark `README.md` that writes `data/whitelist.json`. | G4-06 |
+| D4-3 | Should plugins get the old-to-new UUID mapping through the plugin API? | Answered by the 2.0 loop (2026-11-21): docs only: native plugins read `world/players/uuid-migration.json`, because D2-2 leaves the WIT surface to upstream, so a PEX-only WIT function would be a public item no upstream plugin can use; the docs tell Wasm plugin authors to key data by name or recompute the old hash. | G4-04 |
 | D5-1 | How do scheduled block and fluid ticks and block entities run? | Answered by the 2.0 loop (2026-11-21): serially, in vanilla order, because vanilla parity comes first and the region split risks rare non-vanilla order; G5-05 builds the stress world and measures the cost, and Goal 9 can win time back elsewhere. | G5-05, G5-15 |
 | D5-2 | Is the chained neighbour update limit configurable? | Answered by the 2.0 loop (2026-11-21): a key matching vanilla's `max-chained-neighbor-updates` (default 1000000, negative means unlimited), because a server that tunes it on vanilla should be able to on PEX; it takes the next free `config_version` when G5-14 lands. | G5-14 |
 | D5-3 | Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? | Answered: out, default redstone only for 2.0 (Q5.1) | none (scope only) |
@@ -119,13 +121,13 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Answered: the shared tester server, fixed seed, both dimensions on (Q6.4) | G6-01 |
 | D6-3 | Which stages run in CI's `gametest` job? | Answered: short stages in CI, the long ones nightly and before releases | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
 | D6-4 | Where do the 12 pearls come from? | Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work | G6-12, G6-13 |
-| D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Open | G6-20 |
-| D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
+| D6-5 | Does the dragon stage wait for Goal 1's dragon phases? | Answered by the 2.0 loop (2026-11-21): wait for Goal 1's dragon phases, because the stage is there to prove the vanilla fight, and a run on the current phase machine would pass without perching, breath or fireballs. | G6-20 |
+| D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Answered by the 2.0 loop (2026-11-21): no, Goal 6 stays the start-to-dragon run, because those systems are tested where their parity work happens, as G6-27 does for the advancement triggers, and more stages would cost CI time without proving the run. | none (scope only) |
 | D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Answered by the 2.0 loop (2026-11-20): pass through now, model fields as features need them, because the first round trip shows losses in dozens of chunk, block entity, item and entity keys that one generic mechanism stops at once, while fields PEX models still win | G7-06, G7-21, G7-23, G7-24, G7-25 |
-| D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Open | G7-28 |
+| D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Answered by the 2.0 loop (2026-11-21): port the 26.x fixers (4996 to 5016), because it matches vanilla and is the only option that is safe for a server upgrading a world from before 26.3: refusing stops it starting, and keeping old `DataVersion`s restamps changed chunks without their fixes. | G7-28 |
 | D7-3 | How much of a structure start should PEX save for chunks it generates? | Answered by the 2.0 loop (2026-11-20): the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored | G7-07 |
 | D7-4 | Which `data/` files must round-trip for 2.0? | Answered by the 2.0 loop (2026-11-20): all, because the first round trip shows PEX already leaves every one of these files intact and vanilla reads them, so each piece only has to read and write its own file, and a subset would mean documented losses of players' maps, raids and boss bars | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
-| D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
+| D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Answered by the 2.0 loop (2026-11-21): accept the loss and document it, because vanilla has no slot for chunk data and drops components it doesn't know, and changing the plugin storage API goes against D2-2. | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
 | D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
 | D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Open | G8-21 |
@@ -133,11 +135,11 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D8-4 | Which UUID should a Bedrock player get? | Open | G8-20 |
 | D9-1 | What is the bar against Paper, and at which sizes? | Answered: less RAM than Paper, P95 within 10% at 10, 25 and 50 bots (Q9.2) | G9-12, G9-14 |
 | D9-2 | Where does the benchmark live? | Answered: move it to `tools/gameplay-bench` (Q9.3) | G9-11 |
-| D9-3 | Where are benchmark results published? | Open | G9-14 |
-| D9-4 | Which default Java compression level? | Open | G9-08 |
+| D9-3 | Where are benchmark results published? | Answered by the 2.0 loop (2026-11-21): `docs/BENCHMARKS.md` in PEX, with the HTML reports and CSVs attached to the release they measure, because it needs no new infrastructure while Actions is down, and a release then points at its own numbers; Neon uploads the assets until Goal 10's release jobs run. | G9-14 |
+| D9-4 | Which default Java compression level? | Answered by the 2.0 loop (2026-11-21): 6, like vanilla's `new Deflater()`, for new files, because vanilla parity comes first, and existing servers keep the 4 written in their files unless they change it; G9-08 still records both numbers. | G9-08 |
 | D9-5 | Which hardware produces the published numbers? | Answered: a dedicated 4-core cloud VM, pve for development (Q9.1) | G9-14 |
 | D10-1 | Which ARM64 and Windows machines run G10-09 and G10-10? | Answered: hosted runners plus one real run each (Q10.1) | G10-09, G10-10 |
-| D10-2 | Which release assets must be bit-for-bit reproducible, and where can a rebuild happen? | Partly (Q10.3): x86_64 Linux only. Open: a pinned container or one host | G10-03, G10-04 |
+| D10-2 | Which release assets must be bit-for-bit reproducible, and where can a rebuild happen? | Answered by the 2.0 loop (2026-11-21): one host without a container: two builds on CT 117 now, and two in CI once Actions runs, because CT 117 has no Docker or Podman and Actions is down (D0-1), so a pinned container can't run anywhere yet; it can follow after 2.0. | G10-03, G10-04 |
 | D10-3 | Are Windows releases signed? | Answered: unsigned for 2.0, SignPath after (Q10.2) | G10-05 |
 | D10-4 | What does CI publish on the fork besides `v*` releases? | Answered: a nightly pre-release, never Latest, and Docker images (Q10.6). Open: `master` or `alpha` | G10-06 |
 | D10-5 | Which targets does a 2.0 release ship, and what builds them? | Partly (Q10.4): keep musl, server only. Open: the target list, after D0-1 | G10-05 |
@@ -1441,22 +1443,26 @@ Paths in this section: `cfg/` is `crates/pumpkin-config/src/`, `core/` is `crate
   - Remove the key, keeping `level.dat` as the only source, and have the management API report the world's difficulty. Existing servers see no change, but this differs from vanilla, where `server.properties` wins.
   - Leave it as a value that only the management API reports. No work, and the key keeps looking as if it does something.
   - Waits on it: G3-07.
+  - Answered by the 2.0 loop (2026-11-21): apply it at every start, as vanilla `DedicatedServer.forceDifficulty` does, because vanilla's `/difficulty` changes only `level.dat` and `server.properties` wins at the next start, so this is the parity choice; G3-07 logs the difficulty it applies so an admin sees why a changed one came back.
 - D3-4: Should the server write changes made at runtime back to `pumpkin.toml`, as vanilla does with `server.properties`? Options:
   - Yes, for every setting vanilla writes back (19 `settings.update` calls in `DedicatedServer`) that has a PEX key. This matches vanilla. The server then rewrites the admin's file while it runs, and a hand edit made in that time is lost on the next write. Vanilla has the same race.
   - Only `/whitelist on` and `off`. That is the one with a security effect: today a restart turns off a whitelist that was turned on by command. It is also the smallest change.
   - No, and document that changes made by command or through the management API last until the next restart.
   - Waits on it: G3-06.
+  - Answered by the 2.0 loop (2026-11-21): yes, for every setting vanilla writes back that has a PEX key, because it matches vanilla and fixes the whitelist turning itself off at restart; G3-06 edits the keys in place the way the `config_version` steps do, so comments and order stay.
 - D3-5: What should happen to the defaults that point at upstream Pumpkin? The earlier roadmap recorded "telemetry off by default, admins can turn it on" (2026-10-29), but `TelemetryConfig::default` still has `enabled: true`. Open questions:
   - (a) New files only. Existing generated files have `enabled = true` written in them, so current servers keep reporting.
   - (b) Also a migration that turns telemetry off in existing files. A generated `true` can't be told apart from one an admin chose, so the migration logs a line saying how to turn it back on.
   - The same question applies to `server_links.bug_report`, which points at Pumpkin's issue tracker. Keep it, point it at `https://github.com/Conman1533/PEX/issues`, or leave it empty?
   - Waits on it: G3-08.
   - Partly answered 2026-10-31 (Neon accepted Q3.6): telemetry is off by default and admins can turn it on. Still open: (a) or (b) for existing files, and what `server_links.bug_report` points at.
+  - Answered by the 2.0 loop (2026-11-21): (b), a migration that turns telemetry off in existing files and logs how to turn it back on, and `server_links.bug_report` left empty, because a generated `true` reports to a project PEX is not, which is worse for existing servers than one logged line, and vanilla sends no server links by default.
 - D3-6: How should the egg set the port? Options:
   - Keep the `file` parser on the default line. No server change. But it also rewrites `networking.query.address`, and it stops matching once the line holds a port. Whether Wings copes with a changed allocation was not checked.
   - A Wings parser that edits `networking.java.address` by key, if Wings has one that writes TOML. That was not checked in this session. Only the egg changes.
   - PEX reads Pelican's `SERVER_PORT` environment variable for `networking.java.address` (Wings sets it; not checked in this session). This works on every start and after allocation changes. But it adds a second config source to the server, which `AGENTS.md` ("Keep it as small as the task") argues against, and upstream's egg wouldn't benefit.
   - Waits on it: G3-05.
+  - Answered by the 2.0 loop (2026-11-21): keep the `file` parser, matched on the key so the port in the line doesn't matter, because it needs no server change, and the query address following the game port is what vanilla's default `query.port` does; G3-05 checks the egg against a Pelican test server.
 
 ## Goal 4: Offline UUIDs match vanilla
 
@@ -1572,15 +1578,18 @@ Format and place of the lists, outside the migration:
   - Vanilla's rule: ask Mojang first, then the offline UUID of the lowercased name. Lists match vanilla's byte for byte, but on an offline server the stored UUID only matches a player who joins with an all-lowercase name, so `whitelist add Alex` locks `Alex` out as it does on vanilla, and offline servers make blocking Mojang calls (`lookup_profile_by_name_blocking`, `net/authentication.rs`).
   - Lowercase only, no Mojang: matches a vanilla server without internet access. Mixed-case names are still locked out.
   - Waits on it: G4-03.
+  - Answered by the 2.0 loop (2026-11-21): vanilla's rule: ask Mojang first, then the offline UUID of the lowercased name, because the lists then match vanilla's and a server moved to or from vanilla keeps its ops, whitelist and bans; entries already in the lists are not changed.
 - D4-2: Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? Options:
   - Keep `data/` (upstream Pumpkin's layout). No work; a server moved from or to vanilla loses its ops, whitelist and bans unless the admin moves the files.
   - Read the root files once when `data/` has none, keep writing `data/`. Vanilla to PEX works; PEX to vanilla still needs a manual copy. Small piece.
   - Move them to the root with a one-time move and backups. Works both ways; diverges from upstream Pumpkin's `data/` code, and scripts that write `data/whitelist.json` (the benchmark's `README.md` does) break.
   - Waits on it: G4-06.
+  - Answered by the 2.0 loop (2026-11-21): move them to the server root with a one-time move and backups, because it is the only option that works in both directions between PEX and vanilla; the same piece updates the benchmark `README.md` that writes `data/whitelist.json`.
 - D4-3: Should plugins get the old-to-new UUID mapping through the plugin API? Options:
   - Docs only: native plugins read `world/players/uuid-migration.json` as PEXGuard does. Wasm plugins can't reach it, so their UUID-keyed data stays on old UUIDs unless they stored names and recompute the old hash themselves. No code.
   - An API call returning the mapping, native and WIT. Works for every plugin; adds a public WIT item that outlives the migration, and it's Goal 2's call whether v0.1 survives to carry it (D2-2 decides where a new WIT function goes).
   - Waits on it: the Wasm paragraph of G4-04, and a Goal 2 piece if the API option is picked.
+  - Answered by the 2.0 loop (2026-11-21): docs only: native plugins read `world/players/uuid-migration.json`, because D2-2 leaves the WIT surface to upstream, so a PEX-only WIT function would be a public item no upstream plugin can use; the docs tell Wasm plugin authors to key data by name or recompute the old hash.
 
 ## Goal 5: Redstone parity
 
@@ -1669,7 +1678,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/scheduled-tick-block-check
 - Needs decision: none
 - Done when: `pumpkin:redstone/tick_skips_replaced_block` (for example a lit lamp with a pending turn-off tick pushed away and replaced by an observer, which must not pulse) fails on alpha and passes on both.
-- Status (2026-11-21): built, proof missing (branch `fix/scheduled-tick-block-check`, second lane). Block and fluid ticks run only if the block or fluid at the position still matches (`World::run_block_tick`, `run_fluid_tick`); unit tests `a_block_tick_skips_a_replaced_block`, `a_fluid_tick_skips_a_replaced_fluid`. It exposed the bubble column scheduling its forming tick under the wrong block, fixed in the same batch. The GameTest `pumpkin:redstone/tick_skips_replaced_block` is on `test/tick-skips-replaced-block` for the next batch. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `fix/scheduled-tick-block-check`, second lane). Block and fluid ticks run only if the block or fluid at the position still matches (`World::run_block_tick`, `run_fluid_tick`); unit tests `a_block_tick_skips_a_replaced_block`, `a_fluid_tick_skips_a_replaced_fluid`, and the GameTest `pumpkin:redstone/tick_skips_replaced_block` (a lit lamp's pending turn-off tick must not pulse the observer that replaced it) from `test/tick-skips-replaced-block`. It exposed the bubble column scheduling its forming tick under the wrong block, fixed in batch 7. The code landed with batch 7 (`4a500f1fd`); the GameTest landed with batch 8. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-03 willTickThisTick for diodes and torches
 
@@ -1678,6 +1687,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/will-tick-this-tick
 - Needs decision: none
 - Done when: new unit test `collected_tick_will_tick_until_run` in `world/tick/scheduler.rs` passes; `pumpkin:redstone/diode_update_before_own_tick` (a repeater whose input changes earlier in the tick its own tick runs) fails on alpha and passes on both.
+- Status (2026-11-21): built, proof missing (branch `fix/will-tick-this-tick`, second lane). Ticks collected for this tick are marked and cleared as they run, and repeaters, comparators and torches skip a neighbour update while their own tick waits to run this tick (`World::will_block_tick_this_tick`); unit tests `collected_tick_will_tick_until_run`, `a_carried_over_tick_wont_tick_this_tick`, `a_collected_block_tick_will_tick_until_it_runs`. Missing: the GameTest `pumpkin:redstone/diode_update_before_own_tick`. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-04 Scheduler order details
 
@@ -1704,6 +1714,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/block-event-phase
 - Needs decision: none
 - Done when: `pumpkin:redstone/piston_arrival_tick` (a pushed redstone block races a repeater chain and reaches ACCEPT only on vanilla's arrival tick) and `pumpkin:redstone/piston_bud_chain` fail on alpha and pass on both; the builtin piston, note block and chest GameTests still pass.
+- Status (2026-11-21): built, proof missing (branch `fix/block-events-phase`, second lane). Block events run in their own phase after the chunk ticks, in order and without repeats, like vanilla `ServerLevel.runBlockEvents` (`world/block_events.rs`); unit tests `keeps_order_and_drops_repeats`, `clear_box_drops_only_events_inside`, and the builtin piston, note block and chest GameTests still pass. Missing: the GameTests `pumpkin:redstone/piston_arrival_tick` and `pumpkin:redstone/piston_bud_chain`. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-07 Sticky piston retraction matches triggerEvent
 
@@ -2144,14 +2155,17 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
   - Endermen: needs Goal 1's enderman work; 0 or 1 pearl per kill without Looting, about 24 kills.
   - Both, as players do: both Goal 1 dependencies, and both mechanics get tested.
   - Waits on it: G6-12, G6-13.
-  - Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work. G6-12 stays as a parity fix with its own test, and G6-13 depends on G1-10, not G1-30.: Does the dragon stage wait for Goal 1's dragon phases? Options:
+  - Answered by the 2.0 loop (2026-11-20): endermen, because G1-10 needs no open decision and depends only on landed G1-01, while bartering also needs G1-29, G1-30 and D1-1/D1-3 work. G6-12 stays as a parity fix with its own test, and G6-13 depends on G1-10, not G1-30.
+- D6-5: Does the dragon stage wait for Goal 1's dragon phases? Options:
   - Wait: the stage proves the vanilla fight (perching, breath, fireballs), but G6-20 and G6-22 block on Goal 1.
   - Run it on the current phase machine with the phase gaps in the deviations list, and rerun when Goal 1 lands.
   - Waits on it: G6-20, G6-22.
+  - Answered by the 2.0 loop (2026-11-21): wait for Goal 1's dragon phases, because the stage is there to prove the vanilla fight, and a run on the current phase machine would pass without perching, breath or fireballs.
 - D6-6: Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? Options:
   - No: Goal 6 is the run; those systems go to a later goal.
   - Yes: one audit piece and one stage per system. More pieces and CI time.
   - Waits on it: nothing now; a yes adds pieces.
+  - Answered by the 2.0 loop (2026-11-21): no, Goal 6 stays the start-to-dragon run, because those systems are tested where their parity work happens, as G6-27 does for the advancement triggers, and more stages would cost CI time without proving the run.
 
 ## Goal 7: Worlds round-trip with vanilla 26.3
 
@@ -2395,7 +2409,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/vanilla-advancements-stats
 - Needs decision: none
 - Done when: a PEX 1.x player directory moves without losing a criterion or statistic, vanilla reads both files PEX wrote (G7-04), and PEX reads vanilla's. This is what Goal 4's vanilla-direction proof waits on.
-- Status (2026-11-21): landed (branch `fix/vanilla-advancements-stats`, built on the second lane). Advancements and statistics are read from and written to vanilla's `players/advancements/<uuid>.json` and `players/stats/<uuid>.json`, and a `config_version` 4 step moves PEX 1.x advancement files and NBT statistics there once, with backups. Unit tests in the migration module (`a_world_without_players_needs_nothing`, `statistics_files_sit_next_to_the_player_data` and others). Left over: the round trip still lists `players/data/*.dat Statistics` as a G7-22 known loss until the lane's known-losses follow-up lands. Play test for Neon: open a PEX 1.x world with a player who has advancements and statistics on this build, then on vanilla 26.3; expect the same advancements and statistics on both. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `fix/vanilla-advancements-stats`, built on the second lane). Advancements and statistics are read from and written to vanilla's `players/advancements/<uuid>.json` and `players/stats/<uuid>.json`, and a `config_version` 4 step moves PEX 1.x advancement files and NBT statistics there once, with backups. Unit tests in the migration module (`a_world_without_players_needs_nothing`, `statistics_files_sit_next_to_the_player_data` and others). The round trip's last G7-22 known loss (`players/data/*.dat Statistics`) went with the follow-up in batch 8 (`e8b5cbdf1`). Play test for Neon: open a PEX 1.x world with a player who has advancements and statistics on this build, then on vanilla 26.3; expect the same advancements and statistics on both. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-23 Item stacks keep components PEX can't parse
 
@@ -2503,6 +2517,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Keep each untouched chunk's own `DataVersion` so vanilla fixes it later. Small; chunks PEX changed are still restamped without fixes.
   - Port the 26.x fixers (4996 to 5016). Matches vanilla; ten fixers over chunks, block entities and item components to write and keep up.
   - Waits on it: G7-28.
+  - Answered by the 2.0 loop (2026-11-21): port the 26.x fixers (4996 to 5016), because it matches vanilla and is the only option that is safe for a server upgrading a world from before 26.3: refusing stops it starting, and keeping old `DataVersion`s restamps changed chunks without their fixes.
 - D7-3: How much of a structure start should PEX save for chunks it generates? Options:
   - Full `StructureStart` NBT with every piece, like vanilla. Every structure piece type needs a serializer.
   - Start id, bounding box and references only. Enough for spawn overrides and `/locate`; what vanilla does with a start without pieces is unknown until G7-04 runs it.
@@ -2519,6 +2534,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - A sidecar file per region beside vanilla's files, keyed by position or UUID. Survives vanilla, but goes stale when vanilla moves or kills things.
   - Store it in slots vanilla keeps, such as the `minecraft:custom_data` component on items. Survives where a slot exists; chunks have none. Changes the plugin API's storage (D2-2 decides whether the WIT custom data calls can change).
   - Waits on it: G7-29.
+  - Answered by the 2.0 loop (2026-11-21): accept the loss and document it, because vanilla has no slot for chunk data and drops components it doesn't know, and changing the plugin storage API goes against D2-2.
 - D7-6: How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? Options:
   - Flush before unload, as `fix/flush-block-entities-before-unload` does. One cross-crate hook, no per-type change; needs a rebase over two conflicting files.
   - Write on change. Closest to vanilla; the issue counts 18 of 54 block entity types with `is_dirty`, so most need dirty tracking.
@@ -3038,11 +3054,13 @@ Unmerged branches on tick cost and memory: `perf/memory` (3 commits: uniform lig
   - A GitHub Pages site from the repository. Costs a Pages workflow, which needs Actions running (G0-01).
   - The mc-gameplay-bench README, where the 2026-10-14 results already are. Costs nothing, but nothing in PEX's releases or README points there.
   - Waits on it: G9-14.
+  - Answered by the 2.0 loop (2026-11-21): `docs/BENCHMARKS.md` in PEX, with the HTML reports and CSVs attached to the release they measure, because it needs no new infrastructure while Actions is down, and a release then points at its own numbers; Neon uploads the assets until Goal 10's release jobs run.
 - D9-4: Which default Java compression level? Options:
   - Keep 4. No change; more bytes per chunk, less CPU.
   - 6, like vanilla's `new Deflater()`. Fewer bytes, more CPU per compressed packet (G9-07's bench gives both numbers). Existing servers keep 4 unless the G3 migration rewrites untouched defaults.
   - Let G9-08's bench decide: switch to 6 only if it saves at least 5% of chunk-packet bytes for at most 20% more compression time.
   - Waits on it: G9-08.
+  - Answered by the 2.0 loop (2026-11-21): 6, like vanilla's `new Deflater()`, for new files, because vanilla parity comes first, and existing servers keep the 4 written in their files unless they change it; G9-08 still records both numbers.
 - D9-5: Which hardware produces the published numbers? Options:
   - A dedicated 4-core cloud VM, the earlier roadmap's answer for release numbers (Q9.1, 2026-10-29; pve was fine for development comparisons run back to back). Costs money per run-hour and a Docker setup per run.
   - CT 117 on pve. Free, but it shares the host with production (Pelican CT 109) and has no Docker, which `sampler.py` needs.
@@ -3216,6 +3234,7 @@ Hardware:
   - The earlier roadmap recorded x86_64 Linux only (glibc and musl).
   - Waits on it: G10-03, G10-04, G10-05.
   - Partly answered 2026-10-31 (Neon accepted Q10.3): x86_64 Linux only, glibc and musl. Still open: a container pinned by digest (the first option) or one host without one (the second).
+  - Answered by the 2.0 loop (2026-11-21): one host without a container: two builds on CT 117 now, and two in CI once Actions runs, because CT 117 has no Docker or Podman and Actions is down (D0-1), so a pinned container can't run anywhere yet; it can follow after 2.0.
 - D10-3: Are Windows releases signed? Options:
   - Ship unsigned, with a SmartScreen note in the release text. No cost; the `.exe` compares with a rebuild as is; `sign_windows_release` is removed.
   - SignPath's free open-source program, which `sign_windows_release` already calls. Costs an application and an approval wait, and the repository owner has to add the four `SIGNPATH_*` secrets. A signed `.exe` differs from a rebuild, so checking it means stripping the signature first.
