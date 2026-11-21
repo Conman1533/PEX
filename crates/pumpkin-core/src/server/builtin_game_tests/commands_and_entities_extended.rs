@@ -635,7 +635,10 @@ pub(super) async fn test_data_modify_block_changes_block_entity(
                 )
                 .await?;
             helper
-                .execute_command(&origin, "data modify block ~2 ~ ~2 Items[0].count set value 5")
+                .execute_command(
+                    &origin,
+                    "data modify block ~2 ~ ~2 Items[0].count set value 5",
+                )
                 .await?;
             helper.assert_true(
                 helper
