@@ -44,11 +44,14 @@ use crate::command::node::{
 };
 use crate::entity::EntityBase;
 use crate::entity::r#type::from_type;
+use crate::world::World;
 use crate::world::scoreboard::Scoreboard;
 use crate::world::stopwatches::Stopwatches;
+use pumpkin_data::Block;
 use pumpkin_data::biome::Biome;
 use pumpkin_data::tag::{self, RegistryKey};
 use pumpkin_data::translation;
+use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::PermissionLvl;
 use pumpkin_util::identifier::Identifier;
@@ -70,6 +73,19 @@ const ERROR_CONDITIONAL_FAILED: CommandErrorType<0> = CommandErrorType::new(
     translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL,
     translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL,
 );
+
+const ERROR_BLOCKS_TOO_BIG: CommandErrorType<2> = CommandErrorType::new(
+    translation::java::COMMANDS_EXECUTE_BLOCKS_TOOBIG,
+    translation::java::COMMANDS_EXECUTE_BLOCKS_TOOBIG,
+);
+
+const ERROR_AREA_NOT_LOADED: CommandErrorType<0> = CommandErrorType::new(
+    translation::java::ARGUMENT_POS_UNLOADED,
+    translation::java::ARGUMENT_POS_UNLOADED,
+);
+
+/// Vanilla `ExecuteCommand.MAX_TEST_AREA`.
+const MAX_TEST_AREA: i64 = 32768;
 
 const ERROR_CONDITIONAL_FAILED_COUNT: CommandErrorType<1> = CommandErrorType::new(
     translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL_COUNT,
@@ -809,7 +825,9 @@ fn check_blocks_match(context: &CommandContext, masked: bool) -> Result<bool, Co
 }
 
 /// How many blocks the region comparison checked (air is skipped when `masked`), or `None` when
-/// the regions differ.
+/// the regions differ. Like vanilla `ExecuteCommand.checkRegions`, blocks match when their states
+/// are the same and, where the source has a block entity, the destination has one of the same
+/// type with the same saved data.
 fn count_matching_blocks(
     context: &CommandContext,
     masked: bool,
@@ -826,6 +844,16 @@ fn count_matching_blocks(
         let min_z = start.0.z.min(end.0.z);
         let max_z = start.0.z.max(end.0.z);
 
+        let volume = (i64::from(max_x) - i64::from(min_x) + 1)
+            * (i64::from(max_y) - i64::from(min_y) + 1)
+            * (i64::from(max_z) - i64::from(min_z) + 1);
+        if volume > MAX_TEST_AREA {
+            return Err(ERROR_BLOCKS_TOO_BIG.create_without_context_args_slice(&[
+                TextComponent::text(MAX_TEST_AREA.to_string()),
+                TextComponent::text(volume.to_string()),
+            ]));
+        }
+
         let dx = destination.0.x - min_x;
         let dy = destination.0.y - min_y;
         let dz = destination.0.z - min_z;
@@ -836,13 +864,17 @@ fn count_matching_blocks(
                 for x in min_x..=max_x {
                     let src_pos = BlockPos::new(x, y, z);
                     let dst_pos = BlockPos::new(x + dx, y + dy, z + dz);
-                    let src_block = world.get_block(&src_pos);
-                    let dst_block = world.get_block(&dst_pos);
+                    let (Some(src_state), Some(dst_state)) = (
+                        world.get_block_state_id_if_loaded(&src_pos),
+                        world.get_block_state_id_if_loaded(&dst_pos),
+                    ) else {
+                        return Err(ERROR_AREA_NOT_LOADED.create_without_context());
+                    };
 
-                    if masked && src_block.is_air() {
+                    if masked && src_state == Block::AIR.default_state.id {
                         continue;
                     }
-                    if src_block != dst_block {
+                    if src_state != dst_state || !same_block_entity(world, &src_pos, &dst_pos) {
                         return Ok(None);
                     }
                     count += 1;
@@ -852,6 +884,25 @@ fn count_matching_blocks(
         return Ok(Some(count));
     }
     Ok(None)
+}
+
+/// The block entity part of vanilla `ExecuteCommand.checkRegions`: the destination must hold a
+/// block entity of the same type with the same saved data, when the source has one.
+fn same_block_entity(world: &World, src: &BlockPos, dst: &BlockPos) -> bool {
+    let Some(src_entity) = world.get_block_entity(src) else {
+        return true;
+    };
+    let Some(dst_entity) = world.get_block_entity(dst) else {
+        return false;
+    };
+    if src_entity.resource_location() != dst_entity.resource_location() {
+        return false;
+    }
+    let mut src_nbt = NbtCompound::new();
+    src_entity.write_nbt(&mut src_nbt);
+    let mut dst_nbt = NbtCompound::new();
+    dst_entity.write_nbt(&mut dst_nbt);
+    src_nbt == dst_nbt
 }
 
 fn execute_if_blocks_all_modifier(

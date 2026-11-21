@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7a7de1ddd`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `9f63cd53d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -17,13 +17,13 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 5 | 5 | 6 | |
-| G6 Survival | 31 | 16 | 1 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G5 Redstone | 16 | 8 | 5 | 3 | |
+| G6 Survival | 31 | 17 | 0 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 201 | 84 | 7 | 94 | 16 |
+| Total | 201 | 88 | 6 | 91 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -1752,6 +1752,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/wire-removal-updates
 - Needs decision: none
 - Done when: `pumpkin:redstone/wire_washed_away_unpowers_lamp` fails on alpha and passes on both; the builtin wire GameTests still pass.
+- Status (2026-11-21): landed (branch `fix/wire-removal-updates`, second lane). Removing a wire runs vanilla `affectNeighborsAfterRemoval` through `on_state_replaced`, power update included, so a wire washed away or broken by a player updates its neighbours once and in vanilla order; the wire helper goes through `World::update_neighbors_at` and a new `BlockDirection::horizontal_plane()` gives vanilla's N, E, S, W order. The GameTest `pumpkin:redstone/wire_washed_away_unpowers_lamp` fails on `alpha` and passes, and the 14 wire GameTests and the comparator GameTests still pass. Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-10 Wire power updates follow vanilla's HashSet order
 
@@ -1768,6 +1769,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/diode-state-updates
 - Needs decision: none
 - Done when: `pumpkin:redstone/repeater_lock_updates_front` (a quasi-powered piston in front of a repeater whose lock flips) fails on alpha and passes on both.
+- Status (2026-11-21): landed (branch `fix/diode-state-updates`, second lane, through G5-12's branch). A new `state_changed` hook runs vanilla `onPlace` on every state change, and the repeater, comparator and torch use it for their front updates after a delay, mode, lock or power change. The GameTest `pumpkin:redstone/repeater_lock_updates_front` fails on `alpha` and passes, and about 20 redstone GameTests pass on both. Other vanilla blocks whose `onPlace` has no type check and would need the hook for full parity: composter, fire, scaffolding and others (a G9 note). Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-12 Update source and rail junction switching
 
@@ -1776,6 +1778,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: feat/rail-junction-switching
 - Needs decision: none
 - Done when: `pumpkin:redstone/rail_junction_switches` (a torch beside a T-junction turns off) fails on alpha and passes on both.
+- Status (2026-11-21): landed (branch `feat/rail-junction-switching`, second lane, carrying G5-11). Vanilla `RailState` is ported, and a three-way rail junction re-orients when a signal source updates it; repeaters, comparators and torches pass themselves as the update source. The GameTest `pumpkin:redstone/rail_junction_switches` fails on `alpha` and passes, and the other rail and redstone GameTests still pass. The other emitters (lever, buttons, pressure plates, lightning rod, lectern, tripwire hook, trapped chest, detector rail) follow on branch `fix/emitter-update-source`. Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-13 Torch burnout
 
@@ -2163,7 +2166,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/execute-terminal-conditions
 - Needs decision: none
 - Done when: from the console on PEX and vanilla 26.3, `execute if block 0 -64 0 minecraft:bedrock`, `execute unless block 0 -64 0 minecraft:bedrock`, `execute if entity @e[type=minecraft:pig]` with two pigs and `execute if blocks` with a copy print the same lines; a unit test per condition kind beside `add_conditionals_accept_single_score_holders`.
-- Status (2026-11-21): built, proof missing (branch `fix/execute-terminal-conditions`, second lane). All 22 non-score `if`/`unless` conditions can end the command and answer "Test passed" or vanilla's fail message, with the count for `entity` and `blocks`; unit test `every_condition_can_end_the_command` fails on `alpha` and passes. Missing: the side-by-side console run against vanilla, and `if blocks` compares block types instead of block states and skips block entities, which vanilla compares. Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `fix/execute-terminal-conditions` in batch 11, then `fix/execute-if-blocks-states` in batch 12, second lane and the 2.0 loop). All 22 non-score `if`/`unless` conditions can end the command and answer "Test passed" or vanilla's fail message, with the count for `entity` and `blocks`; unit test `every_condition_can_end_the_command` fails on `alpha` and passes. `if blocks` now compares block states and block entity data like vanilla `ExecuteCommand.checkRegions` and refuses areas over 32768 blocks and unloaded areas (GameTest `pumpkin:commands/execute_if_blocks_compares_states`). Side-by-side console run on CT 117, same seed, PEX batch 12 against vanilla 26.3: `forceload add`, `if`/`unless block` on bedrock, `kill` and two `summon pig`, `if`/`unless entity` with two pigs, and `if blocks` `all`/`masked` on a 27-block copy before and after changing one block printed the same 18 lines. Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G6-31 forceload add loads the chunks at once
 

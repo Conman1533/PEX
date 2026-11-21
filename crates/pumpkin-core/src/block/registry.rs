@@ -1299,6 +1299,28 @@ impl BlockRegistry {
         }
     }
 
+    /// See [`BlockBehaviour::state_changed`].
+    pub fn on_state_changed(
+        &self,
+        world: &Arc<World>,
+        block: &Block,
+        state_id: BlockStateId,
+        position: &BlockPos,
+        old_state_id: BlockStateId,
+        notify: bool,
+    ) {
+        if let Some(pumpkin_block) = self.get_pumpkin_block(block.id) {
+            pumpkin_block.state_changed(PlacedArgs {
+                world,
+                block,
+                state_id,
+                old_state_id,
+                position,
+                notify,
+            });
+        }
+    }
+
     pub fn on_placed_fluid(
         &self,
         world: &Arc<World>,

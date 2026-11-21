@@ -131,8 +131,9 @@ pub trait RedstoneGateBlock<T: Send + Sync + BlockProperties + RedstoneGateBlock
         let props = T::from_state_id(state_id, block);
         let facing = props.get_facing();
         let front_pos = pos.offset(facing.opposite().to_offset());
+        // Vanilla `DiodeBlock.updateNeighborsInFront`: the diode is the source of both.
         world.update_neighbor(&front_pos, block);
-        world.update_neighbors(&front_pos, Some(facing.to_block_direction()));
+        world.update_neighbors_at(&front_pos, block, Some(facing.to_block_direction()));
     }
 
     fn on_place(&self, player: &Player, block: &Block) -> BlockStateId {

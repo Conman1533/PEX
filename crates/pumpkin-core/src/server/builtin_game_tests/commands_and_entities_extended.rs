@@ -1,8 +1,8 @@
 use pumpkin_data::{
     Block,
     block_properties::{
-        CommandBlockLikeProperties, Facing, Half, HorizontalFacing, StairsShape,
-        StickyPistonLikeProperties, WhiteWoolStairsLikeProperties,
+        CommandBlockLikeProperties, Facing, FurnaceLikeProperties, Half, HorizontalFacing,
+        StairsShape, StickyPistonLikeProperties, WhiteWoolStairsLikeProperties,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -506,6 +506,68 @@ pub(super) async fn test_quoted_non_ascii_player_name(
             helper
                 .assert_block_present(&BlockPos::new(3, 1, 3), &Block::GOLD_BLOCK)
                 .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// G6-30: `execute if blocks` compares block states and block entity data like vanilla
+/// `ExecuteCommand.checkRegions`, not only the block type.
+pub(super) async fn test_execute_if_blocks_compares_states(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 7, 3).await?;
+    let origin = BlockPos::new(0, 1, 0);
+    let src = BlockPos::new(1, 1, 1);
+    let dst = BlockPos::new(5, 1, 1);
+    let facing = |facing: HorizontalFacing| {
+        let mut props = FurnaceLikeProperties::default(&Block::FURNACE);
+        props.facing = facing;
+        props.to_state_id(&Block::FURNACE)
+    };
+    let check = "execute if blocks ~1 ~ ~1 ~1 ~ ~1 ~5 ~ ~1 all";
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .set_block(&src, facing(HorizontalFacing::North))
+                .await?;
+            helper
+                .set_block(&dst, facing(HorizontalFacing::South))
+                .await?;
+            helper.assert_true(
+                helper.execute_command(&origin, check).await.is_err(),
+                "furnaces facing different ways should not match",
+            )?;
+            helper
+                .set_block(&dst, facing(HorizontalFacing::North))
+                .await?;
+            helper.assert_true(
+                helper.execute_command(&origin, check).await.is_ok(),
+                "furnaces facing the same way should match",
+            )?;
+            helper.set_block_default(&src, &Block::CHEST).await?;
+            helper.set_block_default(&dst, &Block::CHEST).await?;
+            helper
+                .execute_command(
+                    &origin,
+                    "item replace block ~1 ~ ~1 container.0 with minecraft:stone 3",
+                )
+                .await?;
+            helper.assert_true(
+                helper.execute_command(&origin, check).await.is_err(),
+                "a chest holding stone should not match an empty chest",
+            )?;
+            helper
+                .execute_command(
+                    &origin,
+                    "item replace block ~5 ~ ~1 container.0 with minecraft:stone 3",
+                )
+                .await?;
+            helper.assert_true(
+                helper.execute_command(&origin, check).await.is_ok(),
+                "chests holding the same items should match",
+            )
         })
         .then_succeed();
     Ok(())
