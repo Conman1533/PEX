@@ -123,6 +123,48 @@ fn remove_dead_keys(document: &mut DocumentMut) -> Vec<String> {
     migration::remove_keys(document, DEAD_KEYS)
 }
 
+/// Upstream Pumpkin's issue tracker, which PEX 1.x wrote as `server_links.bug_report`.
+const UPSTREAM_BUG_REPORT: &str = "https://github.com/Pumpkin-MC/Pumpkin/issues";
+
+/// `config_version` 5 (D3-5): telemetry reports to upstream Pumpkin, which PEX is not, so it is
+/// turned off where a file has it on. A generated `true` can't be told apart from one an admin
+/// chose, so the log line says how to turn it back on. The link to upstream's issue tracker that
+/// PEX 1.x wrote as the bug report link is cleared; a link the admin set is kept.
+fn turn_off_upstream_defaults(document: &mut DocumentMut) -> Vec<String> {
+    let mut changes = Vec::new();
+    if let Some(value) = document
+        .get_mut("telemetry")
+        .and_then(|telemetry| telemetry.get_mut("enabled"))
+        .and_then(toml_edit::Item::as_value_mut)
+        && value.as_bool() == Some(true)
+    {
+        let decor = value.decor().clone();
+        *value = false.into();
+        *value.decor_mut() = decor;
+        changes.push(
+            "set telemetry.enabled = false, as PEX no longer reports to upstream Pumpkin unless \
+             asked; set it to true again to keep reporting"
+                .to_owned(),
+        );
+    }
+    if let Some(value) = document
+        .get_mut("server_links")
+        .and_then(|links| links.get_mut("bug_report"))
+        .and_then(toml_edit::Item::as_value_mut)
+        && value.as_str() == Some(UPSTREAM_BUG_REPORT)
+    {
+        let decor = value.decor().clone();
+        *value = "".into();
+        *value.decor_mut() = decor;
+        changes.push(
+            "cleared server_links.bug_report, which pointed players at upstream Pumpkin's issue \
+             tracker"
+                .to_owned(),
+        );
+    }
+    changes
+}
+
 impl LoadConfiguration for PumpkinConfig {
     const MIGRATIONS: &'static [Migration] = &[
         Migration {
@@ -136,6 +178,10 @@ impl LoadConfiguration for PumpkinConfig {
         Migration {
             version: VANILLA_PLAYER_FILES_VERSION,
             step: Step::ServerFiles,
+        },
+        Migration {
+            version: 5,
+            step: Step::Config(turn_off_upstream_defaults),
         },
     ];
 
