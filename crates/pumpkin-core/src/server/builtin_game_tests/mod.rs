@@ -282,6 +282,7 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:strider_walks_back_to_lava",
     "pumpkin:piglin_barters_gold_ingot_for_loot",
     "pumpkin:villager_claims_job_site_and_bed",
+    "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -730,6 +731,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_setblock_and_fill_parse_block_states,
+        );
+        register_function_test(
+            "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
+            "pumpkin:empty_8x4x8",
+            20,
+            0,
+            commands_and_entities_extended::test_spreadplayers_lands_on_the_only_dry_block,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",

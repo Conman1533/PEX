@@ -1,9 +1,11 @@
-use pumpkin_data::translation;
+use pumpkin_data::tag::Taggable;
+use pumpkin_data::{Block, tag, translation};
 use pumpkin_util::PermissionLvl;
+use pumpkin_util::math::position::BlockPos;
+use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
 use pumpkin_util::text::TextComponent;
-use pumpkin_world::chunk::ChunkHeightmapType;
 
 use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
 use crate::command::argument_types::coordinates::vec2::Vec2ArgumentType;
@@ -86,78 +88,59 @@ impl Pile {
         moved
     }
 
-    /// Returns the y coordinate an entity should stand at for this pile, or
-    /// `None` if the location is unsafe (on top of a liquid or out of height bounds).
-    fn surface_y(&self, world: &World, max_height: i32) -> Option<i32> {
-        let block_x = self.x.floor() as i32;
-        let block_z = self.z.floor() as i32;
-        let top = world.get_heightmap_height(ChunkHeightmapType::WorldSurface, block_x, block_z);
-
-        if top >= max_height {
-            return None;
+    /// Vanilla `Position.getSpawnY`: the y above the highest block under two air blocks,
+    /// scanning down from `max_height`, or `max_height + 1` when the column is all air.
+    fn spawn_y(&self, world: &World, max_height: i32) -> i32 {
+        let x = self.x.floor() as i32;
+        let z = self.z.floor() as i32;
+        load_column(world, x, z);
+        let is_air = |y: i32| world.get_block_state(&BlockPos::new(x, y, z)).is_air();
+        let mut y = max_height + 1;
+        let mut air2_above = is_air(y);
+        y -= 1;
+        let mut air1_above = is_air(y);
+        while y > world.min_y {
+            y -= 1;
+            let current_is_air = is_air(y);
+            if !current_is_air && air1_above && air2_above {
+                return y + 1;
+            }
+            air2_above = air1_above;
+            air1_above = current_is_air;
         }
+        max_height + 1
+    }
 
-        let ground = pumpkin_util::math::position::BlockPos(Vector3::new(block_x, top, block_z));
-        let state = world.get_block_state(&ground);
-        if state.is_liquid() {
-            return None;
-        }
-
-        Some(top + 1)
+    /// Vanilla `Position.isSafe`: below `max_height`, not a liquid, and a block entities may
+    /// teleport onto.
+    fn is_safe(&self, world: &World, max_height: i32) -> bool {
+        let pos = BlockPos::new(
+            self.x.floor() as i32,
+            self.spawn_y(world, max_height) - 1,
+            self.z.floor() as i32,
+        );
+        let state = world.get_block_state(&pos);
+        pos.0.y < max_height
+            && !state.is_liquid()
+            && Block::from_state_id(state.id)
+                .has_tag(&tag::Block::MINECRAFT_ENTITIES_CAN_TELEPORT_TO)
     }
 }
 
-/// Spreads `piles` apart until every pair is at least `spread_distance` apart
-/// and all piles are inside the spread area, mirroring Vanilla's algorithm.
-/// Returns whether the piles converged within [`MAX_ITERATIONS`].
-fn spread_piles(
-    piles: &mut [Pile],
-    spread_distance: f64,
-    min_x: f64,
-    min_z: f64,
-    max_x: f64,
-    max_z: f64,
-) -> bool {
-    for _ in 0..MAX_ITERATIONS {
-        let mut moved = false;
-        for i in 0..piles.len() {
-            let mut push = Pile::default();
-            let mut collisions = 0;
-
-            for j in 0..piles.len() {
-                if i == j {
-                    continue;
-                }
-                let distance = piles[i].distance(&piles[j]);
-                if distance < spread_distance {
-                    collisions += 1;
-                    push.x += piles[j].x - piles[i].x;
-                    push.z += piles[j].z - piles[i].z;
-                }
-            }
-
-            if collisions > 0 {
-                push.x /= f64::from(collisions);
-                push.z /= f64::from(collisions);
-                let length = push.x.hypot(push.z);
-                if length > 0.0 {
-                    piles[i].x -= push.x / length;
-                    piles[i].z -= push.z / length;
-                } else {
-                    piles[i].randomize(min_x, min_z, max_x, max_z);
-                }
-                moved = true;
-            }
-
-            if piles[i].clamp(min_x, min_z, max_x, max_z) {
-                moved = true;
-            }
-        }
-        if !moved {
-            return true;
-        }
+/// Loads the chunk holding the column, as vanilla's block lookups do, so an unloaded spot is
+/// judged by its real blocks instead of air.
+fn load_column(world: &World, x: i32, z: i32) {
+    let pos = Vector2::new(x >> 4, z >> 4);
+    if world.level.is_chunk_loaded(&pos) {
+        return;
     }
-    false
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let level = world.level.clone();
+    tokio::task::block_in_place(|| {
+        handle.block_on(level.get_or_fetch_chunk(pos, |_| ()));
+    });
 }
 
 struct SpreadArea {
@@ -167,48 +150,83 @@ struct SpreadArea {
     max_z: f64,
 }
 
-/// Randomizes, relaxes, and grounds `pile_count` piles inside `area`.
-/// Returns the piles and their standing y coordinates, or `None` if no safe
-/// arrangement was found.
-fn find_spread_positions(
+/// Vanilla `SpreadPlayersCommand.spreadPositions`: pushes piles apart until every pair is at
+/// least `spread_distance` apart inside the area, re-rolling any pile on an unsafe spot, for at
+/// most [`MAX_ITERATIONS`]. `Err` carries the closest distance between piles when it gave up.
+fn spread_piles(
     world: &World,
-    pile_count: usize,
+    piles: &mut [Pile],
     spread_distance: f64,
     max_height: i32,
     area: &SpreadArea,
-) -> Option<(Vec<Pile>, Vec<i32>)> {
-    let mut piles = vec![Pile::default(); pile_count];
-    for pile in &mut piles {
-        pile.randomize(area.min_x, area.min_z, area.max_x, area.max_z);
-    }
-
-    let mut surface_ys = vec![0; pile_count];
-    for _ in 0..16 {
-        if !spread_piles(
-            &mut piles,
-            spread_distance,
-            area.min_x,
-            area.min_z,
-            area.max_x,
-            area.max_z,
-        ) {
-            return None;
-        }
-
-        let mut all_safe = true;
-        for (pile, y) in piles.iter_mut().zip(&mut surface_ys) {
-            if let Some(surface) = pile.surface_y(world, max_height) {
-                *y = surface;
-            } else {
-                pile.randomize(area.min_x, area.min_z, area.max_x, area.max_z);
-                all_safe = false;
+) -> Result<(), f64> {
+    let (min_x, min_z, max_x, max_z) = (area.min_x, area.min_z, area.max_x, area.max_z);
+    let mut has_collisions = true;
+    let mut min_distance = f64::from(f32::MAX);
+    let mut iteration = 0;
+    while iteration < MAX_ITERATIONS && has_collisions {
+        has_collisions = false;
+        min_distance = f64::from(f32::MAX);
+        for i in 0..piles.len() {
+            let mut push = Pile::default();
+            let mut neighbours = 0;
+            for j in 0..piles.len() {
+                if i == j {
+                    continue;
+                }
+                let distance = piles[i].distance(&piles[j]);
+                min_distance = min_distance.min(distance);
+                if distance < spread_distance {
+                    neighbours += 1;
+                    push.x += piles[j].x - piles[i].x;
+                    push.z += piles[j].z - piles[i].z;
+                }
+            }
+            if neighbours > 0 {
+                push.x /= f64::from(neighbours);
+                push.z /= f64::from(neighbours);
+                let length = push.x.hypot(push.z);
+                if length > 0.0 {
+                    piles[i].x -= push.x / length;
+                    piles[i].z -= push.z / length;
+                } else {
+                    piles[i].randomize(min_x, min_z, max_x, max_z);
+                }
+                has_collisions = true;
+            }
+            if piles[i].clamp(min_x, min_z, max_x, max_z) {
+                has_collisions = true;
             }
         }
-        if all_safe {
-            return Some((piles, surface_ys));
+        if !has_collisions {
+            for pile in piles.iter_mut() {
+                if !pile.is_safe(world, max_height) {
+                    pile.randomize(min_x, min_z, max_x, max_z);
+                    has_collisions = true;
+                }
+            }
         }
+        iteration += 1;
     }
-    None
+    if min_distance == f64::from(f32::MAX) {
+        min_distance = 0.0;
+    }
+    if iteration >= MAX_ITERATIONS {
+        Err(min_distance)
+    } else {
+        Ok(())
+    }
+}
+
+/// Java's `Float.toString` for the plain numbers a center can be: `57.5`, `57.0`.
+fn java_float(value: f64) -> String {
+    #[expect(clippy::cast_possible_truncation)]
+    let text = format!("{}", value as f32);
+    if text.contains('.') || text.contains('e') || text.contains("inf") || text.contains("NaN") {
+        text
+    } else {
+        format!("{text}.0")
+    }
 }
 
 /// Returns the average distance from each pile to its closest neighbor.
@@ -264,32 +282,35 @@ impl CommandExecutor for SpreadPlayersExecutor {
             }
             val
         } else {
-            world.dimension.height + min_y + 1
+            // Vanilla passes `getMaxY() + 1`.
+            world.dimension.height + min_y
         };
 
         let pile_count = if respect_teams { 1 } else { targets.len() };
 
-        let Some((piles, surface_ys)) =
-            find_spread_positions(&world, pile_count, spread_distance, max_height, &area)
-        else {
+        let mut piles = vec![Pile::default(); pile_count];
+        for pile in &mut piles {
+            pile.randomize(area.min_x, area.min_z, area.max_x, area.max_z);
+        }
+        if let Err(min_distance) =
+            spread_piles(&world, &mut piles, spread_distance, max_height, &area)
+        {
             let error_type = if respect_teams {
                 &FAILED_TEAMS_ERROR_TYPE
             } else {
                 &FAILED_ENTITIES_ERROR_TYPE
             };
-            #[expect(clippy::cast_precision_loss)]
-            let suggested = max_range / (pile_count as f64).sqrt();
             return Err(error_type.create_without_context(
                 TextComponent::text(pile_count.to_string()),
-                TextComponent::text(format!("{center_x:.2}")),
-                TextComponent::text(format!("{center_z:.2}")),
-                TextComponent::text(format!("{suggested:.2}")),
+                TextComponent::text(java_float(center_x)),
+                TextComponent::text(java_float(center_z)),
+                TextComponent::text(format!("{min_distance:.2}")),
             ));
-        };
+        }
 
         for (index, target) in targets.iter().enumerate() {
             let pile = piles[index % pile_count];
-            let y = surface_ys[index % pile_count];
+            let y = pile.spawn_y(&world, max_height);
             target.teleport(
                 Vector3::new(pile.x.floor() + 0.5, f64::from(y), pile.z.floor() + 0.5),
                 None,
@@ -318,8 +339,8 @@ impl CommandExecutor for SpreadPlayersExecutor {
                 success_key.1,
                 [
                     TextComponent::text(pile_count.to_string()),
-                    TextComponent::text(format!("{center_x:.2}")),
-                    TextComponent::text(format!("{center_z:.2}")),
+                    TextComponent::text(java_float(center_x)),
+                    TextComponent::text(java_float(center_z)),
                     TextComponent::text(format!("{average_distance:.2}")),
                 ],
             ),
