@@ -98,6 +98,9 @@ pub struct LivingEntity {
     pub fall_distance: AtomicCell<f32>,
     pub active_effects: std::sync::Mutex<FxHashMap<&'static StatusEffect, Effect>>,
     pub entity_equipment: Arc<std::sync::Mutex<EntityEquipment>>,
+    /// What each equipment slot held when it was last applied and broadcast (vanilla
+    /// `lastHandItemStacks`/`lastArmorItemStacks`). Always the innermost lock.
+    pub last_equipment: std::sync::Mutex<FxHashMap<EquipmentSlot, ItemStack>>,
     pub equipment_drop_chances: Arc<std::sync::Mutex<FxHashMap<EquipmentSlot, f32>>>,
     pub movement_input: AtomicCell<Vector3<f64>>,
     speed: AtomicCell<f32>,
@@ -312,6 +315,7 @@ impl LivingEntity {
             livings_flags: AtomicU8::new(0),
             active_effects: std::sync::Mutex::new(FxHashMap::default()),
             entity_equipment: Arc::new(std::sync::Mutex::new(EntityEquipment::new())),
+            last_equipment: std::sync::Mutex::new(FxHashMap::default()),
             equipment_drop_chances: Arc::new(std::sync::Mutex::new(FxHashMap::default())),
             equipment_slots: Arc::new(build_equipment_slots()),
             jumping: AtomicBool::new(false),
@@ -425,6 +429,15 @@ impl LivingEntity {
             return;
         }
         self.apply_and_send_equipment_attribute_modifiers(equipment);
+        {
+            let mut last = self
+                .last_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for (slot, stack) in equipment {
+                last.insert(slot.clone(), stack.clone());
+            }
+        }
 
         if equipment
             .iter()
@@ -564,6 +577,17 @@ impl LivingEntity {
         if !touched.is_empty() {
             crate::entity::attributes::send_attribute_updates_for_living(self, touched);
         }
+    }
+
+    /// Whether `stack` differs from what `slot` held when it was last sent (vanilla
+    /// `equipmentHasChanged`, which compares item, count and components).
+    pub fn equipment_changed(&self, slot: &EquipmentSlot, stack: &ItemStack) -> bool {
+        let last = self
+            .last_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        last.get(slot)
+            .map_or(!stack.is_empty(), |previous| !previous.are_equal(stack))
     }
 
     /// Re-applies modifiers from every currently equipped stack without notifying clients.
