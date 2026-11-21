@@ -62,7 +62,12 @@ pub async fn run_survival_action_tests(
 fn empty_inventory(stage: &StageContext<'_>) -> Result<(), String> {
     // Drops from an earlier test (a killed chicken's raw chicken and feathers) would be picked up
     // into the emptied hotbar.
-    stage.console("kill @e[type=minecraft:item]")?;
+    // With nothing on the ground the kill fails with "No entity was found", which is fine.
+    if let Err(err) = stage.console("kill @e[type=minecraft:item]")
+        && !err.contains("No entity was found")
+    {
+        return Err(err);
+    }
     stage.console(&format!("give {BOT} minecraft:dirt 1"))?;
     stage.console(&format!("clear {BOT}"))
 }
