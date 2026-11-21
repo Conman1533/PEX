@@ -716,7 +716,7 @@ pub(super) async fn test_spreadplayers_lands_on_the_only_dry_block(
                         .assert_entity_present_in_box(
                             "minecraft:pig",
                             BlockPos::new(4, 2, 4),
-                            BlockPos::new(4, 3, 4),
+                            BlockPos::new(5, 3, 5),
                         )
                         .await?;
                 }
