@@ -36,11 +36,12 @@ use pumpkin_protocol::{
             update_attributes::CUpdateAttributes,
             update_block::CUpdateBlock,
         },
-        network_item::NetworkItemDescriptor,
+        network_item::{ContainerName, FullContainerName, NetworkItemDescriptor},
         packet_decoder::BedrockBatchDecoder,
         packet_encoder::BedrockBatchEncoder,
         server::{
-            command_request::SCommandRequest, login::SLogin, player_auth_input::SPlayerAuthInput,
+            command_request::SCommandRequest, item_stack_request::ItemStackRequestSlotInfo,
+            login::SLogin, player_auth_input::SPlayerAuthInput,
             request_chunk_radius::SRequestChunkRadius,
             request_network_settings::SRequestNetworkSettings,
             resource_pack_client_response::SResourcePackClientResponse,
@@ -90,6 +91,28 @@ pub const LINK_PASSENGER: u8 = 2;
 const INTERACT_ID: i32 = 33;
 /// `InventoryTransaction`.
 const INVENTORY_TRANSACTION_ID: i32 = 30;
+const CONTAINER_OPEN_ID: i32 = 46;
+const CONTAINER_CLOSE_ID: i32 = 47;
+const ITEM_STACK_REQUEST_ID: i32 = 147;
+const ITEM_STACK_RESPONSE_ID: i32 = 148;
+
+/// Which `ItemStackRequest` action a `StackMove` is.
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum StackMoveKind {
+    Take = 0,
+    Place = 1,
+}
+
+/// One take or place in an `ItemStackRequest`: `count` items from `from` to `to`, each a
+/// container and slot.
+#[derive(Clone, Copy)]
+pub struct StackMove {
+    pub kind: StackMoveKind,
+    pub count: u8,
+    pub from: (ContainerName, u8),
+    pub to: (ContainerName, u8),
+}
 /// `UseItem` transaction actions.
 const USE_ITEM_CLICK_BLOCK: i32 = 0;
 const USE_ITEM_CLICK_AIR: i32 = 1;
@@ -146,6 +169,11 @@ pub struct BedrockBot {
     pub texts: Vec<SeenText>,
     /// Every layer-0 `UpdateBlock`, as position and block network id.
     pub block_updates: Vec<(BlockPos, u32)>,
+    /// The container the server has open for the bot: window id and container type, from
+    /// `ContainerOpen` until a `ContainerClose`.
+    pub open_container: Option<(u8, u8)>,
+    /// Every `ItemStackResponse` as (request id, result), where result 0 is success.
+    pub stack_responses: Vec<(i32, u8)>,
     pub health: i32,
     /// Whether inputs report standing on something, as a real client does when it isn't
     /// falling or jumping.
@@ -242,6 +270,8 @@ impl BedrockBot {
             driving: None,
             texts: Vec::new(),
             block_updates: Vec::new(),
+            open_container: None,
+            stack_responses: Vec::new(),
             health: 20,
             on_ground: true,
             disconnect: None,
@@ -558,6 +588,23 @@ impl BedrockBot {
                     self.block_updates.push((position, block));
                 }
             }
+            CONTAINER_OPEN_ID => {
+                let err = |err| read_error("ContainerOpen", err);
+                let window = u8::read(reader).map_err(err)?;
+                let container_type = u8::read(reader).map_err(err)?;
+                self.open_container = Some((window, container_type));
+            }
+            CONTAINER_CLOSE_ID => self.open_container = None,
+            ITEM_STACK_RESPONSE_ID => {
+                let err = |err| read_error("ItemStackResponse", err);
+                let count = VarUInt::read(reader).map_err(err)?.0;
+                // Only the first response is read; the bot sends one request at a time.
+                if count > 0 {
+                    let result = u8::read(reader).map_err(err)?;
+                    let request = VarInt::read(reader).map_err(err)?.0;
+                    self.stack_responses.push((request, result));
+                }
+            }
             id if id == SText::PACKET_ID => {
                 let text = SText::read(reader).map_err(|err| read_error("Text", err))?;
                 self.texts.push(SeenText {
@@ -762,6 +809,56 @@ impl BedrockBot {
         };
         write(&mut payload).map_err(|err| err.to_string())?;
         self.send_raw(INVENTORY_TRANSACTION_ID, &payload).await
+    }
+
+    /// Sends one `ItemStackRequest` with `actions`, each a take or place of `count` items from
+    /// one slot to another, as a real client's inventory screen does.
+    pub async fn item_stack_request(
+        &self,
+        request_id: i32,
+        actions: &[StackMove],
+    ) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            VarUInt(1).write(payload)?;
+            VarInt(request_id).write(payload)?;
+            VarUInt(actions.len() as u32).write(payload)?;
+            for action in actions {
+                VarUInt(u32::from(action.kind as u8)).write(payload)?;
+                // The legacy action type, unused.
+                0u8.write(payload)?;
+                action.count.write(payload)?;
+                for (container, slot) in [action.from, action.to] {
+                    ItemStackRequestSlotInfo {
+                        container_name: FullContainerName {
+                            container_name: container,
+                            dynamic_id: None,
+                        },
+                        slot_id: slot,
+                        stack_id: 0,
+                    }
+                    .write(payload)?;
+                }
+            }
+            // No filter strings, no filter cause.
+            VarUInt(0).write(payload)?;
+            0i32.write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(ITEM_STACK_REQUEST_ID, &payload).await
+    }
+
+    /// Closes the open container, as the client does when its screen shuts.
+    pub async fn close_container(&self) -> Result<(), String> {
+        let (window, container_type) = self.open_container.ok_or("no container is open")?;
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            window.write(payload)?;
+            container_type.write(payload)?;
+            false.write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(CONTAINER_CLOSE_ID, &payload).await
     }
 
     /// Asks to get off the vehicle, as the dismount button does.

@@ -33,6 +33,9 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{bot::HeadlessBot, harness};
 pub use bot::BedrockBot;
+use bot::{StackMove, StackMoveKind};
+use pumpkin_inventory::Inventory;
+use pumpkin_protocol::bedrock::network_item::ContainerName;
 
 const TICK: Duration = Duration::from_millis(50);
 /// Plenty for a packet to cross a loopback WebRTC connection and be handled in a tick.
@@ -535,6 +538,7 @@ async fn run_mixed_play(
     run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;
     run_place_checks(server, bedrock, &mut java, &mut checks).await?;
     run_item_use_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_chest_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -1935,6 +1939,270 @@ async fn run_bucket_press_check(
             Err("the water is gone".to_string())
         } else if held.item.id != Item::BUCKET.id {
             Err(format!("holding {}", held.item.registry_key))
+        } else {
+            Ok(())
+        },
+    );
+    Ok(())
+}
+
+/// A survival Bedrock player opens a chest, puts items in, takes some back and closes it, with
+/// the `ItemStackRequest`s a real client's screen sends: each move goes through the cursor.
+async fn run_chest_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    for case in &CONTAINER_CASES {
+        run_container_case(server, bedrock, java, checks, case).await?;
+    }
+    Ok(())
+}
+
+/// One container block for `run_container_case`, and the names of its four checks.
+struct ContainerCase {
+    block: &'static str,
+    /// The container slot the items go to.
+    slot: u8,
+    names: [&'static str; 4],
+}
+
+const CONTAINER_CASES: [ContainerCase; 6] = [
+    ContainerCase {
+        block: "chest",
+        slot: 0,
+        names: [
+            "bedrock opens a chest",
+            "bedrock puts items in a chest",
+            "bedrock takes items from a chest",
+            "bedrock closes a chest",
+        ],
+    },
+    ContainerCase {
+        block: "barrel",
+        slot: 26,
+        names: [
+            "bedrock opens a barrel",
+            "bedrock puts items in a barrel",
+            "bedrock takes items from a barrel",
+            "bedrock closes a barrel",
+        ],
+    },
+    ContainerCase {
+        block: "shulker_box",
+        slot: 13,
+        names: [
+            "bedrock opens a shulker box",
+            "bedrock puts items in a shulker box",
+            "bedrock takes items from a shulker box",
+            "bedrock closes a shulker box",
+        ],
+    },
+    ContainerCase {
+        block: "hopper",
+        slot: 4,
+        names: [
+            "bedrock opens a hopper",
+            "bedrock puts items in a hopper",
+            "bedrock takes items from a hopper",
+            "bedrock closes a hopper",
+        ],
+    },
+    ContainerCase {
+        block: "dispenser",
+        slot: 8,
+        names: [
+            "bedrock opens a dispenser",
+            "bedrock puts items in a dispenser",
+            "bedrock takes items from a dispenser",
+            "bedrock closes a dispenser",
+        ],
+    },
+    ContainerCase {
+        block: "trapped_chest",
+        slot: 5,
+        names: [
+            "bedrock opens a trapped chest",
+            "bedrock puts items in a trapped chest",
+            "bedrock takes items from a trapped chest",
+            "bedrock closes a trapped chest",
+        ],
+    },
+];
+
+async fn run_container_case(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    case: &ContainerCase,
+) -> Result<(), String> {
+    let [open_name, _, _, close_name] = case.names;
+    run_console(server, &format!("op {BEDROCK_NAME}"));
+    run_console(server, &format!("gamemode survival {BEDROCK_NAME}"));
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} diamond 5"));
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java.position.x > f64::from(bedrock.position.x) {
+        -1.0
+    } else {
+        1.0
+    };
+    let chest = BlockPos::floored(
+        f64::from(bedrock.position.x) + side * 2.0,
+        feet,
+        f64::from(bedrock.position.z),
+    );
+    let setblock = |pos: BlockPos, block: &str| {
+        run_console(
+            server,
+            &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+        );
+    };
+    setblock(chest.up(), "air");
+    setblock(chest, case.block);
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+
+    let diamonds = ItemStack::new(5, &Item::DIAMOND);
+    bedrock
+        .use_item_on_block(chest, 1, 0, &diamonds, &[])
+        .await?;
+    checks.record(
+        open_name,
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a ContainerOpen on the Bedrock bot",
+            |bot, _| bot.open_container.is_some(),
+        )
+        .await,
+    );
+
+    run_container_moves(server, bedrock, java, checks, case, chest).await?;
+
+    bedrock.close_container().await?;
+    checks.record(
+        close_name,
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the close echoed back to the Bedrock bot",
+            |bot, _| bot.open_container.is_none(),
+        )
+        .await,
+    );
+
+    // Breaking the container drops what is left in it; nobody should pick that up later.
+    setblock(chest, "air");
+    tick(server, bedrock, Some(&mut *java)).await?;
+    run_console(server, "kill @e[type=item]");
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// The put and take of `run_container_case`, with the container open.
+async fn run_container_moves(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    case: &ContainerCase,
+    chest: BlockPos,
+) -> Result<(), String> {
+    let [_, put_name, take_name, _] = case.names;
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    let chest_stack = |slot| {
+        world
+            .get_block_entity(&chest)
+            .and_then(pumpkin_core::block::entities::BlockEntity::get_inventory)
+            .map(|inventory| inventory.get_stack(slot))
+    };
+    let player_stack = |slot| bedrock_player.inventory().get_stack(slot);
+    let moves = |count, from, to| {
+        [
+            StackMove {
+                kind: StackMoveKind::Take,
+                count,
+                from,
+                to: (ContainerName::Cursor, 0),
+            },
+            StackMove {
+                kind: StackMoveKind::Place,
+                count,
+                from: (ContainerName::Cursor, 0),
+                to,
+            },
+        ]
+    };
+
+    // All 5 diamonds from hotbar slot 0 into the chest's first slot.
+    bedrock
+        .item_stack_request(
+            1,
+            &moves(
+                5,
+                (ContainerName::HotBar, 0),
+                (ContainerName::LevelEntity, case.slot),
+            ),
+        )
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let in_chest = chest_stack(usize::from(case.slot)).ok_or("the chest has no inventory")?;
+    checks.record(
+        put_name,
+        if !bedrock.stack_responses.contains(&(1, 0)) {
+            Err(format!("responses: {:?}", bedrock.stack_responses))
+        } else if in_chest.item.id != Item::DIAMOND.id || in_chest.item_count != 5 {
+            Err(format!(
+                "the chest holds {} {}",
+                in_chest.item_count, in_chest.item.registry_key
+            ))
+        } else if !player_stack(0).is_empty() {
+            Err("the diamonds are still in the hotbar".to_string())
+        } else {
+            Ok(())
+        },
+    );
+
+    // 2 of them back, into hotbar slot 1.
+    bedrock
+        .item_stack_request(
+            2,
+            &moves(
+                2,
+                (ContainerName::LevelEntity, case.slot),
+                (ContainerName::HotBar, 1),
+            ),
+        )
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let in_chest = chest_stack(usize::from(case.slot)).ok_or("the chest has no inventory")?;
+    let taken = player_stack(1);
+    checks.record(
+        take_name,
+        if !bedrock.stack_responses.contains(&(2, 0)) {
+            Err(format!("responses: {:?}", bedrock.stack_responses))
+        } else if in_chest.item_count != 3 {
+            Err(format!("the chest holds {} diamonds", in_chest.item_count))
+        } else if taken.item.id != Item::DIAMOND.id || taken.item_count != 2 {
+            Err(format!(
+                "hotbar slot 1 holds {} {}",
+                taken.item_count, taken.item.registry_key
+            ))
         } else {
             Ok(())
         },
