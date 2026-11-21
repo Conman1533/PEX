@@ -354,9 +354,36 @@ impl<'a> StageContext<'a> {
             Ok(())
         } else {
             Err(format!(
-                "Waited {MAX_EAT_TICKS} ticks for the food level to rise above {before}"
+                "Waited {MAX_EAT_TICKS} ticks for the food level to rise above {before} ({})",
+                self.item_use_state()
             ))
         }
+    }
+
+    /// What the server's player is holding and using, for a failed eat or draw.
+    fn item_use_state(&self) -> String {
+        let living = &self.player.living_entity;
+        let inventory = self.player.inventory();
+        let in_use = living
+            .item_in_use
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .map(|stack| stack.item.registry_key.to_string());
+        format!(
+            "selected slot {}, held {}, item in use {in_use:?}, active hand {:?}, use ticks left {}, \
+             client loaded {}",
+            inventory.get_selected_slot(),
+            inventory.held_item().item.registry_key,
+            *living
+                .active_hand
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            living
+                .item_use_time
+                .load(std::sync::atomic::Ordering::Relaxed),
+            self.player.has_client_loaded(),
+        )
     }
 
     /// Draws the held bow fully at `target` and lets go. Returns the arrow's entity id.
