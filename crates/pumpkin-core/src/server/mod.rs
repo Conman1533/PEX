@@ -855,6 +855,7 @@ impl Server {
                 player.screen_handler_sync_handler.store_player(player.clone());
                 world.add_player(&player).is_ok().then(|| {
                     player.spawn_saved_ender_pearls(self);
+                    player.spawn_skin_fetch(self);
                     {
                         let mut user_cache = self
                             .data

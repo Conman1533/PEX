@@ -1544,6 +1544,16 @@ impl World {
         Self::broadcast_bedrock_grouped(be_packet, bedrock_recipients.into_iter());
     }
 
+    /// Sends a Bedrock packet to every Bedrock player in this world except those in `except`.
+    pub fn broadcast_bedrock_packet<B: BClientPacket>(&self, except: &[uuid::Uuid], packet: &B) {
+        let players = self.players.load();
+        let recipients = players.iter().filter_map(|p| match p.client.as_ref() {
+            ClientPlatform::Bedrock(client) if !except.contains(&p.gameprofile.id) => Some(client),
+            ClientPlatform::Bedrock(_) | ClientPlatform::Java(_) => None,
+        });
+        Self::broadcast_bedrock_grouped(packet, recipients);
+    }
+
     /// Broadcasts the skin layers of a player, encoding the metadata for each Java client's own
     /// protocol version since the tracked data index differs between versions.
     fn broadcast_skin_parts<B: BClientPacket>(

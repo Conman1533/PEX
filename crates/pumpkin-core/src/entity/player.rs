@@ -632,67 +632,164 @@ struct SkinMetadata {
     model: Option<String>,
 }
 
-impl Player {
-    #[must_use]
-    pub fn fetch_skin(properties: &[Property]) -> Option<pumpkin_protocol::bedrock::client::Skin> {
-        let textures_prop = properties.iter().find(|p| &*p.name == "textures")?;
-        let decoded = BASE64_STANDARD
-            .decode(textures_prop.value.as_bytes())
+/// How long a Java skin download for Bedrock viewers may take, start to finish.
+const SKIN_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+/// The largest skin PNG accepted. Vanilla skins are 64x64 or 64x32 and a few KiB.
+const MAX_SKIN_BYTES: usize = 64 * 1024;
+
+/// The skin texture named in a profile's `textures` property.
+fn skin_texture(properties: &[Property]) -> Option<SkinTexture> {
+    let textures_prop = properties.iter().find(|p| &*p.name == "textures")?;
+    let decoded = BASE64_STANDARD
+        .decode(textures_prop.value.as_bytes())
+        .ok()?;
+    let textures: TexturesProperty = serde_json::from_slice(&decoded).ok()?;
+    textures.textures.skin
+}
+
+/// Downloads a skin PNG, giving up after `timeout` or past [`MAX_SKIN_BYTES`].
+async fn download_skin(url: &str, timeout: Duration) -> Option<Vec<u8>> {
+    let client = pumpkin_auth::client_builder()
+        .connect_timeout(timeout)
+        .timeout(timeout)
+        .build()
+        .ok()?;
+    tokio::time::timeout(timeout, async {
+        let mut response = client.get(url).send().await.ok()?.error_for_status().ok()?;
+        if response
+            .content_length()
+            .is_some_and(|len| len > MAX_SKIN_BYTES as u64)
+        {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > MAX_SKIN_BYTES {
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Some(bytes)
+    })
+    .await
+    .ok()?
+}
+
+/// Converts a Java skin PNG to a Bedrock skin. Only 64x64 and legacy 64x32 skins are accepted;
+/// the size is read from the header before anything is decoded.
+fn skin_from_png(
+    bytes: &[u8],
+    url: String,
+    is_slim: bool,
+) -> Option<pumpkin_protocol::bedrock::client::Skin> {
+    let (width, height) =
+        image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png)
+            .into_dimensions()
             .ok()?;
-        let textures: TexturesProperty = serde_json::from_slice(&decoded).ok()?;
-        let skin_texture = textures.textures.skin?;
-        let url = skin_texture.url;
-        let is_slim = skin_texture
+    if width != 64 || (height != 32 && height != 64) {
+        return None;
+    }
+    let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Png).ok()?;
+
+    let mut rgba = img.into_rgba8().into_raw();
+
+    let opaque_mask = BASE64_STANDARD
+        .decode(if height == 32 {
+            LEGACY_SKIN_OPAQUE_MASK
+        } else {
+            SKIN_OPAQUE_MASK
+        })
+        .ok()?;
+    for pixel_index in 0..(width * height) as usize {
+        if opaque_mask[pixel_index >> 3] & (1 << (pixel_index & 7)) != 0 {
+            rgba[pixel_index * 4 + 3] = u8::MAX;
+        }
+    }
+
+    let mut skin = pumpkin_protocol::bedrock::client::Skin::steve();
+    skin.set_slim(is_slim);
+    skin.image_width = width;
+    skin.image_height = height;
+    skin.skin_data = rgba;
+    skin.skin_id.clone_from(&url);
+    skin.full_id = url;
+    Some(skin)
+}
+
+/// The skin Bedrock viewers see until, or instead of, the player's own. `Standard_Custom` is a
+/// shared placeholder, so it gets a per-player id: Bedrock must never see duplicate skin ids.
+fn fallback_skin(player_uuid: uuid::Uuid) -> pumpkin_protocol::bedrock::client::Skin {
+    let mut skin = pumpkin_protocol::bedrock::client::Skin::steve();
+    let skin_id = format!("pumpkin:{player_uuid}");
+    skin.skin_id.clone_from(&skin_id);
+    skin.full_id = skin_id;
+    skin
+}
+
+impl Player {
+    /// Downloads and converts the Java skin named in `properties`, for Bedrock viewers.
+    pub async fn fetch_skin(
+        properties: &[Property],
+    ) -> Option<pumpkin_protocol::bedrock::client::Skin> {
+        let texture = skin_texture(properties)?;
+        let is_slim = texture
             .metadata
             .as_ref()
             .and_then(|m| m.model.as_deref())
             .is_some_and(|model| model == "slim");
+        let bytes = download_skin(&texture.url, SKIN_FETCH_TIMEOUT).await?;
+        skin_from_png(&bytes, texture.url, is_slim)
+    }
 
-        let bytes = if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            tokio::task::block_in_place(|| {
-                handle.block_on(async {
-                    let client = pumpkin_auth::client();
-                    client.get(&url).send().await.ok()?.bytes().await.ok()
+    /// Fetches this player's Java skin on a server task, so the join doesn't wait on it, and
+    /// sends it to the Bedrock players in the player's world when it arrives. Bedrock players who
+    /// see the player later get it in the player list entry. Does nothing with Bedrock off or
+    /// without a skin texture.
+    pub fn spawn_skin_fetch(self: &Arc<Self>, server: &Server) {
+        if !server.advanced_config.networking.bedrock.enabled {
+            return;
+        }
+        let properties = self.gameprofile.properties.load_full();
+        if skin_texture(&properties).is_none() {
+            return;
+        }
+        let player = Arc::downgrade(self);
+        let name = self.gameprofile.name.clone();
+        server.spawn_task(async move {
+            let Some(skin) = Self::fetch_skin(&properties).await else {
+                tracing::debug!(
+                    "Could not fetch {name}'s Java skin for Bedrock players; they see the default"
+                );
+                return;
+            };
+            let Some(player) = player.upgrade() else {
+                return;
+            };
+            player.bedrock_skin.store(Arc::new(skin.clone()));
+            let world = player.world();
+            let viewers = world
+                .players
+                .load()
+                .iter()
+                .filter(|other| {
+                    other.gameprofile.id != player.gameprofile.id
+                        && matches!(other.client.as_ref(), ClientPlatform::Bedrock(_))
                 })
-            })?
-        } else {
-            tokio::runtime::Runtime::new().ok()?.block_on(async {
-                let client = pumpkin_auth::client();
-                client.get(&url).send().await.ok()?.bytes().await.ok()
-            })?
-        };
-        let img = image::load_from_memory(&bytes).ok()?;
-
-        let width = img.width();
-        let height = img.height();
-
-        if width != 64 || (height != 32 && height != 64) {
-            return None;
-        }
-
-        let mut rgba = img.into_rgba8().into_raw();
-
-        let opaque_mask = BASE64_STANDARD
-            .decode(if height == 32 {
-                LEGACY_SKIN_OPAQUE_MASK
-            } else {
-                SKIN_OPAQUE_MASK
-            })
-            .ok()?;
-        for pixel_index in 0..(width * height) as usize {
-            if opaque_mask[pixel_index >> 3] & (1 << (pixel_index & 7)) != 0 {
-                rgba[pixel_index * 4 + 3] = u8::MAX;
-            }
-        }
-
-        let mut skin = pumpkin_protocol::bedrock::client::Skin::steve();
-        skin.set_slim(is_slim);
-        skin.image_width = width;
-        skin.image_height = height;
-        skin.skin_data = rgba;
-        skin.skin_id.clone_from(&url);
-        skin.full_id = url;
-        Some(skin)
+                .count();
+            tracing::debug!(
+                "Fetched {name}'s Java skin ({}x{}, {}); sending it to {viewers} Bedrock players",
+                skin.image_width,
+                skin.image_height,
+                skin.arm_size
+            );
+            world.broadcast_bedrock_packet(
+                &[player.gameprofile.id],
+                &pumpkin_protocol::bedrock::client::CPlayerSkin {
+                    uuid: player.gameprofile.id,
+                    skin,
+                },
+            );
+        });
     }
 
     #[expect(clippy::too_many_lines, clippy::items_after_statements)]
@@ -761,17 +858,8 @@ impl Player {
         let mut abilities = Abilities::default();
         abilities.set_for_gamemode(gamemode);
 
-        let properties = gameprofile.properties.load();
-        let mut bedrock_skin = Self::fetch_skin(&properties)
-            .unwrap_or_else(pumpkin_protocol::bedrock::client::Skin::steve);
-
-        // Standard_Custom is a shared placeholder. Give fallback skins a stable,
-        // per-player identity so Bedrock never sees duplicate skin IDs.
-        if bedrock_skin.skin_id == "Standard_Custom" {
-            let skin_id = format!("pumpkin:{player_uuid}");
-            bedrock_skin.skin_id.clone_from(&skin_id);
-            bedrock_skin.full_id = skin_id;
-        }
+        // The player's own skin, if any, arrives later: see `spawn_skin_fetch`.
+        let bedrock_skin = fallback_skin(player_uuid);
 
         let supports_player_loaded = match client.as_ref() {
             ClientPlatform::Java(client) => client.version.load() >= JavaMinecraftVersion::V_1_21_4,
@@ -8899,5 +8987,157 @@ mod tests {
         world.set_block_state(&pos, Block::AIR.default_state.id, BlockFlags::empty());
         assert_eq!(player.tick_delayed_destroy(&world), None);
         assert_eq!(player.delayed_destroy.load(), None);
+    }
+}
+
+#[cfg(test)]
+mod skin_tests {
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::{Duration, Instant},
+    };
+
+    use arc_swap::ArcSwap;
+    use base64::{Engine, prelude::BASE64_STANDARD};
+    use pumpkin_protocol::Property;
+    use pumpkin_util::math::vector3::Vector3;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+
+    use super::{MAX_SKIN_BYTES, download_skin, skin_from_png};
+    use crate::world::{test_player_with_client, test_world};
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let image = image::RgbaImage::from_pixel(width, height, image::Rgba([10, 20, 30, 0]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        bytes
+    }
+
+    /// A local server that answers every request with `response`, or holds the connection open
+    /// without answering when `response` is `None`. Counts connections.
+    async fn serve(response: Option<Vec<u8>>) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/skin.png", listener.local_addr().unwrap());
+        let connections = Arc::new(AtomicUsize::new(0));
+        let count = connections.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                count.fetch_add(1, Ordering::SeqCst);
+                let response = response.clone();
+                tokio::spawn(async move {
+                    let mut buf = [0; 1024];
+                    let _ = stream.read(&mut buf).await;
+                    match response {
+                        Some(response) => {
+                            let _ = stream.write_all(&response).await;
+                        }
+                        None => tokio::time::sleep(Duration::from_secs(30)).await,
+                    }
+                });
+            }
+        });
+        (url, connections)
+    }
+
+    fn ok_response(body: &[u8], content_length: bool) -> Vec<u8> {
+        let mut response =
+            b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nConnection: close\r\n".to_vec();
+        if content_length {
+            response.extend_from_slice(format!("Content-Length: {}\r\n", body.len()).as_bytes());
+        }
+        response.extend_from_slice(b"\r\n");
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn textures_property(url: &str) -> Property {
+        let textures = serde_json::json!({"textures": {"SKIN": {"url": url}}});
+        Property {
+            name: "textures".into(),
+            value: BASE64_STANDARD.encode(textures.to_string()).into(),
+            signature: None,
+        }
+    }
+
+    #[test]
+    fn converts_vanilla_skin_sizes_only() {
+        let skin = skin_from_png(&png(64, 64), "url".to_owned(), true).unwrap();
+        assert_eq!((skin.image_width, skin.image_height), (64, 64));
+        assert_eq!(skin.skin_data.len(), 64 * 64 * 4);
+        assert_eq!(skin.arm_size, "slim");
+        assert_eq!(skin.skin_id, "url");
+
+        let legacy = skin_from_png(&png(64, 32), "url".to_owned(), false).unwrap();
+        assert_eq!(legacy.image_height, 32);
+        assert_eq!(legacy.arm_size, "wide");
+
+        assert!(skin_from_png(&png(128, 128), "url".to_owned(), false).is_none());
+        assert!(skin_from_png(b"not a png", "url".to_owned(), false).is_none());
+    }
+
+    #[tokio::test]
+    async fn download_gives_up_on_a_stalled_server() {
+        let (url, _) = serve(None).await;
+        let started = Instant::now();
+        assert!(
+            download_skin(&url, Duration::from_millis(300))
+                .await
+                .is_none()
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn download_rejects_oversized_skins() {
+        let body = vec![0; MAX_SKIN_BYTES + 1];
+        for content_length in [true, false] {
+            let (url, _) = serve(Some(ok_response(&body, content_length))).await;
+            assert!(download_skin(&url, Duration::from_secs(5)).await.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn download_returns_a_skin() {
+        let skin = png(64, 64);
+        let (url, _) = serve(Some(ok_response(&skin, true))).await;
+        assert_eq!(
+            download_skin(&url, Duration::from_secs(5)).await,
+            Some(skin)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn new_player_does_not_wait_for_the_skin() {
+        let (url, connections) = serve(None).await;
+        let world = test_world();
+        let profile = crate::net::GameProfile {
+            id: uuid::Uuid::new_v4(),
+            name: "SkinTest".to_string(),
+            properties: ArcSwap::from_pointee(vec![textures_property(&url)]),
+            profile_actions: None,
+        };
+        let started = Instant::now();
+        let player = test_player_with_client(
+            &world,
+            Vector3::new(0.0, 64.0, 0.0),
+            crate::net::java::JavaClient::new_for_test(profile),
+        );
+        assert!(started.elapsed() < Duration::from_millis(100));
+        assert!(player.bedrock_skin.load().skin_id.starts_with("pumpkin:"));
+        // Building the player made no request; only `spawn_skin_fetch` does.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(connections.load(Ordering::SeqCst), 0);
     }
 }
