@@ -117,10 +117,7 @@ impl DrownedEntity {
                 Some(|target: &LivingEntity, world: &World| Self::ok_target(&target.entity, world)),
             )),
         );
-        target_selector.add_goal(
-            3,
-            ActiveTargetGoal::with_default(mob_entity, &EntityType::VILLAGER, false),
-        );
+        target_selector.add_goal(3, Box::new(super::abstract_villager_target(mob_entity)));
         target_selector.add_goal(
             3,
             ActiveTargetGoal::with_default(mob_entity, &EntityType::IRON_GOLEM, true),

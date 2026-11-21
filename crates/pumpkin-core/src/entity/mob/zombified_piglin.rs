@@ -11,9 +11,9 @@ use crate::entity::{
     Entity, EntityBase,
     ai::behavior::neutral::apply_targets,
     ai::goal::{
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
-        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal,
-        wander_around::WanderAroundGoal,
+        destroy_egg::DestroyEggGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, revenge::RevengeGoal, spear_use::SpearUseGoal,
+        wander_around::WanderAroundGoal, zombie_attack::ZombieAttackGoal,
     },
     mob::{
         Mob, MobEntity,
@@ -54,14 +54,15 @@ impl ZombifiedPiglinEntity {
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, Box::new(MeleeAttackGoal::new(1.0, true)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(1, SpearUseGoal::new(1.0, 1.0, 10.0, 2.0));
+            goal_selector.add_goal(2, ZombieAttackGoal::new(1.0, false));
+            goal_selector.add_goal(4, DestroyEggGoal::new(1.0, 3));
+            goal_selector.add_goal(7, Box::new(WanderAroundGoal::water_avoiding(1.0)));
             goal_selector.add_goal(
-                6,
+                8,
                 LookAtEntityGoal::with_default(mob_weak.clone(), &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
+            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
 
             let target_selector = &mob_arc.mob_entity.target_selector;
             target_selector.add_goal(1, Box::new(RevengeGoal::new(true).alerting_others()));

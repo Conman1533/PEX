@@ -2,7 +2,9 @@ use super::{Mob, MobEntity, MobMetadata};
 use crate::entity::ai::goal::break_door::BreakDoorGoal;
 use crate::entity::ai::goal::destroy_egg::DestroyEggGoal;
 use crate::entity::ai::goal::look_around::RandomLookAroundGoal;
+use crate::entity::ai::goal::move_through_village::MoveThroughVillageGoal;
 use crate::entity::ai::goal::revenge::RevengeGoal;
+use crate::entity::ai::goal::spear_use::SpearUseGoal;
 use crate::entity::ai::goal::wander_around::WanderAroundGoal;
 use crate::entity::ai::goal::zombie_attack::ZombieAttackGoal;
 use crate::entity::mob::equipment::RegionalDifficulty;
@@ -25,6 +27,15 @@ pub mod husk;
 #[allow(clippy::module_inception)]
 pub mod zombie;
 pub mod zombie_villager;
+
+/// Vanilla `NearestAttackableTargetGoal(mob, AbstractVillager.class, false)`: villagers and
+/// wandering traders, seen or not.
+pub(crate) fn abstract_villager_target(mob: &MobEntity) -> ActiveTargetGoal {
+    *ActiveTargetGoal::predicated(mob, 10, false, |target, _| {
+        target.entity.entity_type == &EntityType::VILLAGER
+            || target.entity.entity_type == &EntityType::WANDERING_TRADER
+    })
+}
 
 pub struct ZombieEntityBase {
     pub mob_entity: MobEntity,
@@ -80,7 +91,9 @@ impl ZombieEntityBase {
         let goal_selector = &self.mob_entity.goals_selector;
         let target_selector = &self.mob_entity.target_selector;
 
-        goal_selector.add_goal(2, ZombieAttackGoal::new(1.0, false));
+        goal_selector.add_goal(2, SpearUseGoal::new(1.0, 1.0, 10.0, 2.0));
+        goal_selector.add_goal(3, ZombieAttackGoal::new(1.0, false));
+        goal_selector.add_goal(6, MoveThroughVillageGoal::new(1.0, true, 4));
         goal_selector.add_goal(7, Box::new(WanderAroundGoal::water_avoiding(1.0)));
 
         target_selector.add_goal(
@@ -95,17 +108,21 @@ impl ZombieEntityBase {
             2,
             ActiveTargetGoal::with_default(&self.mob_entity, &EntityType::PLAYER, true),
         );
-        target_selector.add_goal(
-            3,
-            ActiveTargetGoal::with_default(&self.mob_entity, &EntityType::VILLAGER, true),
-        );
+        target_selector.add_goal(3, Box::new(abstract_villager_target(&self.mob_entity)));
         target_selector.add_goal(
             3,
             ActiveTargetGoal::with_default(&self.mob_entity, &EntityType::IRON_GOLEM, true),
         );
         target_selector.add_goal(
             5,
-            ActiveTargetGoal::with_default(&self.mob_entity, &EntityType::TURTLE, true),
+            Box::new(ActiveTargetGoal::new(
+                &self.mob_entity,
+                &EntityType::TURTLE,
+                10,
+                true,
+                false,
+                Some(crate::entity::passive::turtle::baby_on_land_selector),
+            )),
         );
     }
 
