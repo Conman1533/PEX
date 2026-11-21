@@ -997,7 +997,11 @@ pub struct Entity {
     // Whether the entity is immune to fire (to disable visual fire and fire damage)
     pub fire_immune: AtomicBool,
     pub fire_ticks: AtomicI32,
+    /// Vanilla `hasVisualFire`: fire shown without burning, set by commands or saved data and
+    /// saved as `HasVisualFire`.
     pub has_visual_fire: AtomicBool,
+    /// The shared `OnFire` flag clients see: burning, or [`Self::has_visual_fire`].
+    pub on_fire_flag: AtomicBool,
     /// The number of ticks the entity has been frozen (in powder snow)
     /// Max is 140 ticks (7 seconds). Increases by 1/tick in powder snow, decreases by 2/tick outside.
     pub frozen_ticks: AtomicI32,
@@ -1164,6 +1168,7 @@ impl Entity {
         )
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn from_uuid_with_id(
         entity_id: i32,
         entity_uuid: uuid::Uuid,
@@ -1236,6 +1241,7 @@ impl Entity {
             fire_immune: AtomicBool::new(false),
             fire_ticks: AtomicI32::new(-1),
             has_visual_fire: AtomicBool::new(false),
+            on_fire_flag: AtomicBool::new(false),
             frozen_ticks: AtomicI32::new(0),
             is_in_powder_snow: AtomicBool::new(false),
             was_in_powder_snow: AtomicBool::new(false),
@@ -3119,15 +3125,15 @@ impl Entity {
 
     /// Sets whether the entity is on fire for visual and damage purposes. This is separate from `fire_ticks` which tracks the damage aspect of being on fire.
     pub fn set_on_fire(&self, on_fire: bool) {
-        if self.has_visual_fire.load(Ordering::Relaxed) != on_fire {
-            self.has_visual_fire.store(on_fire, Ordering::Relaxed);
-            self.set_flag(Flag::OnFire, on_fire);
+        let shown = on_fire || self.has_visual_fire.load(Ordering::Relaxed);
+        if self.on_fire_flag.swap(shown, Ordering::Relaxed) != shown {
+            self.set_flag(Flag::OnFire, shown);
         }
     }
 
     #[must_use]
     pub fn is_on_fire(&self) -> bool {
-        self.fire_ticks.load(Ordering::Relaxed) > 0 || self.has_visual_fire.load(Ordering::Relaxed)
+        self.fire_ticks.load(Ordering::Relaxed) > 0 || self.on_fire_flag.load(Ordering::Relaxed)
     }
 
     pub fn get_horizontal_facing(&self) -> HorizontalFacing {
@@ -5202,6 +5208,28 @@ mod tests {
             })
             .unwrap_or_default();
         assert_eq!(tags, vec!["fixture", "keeper"]);
+    }
+
+    /// G7-28 round trip: burning shows fire but is no `HasVisualFire`, which only commands set.
+    #[tokio::test]
+    async fn burning_is_not_saved_as_visual_fire() {
+        let world = crate::world::test_world();
+        let entity = crate::entity::r#type::from_type(
+            &EntityType::ZOMBIE,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        entity.get_entity().set_on_fire(true);
+        assert!(entity.get_entity().is_on_fire());
+        let mut written = NbtCompound::new();
+        entity.write_nbt(&mut written);
+        assert_eq!(written.get_bool("HasVisualFire"), None);
+
+        let mut saved = NbtCompound::new();
+        saved.put_bool("HasVisualFire", true);
+        let written = round_trip(&EntityType::PIG, &saved);
+        assert_eq!(written.get_bool("HasVisualFire"), Some(true));
     }
 
     /// G7-24: like vanilla `Entity.load`, a saved speed over 10 blocks a tick reads as 0.
