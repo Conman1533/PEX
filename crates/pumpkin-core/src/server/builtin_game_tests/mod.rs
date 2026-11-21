@@ -28,6 +28,7 @@ mod redstone_lamps_and_bulbs;
 mod redstone_logic_circuits;
 mod redstone_wire_and_power;
 mod scaffolding;
+mod spiders;
 mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
@@ -299,6 +300,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:camel_follows_cactus",
     "pumpkin:husk_rider_steers_camel_husk_to_target",
     "pumpkin:piglin_brute_attacks_player_in_gold_armor",
+    "pumpkin:spider_climbs_wall_to_target",
+    "pumpkin:cave_spider_stops_targeting_in_daylight",
 ];
 
 #[must_use]
@@ -745,6 +748,20 @@ pub fn ensure_builtin_game_tests_registered() {
             100,
             0,
             entities_and_ai::test_zombie_targets_survival_mock_player,
+        );
+        register_function_test(
+            "pumpkin:spider_climbs_wall_to_target",
+            "pumpkin:empty_9x6x5",
+            400,
+            0,
+            spiders::test_spider_climbs_wall_to_target,
+        );
+        register_function_test(
+            "pumpkin:cave_spider_stops_targeting_in_daylight",
+            "pumpkin:empty_9x7x7",
+            1500,
+            0,
+            spiders::test_cave_spider_stops_targeting_in_daylight,
         );
         register_function_test(
             "pumpkin:nautilus_follows_tempting_player",
