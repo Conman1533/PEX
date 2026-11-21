@@ -561,3 +561,35 @@ pub(super) async fn test_villager_claims_job_site_and_bed(
     })?;
     Ok(())
 }
+
+/// Vanilla `Zombie.ZombieAttackTurtleEggGoal` (a `RemoveBlockGoal`) only breaks the egg once the
+/// zombie stands on it, and it gets up there by the step up in `Entity.collide`: the egg is
+/// lower than a zombie's 0.6 block `step_height`.
+pub(super) async fn test_zombie_tramples_turtle_egg(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..=2 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
+    let egg = BlockPos::new(6, 1, 2);
+    helper.set_block_default(&egg, &Block::TURTLE_EGG).await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 1, 2),
+            "summon minecraft:zombie ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(move |helper| async move {
+        helper
+            .assert_block_not_present(&egg, &Block::TURTLE_EGG)
+            .await
+    })?;
+    Ok(())
+}
