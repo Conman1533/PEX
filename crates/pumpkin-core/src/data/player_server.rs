@@ -211,10 +211,14 @@ impl ServerPlayerData {
         let result = self.storage.load_player_data(uuid);
 
         match result {
-            Ok((should_load, data)) => {
+            Ok((should_load, mut data)) => {
                 if !should_load {
                     // No data to load, continue with default data
                     return Ok(None);
+                }
+                // An older vanilla's save (roadmap D7-2).
+                if let Some(version) = pumpkin_world::datafix::data_version(&data) {
+                    pumpkin_world::datafix::upgrade_tree(&mut data, version);
                 }
                 Ok(Some(data))
             }

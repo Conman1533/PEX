@@ -480,6 +480,7 @@ where
 
                 let t_decode = Instant::now();
                 let (tx, mut rx) = mpsc::channel(raw_chunks.len().max(1));
+                let dimension = crate::datafix::dimension_of_folder(folder);
                 crate::background_pool().spawn(move || {
                     raw_chunks.into_par_iter().for_each(|(pos, nbt)| {
                         let loaded = match nbt {
@@ -494,7 +495,7 @@ where
                                         Ordering::Relaxed,
                                         Ordering::Relaxed,
                                     );
-                                    match D::from_bytes(&nbt, pos) {
+                                    match D::from_bytes_in(&nbt, pos, &dimension) {
                                         Ok(chunk) => LoadedData::Loaded(Arc::new(chunk)),
                                         Err(err) => LoadedData::Error((pos, err)),
                                     }

@@ -772,6 +772,15 @@ impl RegionFile for AnvilRegion {
 pub trait SingleChunkDataSerializer: Send + Sync + Sized + Dirtiable + 'static {
     fn to_bytes(&self) -> Result<Bytes, ChunkSerializingError>;
     fn from_bytes(bytes: &Bytes, pos: Vector2<i32>) -> Result<Self, ChunkReadingError>;
+    /// [`Self::from_bytes`] for data read from `dimension`'s folder, which older vanilla data
+    /// needs to be upgraded right (roadmap D7-2).
+    fn from_bytes_in(
+        bytes: &Bytes,
+        pos: Vector2<i32>,
+        _dimension: &str,
+    ) -> Result<Self, ChunkReadingError> {
+        Self::from_bytes(bytes, pos)
+    }
     fn to_pump_bytes(&self) -> Result<Bytes, ChunkSerializingError> {
         self.to_bytes()
     }
