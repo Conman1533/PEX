@@ -23,6 +23,10 @@ Steps, each in its own folder under --out:
    `locate`, generates the chunks around it and saves. Its start chunk must hold the village's
    start, and vanilla, opening that save, must find the same village and log no structure
    errors (G7-07).
+7. player: the fixture's bot joins vanilla on the fixture, stands for a few seconds and leaves,
+   so vanilla loads and saves its player file; the same visit on PEX, then on vanilla opening
+   PEX's save. Each player file is diffed against vanilla's own visit, outside VISIT_IGNORE
+   (values a visit changes by how long it lasts) (G7-21).
 
 Every step's saved data files (`scoreboard.dat`, `world_clocks.dat`, `weather.dat`, each
 dimension's `world_border.dat`, `chunk_tickets.dat` and `ender_dragon_fight.dat`) also get
@@ -57,6 +61,15 @@ VANILLA_PROBLEMS = re.compile(
     r"|Failed to load chunk|Couldn't load chunk|Failed to read"
     # Vanilla falls back to air for a section whose palette it can't read (G7-05).
     r"|Recoverable errors when loading section")
+# Values in the player file that a visit changes by how many ticks it lasted, so two visits
+# from the same file never agree on them.
+VISIT_IGNORE = [
+    ("players/data/*.dat", "active_effects[*].duration", "effects count down while the bot is online"),
+    ("players/data/*.dat", "warden_spawn_tracker.ticks_since_last_warning", "counts up while online"),
+    ("players/data/*.dat", "foodTickTimer", "the hunger timer runs while online"),
+    ("players/data/*.dat", "XpSeed", "a file holding 0, as the fixture's does, gets a new random seed on load"),
+]
+FIXTURE_BOT = "fixturebot"
 PEX_READY = re.compile(r"Started server|Done \(")
 VANILLA_READY = re.compile(r"Done \(")
 SAVED = re.compile(r"[Ss]aved the game|Saved the world|saved", re.I)
@@ -98,7 +111,9 @@ def write_pex_config(folder, port, seed=None):
     os.makedirs(folder, exist_ok=True)
     with open(os.path.join(folder, "pumpkin.toml"), "w") as f:
         f.write("\n".join(([f'seed = "{seed}"', ""] if seed is not None else []) + [
-            "[networking.java]", f'address = "127.0.0.1:{port}"', "online_mode = false", "",
+            "[networking.java]", f'address = "127.0.0.1:{port}"', "online_mode = false",
+            # Step 7's bot speaks neither encryption nor more chunks than vanilla's config sends.
+            "encryption = false", "view_distance = 4", "simulation_distance = 4", "",
             "[networking.bedrock]", "enabled = false", "",
             "[plugins]", "enabled = false", "",
             "[telemetry]", "enabled = false", "",
@@ -209,6 +224,58 @@ def diff(report, title, world_a, world_b, known, all_groups):
             report.append(f"  - ... {len(diffs) - 20} more")
     report.append("")
     return len(new)
+
+
+def bot_visit(port, seconds=8):
+    """The fixture's bot joins, stands still for `seconds` and leaves, so the server loads its
+    player file and saves it when the bot leaves."""
+    import build_structures
+    build_structures.BOT_NAME = FIXTURE_BOT
+    bot = build_structures.Bot(port)
+    if not bot.joined.wait(180) or bot.error:
+        raise RuntimeError(f"the bot didn't join: {bot.error}")
+    time.sleep(seconds)
+    bot.sock.close()
+    time.sleep(3)
+
+
+def player_files(world, dst):
+    """Copies only the world's player files, so a diff of two copies compares just those."""
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    src = os.path.join(world, "players", "data")
+    os.makedirs(os.path.join(dst, "players", "data"))
+    for name in os.listdir(src):
+        if name.endswith(".dat"):
+            shutil.copy2(os.path.join(src, name), os.path.join(dst, "players", "data", name))
+    return dst
+
+
+def visit(args, kind, src_world, folder, port):
+    copy_world(src_world, os.path.join(folder, "world"))
+    server, console = start(args, kind, folder, port)
+    try:
+        bot_visit(port)
+        save_and_stop(server, console)
+    finally:
+        server.stop()
+    return os.path.join(folder, "world")
+
+
+def player_step(args, report, known, all_groups):
+    """Step 7. Returns the differences outside the ignore and known-loss lists."""
+    fixture_world = os.path.join(args.fixture, "world")
+    vanilla_world = visit(args, "vanilla", fixture_world, os.path.join(args.out, "player-vanilla"), args.port + 9)
+    pex_world = visit(args, "pex", fixture_world, os.path.join(args.out, "player-pex"), args.port + 10)
+    back_world = visit(args, "vanilla", pex_world, os.path.join(args.out, "player-pex-vanilla"), args.port + 11)
+    files = os.path.join(args.out, "player-files")
+    vanilla_files = player_files(vanilla_world, os.path.join(files, "vanilla"))
+    ignore = VISIT_IGNORE + known
+    problems = diff(report, "7. The fixture bot's visit: vanilla -> PEX", vanilla_files,
+                    player_files(pex_world, os.path.join(files, "pex")), ignore, all_groups)
+    problems += diff(report, "7. The fixture bot's visit: vanilla -> vanilla after PEX", vanilla_files,
+                     player_files(back_world, os.path.join(files, "pex-vanilla")), ignore, all_groups)
+    return problems
 
 
 def read_dat(world, rel):
@@ -476,6 +543,7 @@ def main():
     problems += len(failures)
     problems += len(hardcore_step(args, report))
     problems += len(structures_step(args, report))
+    problems += player_step(args, report, known, all_groups)
 
     if args.write_known_losses:
         seen = set()
