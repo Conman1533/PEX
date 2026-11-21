@@ -178,6 +178,7 @@ dimensions/minecraft/*/entities/*.mca Entities[*].acceleration_power G7-24; 2026
 dimensions/minecraft/*/entities/*.mca Entities[*].Item G7-24; 2026-11-21 batch 5 run: step 1: 3 lost, step 2: 2 added
 dimensions/minecraft/*/entities/*.mca Entities[*].ExplosionPower G7-24; 2026-11-21 batch 5 run: steps 1 and 2: 1 changed
 dimensions/minecraft/*/entities/*.mca Entities[*].equipment.head G7-24; 2026-11-21 batch 5 run: step 3: 1 added
+dimensions/minecraft/*/entities/*.mca Entities[*].equipment.mainhand.id ticking; a live mob in a force-loaded chunk picks up an item; 2026-11-21 batch 5 run: step 3: 1 changed
 dimensions/minecraft/*/entities/*.mca Entities[*].fall_distance G7-24; first run: step 1: 150 lost
 dimensions/minecraft/*/entities/*.mca Entities[*].from_bucket G7-24; first run: step 1: 1 lost
 dimensions/minecraft/*/entities/*.mca Entities[*].glow_color_override G7-24; first run: step 1: 3 lost
@@ -305,10 +306,3 @@ dimensions/minecraft/*/region/*.mca block_entities[*].ticks_since_song_started t
 dimensions/minecraft/*/region/*.mca block_entities[*].Items[*] G7-23; 2026-11-21 G7-25 run: steps 1 and 3: 4 lost (also ticking: a brewed ingredient, cooked beef)
 dimensions/minecraft/*/region/*.mca block_entities[*].RecordItem.components G7-23; 2026-11-21 G7-25 run: steps 1 and 2: 1 added
 dimensions/minecraft/*/region/*.mca block_entities[*].Page G7-23; 2026-11-21 G7-25 run: step 2: 1 changed
-
-# Follow-ups seen in batch 4 round trips (2026-11-21), not caused by G7-23 or G7-25: PEX starts
-# the fixture raid on its second load, and vanilla keeps the visit pearl twice (one UUID) in PEX saves.
-dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].started G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
-dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].groups_spawned G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
-dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].total_health G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
-players/data/*.dat ender_pearls[*] G7-21; 2026-11-21 batch 4 run: step 7: 1 added
