@@ -8,7 +8,15 @@ mod riding;
 mod transport;
 
 use std::{
-    collections::HashMap, future::Future, net::SocketAddr, path::Path, sync::Arc, time::Duration,
+    collections::HashMap,
+    future::Future,
+    net::SocketAddr,
+    path::Path,
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 use pumpkin_core::{
@@ -48,6 +56,82 @@ const JAVA_NAME: &str = "JavaBot";
 /// `bedrock.max_players` on the test server: room for the Java and Bedrock bots in `mixed_play`,
 /// and for the main Bedrock bot plus one more in `login_checks`.
 const MAX_PLAYERS: u32 = 2;
+
+/// How long the Bedrock tests may go without finishing a tick before the stall watchdog reports
+/// them stuck, and (unless `PEX_TESTER_STALL_EXIT_SECS` says otherwise) ends the run.
+const STALL_REPORT: Duration = Duration::from_secs(120);
+
+/// What the last tick was doing, for the stall report.
+static TICK_PHASE: AtomicU8 = AtomicU8::new(PHASE_IDLE);
+const PHASE_IDLE: u8 = 0;
+const PHASE_SERVER_TICK: u8 = 1;
+const PHASE_BEDROCK_POLL: u8 = 2;
+const PHASE_JAVA_POLL: u8 = 3;
+const PHASE_SLEEP: u8 = 4;
+/// Milliseconds since `WATCHDOG_START` when the last tick finished.
+static LAST_TICK_MS: AtomicU64 = AtomicU64::new(0);
+static WATCHDOG_START: OnceLock<Instant> = OnceLock::new();
+static WATCHDOG_STOP: AtomicBool = AtomicBool::new(false);
+/// The scenario and the check recorded last, for the stall report.
+static LAST_CHECK: std::sync::Mutex<(&str, &str)> = std::sync::Mutex::new(("", ""));
+
+fn mark_progress() {
+    let start = WATCHDOG_START.get_or_init(Instant::now);
+    let elapsed = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+    LAST_TICK_MS.store(elapsed, Ordering::Relaxed);
+}
+
+/// A thread that ends the run with a clear message when no tick finishes for `STALL_REPORT`:
+/// every wait in the Bedrock tests is capped in ticks, so a stall means an `await` (a server
+/// tick or a bot read) never returned. Set `PEX_TESTER_STALL_EXIT_SECS` higher to leave the
+/// stuck process running after the report, for a debugger or a crash dump.
+#[expect(
+    clippy::print_stderr,
+    reason = "the stall report goes to the runner log, like main's"
+)]
+fn start_stall_watchdog() {
+    mark_progress();
+    WATCHDOG_STOP.store(false, Ordering::Relaxed);
+    let exit_after = std::env::var("PEX_TESTER_STALL_EXIT_SECS")
+        .ok()
+        .and_then(|secs| secs.parse().ok())
+        .map_or(STALL_REPORT, Duration::from_secs);
+    std::thread::spawn(move || {
+        let start = *WATCHDOG_START.get_or_init(Instant::now);
+        let mut reported = false;
+        while !WATCHDOG_STOP.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_secs(1));
+            let last = Duration::from_millis(LAST_TICK_MS.load(Ordering::Relaxed));
+            let stalled = start.elapsed().saturating_sub(last);
+            if stalled < STALL_REPORT {
+                reported = false;
+                continue;
+            }
+            if !reported {
+                reported = true;
+                let (scenario, check) = *LAST_CHECK
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let phase = match TICK_PHASE.load(Ordering::Relaxed) {
+                    PHASE_SERVER_TICK => "inside Server::tick",
+                    PHASE_BEDROCK_POLL => "reading the Bedrock bot's packets",
+                    PHASE_JAVA_POLL => "reading the Java bot's packets",
+                    PHASE_SLEEP => "sleeping between ticks",
+                    _ => "outside a tick",
+                };
+                eprintln!(
+                    "bedrock: STUCK: no tick for {}s, {phase}, in bedrock:{scenario} after the \
+                     check \"{check}\"",
+                    stalled.as_secs()
+                );
+            }
+            if stalled >= exit_after {
+                eprintln!("bedrock: ending the stuck run");
+                std::process::exit(101);
+            }
+        }
+    });
+}
 
 type BedrockClients = Arc<Mutex<HashMap<SocketAddr, Arc<BedrockClient>>>>;
 
@@ -138,7 +222,12 @@ impl BedrockTestServer {
         loop {
             tokio::select! {
                 output = &mut future => return output,
-                () = tokio::time::sleep(TICK) => self.server.tick(),
+                () = tokio::time::sleep(TICK) => {
+                    TICK_PHASE.store(PHASE_SERVER_TICK, Ordering::Relaxed);
+                    self.server.tick();
+                    TICK_PHASE.store(PHASE_IDLE, Ordering::Relaxed);
+                    mark_progress();
+                }
             }
         }
     }
@@ -163,12 +252,18 @@ async fn tick(
 ) -> Result<(), String> {
     // A real client sends `PlayerAuthInput` every tick; the server times out a silent one.
     bedrock.send_input(bedrock.position, &[]).await?;
+    TICK_PHASE.store(PHASE_SERVER_TICK, Ordering::Relaxed);
     server.server.tick();
+    TICK_PHASE.store(PHASE_SLEEP, Ordering::Relaxed);
     tokio::time::sleep(TICK).await;
+    TICK_PHASE.store(PHASE_BEDROCK_POLL, Ordering::Relaxed);
     bedrock.poll_packets().await?;
     if let Some(java) = java {
+        TICK_PHASE.store(PHASE_JAVA_POLL, Ordering::Relaxed);
         java.poll_packets().await?;
     }
+    TICK_PHASE.store(PHASE_IDLE, Ordering::Relaxed);
+    mark_progress();
     Ok(())
 }
 
@@ -209,6 +304,9 @@ impl Checks {
     }
 
     fn record(&mut self, name: &'static str, result: Result<(), String>) {
+        *LAST_CHECK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = (self.scenario, name);
         self.results.push((name, result));
     }
 
@@ -239,7 +337,9 @@ impl Checks {
 pub async fn run_bedrock_tests(summary_lines: &mut Vec<String>) -> Result<(), String> {
     let world = tempfile::tempdir().map_err(|err| format!("temp dir failed: {err}"))?;
     let server = BedrockTestServer::start(world.path()).await?;
+    start_stall_watchdog();
     let result = Box::pin(run_scenarios(&server, summary_lines)).await;
+    WATCHDOG_STOP.store(true, Ordering::Relaxed);
     server.stop().await;
     result
 }

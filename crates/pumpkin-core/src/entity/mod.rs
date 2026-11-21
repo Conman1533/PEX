@@ -2317,7 +2317,12 @@ impl Entity {
     }
 
     fn tick_portal(&self, caller: &dyn EntityBase) {
-        if self.portal_cooldown.load(Ordering::Relaxed) > 0 {
+        // A player still loading into the dimension it came to stands in the exit portal, and
+        // its movement isn't taken yet, so nothing refreshes the cooldown. Counting down then
+        // sends it straight back as soon as it has loaded, whenever the new chunks take longer
+        // than the cooldown to reach it. The client-load timeout still bounds the wait.
+        let still_arriving = caller.get_player().is_some_and(|p| !p.has_client_loaded());
+        if !still_arriving && self.portal_cooldown.load(Ordering::Relaxed) > 0 {
             self.portal_cooldown.fetch_sub(1, Ordering::Relaxed);
         }
         let Ok(mut manager_guard) = self.portal_manager.try_lock() else {
@@ -2336,9 +2341,16 @@ impl Entity {
                 let entity_id = self.entity_id;
                 let yaw = self.yaw.load();
 
-                let rt_handle = world_clone.server.upgrade().map(|s| s.runtime.clone());
-                rayon::spawn(move || {
-                    let _guard = rt_handle.as_ref().map(tokio::runtime::Handle::enter);
+                // On the runtime's blocking pool, not rayon: this waits for the exit's chunks to
+                // generate. Spawned from a player's tick inside the world's `par_iter`, a rayon job
+                // can land on the same worker's queue and be run by that worker while it waits for
+                // its share of the `par_iter`, which blocks the whole server tick on the chunk
+                // loading, and for good if that loading needs a later tick.
+                let Some(rt_handle) = world_clone.server.upgrade().map(|s| s.runtime.clone())
+                else {
+                    return;
+                };
+                drop(rt_handle.spawn_blocking(move || {
                     let Some(entity_arc) = world_clone.get_entity_by_id(entity_id) else {
                         return;
                     };
@@ -2367,7 +2379,7 @@ impl Entity {
                             &dest_world,
                         );
                     }
-                });
+                }));
             } else if portal_processor.portal_time == 0 {
                 should_remove = true;
             }
@@ -5122,6 +5134,28 @@ fn saved_motion(nbt: &NbtCompound) -> Option<Vector3<f64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A player arriving through a portal keeps its cooldown until its client has loaded the
+    /// new dimension, so it doesn't go straight back through the exit portal it stands in.
+    #[tokio::test]
+    async fn portal_cooldown_waits_for_the_player_to_load_in() {
+        let world = crate::world::test_world();
+        let player = crate::world::test_player(&world, Vector3::new(0.5, 64.0, 0.5));
+        assert!(player.supports_player_loaded());
+        let entity = player.get_entity();
+        player.set_client_loaded(false);
+        entity.portal_cooldown.store(10, Ordering::Relaxed);
+        for _ in 0..20 {
+            entity.tick_portal(player.as_ref());
+        }
+        assert_eq!(entity.portal_cooldown.load(Ordering::Relaxed), 10);
+
+        player.set_client_loaded(true);
+        for _ in 0..10 {
+            entity.tick_portal(player.as_ref());
+        }
+        assert_eq!(entity.portal_cooldown.load(Ordering::Relaxed), 0);
+    }
 
     /// Reads `saved` into a new entity of `entity_type` the way a chunk load does, then saves it.
     fn round_trip(entity_type: &'static EntityType, saved: &NbtCompound) -> NbtCompound {
