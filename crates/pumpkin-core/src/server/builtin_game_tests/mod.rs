@@ -262,6 +262,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:iron_golem_pattern_clears_all_four_blocks",
     "pumpkin:different_item_entities_do_not_merge",
     "pumpkin:item_entities_stack_up_to_combined_count",
+    "pumpkin:commands/unseen_names_get_vanilla_offline_uuids",
     "pumpkin:commands/forceload_add_loads_before_answering",
 ];
 
@@ -681,6 +682,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_quoted_non_ascii_player_name,
+        );
+        register_function_test(
+            "pumpkin:commands/unseen_names_get_vanilla_offline_uuids",
+            "pumpkin:empty_5x4x5",
+            20,
+            0,
+            commands_and_entities_extended::test_unseen_names_get_vanilla_offline_uuids,
         );
         register_function_test(
             "pumpkin:commands/forceload_add_loads_before_answering",

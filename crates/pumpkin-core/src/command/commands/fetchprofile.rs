@@ -205,21 +205,22 @@ async fn fetch_profile_by_name_helper(server: &Server, name: &str) -> Option<Gam
         });
     }
 
+    // Vanilla resolves an unknown name to the offline UUID of the lowercased name (D4-1).
     if !server.advanced_config.networking.java.online_mode {
-        let uuid = offline_uuid(name);
-        let profile = GameProfile {
-            id: uuid,
-            name: name.to_string(),
-            properties: arc_swap::ArcSwap::new(Arc::new(vec![])),
-            profile_actions: None,
-        };
+        let lowercase_name = name.to_lowercase();
+        let uuid = offline_uuid(&lowercase_name);
         server
             .data
             .user_cache
             .write()
             .unwrap()
-            .upsert(uuid, name.to_string());
-        return Some(profile);
+            .upsert(uuid, lowercase_name.clone());
+        return Some(GameProfile {
+            id: uuid,
+            name: lowercase_name,
+            properties: arc_swap::ArcSwap::new(Arc::new(vec![])),
+            profile_actions: None,
+        });
     }
 
     None
