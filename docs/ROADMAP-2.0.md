@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4086dbc0e`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `206a50ada`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -18,12 +18,12 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 33 | 18 | 1 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 34 | 18 | 1 | 13 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 203 | 90 | 7 | 90 | 16 |
+| Total | 204 | 90 | 7 | 91 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -57,6 +57,8 @@ Landing batch 10 (2026-11-21) also carried, outside the pieces: the Bedrock thre
 Landing batch 11 (2026-11-21) also carried, outside the pieces: the Bedrock thread's `fix/bedrock-held-item-use` (BP2-10, `ebdca5db6`: a Bedrock client's release of a held food no longer cancels the meal before the server's eating timer finishes, and 23 Bedrock item-use bot checks), and `pumpkin:camel_follows_cactus` walled in like the armadillo test, sharing a `build_pen_wall` helper. The forceload GameTest was first listed as a mock-player test, which overflowed the tester's 18 mob test cells; it now sits with the plain tests, and the next real mob or mock-player GameTest needs the creeper test made persistent or more cells. `pumpkin:cow_follows_wheat_and_panics_when_hit` failed once on CT 117 (the cow still in its box at tick 141, last seen 2026-11-04) and passed on the rerun.
 
 Landing batch 13 (2026-11-21, merge branch `land/g7-batch-13` `0028f6d80`, which passed the world round trip, full CI and the whole tester on CT 117 and the Z420) carried no pieces of its own: the emitter update source above, `test/more-mob-cells` (`2a2ea30b7`: the creeper test summons a persistent creeper and every mob-spawning GameTest runs in its own cell, 44 cells instead of 18, about 5% more tester time), which unblocks the G1 mob pieces, and `test/cow-panic-timing` (`a5b511454`): `pumpkin:cow_follows_wheat_and_panics_when_hit` hit the cow at tick 61 but gave up at tick 140, while a panic lasts 100 to 120 ticks, so it now allows 200.
+
+Landing batch 15 (2026-11-21, `206a50ada`) also carried the Bedrock thread's `fix/bedrock-tester-stall-watchdog` (`5f63ac981`): the portal exit search runs off the rayon pool (the Windows tester hang), the portal cooldown waits until the client has loaded, with a unit test (the `bedrock:mixed_play` flake), and the tester stops with a stall report after 120 s without progress. `pumpkin:creeper_should_run_from_cat` failed once on the Z420 (its test instance needs 3 passes of 3 attempts in 22 ticks each, as vanilla's flaky rules run it); `test/creeper-cat-budget` gives each attempt 60 ticks.
 
 What holds 2.0 back:
 
@@ -2191,12 +2193,21 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 
 #### G6-33 data block messages name the position like vanilla
 
-- Scope: in: `commands.data.block.query` and `commands.data.block.modified` in `core/command/commands/data.rs` get x, y and z as three arguments, like vanilla `BlockDataAccessor`, instead of one "x, y, z" text. Out: the key order inside printed SNBT (vanilla prints a `CompoundTag` in hash order).
+- Scope: in: `commands.data.block.query` and `commands.data.block.modified` in `core/command/commands/data.rs` get x, y and z as three arguments, like vanilla `BlockDataAccessor`, instead of one "x, y, z" text. `data modify`, `data merge` and `data remove` on a block load the new data into the block entity like vanilla `BlockDataAccessor.setData` (on `alpha` they answer "Modified block data" and change nothing, because the data goes to the chunk's lazy-load copy, which an existing block entity never reads). Out: the key order inside printed SNBT (vanilla prints a `CompoundTag` in hash order).
 - Depends on: none
 - Branch: fix/data-block-query-args
 - Needs decision: none
 - Done when: `data get block` and `data modify block` on a chest print the same lines on PEX and vanilla 26.3 in the side-by-side, apart from SNBT key order.
-- Status (2026-11-21): built, proof missing (branch `fix/data-block-query-args`, `b62eeec08`, the 2.0 loop). Found in the G6-28 side-by-side: PEX printed `3, 201, 0, [...], [...] has the following block data: [...]` where vanilla prints `3, 201, 0 has the following block data: [...]`. Missing: the side-by-side run on a build with the fix.
+- Status (2026-11-21): built, proof missing (branch `fix/data-block-query-args`, the 2.0 loop). Batch 15 carried the message part (`b62eeec08`): in the side-by-side on CT 117 against vanilla 26.3, `data get block` now prints `3, 201, 0 has the following block data: [...]` and `data modify block` prints `Modified block data of 3, 201, 0` like vanilla. The same run showed `data modify block 3 201 0 Items[0].count set value 5` leaving the count at 3 (vanilla 5) and `data remove` after `data merge` answering "Nothing changed"; the fix and the GameTest `pumpkin:commands/data_modify_block_changes_block_entity` follow on the same branch. Merge branch `land/g7-batch-15` (`206a50ada`) passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+
+#### G6-34 item replace answers with the 26.3 messages
+
+- Scope: in: `item replace block` and `item replace entity` in `core/command/commands/item.rs` answer with 26.3's `commands.item.block.replace.success.known_item`, `commands.item.entity.replace.success.single.known_item` and `...multiple.known_item` (slot count first, as `BlockItemAccessor` and `EntityItemAccessor` send them) instead of the pre-26.3 `commands.item.*.set.success` keys. Out: the rest of 26.3's `ItemCommands` rework (slot ranges, `CommandResponseTracker`).
+- Depends on: none
+- Branch: fix/item-command-messages
+- Needs decision: none
+- Done when: `item replace block 3 201 0 container.0 with minecraft:stone 3` prints `Replaced 1 slot(s) at 3, 201, 0 with [Stone]` on PEX as on vanilla 26.3 (the CT 117 side-by-side), and `item replace entity` on one and two entities prints vanilla's lines.
+- Status (2026-11-21): built, proof missing (branch `fix/item-command-messages`, `d24192faa`, the 2.0 loop). Found in the G6-33 side-by-side: PEX printed `Replaced a slot at 3, 201, 0 with [Stone]`.
 
 ### Proof
 
