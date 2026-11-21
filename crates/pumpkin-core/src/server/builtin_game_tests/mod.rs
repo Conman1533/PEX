@@ -28,6 +28,7 @@ mod redstone_lamps_and_bulbs;
 mod redstone_logic_circuits;
 mod redstone_wire_and_power;
 mod scaffolding;
+mod small_hostiles;
 mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
@@ -282,6 +283,11 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:strider_walks_back_to_lava",
     "pumpkin:piglin_barters_gold_ingot_for_loot",
     "pumpkin:villager_claims_job_site_and_bed",
+    "pumpkin:silverfish_wakes_friends_from_infested_stone",
+    "pumpkin:endermite_climbs_out_of_powder_snow",
+    "pumpkin:endermites_alert_each_other_when_hit",
+    "pumpkin:persistent_endermite_never_expires",
+    "pumpkin:priming_creeper_sets_off_sculk_sensor",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -595,6 +601,41 @@ pub fn ensure_builtin_game_tests_registered() {
             3,
             1,
             entities_and_ai::test_zombie_pathfinds_to_villager,
+        );
+        register_function_test(
+            "pumpkin:silverfish_wakes_friends_from_infested_stone",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            small_hostiles::test_silverfish_wakes_friends_from_infested_stone,
+        );
+        register_function_test(
+            "pumpkin:endermite_climbs_out_of_powder_snow",
+            "pumpkin:empty_5x4x5",
+            200,
+            0,
+            small_hostiles::test_endermite_climbs_out_of_powder_snow,
+        );
+        register_function_test(
+            "pumpkin:endermites_alert_each_other_when_hit",
+            "pumpkin:empty_9x4x5",
+            100,
+            0,
+            small_hostiles::test_endermites_alert_each_other_when_hit,
+        );
+        register_function_test(
+            "pumpkin:persistent_endermite_never_expires",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            small_hostiles::test_persistent_endermite_never_expires,
+        );
+        register_function_test(
+            "pumpkin:priming_creeper_sets_off_sculk_sensor",
+            "pumpkin:empty_9x4x5",
+            100,
+            0,
+            small_hostiles::test_priming_creeper_sets_off_sculk_sensor,
         );
         register_function_test(
             "pumpkin:dragon_fireball_leaves_breath_cloud",
