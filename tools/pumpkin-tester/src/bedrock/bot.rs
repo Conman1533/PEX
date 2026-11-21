@@ -874,6 +874,16 @@ impl BedrockBot {
     /// Hits the entity with this runtime id, as a real client's `UseItemOnEntity` attack
     /// transaction with an empty hand.
     pub async fn attack(&self, runtime_id: u64) -> Result<(), String> {
+        self.use_on_entity(runtime_id, 1).await
+    }
+
+    /// Clicks the entity with this runtime id with an empty hand, as a real client's
+    /// `UseItemOnEntity` interact transaction (mounting, trading, feeding).
+    pub async fn interact(&self, runtime_id: u64) -> Result<(), String> {
+        self.use_on_entity(runtime_id, 0).await
+    }
+
+    async fn use_on_entity(&self, runtime_id: u64, action: i32) -> Result<(), String> {
         let mut payload = Vec::new();
         let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
             // No legacy request, no legacy slots, transaction type `UseItemOnEntity`, no actions.
@@ -882,8 +892,8 @@ impl BedrockBot {
             VarUInt(3).write(payload)?;
             VarUInt(0).write(payload)?;
             VarULong(runtime_id).write(payload)?;
-            // Attack, with hotbar slot 0 in the main hand.
-            VarInt(1).write(payload)?;
+            // The action (0 interact, 1 attack), with hotbar slot 0 in the main hand.
+            VarInt(action).write(payload)?;
             VarInt(0).write(payload)?;
             0u8.write(payload)?;
             NetworkItemDescriptor::from(&ItemStack::EMPTY.clone()).write(payload)?;

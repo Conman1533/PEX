@@ -216,6 +216,21 @@ impl RideTamable for DonkeyEntity {
 }
 
 impl Mob for DonkeyEntity {
+    fn mob_controlling_passenger(&self) -> Option<std::sync::Arc<dyn crate::entity::EntityBase>> {
+        crate::entity::mob::saddled_player_controller(self.get_entity(), self.is_saddled()).or_else(
+            || {
+                crate::entity::mob::mob_rider_controller(
+                    self.get_entity(),
+                    self.get_mob_entity().is_no_ai(),
+                )
+            },
+        )
+    }
+
+    fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
+        crate::entity::mob::player_steers(self)
+    }
+
     /// Vanilla `AbstractHorse.aiStep`: rearing ends after 20 ticks.
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let stand = self.stand_counter.load(Ordering::Relaxed);
