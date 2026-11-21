@@ -144,3 +144,10 @@ dimensions/minecraft/*/region/*.mca block_entities[*].ticks_since_song_started t
 dimensions/minecraft/*/region/*.mca block_entities[*].Items[*] G7-23; 2026-11-21 G7-25 run: steps 1 and 3: 4 lost (also ticking: a brewed ingredient, cooked beef)
 dimensions/minecraft/*/region/*.mca block_entities[*].RecordItem.components G7-23; 2026-11-21 G7-25 run: steps 1 and 2: 1 added
 dimensions/minecraft/*/region/*.mca block_entities[*].Page G7-23; 2026-11-21 G7-25 run: step 2: 1 changed
+
+# Follow-ups seen in batch 4 round trips (2026-11-21), not caused by G7-23 or G7-25: PEX starts
+# the fixture raid on its second load, and vanilla keeps the visit pearl twice (one UUID) in PEX saves.
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].started G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].groups_spawned G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].total_health G7-18; 2026-11-21 batch 4 run: step 3: 1 changed
+players/data/*.dat ender_pearls[*] G7-21; 2026-11-21 batch 4 run: step 7: 1 added
