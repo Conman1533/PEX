@@ -106,6 +106,15 @@ impl PlayerInventory {
         inv[self.get_selected_slot() as usize].clone()
     }
 
+    /// Runs `f` on the item in the selected hotbar slot without cloning it.
+    pub fn with_held_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
+        let inv = self
+            .main_inventory
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        f(&inv[self.get_selected_slot() as usize])
+    }
+
     /// Sets the item in the currently selected hotbar slot.
     pub fn set_held_item(&self, stack: ItemStack) {
         let selected = self.get_selected_slot() as usize;

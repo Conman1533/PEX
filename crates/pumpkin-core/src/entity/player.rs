@@ -3140,6 +3140,7 @@ impl Player {
             client.tick_attack_cooldown(self);
         }
 
+        self.detect_equipment_updates();
         self.living_entity.tick(self, server);
 
         self.breath_manager.tick(self);
@@ -4821,6 +4822,35 @@ impl Player {
         let health = self.living_entity.health.load();
         let max_health = self.living_entity.get_max_health();
         health > 0.0 && health < max_health
+    }
+
+    /// Vanilla `LivingEntity.detectEquipmentUpdates`: a slot whose stack changed without going
+    /// through `send_equipment_changes` (a `/give` into the held slot, a stack used up) gets its
+    /// attribute modifiers applied and is broadcast this tick, not at the next hand sync.
+    pub fn detect_equipment_updates(&self) {
+        let living = &self.living_entity;
+        // `last_equipment` is the innermost lock: taken inside the inventory and equipment locks,
+        // never held while taking another.
+        let mut changed = Vec::new();
+        self.inventory().with_held_item(|held| {
+            if living.equipment_changed(&EquipmentSlot::MAIN_HAND, held) {
+                changed.push((EquipmentSlot::MAIN_HAND, held.clone()));
+            }
+        });
+        {
+            let equipment = living
+                .entity_equipment
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for (slot, stack) in &equipment.equipment {
+                if *slot != EquipmentSlot::MAIN_HAND && living.equipment_changed(slot, stack) {
+                    changed.push((slot.clone(), stack.clone()));
+                }
+            }
+        }
+        if !changed.is_empty() {
+            living.send_equipment_changes(&changed);
+        }
     }
 
     pub fn add_exhaustion(&self, exhaustion: f32) {
@@ -8596,6 +8626,37 @@ mod tests {
     use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
     use pumpkin_world::chunk::ChunkData;
     use uuid::Uuid;
+
+    #[tokio::test]
+    async fn a_sword_put_in_the_held_slot_applies_its_damage_on_the_next_tick() {
+        use pumpkin_data::data_component_impl::EquipmentSlot;
+        use pumpkin_data::item::Item;
+        use pumpkin_data::item_stack::ItemStack;
+
+        let world = test_world();
+        let player = test_player(&world, Vector3::new(0.5, 64.0, 0.5));
+        let fist = player
+            .living_entity
+            .get_attribute_value(&Attributes::ATTACK_DAMAGE);
+        // Like `/give`: straight into the inventory, without an equipment change.
+        player
+            .inventory()
+            .set_held_item(ItemStack::new(1, &Item::DIAMOND_SWORD));
+        player.detect_equipment_updates();
+        let sword = player
+            .living_entity
+            .get_attribute_value(&Attributes::ATTACK_DAMAGE);
+        assert!(
+            (sword - fist - 6.0).abs() < 1e-9,
+            "a diamond sword adds 6 attack damage, got {fist} -> {sword}"
+        );
+        // Nothing changed since, so the next tick sends nothing new.
+        assert!(
+            !player
+                .living_entity
+                .equipment_changed(&EquipmentSlot::MAIN_HAND, &player.inventory().held_item())
+        );
+    }
 
     fn mining_world() -> Arc<World> {
         let world = test_world();
