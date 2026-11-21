@@ -21,11 +21,11 @@ use pumpkin_protocol::{
             play::{
                 CBlockUpdate, CChunkBatchEnd, CChunkData, CCloseContainer, CDisguisedChatMessage,
                 CEntityPositionSync, CEntityVelocity, CGameEvent, CHeadRot, CKeepAlive, CLogin,
-                COpenScreen, CPingResponse, CPlayDisconnect, CPlayerChatMessage, CPlayerPosition,
-                CRemoveEntities, CRespawn, CSetContainerContent, CSetContainerSlot, CSetCursorItem,
-                CSetEntityMetadata, CSetHealth, CSetPassengers, CSetPlayerInventory,
-                CSetSelectedSlot, CSpawnEntity, CSystemChatMessage, CUnloadChunk, CUpdateEntityPos,
-                CUpdateEntityPosRot, CUpdateEntityRot,
+                CMultiBlockUpdate, COpenScreen, CPingResponse, CPlayDisconnect, CPlayerChatMessage,
+                CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
+                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetHealth, CSetPassengers,
+                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CSystemChatMessage,
+                CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -466,12 +466,41 @@ impl HeadlessBot {
                 let state = payload.get_var_int().map_err(|err| read_error(id, &err))?.0;
                 self.block_updates.push((position, state));
             }
+            id if id == CMultiBlockUpdate::to_id(CURRENT_MC_VERSION) => {
+                self.read_multi_block_update(id, &mut payload)?;
+            }
             id => {
                 self.handle_inventory_packet(id, &mut payload)
                     .map_err(|err| read_error(id, &err))?;
                 self.handle_entity_packet(id, &mut payload)
                     .map_err(|err| read_error(id, &err))?;
             }
+        }
+        Ok(())
+    }
+
+    /// `SectionBlocksUpdate`: several changes in one section in one tick come as one packet.
+    fn read_multi_block_update(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), String> {
+        // Several changes in one section in one tick come as one packet.
+        let section = payload.get_i64_be().map_err(|err| read_error(id, &err))?;
+        let (section_x, section_y, section_z) = (
+            (section >> 42) as i32,
+            ((section << 44) >> 44) as i32,
+            ((section << 22) >> 42) as i32,
+        );
+        let count = payload.get_var_int().map_err(|err| read_error(id, &err))?.0;
+        for _ in 0..count {
+            let packed = payload
+                .get_var_long()
+                .map_err(|err| read_error(id, &err))?
+                .0;
+            let local = |shift: i64| ((packed >> shift) & 0xF) as i32;
+            let position = BlockPos::new(
+                section_x * 16 + local(8),
+                section_y * 16 + local(0),
+                section_z * 16 + local(4),
+            );
+            self.block_updates.push((position, (packed >> 12) as i32));
         }
         Ok(())
     }
