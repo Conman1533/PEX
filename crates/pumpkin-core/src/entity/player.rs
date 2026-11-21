@@ -5779,13 +5779,20 @@ impl Player {
                             &pumpkin_data::map_decoration::MapDecorationType::PLAYER
                         };
 
-                        let mut icons = vec![MapIcon {
-                            icon_type: VarInt(decoration_type.id as i32),
-                            x: icon_x,
-                            z: icon_z,
-                            direction: icon_direction,
-                            display_name: None,
-                        }];
+                        // Vanilla `MapItemSavedData.tickCarriedBy` only shows the holder in
+                        // the map's own dimension.
+                        let same_dimension = map_data.dimension.minecraft_name
+                            == self.world().dimension.minecraft_name;
+                        let mut icons = Vec::with_capacity(map_data.decorations.len() + 1);
+                        if same_dimension {
+                            icons.push(MapIcon {
+                                icon_type: VarInt(decoration_type.id as i32),
+                                x: icon_x,
+                                z: icon_z,
+                                direction: icon_direction,
+                                display_name: None,
+                            });
+                        }
                         icons.extend(map_data.decorations.iter().map(|decoration| {
                             MapIcon {
                                 icon_type: VarInt(decoration.icon_type),
