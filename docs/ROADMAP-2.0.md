@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4a500f1fd`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `6bdf5476b`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -17,13 +17,13 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 1 | 1 | 14 | |
+| G5 Redstone | 16 | 2 | 2 | 12 | |
 | G6 Survival | 27 | 14 | 0 | 12 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 26 | 0 | 6 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 197 | 72 | 2 | 108 | 15 |
+| Total | 197 | 73 | 3 | 106 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -47,6 +47,8 @@ Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4
 - `fix/creaking-heart-test-flake`: the creaking heart unit test waits for the heart's update (every 22 to 26 ticks) instead of a fixed 25 ticks.
 
 Landing batch 7 (2026-11-21) also carried, outside the pieces: the Java login packet sent before the player joins the world (a client could get entity data before it had a level and hang on its first join; every bot join now checks it), held item attributes applied the tick they change like vanilla `detectEquipmentUpdates` (a sword given by `/give` hit with fist damage until the next hand sync), `fix/bedrock-dimensions` from the Bedrock thread, and a longer timeout for the flaky armadillo GameTest.
+
+Landing batch 8 (2026-11-21) also carried, outside the pieces: `fix/portal-exit-chunks` from the Bedrock thread (the exit side of a portal keeps its chunks loaded while the portal is found or built, which stopped duplicate portals for Java and Bedrock), and the `bot:eat_restores_food` test reading the food level from the server's player, since on a slow machine the bot's view trails the server by many ticks. That test still fails now and then on the Windows box with the eat never landing; batch 9 adds the server player's item use state to its message. On CT 117 the first tester run hung once at server shutdown after `bot:block_entities_saved_with_unloaded_chunk` passed (every thread idle, the main task parked); the rerun passed in full, so it is logged as a shutdown flake to watch.
 
 What holds 2.0 back:
 
@@ -1676,7 +1678,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/scheduled-tick-block-check
 - Needs decision: none
 - Done when: `pumpkin:redstone/tick_skips_replaced_block` (for example a lit lamp with a pending turn-off tick pushed away and replaced by an observer, which must not pulse) fails on alpha and passes on both.
-- Status (2026-11-21): built, proof missing (branch `fix/scheduled-tick-block-check`, second lane). Block and fluid ticks run only if the block or fluid at the position still matches (`World::run_block_tick`, `run_fluid_tick`); unit tests `a_block_tick_skips_a_replaced_block`, `a_fluid_tick_skips_a_replaced_fluid`. It exposed the bubble column scheduling its forming tick under the wrong block, fixed in the same batch. The GameTest `pumpkin:redstone/tick_skips_replaced_block` is on `test/tick-skips-replaced-block` for the next batch. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `fix/scheduled-tick-block-check`, second lane). Block and fluid ticks run only if the block or fluid at the position still matches (`World::run_block_tick`, `run_fluid_tick`); unit tests `a_block_tick_skips_a_replaced_block`, `a_fluid_tick_skips_a_replaced_fluid`, and the GameTest `pumpkin:redstone/tick_skips_replaced_block` (a lit lamp's pending turn-off tick must not pulse the observer that replaced it) from `test/tick-skips-replaced-block`. It exposed the bubble column scheduling its forming tick under the wrong block, fixed in batch 7. The code landed with batch 7 (`4a500f1fd`); the GameTest landed with batch 8. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-03 willTickThisTick for diodes and torches
 
@@ -1685,6 +1687,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/will-tick-this-tick
 - Needs decision: none
 - Done when: new unit test `collected_tick_will_tick_until_run` in `world/tick/scheduler.rs` passes; `pumpkin:redstone/diode_update_before_own_tick` (a repeater whose input changes earlier in the tick its own tick runs) fails on alpha and passes on both.
+- Status (2026-11-21): built, proof missing (branch `fix/will-tick-this-tick`, second lane). Ticks collected for this tick are marked and cleared as they run, and repeaters, comparators and torches skip a neighbour update while their own tick waits to run this tick (`World::will_block_tick_this_tick`); unit tests `collected_tick_will_tick_until_run`, `a_carried_over_tick_wont_tick_this_tick`, `a_collected_block_tick_will_tick_until_it_runs`. Missing: the GameTest `pumpkin:redstone/diode_update_before_own_tick`. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-04 Scheduler order details
 
@@ -1711,6 +1714,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/block-event-phase
 - Needs decision: none
 - Done when: `pumpkin:redstone/piston_arrival_tick` (a pushed redstone block races a repeater chain and reaches ACCEPT only on vanilla's arrival tick) and `pumpkin:redstone/piston_bud_chain` fail on alpha and pass on both; the builtin piston, note block and chest GameTests still pass.
+- Status (2026-11-21): built, proof missing (branch `fix/block-events-phase`, second lane). Block events run in their own phase after the chunk ticks, in order and without repeats, like vanilla `ServerLevel.runBlockEvents` (`world/block_events.rs`); unit tests `keeps_order_and_drops_repeats`, `clear_box_drops_only_events_inside`, and the builtin piston, note block and chest GameTests still pass. Missing: the GameTests `pumpkin:redstone/piston_arrival_tick` and `pumpkin:redstone/piston_bud_chain`. Landed through merge branch `land/g7-batch-8` (`6bdf5476b`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-07 Sticky piston retraction matches triggerEvent
 
@@ -2405,7 +2409,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/vanilla-advancements-stats
 - Needs decision: none
 - Done when: a PEX 1.x player directory moves without losing a criterion or statistic, vanilla reads both files PEX wrote (G7-04), and PEX reads vanilla's. This is what Goal 4's vanilla-direction proof waits on.
-- Status (2026-11-21): landed (branch `fix/vanilla-advancements-stats`, built on the second lane). Advancements and statistics are read from and written to vanilla's `players/advancements/<uuid>.json` and `players/stats/<uuid>.json`, and a `config_version` 4 step moves PEX 1.x advancement files and NBT statistics there once, with backups. Unit tests in the migration module (`a_world_without_players_needs_nothing`, `statistics_files_sit_next_to_the_player_data` and others). Left over: the round trip still lists `players/data/*.dat Statistics` as a G7-22 known loss until the lane's known-losses follow-up lands. Play test for Neon: open a PEX 1.x world with a player who has advancements and statistics on this build, then on vanilla 26.3; expect the same advancements and statistics on both. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `fix/vanilla-advancements-stats`, built on the second lane). Advancements and statistics are read from and written to vanilla's `players/advancements/<uuid>.json` and `players/stats/<uuid>.json`, and a `config_version` 4 step moves PEX 1.x advancement files and NBT statistics there once, with backups. Unit tests in the migration module (`a_world_without_players_needs_nothing`, `statistics_files_sit_next_to_the_player_data` and others). The round trip's last G7-22 known loss (`players/data/*.dat Statistics`) went with the follow-up in batch 8 (`e8b5cbdf1`). Play test for Neon: open a PEX 1.x world with a player who has advancements and statistics on this build, then on vanilla 26.3; expect the same advancements and statistics on both. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-23 Item stacks keep components PEX can't parse
 
