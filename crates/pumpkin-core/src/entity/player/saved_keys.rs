@@ -164,7 +164,10 @@ pub fn owned_ender_pearls(
         for entity in world.entities.load().iter() {
             if let Some(pearl) = entity.cast_any().downcast_ref::<EnderPearlEntity>()
                 && pearl.thrown.owner_id == Some(owner_id)
-                && !entity.get_entity().removed.load(std::sync::atomic::Ordering::Acquire)
+                && !entity
+                    .get_entity()
+                    .removed
+                    .load(std::sync::atomic::Ordering::Acquire)
             {
                 pearls.push((world.clone(), entity.clone()));
             }
