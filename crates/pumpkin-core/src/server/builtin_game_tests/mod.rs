@@ -276,6 +276,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:enderman_angers_when_stared_at",
     "pumpkin:shulker_shoots_bullet_at_survival_player",
     "pumpkin:ghast_shoots_fireball_at_survival_player",
+    "pumpkin:camel_follows_cactus",
+    "pumpkin:husk_rider_steers_camel_husk_to_target",
 ];
 
 #[must_use]
@@ -566,6 +568,20 @@ pub fn ensure_builtin_game_tests_registered() {
             140,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:camel_follows_cactus",
+            "pumpkin:empty_13x5x5",
+            600,
+            0,
+            farm_animals::test_camel_follows_cactus,
+        );
+        register_function_test(
+            "pumpkin:husk_rider_steers_camel_husk_to_target",
+            "pumpkin:empty_13x5x5",
+            600,
+            0,
+            farm_animals::test_husk_rider_steers_camel_husk_to_target,
         );
         register_function_test(
             "pumpkin:armadillo_rolls_up_near_zombie",
