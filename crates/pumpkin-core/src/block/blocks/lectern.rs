@@ -108,7 +108,7 @@ impl LecternBlock {
     /// The lectern strongly powers the block below it, so its neighbors need
     /// updating whenever the power or book state changes.
     fn update_neighbors_below(world: &Arc<World>, position: &BlockPos) {
-        world.update_neighbors(&position.down(), None);
+        world.update_neighbors_at(&position.down(), &Block::LECTERN, None);
     }
 
     /// Emits the vanilla page-turn redstone pulse: powered for two game ticks.

@@ -35,8 +35,10 @@ pub(crate) trait PressurePlate {
 
     fn on_state_replaced_pp(&self, args: OnStateReplacedArgs<'_>) {
         if !args.moved && self.get_redstone_output(args.block, args.old_state_id) > 0 {
-            args.world.update_neighbors(args.position, None);
-            args.world.update_neighbors(&args.position.down(), None);
+            args.world
+                .update_neighbors_at(args.position, args.block, None);
+            args.world
+                .update_neighbors_at(&args.position.down(), args.block, None);
         }
     }
 
@@ -69,8 +71,9 @@ pub(crate) trait PressurePlate {
             };
             let state = self.set_redstone_output(block, state, next_output);
             world.set_block_state(pos, state, BlockFlags::NOTIFY_LISTENERS);
-            world.update_neighbors(pos, None);
-            world.update_neighbors(&pos.down(), None);
+            // Vanilla `BasePressurePlateBlock.updateNeighbours`: the plate is the source.
+            world.update_neighbors_at(pos, block, None);
+            world.update_neighbors_at(&pos.down(), block, None);
         }
         if has_output {
             world.schedule_block_tick(block, *pos, self.tick_rate(), TickPriority::Normal);

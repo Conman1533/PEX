@@ -134,9 +134,14 @@ impl LeverBlock {
         block_pos: &BlockPos,
         lever_props: LeverLikeProperties,
     ) {
+        // Vanilla `LeverBlock.updateNeighbours`: the lever is the source of both.
         let direction = lever_props.get_direction().opposite();
-        world.update_neighbors(block_pos, None);
-        world.update_neighbors(&block_pos.offset(direction.to_offset()), None);
+        world.update_neighbors_at(block_pos, &Block::LEVER, None);
+        world.update_neighbors_at(
+            &block_pos.offset(direction.to_offset()),
+            &Block::LEVER,
+            None,
+        );
     }
 }
 

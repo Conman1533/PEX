@@ -44,16 +44,18 @@ fn is_minecart(entity_type: &EntityType) -> bool {
 }
 
 fn update_power_to_connected(world: &Arc<World>, pos: &BlockPos, shape: RailShapeStraight) {
-    let (c1, c2) = match shape {
-        RailShapeStraight::NorthSouth => (pos.north(), pos.south()),
-        RailShapeStraight::EastWest => (pos.east(), pos.west()),
-        RailShapeStraight::AscendingEast => (pos.west(), pos.east().up()),
-        RailShapeStraight::AscendingWest => (pos.east(), pos.west().up()),
-        RailShapeStraight::AscendingNorth => (pos.south(), pos.north().up()),
-        RailShapeStraight::AscendingSouth => (pos.north(), pos.south().up()),
+    let connections = match shape {
+        RailShapeStraight::NorthSouth => [pos.north(), pos.south()],
+        RailShapeStraight::EastWest => [pos.east(), pos.west()],
+        RailShapeStraight::AscendingEast => [pos.west(), pos.east().up()],
+        RailShapeStraight::AscendingWest => [pos.east(), pos.west().up()],
+        RailShapeStraight::AscendingNorth => [pos.south(), pos.north().up()],
+        RailShapeStraight::AscendingSouth => [pos.north(), pos.south().up()],
     };
-    world.update_neighbors(&c1, None);
-    world.update_neighbors(&c2, None);
+    // Vanilla `updatePowerToConnected`: each connected position hears from itself.
+    for connection in connections {
+        world.update_neighbor(&connection, world.get_block(&connection));
+    }
 }
 
 impl DetectorRailBlock {
@@ -84,15 +86,15 @@ impl DetectorRailBlock {
             let new_state_id = props.to_state_id(block);
             world.set_block_state(pos, new_state_id, BlockFlags::NOTIFY_ALL);
             update_power_to_connected(world, pos, props.shape);
-            world.update_neighbors(pos, None);
-            world.update_neighbors(&pos.down(), None);
+            world.update_neighbors_at(pos, block, None);
+            world.update_neighbors_at(&pos.down(), block, None);
         } else if !has_minecart && was_pressed {
             props.powered = false;
             let new_state_id = props.to_state_id(block);
             world.set_block_state(pos, new_state_id, BlockFlags::NOTIFY_ALL);
             update_power_to_connected(world, pos, props.shape);
-            world.update_neighbors(pos, None);
-            world.update_neighbors(&pos.down(), None);
+            world.update_neighbors_at(pos, block, None);
+            world.update_neighbors_at(&pos.down(), block, None);
         }
 
         if has_minecart {
@@ -147,8 +149,10 @@ impl BlockBehaviour for DetectorRailBlock {
         if !args.moved {
             let props = DetectorRailProperties::from_state_id(args.old_state_id);
             if props.powered {
-                args.world.update_neighbors(args.position, None);
-                args.world.update_neighbors(&args.position.down(), None);
+                args.world
+                    .update_neighbors_at(args.position, args.block, None);
+                args.world
+                    .update_neighbors_at(&args.position.down(), args.block, None);
             }
         }
     }

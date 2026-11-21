@@ -309,13 +309,15 @@ macro_rules! impl_viewer_count_listener_for_chest {
                 // Update neighbors for redstone signal when viewer count changes
                 // This is controlled by the EMITS_REDSTONE constant on the struct
                 if Self::EMITS_REDSTONE && old != new {
-                    // Update direct neighbors
-                    world.update_neighbors(position, None);
+                    // Vanilla `TrappedChestBlockEntity.signalOpenCount`: the chest is the
+                    // source of both.
+                    let block = world.get_block(position);
+                    world.update_neighbors_at(position, block, None);
 
                     // Also update neighbors of the block below (strongly powered block)
                     // This ensures redstone components adjacent to the block below are notified
                     let below_pos = position.down();
-                    world.update_neighbors(&below_pos, None);
+                    world.update_neighbors_at(&below_pos, block, None);
                 }
             }
         }

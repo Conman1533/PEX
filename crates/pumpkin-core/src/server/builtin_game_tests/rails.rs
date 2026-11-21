@@ -188,3 +188,69 @@ pub(super) async fn test_rail_junction_switches(helper: GameTestHelper) -> GameT
         .then_succeed();
     Ok(())
 }
+
+/// A T-junction on row `z` whose west side is a stone block, with a switch on that block's west
+/// face. Returns the junction.
+async fn junction_behind_wall(
+    helper: &GameTestHelper,
+    z: i32,
+    switch: &Block,
+) -> GameTestResult<BlockPos> {
+    let rail = |shape| {
+        let mut props = RailLikeProperties::default(&Block::RAIL);
+        props.shape = shape;
+        props.to_state_id(&Block::RAIL)
+    };
+    let junction = BlockPos::new(3, 1, z);
+    helper
+        .set_block(&BlockPos::new(3, 1, z - 1), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(3, 1, z + 1), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(4, 1, z), rail(RailShape::EastWest))
+        .await?;
+    helper
+        .set_block(&junction, rail(RailShape::SouthEast))
+        .await?;
+    helper
+        .set_block_default(&BlockPos::new(2, 1, z), &Block::STONE)
+        .await?;
+    // Lever and button share their properties' shape.
+    let mut props = LeverLikeProperties::default(switch);
+    props.face = AttachFace::Wall;
+    props.facing = HorizontalFacing::West;
+    props.powered = false;
+    helper
+        .set_block(&BlockPos::new(1, 1, z), props.to_state_id(switch))
+        .await?;
+    Ok(junction)
+}
+
+/// Roadmap 2.0 emitter update source: a lever and a button update the neighbours of the block
+/// they hang on as themselves, so the T-junction beside that block, which only hears that second
+/// update, sees a signal source and curves towards the power (`NORTH_EAST`).
+pub(super) async fn test_lever_and_button_switch_rail_junctions(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 8, 8).await?;
+    let powered = {
+        let mut props = RailLikeProperties::default(&Block::RAIL);
+        props.shape = RailShape::NorthEast;
+        props.to_state_id(&Block::RAIL)
+    };
+    let by_lever = junction_behind_wall(&helper, 1, &Block::LEVER).await?;
+    let by_button = junction_behind_wall(&helper, 5, &Block::STONE_BUTTON).await?;
+
+    helper.pull_lever(&BlockPos::new(1, 1, 1)).await?;
+    helper.press_button(&BlockPos::new(1, 1, 5)).await?;
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper.assert_block_state(&by_lever, powered).await?;
+            helper.assert_block_state(&by_button, powered).await
+        })
+        .then_succeed();
+    Ok(())
+}
