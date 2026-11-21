@@ -11,7 +11,10 @@ use std::{
 use pumpkin_core::{PumpkinServer, net::bedrock::BedrockClient, server::Server};
 use pumpkin_data::entity::{EntityPose, EntityType};
 use pumpkin_protocol::{
-    bedrock::{client::set_actor_data::entity_data_flag, server::player_auth_input::InputData},
+    bedrock::{
+        client::set_actor_data::{entity_data_flag, entity_data_key},
+        server::player_auth_input::InputData,
+    },
     java::server::play::{Action as PlayerCommandAction, SPlayerInput},
 };
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
@@ -516,6 +519,7 @@ async fn run_mixed_play(
     run_chat_checks(server, bedrock, &mut java, &mut checks).await?;
     run_move_checks(server, bedrock, &mut java, &mut checks).await?;
     run_pose_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_mount_checks(server, bedrock, &mut java, &mut checks).await?;
     // Before `run_block_checks`, which puts both players in creative.
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
@@ -696,15 +700,9 @@ async fn run_pose_checks(
 
     run_bedrock_pose_checks(server, bedrock, java, checks, &ids).await?;
     run_java_pose_checks(server, bedrock, java, checks, &ids).await?;
-    run_crawl_checks(
-        server,
-        bedrock,
-        java,
-        checks,
-        &ids,
-        [bedrock_block, java_block],
-    )
-    .await
+    let blocks = [bedrock_block, java_block];
+    run_crawl_checks(server, bedrock, java, checks, &ids, blocks).await?;
+    run_swim_checks(server, bedrock, java, checks, &ids, blocks).await
 }
 
 /// The ids the pose checks look the players up by.
@@ -899,6 +897,335 @@ async fn run_crawl_checks(
         )
         .await,
     );
+    Ok(())
+}
+
+/// Java's shared entity flag bit for swimming.
+const JAVA_FLAG_SWIMMING: u8 = 1 << 4;
+
+/// Each player sprints under water and starts swimming; the other edition sees it.
+async fn run_swim_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    ids: &PoseIds,
+    blocks: [BlockPos; 2],
+) -> Result<(), String> {
+    let swimming = EntityPose::Swimming as i32;
+    let java_runtime_id = ids.java_runtime;
+    let fill = |block: &str| {
+        for pos in blocks {
+            let (x, y, z) = (pos.0.x, pos.0.y, pos.0.z);
+            run_console(
+                server,
+                &format!(
+                    "fill {} {y} {} {} {} {} {block}",
+                    x - 1,
+                    z - 1,
+                    x + 1,
+                    y + 2,
+                    z + 1
+                ),
+            );
+        }
+    };
+    fill("water");
+    tick(server, bedrock, Some(&mut *java)).await?;
+
+    send_bedrock_flags(
+        bedrock,
+        &[
+            InputData::StartSprinting,
+            InputData::Sprinting,
+            InputData::StartSwimming,
+        ],
+    )
+    .await?;
+    checks.record(
+        "java sees bedrock swim",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the swimming flag and pose on the Bedrock player in water",
+            |_, java| {
+                seen_by_java(java, ids).is_some_and(|(flags, pose)| {
+                    flags & JAVA_FLAG_SWIMMING != 0 && pose == swimming
+                })
+            },
+        )
+        .await,
+    );
+
+    java.send_player_command(ids.java_entity, PlayerCommandAction::StartSprinting)
+        .await?;
+    checks.record(
+        "bedrock sees java swim",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the SWIMMING actor flag on the Java player in water",
+            |bot, _| {
+                bot.actor_flag(java_runtime_id, entity_data_flag::SWIMMING)
+                    && !bot.actor_flag(java_runtime_id, entity_data_flag::CRAWLING)
+            },
+        )
+        .await,
+    );
+
+    send_bedrock_flags(
+        bedrock,
+        &[InputData::StopSwimming, InputData::StopSprinting],
+    )
+    .await?;
+    java.send_player_command(ids.java_entity, PlayerCommandAction::StopSprinting)
+        .await?;
+    fill("air");
+    checks.record(
+        "java sees bedrock stop swimming",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the Bedrock player standing again out of the water",
+            |_, java| {
+                seen_by_java(java, ids).is_some_and(|(flags, pose)| {
+                    flags & JAVA_FLAG_SWIMMING == 0 && pose == EntityPose::Standing as i32
+                })
+            },
+        )
+        .await,
+    );
+    Ok(())
+}
+
+/// Summons `entity` next to the Java bot and waits until both bots know it. Returns its
+/// entity id.
+async fn summon_next_to_java(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    entity: &EntityType,
+) -> Result<i32, String> {
+    let at = java.position + Vector3::new(1.5, 0.0, 0.0);
+    run_console(
+        server,
+        &format!(
+            "summon minecraft:{} {} {} {}",
+            entity.resource_name, at.x, at.y, at.z
+        ),
+    );
+    let type_id = i32::from(entity.id);
+    let find = |java: &HeadlessBot| {
+        java.entities
+            .iter()
+            .find(|(_, seen)| seen.entity_type == type_id)
+            .map(|(id, _)| *id)
+    };
+    tick_until(
+        server,
+        bedrock,
+        Some(&mut *java),
+        "the summoned entity on both bots",
+        |bot, java| {
+            java.and_then(find)
+                .is_some_and(|id| bot.actors.contains_key(&i64::from(id)))
+        },
+    )
+    .await?;
+    find(java).ok_or_else(|| "the summoned entity is gone".to_string())
+}
+
+/// Riding and leads across editions: each edition sees the other board and leave a boat, and
+/// a lead shows as a lead rather than a rider.
+async fn run_mount_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let (bedrock_start, java_start) = (bedrock.position, java.position);
+    run_boat_checks(server, bedrock, java, checks).await?;
+    run_leash_checks(server, bedrock, java, checks).await?;
+
+    // Dismounting put both players next to the boat; walk back so the later checks have each
+    // player on its own block again.
+    bedrock.send_input(bedrock_start, &[]).await?;
+    java.move_to(java_start, true).await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    Ok(())
+}
+
+/// Each edition sees the other board and leave a boat.
+async fn run_boat_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let player = |name: &str| {
+        server
+            .server
+            .get_player_by_name(name)
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    let (bedrock_player, java_player) = (player(BEDROCK_NAME)?, player(JAVA_NAME)?);
+    let bedrock_id = bedrock_player.entity_id();
+    let java_id = java_player.entity_id();
+    let boat_id = summon_next_to_java(server, bedrock, java, &EntityType::OAK_BOAT).await?;
+    let boat = bedrock_player
+        .world()
+        .get_entity_by_id(boat_id)
+        .ok_or("the boat is not in the world")?;
+
+    java.use_entity(boat_id).await?;
+    checks.record(
+        "bedrock sees java board a boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a rider link from the Java player to the boat",
+            |bot, _| {
+                bot.ride_link(i64::from(java_id)) == Some((i64::from(boat_id), bot::LINK_RIDER))
+            },
+        )
+        .await,
+    );
+
+    // The same call as `/ride` and the boat's own interaction.
+    boat.get_entity()
+        .add_passenger(boat.clone(), bedrock_player.clone());
+    checks.record(
+        "bedrock told it rides the boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a passenger link from the Bedrock bot to the boat",
+            |bot, _| {
+                bot.ride_link(bot.unique_id) == Some((i64::from(boat_id), bot::LINK_PASSENGER))
+            },
+        )
+        .await,
+    );
+    checks.record(
+        "java sees bedrock board the boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the Bedrock player in the boat's passengers",
+            |_, java| {
+                java.and_then(|java| java.passengers.get(&boat_id))
+                    .is_some_and(|ids| ids.contains(&bedrock_id))
+            },
+        )
+        .await,
+    );
+
+    bedrock.stop_riding(boat_id as u64).await?;
+    checks.record(
+        "bedrock leaves the boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the Bedrock player off the boat for the server and both bots",
+            |bot, java| {
+                !bedrock_player.living_entity.entity.has_vehicle()
+                    && bot.ride_link(bot.unique_id).is_none()
+                    && java
+                        .and_then(|java| java.passengers.get(&boat_id))
+                        .is_some_and(|ids| !ids.contains(&bedrock_id))
+            },
+        )
+        .await,
+    );
+
+    java.send_input(SPlayerInput::SNEAK).await?;
+    checks.record(
+        "bedrock sees java leave the boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the Java player's rider link removed",
+            |bot, _| bot.ride_link(i64::from(java_id)).is_none(),
+        )
+        .await,
+    );
+    java.send_input(0).await?;
+    boat.get_entity().remove();
+
+    Ok(())
+}
+
+/// A lead shows on Bedrock as a lead, not as the holder riding the mob.
+async fn run_leash_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let player = |name: &str| {
+        server
+            .server
+            .get_player_by_name(name)
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    let (bedrock_player, java_player) = (player(BEDROCK_NAME)?, player(JAVA_NAME)?);
+    let java_id = java_player.entity_id();
+    let cow_id = summon_next_to_java(server, bedrock, java, &EntityType::COW).await?;
+    let cow = bedrock_player
+        .world()
+        .get_entity_by_id(cow_id)
+        .ok_or("the cow is not in the world")?;
+    cow.get_entity().leash_to(java_player.clone());
+    let cow_runtime_id = cow_id as u64;
+    checks.record(
+        "bedrock sees a lead as a lead",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "LEASH_HOLDER on the cow naming the Java player, and no link",
+            |bot, _| {
+                bot.actor_longs
+                    .get(&(cow_runtime_id, entity_data_key::LEASH_HOLDER))
+                    == Some(&i64::from(java_id))
+                    && bot.actor_flag(cow_runtime_id, entity_data_flag::LEASHED)
+                    && !bot
+                        .links
+                        .iter()
+                        .any(|(ridden, _, _)| *ridden == i64::from(cow_id))
+            },
+        )
+        .await,
+    );
+    cow.get_entity().unleash();
+    checks.record(
+        "bedrock sees the lead removed",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "LEASH_HOLDER -1 on the cow",
+            |bot, _| {
+                bot.actor_longs
+                    .get(&(cow_runtime_id, entity_data_key::LEASH_HOLDER))
+                    == Some(&-1)
+                    && !bot.actor_flag(cow_runtime_id, entity_data_flag::LEASHED)
+            },
+        )
+        .await,
+    );
+    cow.get_entity().remove();
+
     Ok(())
 }
 

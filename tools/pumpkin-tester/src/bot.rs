@@ -23,8 +23,8 @@ use pumpkin_protocol::{
                 CEntityPositionSync, CEntityVelocity, CGameEvent, CHeadRot, CKeepAlive, CLogin,
                 COpenScreen, CPingResponse, CPlayDisconnect, CPlayerChatMessage, CPlayerPosition,
                 CRemoveEntities, CRespawn, CSetContainerContent, CSetContainerSlot, CSetCursorItem,
-                CSetEntityMetadata, CSetHealth, CSetPlayerInventory, CSetSelectedSlot,
-                CSpawnEntity, CSystemChatMessage, CUnloadChunk, CUpdateEntityPos,
+                CSetEntityMetadata, CSetHealth, CSetPassengers, CSetPlayerInventory,
+                CSetSelectedSlot, CSpawnEntity, CSystemChatMessage, CUnloadChunk, CUpdateEntityPos,
                 CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
@@ -131,6 +131,8 @@ pub struct HeadlessBot {
     pub entity_packets: HashMap<(i32, i32), usize>,
     /// Every entity the server has spawned for the bot and not removed, by entity id.
     pub entities: HashMap<i32, TrackedEntity>,
+    /// The passenger ids of each vehicle, from the last `SetPassengers` for it.
+    pub passengers: HashMap<i32, Vec<i32>>,
     /// The dimension the bot is in, from the last `CRespawn`.
     pub dimension: String,
     /// From the last `CSetHealth`.
@@ -283,6 +285,7 @@ impl HeadlessBot {
             disconnect_reason: None,
             entity_packets: HashMap::new(),
             entities: HashMap::new(),
+            passengers: HashMap::new(),
             dimension: "minecraft:overworld".to_string(),
             health: 20.0,
             food: 20,
@@ -591,6 +594,14 @@ impl HeadlessBot {
             if let Some(entity) = self.entities.get_mut(&entity_id) {
                 entity.position += delta;
             }
+        } else if id == CSetPassengers::to_id(CURRENT_MC_VERSION) {
+            let vehicle = payload.get_var_int()?.0;
+            let count = read_list_length(payload)?;
+            let mut ids = Vec::with_capacity(count);
+            for _ in 0..count {
+                ids.push(payload.get_var_int()?.0);
+            }
+            self.passengers.insert(vehicle, ids);
         } else if id == CSetEntityMetadata::to_id(CURRENT_MC_VERSION) {
             let entity_id = payload.get_var_int()?.0;
             self.read_entity_data(entity_id, payload)?;
@@ -822,6 +833,19 @@ impl HeadlessBot {
             entity_id: VarInt(entity_id),
             r#type: VarInt(ActionType::InteractAt as i32),
             target_position: Some(location),
+            hand: Some(VarInt(0)),
+            sneaking: false,
+        })
+        .await
+    }
+
+    /// Right-clicks an entity with the main hand without a hit position, the packet that boards
+    /// boats and mounts.
+    pub async fn use_entity(&mut self, entity_id: i32) -> Result<(), String> {
+        self.send_packet(&SInteract {
+            entity_id: VarInt(entity_id),
+            r#type: VarInt(ActionType::Interact as i32),
+            target_position: None,
             hand: Some(VarInt(0)),
             sneaking: false,
         })

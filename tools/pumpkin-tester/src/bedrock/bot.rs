@@ -29,6 +29,7 @@ use pumpkin_protocol::{
             resource_pack_stack::CResourcePackStackPacket,
             resource_packs_info::CResourcePacksInfo,
             set_actor_data::{CSetActorData, entity_data_key},
+            set_actor_link::CSetActorLink,
             set_health::CSetHealth,
             start_game::CStartGame,
             update_attributes::CUpdateAttributes,
@@ -75,6 +76,13 @@ const INTERACTION_MODEL_CROSSHAIR: i32 = 1;
 pub const ACTION_START_BREAK: i32 = 0;
 /// `PlayerAuthInput`, for tests that send it raw.
 pub const PLAYER_AUTH_INPUT_ID: i32 = SPlayerAuthInput::PACKET_ID;
+/// `ActorLinkType`s.
+const LINK_REMOVE: u8 = 0;
+pub const LINK_RIDER: u8 = 1;
+pub const LINK_PASSENGER: u8 = 2;
+/// `Interact`, and its `StopRiding` action.
+const INTERACT_ID: i32 = 33;
+const INTERACT_STOP_RIDING: u8 = 3;
 /// `TextPacketType::Chat`.
 const TEXT_TYPE_CHAT: u8 = 1;
 
@@ -116,6 +124,10 @@ pub struct BedrockBot {
     actor_runtime_ids: HashMap<i64, u64>,
     /// The two actor flag words (flags 0..63 and 64..127) from `SetActorData`, by runtime id.
     pub actor_flags: HashMap<u64, [i64; 2]>,
+    /// Every 64-bit actor data value from `SetActorData`, by runtime id and key.
+    pub actor_longs: HashMap<(u64, u32), i64>,
+    /// Every `SetActorLink` as (ridden, rider, link type), oldest first.
+    pub links: Vec<(i64, i64, u8)>,
     /// Every `Text` the server sent.
     pub texts: Vec<SeenText>,
     /// Every layer-0 `UpdateBlock`, as position and block network id.
@@ -211,6 +223,8 @@ impl BedrockBot {
             actors: HashMap::new(),
             actor_runtime_ids: HashMap::new(),
             actor_flags: HashMap::new(),
+            actor_longs: HashMap::new(),
+            links: Vec::new(),
             texts: Vec::new(),
             block_updates: Vec::new(),
             health: 20,
@@ -547,6 +561,13 @@ impl BedrockBot {
             }
             CUpdateAttributes::PACKET_ID => self.read_attributes(reader)?,
             CSetActorData::PACKET_ID => self.read_actor_data(reader)?,
+            CSetActorLink::PACKET_ID => {
+                let err = |err| read_error("SetActorLink", err);
+                let ridden = VarLong::read(reader).map_err(err)?.0;
+                let rider = VarLong::read(reader).map_err(err)?.0;
+                let link_type = u8::read(reader).map_err(err)?;
+                self.links.push((ridden, rider, link_type));
+            }
             CDisconnect::PACKET_ID => {
                 let _reason = VarInt::read(reader).map_err(|err| read_error("Disconnect", err))?;
                 let skip_message =
@@ -614,6 +635,7 @@ impl BedrockBot {
                 }
                 7 => {
                     let value = VarLong::read(reader).map_err(err)?.0;
+                    self.actor_longs.insert((runtime_id, key), value);
                     let words = self.actor_flags.entry(runtime_id).or_default();
                     if key == entity_data_key::FLAGS {
                         words[0] = value;
@@ -638,6 +660,31 @@ impl BedrockBot {
             };
             word & (1 << index) != 0
         })
+    }
+
+    /// What `rider` rides according to the last `SetActorLink` naming it: the vehicle's unique
+    /// id and the link type. `None` once a remove link came last.
+    pub fn ride_link(&self, rider: i64) -> Option<(i64, u8)> {
+        self.links
+            .iter()
+            .rev()
+            .find(|(_, link_rider, _)| *link_rider == rider)
+            .filter(|(_, _, link_type)| *link_type != LINK_REMOVE)
+            .map(|(ridden, _, link_type)| (*ridden, *link_type))
+    }
+
+    /// Asks to get off the vehicle, as the dismount button does.
+    pub async fn stop_riding(&self, vehicle_runtime_id: u64) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            INTERACT_STOP_RIDING.write(payload)?;
+            VarULong(vehicle_runtime_id).write(payload)?;
+            // Where the client would land.
+            true.write(payload)?;
+            self.position.write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(INTERACT_ID, &payload).await
     }
 
     /// The runtime id of the player named `name`, once `AddPlayer` announced it.
