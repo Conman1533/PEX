@@ -149,6 +149,15 @@ impl FireworkRocketEntity {
         entity.remove();
     }
 
+    /// Vanilla `FireworkRocketEntity.hasExplosion`.
+    fn has_explosion(&self) -> bool {
+        self.item_stack
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get_data_component::<FireworksImpl>()
+            .is_some_and(|fw| !fw.explosions.is_empty())
+    }
+
     fn deal_explosion_damage(&self, world: &World) {
         let explosion_count = {
             let stack = self
@@ -362,7 +371,14 @@ impl EntityBase for FireworkRocketEntity {
         self
     }
 
-    fn on_hit(&self, _hit: crate::entity::projectile::ProjectileHit) {
+    /// Vanilla `FireworkRocketEntity.onHitEntity` and `onHitBlock`: hitting an entity always
+    /// explodes the rocket, hitting a block only when it has explosions.
+    fn on_hit(&self, hit: crate::entity::projectile::ProjectileHit) {
+        if matches!(hit, crate::entity::projectile::ProjectileHit::Block { .. })
+            && !self.has_explosion()
+        {
+            return;
+        }
         let world = self.get_entity().world.load();
         self.explode_and_remove(&world);
     }

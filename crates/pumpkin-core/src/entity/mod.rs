@@ -58,7 +58,7 @@ use pumpkin_util::math::{
 use pumpkin_util::text::TextComponent;
 use pumpkin_util::text::hover::HoverEvent;
 use pumpkin_util::version::JavaMinecraftVersion;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::{
     Arc,
     atomic::{
@@ -1040,7 +1040,7 @@ pub struct Entity {
     pub has_no_gravity: AtomicBool,
     /// Scoreboard tags attached to this entity, managed with `/tag`.
     /// Vanilla allows at most [`MAX_SCOREBOARD_TAGS`] tags per entity.
-    pub scoreboard_tags: std::sync::Mutex<HashSet<String>>,
+    pub scoreboard_tags: std::sync::Mutex<indexmap::IndexSet<String>>,
     /// The data send in the Entity Spawn packet
     pub data: AtomicI32,
     /// Stores entity boolean flags (on fire, sneaking, invisible, glowing, etc.)
@@ -1259,7 +1259,7 @@ impl Entity {
             silent: AtomicBool::new(false),
             air_supply: AtomicI32::new(breath::MAX_AIR),
             has_no_gravity: AtomicBool::new(false),
-            scoreboard_tags: std::sync::Mutex::new(HashSet::new()),
+            scoreboard_tags: std::sync::Mutex::new(indexmap::IndexSet::new()),
             no_physics: AtomicBool::new(false),
             synched_data: synched_entity_data::SynchedEntityData::new(),
             movement_multiplier: AtomicCell::new(Vector3::default()),
@@ -1377,7 +1377,7 @@ impl Entity {
         self.scoreboard_tags
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(tag)
+            .shift_remove(tag)
     }
 
     /// Sets a custom name for the entity, typically used with nametags
@@ -4736,8 +4736,9 @@ impl Entity {
             nbt.put(
                 "Tags",
                 NbtTag::List(
-                    tags.iter()
-                        .map(|tag| NbtTag::String(tag.as_str().into()))
+                    java_hash_set_order(&tags)
+                        .into_iter()
+                        .map(|tag| NbtTag::String(tag.into()))
                         .collect(),
                 ),
             );
@@ -4852,13 +4853,8 @@ impl Entity {
             self.set_pos(pos);
             self.last_sent_pos.store(pos);
         }
-        if let Some(velocity) = nbt.get_list("Motion")
-            && velocity.len() >= 3
-        {
-            let x = velocity[0].extract_double().unwrap_or(0.0);
-            let y = velocity[1].extract_double().unwrap_or(0.0);
-            let z = velocity[2].extract_double().unwrap_or(0.0);
-            self.velocity.store(Vector3::new(x, y, z));
+        if let Some(velocity) = saved_motion(nbt) {
+            self.velocity.store(velocity);
         }
         if let Some(rotation) = nbt.get_list("Rotation")
             && rotation.len() >= 2
@@ -5083,6 +5079,40 @@ const BEDROCK_LINK_REMOVE: u8 = 0;
 const BEDROCK_LINK_RIDER: u8 = 1;
 const BEDROCK_LINK_PASSENGER: u8 = 2;
 
+/// The order a Java `HashSet<String>` like vanilla's `Entity.tags` iterates `tags` in, given the
+/// order they were added: by hash bucket, then by insertion within a bucket.
+fn java_hash_set_order(tags: &indexmap::IndexSet<String>) -> Vec<&str> {
+    let mut capacity = 16usize;
+    while tags.len() > capacity / 4 * 3 {
+        capacity *= 2;
+    }
+    let mut ordered: Vec<(usize, usize, &str)> = tags
+        .iter()
+        .enumerate()
+        .map(|(added, tag)| {
+            // `String.hashCode`, then `HashMap.hash` spreads the high bits down.
+            let hash = tag.encode_utf16().fold(0u32, |hash, unit| {
+                hash.wrapping_mul(31).wrapping_add(u32::from(unit))
+            });
+            let bucket = (hash ^ (hash >> 16)) as usize & (capacity - 1);
+            (bucket, added, tag.as_str())
+        })
+        .collect();
+    ordered.sort_unstable();
+    ordered.into_iter().map(|(_, _, tag)| tag).collect()
+}
+
+/// The saved `Motion`, with any component over 10 blocks a tick read as 0 like vanilla
+/// `Entity.load`.
+fn saved_motion(nbt: &NbtCompound) -> Option<Vector3<f64>> {
+    let motion = nbt.get_list("Motion")?;
+    let component = |i: usize| {
+        let value = motion.get(i)?.extract_double().unwrap_or(0.0);
+        Some(if value.abs() > 10.0 { 0.0 } else { value })
+    };
+    Some(Vector3::new(component(0)?, component(1)?, component(2)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5130,6 +5160,64 @@ mod tests {
         assert_eq!(written.get_int("LifeTime"), Some(i32::MAX));
         assert_eq!(written.get_bool("ShotAtAngle"), Some(true));
         assert!(written.get_compound("FireworksItem").is_some());
+    }
+
+    /// G7-24: a rocket without explosions that flies into a block stays, like vanilla's.
+    #[tokio::test]
+    async fn a_firework_without_explosions_survives_hitting_a_block() {
+        let world = crate::world::test_world();
+        let rocket = crate::entity::r#type::from_type(
+            &EntityType::FIREWORK_ROCKET,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        rocket.on_hit(crate::entity::projectile::ProjectileHit::Block {
+            pos: BlockPos::new(0, 65, 0),
+            face: BlockDirection::Down,
+            hit_pos: Vector3::new(0.5, 65.0, 0.5),
+            normal: Vector3::new(0.0, -1.0, 0.0),
+        });
+        assert!(!rocket.get_entity().is_removed());
+    }
+
+    /// G7-24: tags save in vanilla's `HashSet` order whatever order they were read in.
+    #[tokio::test]
+    async fn tags_save_in_vanillas_hash_set_order() {
+        let mut saved = NbtCompound::new();
+        saved.put(
+            "Tags",
+            NbtTag::List(vec![
+                NbtTag::String("keeper".into()),
+                NbtTag::String("fixture".into()),
+            ]),
+        );
+        let written = round_trip(&EntityType::PIG, &saved);
+        let tags: Vec<String> = written
+            .get_list("Tags")
+            .map(|list| {
+                list.iter()
+                    .filter_map(|tag| tag.extract_string().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(tags, vec!["fixture", "keeper"]);
+    }
+
+    /// G7-24: like vanilla `Entity.load`, a saved speed over 10 blocks a tick reads as 0.
+    #[tokio::test]
+    async fn motion_over_ten_reads_as_zero() {
+        let mut saved = NbtCompound::new();
+        saved.put(
+            "Motion",
+            NbtTag::List(vec![11.0f64.into(), 0.5f64.into(), (-20.0f64).into()]),
+        );
+        let written = round_trip(&EntityType::PIG, &saved);
+        let motion: Vec<f64> = written
+            .get_list("Motion")
+            .map(|list| list.iter().filter_map(NbtTag::extract_double).collect())
+            .unwrap_or_default();
+        assert_eq!(motion, vec![0.0, 0.5, 0.0]);
     }
 
     /// G7-24: a falling block keeps its block and fall time, and the keys PEX doesn't model.
