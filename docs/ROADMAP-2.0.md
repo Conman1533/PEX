@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c05dcfe01`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `de94c607e`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -19,11 +19,11 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 14 | 0 | 18 | |
+| G7 Worlds | 32 | 15 | 0 | 17 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 57 | 1 | 123 | 15 |
+| Total | 196 | 58 | 1 | 122 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2420,6 +2420,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/world-session-lock
 - Needs decision: none
 - Done when: PEX refuses a world vanilla has open, and vanilla refuses one PEX has open.
+- Status (2026-11-21): landed (branch `fix/world-session-lock`, built on the second lane). PEX holds `session.lock` like `DirectoryLock` (an fcntl record lock, OFD on Linux, `LockFileEx` on Windows), refuses to start on a locked world with exit code 1, and releases the lock at the end of shutdown, after the saves. Checked both ways against vanilla 26.3: with vanilla running PEX refuses, with PEX running vanilla throws its LockException, and after PEX stops vanilla opens the world. Unit test `world_info::session_lock::tests::a_locked_world_is_refused_until_its_lock_is_dropped`. Play test for Neon (Windows, not run on Windows hardware yet): start PEX twice on one world, expect the second to exit with the session lock error.
 
 #### G7-31 Long-play round trip
 
