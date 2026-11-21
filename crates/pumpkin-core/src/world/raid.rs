@@ -421,6 +421,8 @@ impl Raid {
                         self.group_to_leader_map.insert(group_number, uuid);
                         leader_set = true;
                     }
+                    // Vanilla `Raid.joinRaid` sets the raider's raid with its wave.
+                    raider.get_raider_data().raid_id.store(Some(self.id));
                     raider.set_wave(group_number);
                     raider.set_can_join_raid(true);
                     raider.apply_raid_buffs(group_number, false);
@@ -448,6 +450,7 @@ impl Raid {
                         if let Some(mob) = rider_base.get_mob()
                             && let Some(raider) = mob.as_raider()
                         {
+                            raider.get_raider_data().raid_id.store(Some(self.id));
                             raider.set_wave(group_number);
                             raider.set_can_join_raid(true);
                             raider.apply_raid_buffs(group_number, false);
