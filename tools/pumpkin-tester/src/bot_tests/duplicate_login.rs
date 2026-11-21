@@ -96,7 +96,9 @@ async fn duplicate_login_kicks_the_old_session(
         .filter(|player| player.gameprofile.name == NAME)
         .count();
     if online != 1 {
-        return Err(format!("{online} players named {NAME} are online, expected 1"));
+        return Err(format!(
+            "{online} players named {NAME} are online, expected 1"
+        ));
     }
 
     drop(second);
