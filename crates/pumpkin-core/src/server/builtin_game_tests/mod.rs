@@ -75,6 +75,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:powered_rail_propagation",
     "pumpkin:activator_rail_propagation",
     "pumpkin:detector_rail_minecart",
+    "pumpkin:redstone/rail_junction_switches",
     "pumpkin:tripwire_entity_collision",
     "pumpkin:snow_golem_pattern_spawns",
     "pumpkin:iron_golem_pattern_spawns",
@@ -112,6 +113,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:redstone_repeater_delay_4_ticks",
     "pumpkin:redstone_repeater_locking_holds_off",
     "pumpkin:redstone_repeater_locking_holds_on",
+    "pumpkin:redstone/repeater_lock_updates_front",
     // comparators_extended (14)
     "pumpkin:comparator_composter_levels_1_to_4",
     "pumpkin:comparator_composter_levels_5_to_8",
@@ -533,6 +535,13 @@ pub fn ensure_builtin_game_tests_registered() {
             rails::test_detector_rail_minecart,
         );
         register_function_test(
+            "pumpkin:redstone/rail_junction_switches",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            rails::test_rail_junction_switches,
+        );
+        register_function_test(
             "pumpkin:tripwire_entity_collision",
             "pumpkin:empty_5x4x5",
             30,
@@ -917,6 +926,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             redstone_logic_circuits::test_redstone_repeater_locking_holds_on,
+        );
+        register_function_test(
+            "pumpkin:redstone/repeater_lock_updates_front",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            redstone_logic_circuits::test_repeater_lock_updates_front,
         );
 
         // comparators_extended (14)

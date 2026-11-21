@@ -5823,14 +5823,26 @@ impl World {
             );
         }
 
-        if !flags.contains(BlockFlags::SKIP_BLOCK_ADDED_CALLBACK) && is_new_block {
-            self.on_block_placed(
-                position,
-                new_block,
-                block_state_id,
-                replaced_block_state_id,
-                block_moved,
-            );
+        if !flags.contains(BlockFlags::SKIP_BLOCK_ADDED_CALLBACK) {
+            if is_new_block {
+                self.on_block_placed(
+                    position,
+                    new_block,
+                    block_state_id,
+                    replaced_block_state_id,
+                    block_moved,
+                );
+            } else {
+                // Vanilla calls `onPlace` on every state change (roadmap G5-11).
+                self.block_registry.on_state_changed(
+                    self,
+                    new_block,
+                    block_state_id,
+                    position,
+                    replaced_block_state_id,
+                    block_moved,
+                );
+            }
         }
 
         // Level.java setBlock

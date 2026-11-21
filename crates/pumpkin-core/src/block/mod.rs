@@ -135,6 +135,11 @@ pub trait BlockBehaviour: Send + Sync {
     /// onBlockAdded in source code
     fn placed(&self, _args: PlacedArgs<'_>) {}
 
+    /// Vanilla `onPlace` when only the state changed and the block stayed the same. Most vanilla
+    /// blocks return there at once (`oldState.is(this)`); the ones that don't, diodes and redstone
+    /// torches among them, do their work here.
+    fn state_changed(&self, _args: PlacedArgs<'_>) {}
+
     fn player_placed(&self, _args: PlayerPlacedArgs<'_>) {}
 
     fn on_landed_upon(&self, args: OnLandedUponArgs<'_>) {

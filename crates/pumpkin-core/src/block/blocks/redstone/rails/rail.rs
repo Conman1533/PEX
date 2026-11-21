@@ -9,9 +9,11 @@ use crate::block::CanPlaceAtArgs;
 use crate::block::OnNeighborUpdateArgs;
 use crate::block::OnPlaceArgs;
 use crate::block::PlacedArgs;
+use crate::block::blocks::redstone::{block_receives_redstone_power, is_signal_source};
 
 use super::StraightRailShapeExt;
 use super::common::{can_place_rail_at, rail_placement_is_valid, update_flanking_rails_shape};
+use super::rail_state::RailState;
 use super::{HorizontalFacingRailExt, Rail, RailElevation, RailProperties};
 
 #[pumpkin_block("minecraft:rail")]
@@ -99,6 +101,17 @@ impl BlockBehaviour for RailBlock {
         if !rail_placement_is_valid(args.world, args.block, args.position) {
             args.world
                 .break_block(args.position, None, BlockFlags::NOTIFY_ALL);
+            return;
+        }
+        // Vanilla `RailBlock.updateState`: a signal source updating a three-way junction picks
+        // which curve it takes.
+        if is_signal_source(args.source_block)
+            && let Some(rail) = RailState::new(args.world, *args.position)
+            && rail.count_potential_connections(args.world) == 3
+        {
+            let shape = rail.shape();
+            let has_signal = block_receives_redstone_power(args.world, args.position);
+            rail.place(args.world, has_signal, false, shape);
         }
     }
 
