@@ -36,15 +36,26 @@ impl BlockMetadata for PistonBlock {
 }
 
 impl PistonBlock {
+    /// Vanilla `PistonBaseBlock.isPushable`: whether the block at `pos` can move in `dir`.
     #[must_use]
     pub fn is_movable(
+        world: &World,
+        pos: &BlockPos,
         block: &Block,
         state: &BlockState,
         dir: BlockDirection,
         can_break: bool,
         piston_dir: BlockDirection,
     ) -> bool {
-        // TODO: more checks
+        if !world.is_in_height_limit(pos.0.y)
+            || !world
+                .worldborder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_within_bounds(pos)
+        {
+            return false;
+        }
         if state.is_air() {
             return true;
         }
@@ -53,6 +64,12 @@ impl PistonBlock {
             || block == &Block::CRYING_OBSIDIAN
             || block == &Block::RESPAWN_ANCHOR
             || block == &Block::REINFORCED_DEEPSLATE
+        {
+            return false;
+        }
+        // A block at the bottom or top of the world can't leave it.
+        if (dir == BlockDirection::Down && pos.0.y == world.get_bottom_y())
+            || (dir == BlockDirection::Up && pos.0.y == world.get_top_y())
         {
             return false;
         }
@@ -259,8 +276,15 @@ impl PistonBlock {
             } else {
                 let is_air = state.is_air();
                 if !is_air
-                    && (Self::is_movable(block, state, dir, false, dir.opposite())
-                        || Self::is_movable(block, state, dir, false, dir))
+                    && (Self::is_movable(
+                        world,
+                        &pull_pos,
+                        block,
+                        state,
+                        dir,
+                        false,
+                        dir.opposite(),
+                    ) || Self::is_movable(world, &pull_pos, block, state, dir, false, dir))
                     && (state.piston_behavior == PistonBehavior::Normal
                         || block == &Block::PISTON
                         || block == &Block::STICKY_PISTON)
@@ -307,11 +331,7 @@ fn should_extend(world: &World, block_pos: &BlockPos, piston_dir: BlockDirection
         }
         return true;
     }
-    let neighbor_pos = block_pos.offset(BlockDirection::Down.to_offset());
-    let (block, state) = world.get_block_and_state(&neighbor_pos);
-    if is_emitting_redstone_power(block, state, world, block_pos, BlockDirection::Down) {
-        return true;
-    }
+    // Vanilla's next check asks the piston itself for a signal, which it never gives.
     for dir in BlockDirection::all() {
         let neighbor_pos = block_pos.up().offset(dir.to_offset());
         let (block, state) = world.get_block_and_state(&neighbor_pos);
