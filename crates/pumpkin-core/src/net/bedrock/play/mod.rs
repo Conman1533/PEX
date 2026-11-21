@@ -133,6 +133,7 @@ const fn map_bedrock_slot_to_screen_handler(window_id: i32, slot: u32) -> Option
 
 pub mod actor_event;
 pub mod animate;
+mod attack_cooldown;
 pub mod block_actor_data;
 pub mod block_pick_request;
 pub mod chat_command;

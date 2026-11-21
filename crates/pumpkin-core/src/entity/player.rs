@@ -1525,8 +1525,19 @@ impl Player {
             .living_entity
             .get_attribute_value(&Attributes::ATTACK_SPEED);
 
-        let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
-        let attack_cooldown_progress = if is_bedrock {
+        // Bedrock players follow the Java cooldown and get a charge bar, unless the server
+        // gives them classic Bedrock combat.
+        let classic_bedrock = match self.client.as_ref() {
+            ClientPlatform::Bedrock(client) => {
+                let cooldown = server.advanced_config.networking.bedrock.combat_cooldown;
+                if cooldown {
+                    client.show_attack_cooldown();
+                }
+                !cooldown
+            }
+            ClientPlatform::Java(_) => false,
+        };
+        let attack_cooldown_progress = if classic_bedrock {
             1.0
         } else {
             self.get_attack_cooldown_progress(0.5, attack_speed)
@@ -2662,6 +2673,9 @@ impl Player {
     }
 
     pub fn send_title_animation(&self, fade_in: i32, stay: i32, fade_out: i32) {
+        if let ClientPlatform::Bedrock(client) = self.client.as_ref() {
+            client.title_times.store((fade_in, stay, fade_out));
+        }
         self.try_enqueue_packet_editioned(
             &CTitleAnimation::new(fade_in, stay, fade_out),
             &pumpkin_protocol::bedrock::client::set_title::CSetTitle::new(
@@ -3122,6 +3136,9 @@ impl Player {
             }
         }
         self.last_attacked_ticks.fetch_add(1, Ordering::Relaxed);
+        if let ClientPlatform::Bedrock(client) = self.client.as_ref() {
+            client.tick_attack_cooldown(self);
+        }
 
         self.living_entity.tick(self, server);
 
