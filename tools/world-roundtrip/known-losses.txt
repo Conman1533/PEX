@@ -93,7 +93,10 @@ dimensions/minecraft/*/region/*.mca sections[*].SkyLight light; first run: step 
 level.dat Data.difficulty_settings.difficulty run config; first run: step 2: 1 changed
 
 # ticking: raids and stopwatches advanced while the server ran
+# The fixture raid has no spot for its first wave, so vanilla and PEX both stop it 300 loaded
+# ticks in; whether a save still holds it depends on how long that server ran.
 data/minecraft/stopwatches.dat data.stopwatches."fixture:watch" ticking; first run: step 2: 1 changed
+dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids ticking; first run: step 2: 1 lost
 dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].cooldown_ticks ticking; first run: step 2: 1 changed
 dimensions/minecraft/overworld/data/minecraft/raids.dat data.raids[*].ticks_active ticking; first run: step 2: 1 changed
 dimensions/minecraft/overworld/data/minecraft/raids.dat data.tick ticking; first run: step 2: 1 changed
