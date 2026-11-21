@@ -1,8 +1,9 @@
 use pumpkin_data::{
     Block,
     block_properties::{
-        DetectorRailProperties, PoweredRailLikeProperties, RailShapeStraight,
-        RedstoneWireLikeProperties,
+        AttachFace, DetectorRailProperties, FurnaceLikeProperties, HorizontalFacing,
+        LeverLikeProperties, PoweredRailLikeProperties, RailLikeProperties, RailShape,
+        RailShapeStraight, RedstoneWireLikeProperties,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -124,5 +125,66 @@ pub(super) async fn test_detector_rail_minecart(helper: GameTestHelper) -> GameT
             ),
         )
     })?;
+    Ok(())
+}
+
+/// Roadmap G5-12: vanilla `RailBlock.updateState`. A T-junction next to a lit torch curves
+/// north (`NORTH_EAST`); when the torch goes out its update, with the torch as the source, turns
+/// the junction south (`SOUTH_EAST`).
+pub(super) async fn test_rail_junction_switches(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let junction = BlockPos::new(2, 1, 2);
+    let rail = |shape| {
+        let mut props = RailLikeProperties::default(&Block::RAIL);
+        props.shape = shape;
+        props.to_state_id(&Block::RAIL)
+    };
+    helper
+        .set_block(&BlockPos::new(2, 1, 1), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(2, 1, 3), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(3, 1, 2), rail(RailShape::EastWest))
+        .await?;
+    helper
+        .set_block(&junction, rail(RailShape::NorthEast))
+        .await?;
+
+    // A torch on the west side of the junction, on a wall a lever on top can power.
+    helper
+        .set_block_default(&BlockPos::new(0, 1, 2), &Block::STONE)
+        .await?;
+    let mut torch = FurnaceLikeProperties::default(&Block::REDSTONE_WALL_TORCH);
+    torch.facing = HorizontalFacing::East;
+    torch.lit = true;
+    helper
+        .set_block(
+            &BlockPos::new(1, 1, 2),
+            torch.to_state_id(&Block::REDSTONE_WALL_TORCH),
+        )
+        .await?;
+    let lever_pos = BlockPos::new(0, 2, 2);
+    let mut lever = LeverLikeProperties::default(&Block::LEVER);
+    lever.face = AttachFace::Floor;
+    lever.facing = HorizontalFacing::North;
+    lever.powered = false;
+    helper
+        .set_block(&lever_pos, lever.to_state_id(&Block::LEVER))
+        .await?;
+    helper
+        .assert_block_state(&junction, rail(RailShape::NorthEast))
+        .await?;
+
+    helper.pull_lever(&lever_pos).await?;
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_block_state(&junction, rail(RailShape::SouthEast))
+                .await
+        })
+        .then_succeed();
     Ok(())
 }

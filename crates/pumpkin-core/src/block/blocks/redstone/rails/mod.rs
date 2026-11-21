@@ -11,6 +11,7 @@ use pumpkin_util::math::position::BlockPos;
 use crate::world::World;
 
 mod common;
+mod rail_state;
 
 pub mod activator_rail;
 pub mod detector_rail;

@@ -75,6 +75,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:powered_rail_propagation",
     "pumpkin:activator_rail_propagation",
     "pumpkin:detector_rail_minecart",
+    "pumpkin:redstone/rail_junction_switches",
     "pumpkin:tripwire_entity_collision",
     "pumpkin:snow_golem_pattern_spawns",
     "pumpkin:iron_golem_pattern_spawns",
@@ -526,6 +527,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             rails::test_detector_rail_minecart,
+        );
+        register_function_test(
+            "pumpkin:redstone/rail_junction_switches",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            rails::test_rail_junction_switches,
         );
         register_function_test(
             "pumpkin:tripwire_entity_collision",

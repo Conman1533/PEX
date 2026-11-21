@@ -2,7 +2,8 @@
  * This implementation is heavily based on <https://github.com/MCHPR/MCHPRS>
  * Updated to fit pumpkin by 4lve
  */
-use pumpkin_data::{Block, BlockDirection, BlockState};
+use pumpkin_data::tag::Taggable;
+use pumpkin_data::{Block, BlockDirection, BlockState, tag};
 use pumpkin_util::math::position::BlockPos;
 
 use crate::world::World;
@@ -152,6 +153,35 @@ pub fn block_receives_redstone_power(world: &World, pos: &BlockPos) -> bool {
         }
     }
     false
+}
+
+/// Vanilla `isSignalSource` of a block's default state: the blocks that override it to give a
+/// signal (`RedStoneWireBlock` only while it isn't working out its own power).
+#[must_use]
+pub fn is_signal_source(block: &Block) -> bool {
+    block.has_tag(&tag::Block::MINECRAFT_BUTTONS)
+        || block.has_tag(&tag::Block::MINECRAFT_PRESSURE_PLATES)
+        || block.has_tag(&tag::Block::MINECRAFT_LIGHTNING_RODS)
+        || [
+            &Block::CALIBRATED_SCULK_SENSOR,
+            &Block::COMPARATOR,
+            &Block::DAYLIGHT_DETECTOR,
+            &Block::DETECTOR_RAIL,
+            &Block::JUKEBOX,
+            &Block::LECTERN,
+            &Block::LEVER,
+            &Block::OBSERVER,
+            &Block::REDSTONE_BLOCK,
+            &Block::REDSTONE_TORCH,
+            &Block::REDSTONE_WALL_TORCH,
+            &Block::REDSTONE_WIRE,
+            &Block::REPEATER,
+            &Block::SCULK_SENSOR,
+            &Block::TARGET,
+            &Block::TRAPPED_CHEST,
+            &Block::TRIPWIRE_HOOK,
+        ]
+        .contains(&block)
 }
 
 #[must_use]
