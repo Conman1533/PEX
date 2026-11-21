@@ -175,6 +175,24 @@ impl Animal for PigEntity {
 }
 
 impl Mob for PigEntity {
+    fn mob_controlling_passenger(&self) -> Option<std::sync::Arc<dyn crate::entity::EntityBase>> {
+        crate::entity::mob::item_steering_player_controller(
+            self.get_entity(),
+            self.is_saddled(),
+            &pumpkin_data::item::Item::CARROT_ON_A_STICK,
+        )
+        .or_else(|| {
+            crate::entity::mob::mob_rider_controller(
+                self.get_entity(),
+                self.get_mob_entity().is_no_ai(),
+            )
+        })
+    }
+
+    fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
+        crate::entity::mob::player_steers(self)
+    }
+
     /// Vanilla `Pig.finalizeSpawn` rolls a random sound variant.
     fn finalize_spawn(
         &self,

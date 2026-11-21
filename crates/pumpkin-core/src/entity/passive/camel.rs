@@ -402,6 +402,21 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
+    fn mob_controlling_passenger(&self) -> Option<std::sync::Arc<dyn crate::entity::EntityBase>> {
+        crate::entity::mob::saddled_player_controller(self.get_entity(), self.is_saddled()).or_else(
+            || {
+                crate::entity::mob::mob_rider_controller(
+                    self.get_entity(),
+                    self.get_mob_entity().is_no_ai(),
+                )
+            },
+        )
+    }
+
+    fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
+        crate::entity::mob::player_steers(self)
+    }
+
     fn get_sound_volume(&self) -> f32 {
         0.8
     }

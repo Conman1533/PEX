@@ -1317,17 +1317,7 @@ pub trait Mob: EntityBase + Send + Sync {
     }
 
     fn mob_controlling_passenger(&self) -> Option<Arc<dyn EntityBase>> {
-        if self.get_mob_entity().is_no_ai() {
-            return None;
-        }
-        let first = self
-            .get_entity()
-            .passengers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .first()
-            .cloned();
-        first.filter(|passenger| passenger.get_mob().is_some() && passenger.can_control_vehicle())
+        mob_rider_controller(self.get_entity(), self.get_mob_entity().is_no_ai())
     }
 
     fn omnidirectional_air_mover(&self) -> bool {
@@ -2414,6 +2404,63 @@ impl<T: Mob + Send + 'static> EntityBase for T {
     fn get_base_experience_reward(&self) -> u32 {
         Mob::get_base_experience_reward(self)
     }
+}
+
+/// Vanilla `Mob.getControllingPassenger`: a mob riding first steers, unless this mob has no AI.
+#[must_use]
+pub fn mob_rider_controller(entity: &Entity, no_ai: bool) -> Option<Arc<dyn EntityBase>> {
+    if no_ai {
+        return None;
+    }
+    let first = entity
+        .passengers
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .first()
+        .cloned();
+    first.filter(|passenger| passenger.get_mob().is_some() && passenger.can_control_vehicle())
+}
+
+/// Vanilla `AbstractHorse.getControllingPassenger` (horses, donkeys, mules, camels) and the
+/// nautilus: a player riding first steers a saddled mob.
+#[must_use]
+pub fn saddled_player_controller(entity: &Entity, saddled: bool) -> Option<Arc<dyn EntityBase>> {
+    if !saddled {
+        return None;
+    }
+    entity
+        .passengers
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .first()
+        .filter(|passenger| passenger.get_player().is_some())
+        .cloned()
+}
+
+/// Vanilla `Pig` and `Strider.getControllingPassenger`: the saddled rule, and the player must
+/// hold the steering item in either hand.
+#[must_use]
+pub fn item_steering_player_controller(
+    entity: &Entity,
+    saddled: bool,
+    item: &Item,
+) -> Option<Arc<dyn EntityBase>> {
+    saddled_player_controller(entity, saddled).filter(|rider| {
+        rider.get_player().is_some_and(|player| {
+            player.inventory.held_item().get_item() == item
+                || player.inventory.off_hand_item().get_item() == item
+        })
+    })
+}
+
+/// Whether a player steers this mob from their own client.
+///
+/// Vanilla's `isControlledByLocalInstance` is false on the server then, so the server skips the
+/// mob's own travel step and doesn't fight the rider's moves.
+#[must_use]
+pub fn player_steers(mob: &dyn Mob) -> bool {
+    mob.mob_controlling_passenger()
+        .is_some_and(|rider| rider.get_player().is_some())
 }
 
 #[expect(dead_code)]
