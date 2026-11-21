@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
-use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::data_component_impl::{EquipmentSlot, StatusEffectInstance};
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
@@ -27,6 +28,19 @@ pub mod parched;
 pub mod skeleton;
 pub mod stray;
 pub mod wither;
+
+/// The `MobEffectInstance(effect, duration)` a variant's vanilla `getArrow` adds to its arrows.
+#[must_use]
+pub const fn arrow_effect_instance(effect_id: &'static str, duration: i32) -> StatusEffectInstance {
+    StatusEffectInstance {
+        effect_id: Cow::Borrowed(effect_id),
+        amplifier: 0,
+        duration,
+        ambient: false,
+        show_particles: true,
+        show_icon: true,
+    }
+}
 
 pub struct SkeletonEntityBase {
     pub mob_entity: MobEntity,
