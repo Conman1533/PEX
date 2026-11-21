@@ -3259,6 +3259,11 @@ impl Player {
         // Vanilla updates pose in PlayerEntity#tick after super.tick().
         self.update_player_pose();
         self.check_inventory_advancements();
+        if self.tick_counter.load(Ordering::Relaxed) % 20 == 0 {
+            self.trigger_advancement(
+                crate::entity::player::advancement::trigger::AdvancementTrigger::Location,
+            );
+        }
         if let Ok(mut adv) = self.advancements.try_lock() {
             adv.flush_dirty(self, true);
         }
@@ -8542,6 +8547,18 @@ impl InventoryPlayer for Player {
 
     fn increment_stat(&self, category: StatisticCategory, stat_id: i32, amount: i32) {
         self.increment_stat(category, stat_id, amount);
+    }
+
+    fn on_item_enchanted(&self, _stack: &ItemStack, _levels: i32) {
+        self.trigger_advancement(
+            crate::entity::player::advancement::trigger::AdvancementTrigger::EnchantedItem,
+        );
+    }
+
+    fn on_potion_brewed(&self, _stack: &ItemStack) {
+        self.trigger_advancement(
+            crate::entity::player::advancement::trigger::AdvancementTrigger::BrewedPotion,
+        );
     }
 
     // Vanilla `Entity.playSound`, for the item overrides that play their own sounds.

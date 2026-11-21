@@ -378,6 +378,7 @@ impl ScreenHandler for EnchantingTableScreenHandler {
         for (enchant, level) in enchantments {
             item_stack.add_enchantment(enchant, level as u16);
         }
+        let enchanted = item_stack.clone();
         self.inventory.set_stack(0, item_stack);
 
         // Update seed
@@ -396,6 +397,7 @@ impl ScreenHandler for EnchantingTableScreenHandler {
             CustomStatistic::EnchantItem as i32,
             1,
         );
+        player.on_item_enchanted(&enchanted, id + 1);
 
         true
     }
