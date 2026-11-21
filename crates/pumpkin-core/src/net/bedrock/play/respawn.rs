@@ -1,4 +1,4 @@
-use pumpkin_protocol::bedrock::server::RespawnState;
+use pumpkin_protocol::bedrock::server::{RespawnState, show_credits::SShowCredits};
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
@@ -22,6 +22,20 @@ impl BedrockClient {
             ),
             state: RespawnState::ReadyToSpawn,
             player_runtime_id: VarULong(player.entity_id() as u64),
+        });
+    }
+
+    /// The player closed the end credits. As after the Java client's respawn request, it comes
+    /// back to its spawn point alive, with everything it has.
+    pub fn handle_show_credits(&self, player: &Arc<Player>, packet: &SShowCredits) {
+        if packet.credits_state.0 != SShowCredits::STOP
+            || !player.won_game.swap(false, Ordering::Relaxed)
+        {
+            return;
+        }
+        let player_c = player.clone();
+        player.spawn_task(async move {
+            player_c.world().respawn_player(&player_c, true).await;
         });
     }
 }

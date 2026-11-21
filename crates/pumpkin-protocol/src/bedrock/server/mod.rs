@@ -30,6 +30,7 @@ pub mod resource_pack_client_response;
 pub mod respawn;
 pub mod set_local_player_as_initialized;
 pub mod set_player_inventory_options;
+pub mod show_credits;
 pub mod text;
 
 pub use actor_event::*;

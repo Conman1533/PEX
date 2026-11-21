@@ -43,7 +43,8 @@ use pumpkin_protocol::{
             resource_pack_chunk_request::SResourcePackChunkRequest,
             resource_pack_client_response::SResourcePackClientResponse, respawn::SRespawn,
             set_local_player_as_initialized::SSetLocalPlayerAsInitialized,
-            set_player_inventory_options::SSetPlayerInventoryOptions, text::SText,
+            set_player_inventory_options::SSetPlayerInventoryOptions, show_credits::SShowCredits,
+            text::SText,
         },
     },
     packet::Packet,
@@ -874,6 +875,10 @@ impl BedrockClient {
             SRespawn::PACKET_ID => {
                 let packet = SRespawn::read(reader)?;
                 self.handle_respawn(player, &packet);
+            }
+            SShowCredits::PACKET_ID => {
+                let packet = SShowCredits::read(reader)?;
+                self.handle_show_credits(player, &packet);
             }
             SAnimate::PACKET_ID => {
                 self.handle_animate(player, &SAnimate::read(reader)?);

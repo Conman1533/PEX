@@ -96,6 +96,15 @@ const CONTAINER_CLOSE_ID: i32 = 47;
 const ITEM_STACK_REQUEST_ID: i32 = 147;
 const ITEM_STACK_RESPONSE_ID: i32 = 148;
 const SET_TITLE_ID: i32 = 88;
+const PLAYER_ACTION_ID: i32 = 36;
+const RESPAWN_ID: i32 = 45;
+const CHANGE_DIMENSION_ID: i32 = 61;
+const SHOW_CREDITS_ID: i32 = 75;
+/// `PlayerActionType::Respawn` and `ChangeDimensionAck`.
+const ACTION_RESPAWN: i32 = 7;
+const ACTION_CHANGE_DIMENSION_ACK: i32 = 14;
+/// `RespawnState::ClientReadyToSpawn`.
+const RESPAWN_CLIENT_READY: u8 = 2;
 /// `ItemStackRequestAction::CraftRecipe`.
 const STACK_ACTION_CRAFT_RECIPE: u32 = 10;
 
@@ -179,6 +188,14 @@ pub struct BedrockBot {
     pub stack_responses: Vec<(i32, u8)>,
     /// Every `SetTitle` as (title type, text): 0 clear, 2 title, 3 subtitle, 5 times.
     pub titles: Vec<(i32, String)>,
+    /// Every `ChangeDimension` as (dimension, position, respawn), oldest first.
+    pub dimension_changes: Vec<(i32, Vector3<f32>, bool)>,
+    /// `PlayStatus` `PlayerSpawn`s after joining, which end a dimension change's loading screen.
+    pub spawn_statuses: usize,
+    /// Every `ShowCredits` state the server sent: 0 start, 1 stop.
+    pub credits: Vec<i32>,
+    /// Every `Respawn` state the server sent: 0 searching, 1 ready to spawn.
+    pub respawn_states: Vec<u8>,
     pub health: i32,
     /// Whether inputs report standing on something, as a real client does when it isn't
     /// falling or jumping.
@@ -278,6 +295,10 @@ impl BedrockBot {
             open_container: None,
             stack_responses: Vec::new(),
             titles: Vec::new(),
+            dimension_changes: Vec::new(),
+            spawn_statuses: 0,
+            credits: Vec::new(),
+            respawn_states: Vec::new(),
             health: 20,
             on_ground: true,
             disconnect: None,
@@ -622,6 +643,10 @@ impl BedrockBot {
                         .collect(),
                 });
             }
+            CHANGE_DIMENSION_ID | SHOW_CREDITS_ID | RESPAWN_ID => {
+                self.read_dimension_packet(packet.id, reader)?;
+            }
+            id if id == CPlayStatus::PACKET_ID => self.read_dimension_packet(id, reader)?,
             SET_TITLE_ID => {
                 let err = |err| read_error("SetTitle", err);
                 let kind = VarInt::read(reader).map_err(err)?.0;
@@ -653,6 +678,41 @@ impl BedrockBot {
                 });
             }
             _ => self.handle_entity_packet(packet.id, reader)?,
+        }
+        Ok(())
+    }
+
+    /// Dimension changes, the loading screen ending, the end credits and the death screen.
+    fn read_dimension_packet(&mut self, id: i32, reader: &mut &[u8]) -> Result<(), String> {
+        match id {
+            CHANGE_DIMENSION_ID => {
+                let err = |err| read_error("ChangeDimension", err);
+                let dimension = VarInt::read(reader).map_err(err)?.0;
+                let position = Vector3::<f32>::read(reader).map_err(err)?;
+                let respawn = bool::read(reader).map_err(err)?;
+                self.dimension_changes.push((dimension, position, respawn));
+                // A real client drops the old dimension's chunks.
+                self.chunks.clear();
+                self.position = position;
+            }
+            id if id == CPlayStatus::PACKET_ID => {
+                if i32::read_be(reader).map_err(|err| read_error("PlayStatus", err))?
+                    == PLAY_STATUS_PLAYER_SPAWN
+                {
+                    self.spawn_statuses += 1;
+                }
+            }
+            SHOW_CREDITS_ID => {
+                let err = |err| read_error("ShowCredits", err);
+                VarULong::read(reader).map_err(err)?;
+                self.credits.push(VarInt::read(reader).map_err(err)?.0);
+            }
+            RESPAWN_ID => {
+                let err = |err| read_error("Respawn", err);
+                Vector3::<f32>::read(reader).map_err(err)?;
+                self.respawn_states.push(u8::read(reader).map_err(err)?);
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -760,6 +820,55 @@ impl BedrockBot {
     ) -> Result<(), String> {
         self.send_use_item(USE_ITEM_CLICK_BLOCK, block, face, slot, in_hand, actions)
             .await
+    }
+
+    /// Sends a `PlayerAction` with no block, as a real client does for a respawn or a finished
+    /// dimension change.
+    async fn send_player_action(&self, action: i32) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            VarULong(self.runtime_id).write(payload)?;
+            VarInt(action).write(payload)?;
+            BlockPos::new(0, 0, 0).write(payload)?;
+            BlockPos::new(0, 0, 0).write(payload)?;
+            VarInt(0).write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(PLAYER_ACTION_ID, &payload).await
+    }
+
+    /// Tells the server the new dimension has loaded, as a real client does when its loading
+    /// screen closes.
+    pub async fn ack_dimension_change(&self) -> Result<(), String> {
+        self.send_player_action(ACTION_CHANGE_DIMENSION_ACK).await
+    }
+
+    /// The real client's respawn after death: `Respawn` with `ClientReadyToSpawn`, then the
+    /// respawn `PlayerAction` once the server answers.
+    pub async fn ready_to_respawn(&self) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            self.position.write(payload)?;
+            RESPAWN_CLIENT_READY.write(payload)?;
+            VarULong(self.runtime_id).write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(RESPAWN_ID, &payload).await
+    }
+
+    pub async fn respawn(&self) -> Result<(), String> {
+        self.send_player_action(ACTION_RESPAWN).await
+    }
+
+    /// Closes the end credits, as a real client's `ShowCredits` with the stop state.
+    pub async fn finish_credits(&self) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            VarULong(self.runtime_id).write(payload)?;
+            VarInt(1).write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(SHOW_CREDITS_ID, &payload).await
     }
 
     /// Hits the entity with this runtime id, as a real client's `UseItemOnEntity` attack

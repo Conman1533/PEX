@@ -161,9 +161,12 @@ impl PortalType {
                                     }
                                     return None;
                                 }
-                                crate::net::ClientPlatform::Java(_) => {}
-                                crate::net::ClientPlatform::Bedrock(_) if seen_credits => {}
-                                crate::net::ClientPlatform::Bedrock(client) => {
+                                crate::net::ClientPlatform::Bedrock(client) if !seen_credits => {
+                                    // The player stays in the End until it closes the
+                                    // credits, which `handle_show_credits` answers.
+                                    player
+                                        .won_game
+                                        .store(true, std::sync::atomic::Ordering::Relaxed);
                                     if let Ok(data) = client.serialize_packet(
                                         &pumpkin_protocol::bedrock::client::CShowCredits {
                                             player_runtime_id: (caller.get_entity().entity_id
@@ -174,7 +177,10 @@ impl PortalType {
                                     ) {
                                         client.try_enqueue_packet(data);
                                     }
+                                    return None;
                                 }
+                                crate::net::ClientPlatform::Java(_)
+                                | crate::net::ClientPlatform::Bedrock(_) => {}
                             }
                         }
 
