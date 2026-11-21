@@ -32,7 +32,7 @@ pub mod game_event;
 pub mod generation_cache;
 pub mod loot;
 pub mod map;
-mod neighbor_updater;
+pub(crate) mod neighbor_updater;
 pub mod portal;
 pub mod raid;
 pub mod random_sequences;
@@ -5704,6 +5704,30 @@ impl World {
             .flatten()
     }
 
+    /// The shape-update pass at the end of `Level.setBlock`, which stops at its `updateLimit`.
+    fn update_shapes_after_set(
+        self: &Arc<Self>,
+        position: &BlockPos,
+        (old_block, old_state): (&'static Block, BlockStateId),
+        (new_block, new_state): (&'static Block, BlockStateId),
+        flags: BlockFlags,
+    ) {
+        if flags.intersects(BlockFlags::MOVED | BlockFlags::UPDATE_KNOWN_SHAPE)
+            || neighbor_updater::shape_update_limit() == 0
+        {
+            return;
+        }
+        let mut neighbour_update_flags = flags;
+        neighbour_update_flags.remove(BlockFlags::NOTIFY_NEIGHBORS);
+        neighbour_update_flags.remove(BlockFlags::SKIP_DROPS);
+        self.block_registry
+            .prepare(self, position, old_block, old_state, neighbour_update_flags);
+        self.block_registry
+            .update_neighbors(self, position, neighbour_update_flags);
+        self.block_registry
+            .prepare(self, position, new_block, new_state, neighbour_update_flags);
+    }
+
     /// Everything `set_block_state` does after the chunk write: callbacks, neighbour updates,
     /// client sync, POI and lighting.
     fn on_block_state_set(
@@ -5767,27 +5791,12 @@ impl World {
                 }
             }
 
-            if !flags.intersects(BlockFlags::MOVED | BlockFlags::UPDATE_KNOWN_SHAPE) {
-                let mut neighbour_update_flags = flags;
-                neighbour_update_flags.remove(BlockFlags::NOTIFY_NEIGHBORS);
-                neighbour_update_flags.remove(BlockFlags::SKIP_DROPS);
-                self.block_registry.prepare(
-                    self,
-                    position,
-                    old_block,
-                    replaced_block_state_id,
-                    neighbour_update_flags,
-                );
-                self.block_registry
-                    .update_neighbors(self, position, neighbour_update_flags);
-                self.block_registry.prepare(
-                    self,
-                    position,
-                    new_block,
-                    block_state_id,
-                    neighbour_update_flags,
-                );
-            }
+            self.update_shapes_after_set(
+                position,
+                (old_block, replaced_block_state_id),
+                (new_block, block_state_id),
+                flags,
+            );
 
             self.villager_poi
                 .lock()

@@ -1,5 +1,6 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use pumpkin_data::{Block, BlockDirection, BlockId, BlockStateId};
 use pumpkin_util::math::position::BlockPos;
@@ -8,8 +9,47 @@ use tracing::error;
 
 use super::World;
 
-/// Default limit for Vanilla for updating neighbors
-const MAX_CHAINED_UPDATES: usize = 1_000_000;
+/// Vanilla's default `max-chained-neighbor-updates`.
+pub const DEFAULT_MAX_CHAINED_UPDATES: i32 = 1_000_000;
+
+/// The server's `max_chained_neighbor_updates`: how many updates one cascade may submit, any
+/// negative value meaning no limit (vanilla `CollectingNeighborUpdater.maxChainedNeighborUpdates`).
+static MAX_CHAINED_UPDATES: AtomicI32 = AtomicI32::new(DEFAULT_MAX_CHAINED_UPDATES);
+
+/// Sets the server's chained neighbour update limit; negative means unlimited.
+pub fn set_max_chained_updates(limit: i32) {
+    MAX_CHAINED_UPDATES.store(limit, Ordering::Relaxed);
+}
+
+/// The chained update limit as a budget, `None` when unlimited.
+fn max_chained_updates() -> Option<usize> {
+    usize::try_from(MAX_CHAINED_UPDATES.load(Ordering::Relaxed)).ok()
+}
+
+/// Vanilla `Level.setBlock`'s default `updateLimit`: how many shape updates deep a block change
+/// may reach.
+pub(super) const SHAPE_UPDATE_DEPTH: u32 = 512;
+
+thread_local! {
+    /// The `updateLimit` of the block change this thread is making: [`SHAPE_UPDATE_DEPTH`], or
+    /// what the shape update being run carried.
+    static SHAPE_UPDATE_LIMIT: Cell<u32> = const { Cell::new(SHAPE_UPDATE_DEPTH) };
+}
+
+/// The `updateLimit` of the block change this thread is making. A change with 0 left updates no
+/// neighbour's shape (vanilla `Level.setBlock`).
+pub(super) fn shape_update_limit() -> u32 {
+    SHAPE_UPDATE_LIMIT.with(Cell::get)
+}
+
+/// Puts the previous `updateLimit` back once a shape update has run, even if it panicked.
+struct ShapeLimitGuard(u32);
+
+impl Drop for ShapeLimitGuard {
+    fn drop(&mut self) {
+        SHAPE_UPDATE_LIMIT.with(|limit| limit.set(self.0));
+    }
+}
 
 #[derive(Clone, Copy)]
 enum UpdateKind {
@@ -25,6 +65,8 @@ enum UpdateKind {
         neighbor_position: BlockPos,
         neighbor_state_id: BlockStateId,
         flags: BlockFlags,
+        /// The `updateLimit` the block change this update makes runs with.
+        update_limit: u32,
     },
 }
 
@@ -45,12 +87,12 @@ struct UpdateStack<W> {
     remaining: Vec<QueuedUpdate<W>>,
     staged: Vec<QueuedUpdate<W>>,
     submitted: usize,
-    limit: usize,
+    limit: Option<usize>,
     gave_up: bool,
 }
 
 impl<W: Clone> UpdateStack<W> {
-    const fn new(limit: usize) -> Self {
+    const fn new(limit: Option<usize>) -> Self {
         Self {
             remaining: Vec::new(),
             staged: Vec::new(),
@@ -60,25 +102,28 @@ impl<W: Clone> UpdateStack<W> {
         }
     }
 
-    fn stage(&mut self, world: &W, kinds: impl Iterator<Item = UpdateKind>) {
-        for kind in kinds {
-            if self.submitted >= self.limit {
-                if !self.gave_up {
-                    self.gave_up = true;
-                    error!(
-                        "block updates chained beyond {}, updates starting at {} have been skipped",
-                        self.limit,
-                        kind.position()
-                    );
-                }
-                return;
+    /// Stages one submission, which counts once however many updates it holds, like a vanilla
+    /// `MultiNeighborUpdate` in `CollectingNeighborUpdater.addAndRun`.
+    fn stage(&mut self, world: &W, mut kinds: impl Iterator<Item = UpdateKind>) {
+        if let Some(limit) = self.limit
+            && self.submitted >= limit
+        {
+            if !self.gave_up
+                && let Some(kind) = kinds.next()
+            {
+                self.gave_up = true;
+                error!(
+                    "block updates chained beyond {limit}, updates starting at {} have been skipped",
+                    kind.position()
+                );
             }
-            self.submitted += 1;
-            self.staged.push(QueuedUpdate {
-                world: world.clone(),
-                kind,
-            });
+            return;
         }
+        self.submitted += 1;
+        self.staged.extend(kinds.map(|kind| QueuedUpdate {
+            world: world.clone(),
+            kind,
+        }));
     }
 
     fn promote_staged(&mut self) {
@@ -152,6 +197,7 @@ pub(super) fn update_shape(
             neighbor_position,
             neighbor_state_id,
             flags,
+            update_limit: shape_update_limit().saturating_sub(1),
         }),
     );
 }
@@ -170,7 +216,7 @@ fn submit(world: &Arc<World>, updates: impl Iterator<Item = UpdateKind>) {
         return;
     }
 
-    let mut stack = UpdateStack::new(MAX_CHAINED_UPDATES);
+    let mut stack = UpdateStack::new(max_chained_updates());
     stack.stage(world, updates);
     stack.promote_staged();
 
@@ -224,7 +270,10 @@ fn execute(update: QueuedUpdate<Arc<World>>) {
             neighbor_position,
             neighbor_state_id,
             flags,
+            update_limit,
         } => {
+            let _restore =
+                ShapeLimitGuard(SHAPE_UPDATE_LIMIT.with(|limit| limit.replace(update_limit)));
             world.execute_shape_update(
                 &position,
                 direction,
@@ -239,7 +288,7 @@ fn execute(update: QueuedUpdate<Arc<World>>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        CascadeGuard, MAX_CHAINED_UPDATES, PENDING_UPDATES, UpdateKind, UpdateStack,
+        CascadeGuard, DEFAULT_MAX_CHAINED_UPDATES, PENDING_UPDATES, UpdateKind, UpdateStack,
         cascade_in_progress,
     };
     use pumpkin_data::{BlockDirection, BlockId};
@@ -247,6 +296,7 @@ mod tests {
     use pumpkin_util::math::vector3::Vector3;
     use pumpkin_world::world::BlockFlags;
 
+    const MAX_CHAINED_UPDATES: Option<usize> = Some(DEFAULT_MAX_CHAINED_UPDATES as usize);
     const OVERWORLD: &str = "overworld";
     const NETHER: &str = "nether";
 
@@ -326,11 +376,9 @@ mod tests {
 
     #[test]
     fn updates_chained_past_the_budget_are_skipped() {
-        let mut stack = UpdateStack::new(2);
-        stack.stage(
-            &OVERWORLD,
-            [neighbor_at(1), neighbor_at(2), neighbor_at(3)].into_iter(),
-        );
+        let mut stack = UpdateStack::new(Some(2));
+        stack.stage(&OVERWORLD, std::iter::once(neighbor_at(1)));
+        stack.stage(&OVERWORLD, std::iter::once(neighbor_at(2)));
         stack.stage(
             &OVERWORLD,
             std::iter::once(UpdateKind::Shape {
@@ -339,12 +387,73 @@ mod tests {
                 neighbor_position: BlockPos(Vector3::new(4, 1, 0)),
                 neighbor_state_id: pumpkin_data::BlockStateId::AIR,
                 flags: BlockFlags::NOTIFY_ALL,
+                update_limit: 511,
             }),
         );
         stack.promote_staged();
 
         assert!(stack.gave_up);
         assert_eq!(remaining_positions(&stack), vec![2, 1]);
+    }
+
+    /// G5-14: the six updates around a changed block are one submission, so they count once
+    /// against the limit (vanilla `CollectingNeighborUpdater.addAndRun`).
+    #[test]
+    fn multi_neighbor_update_counts_once() {
+        let mut stack = UpdateStack::new(Some(2));
+        stack.stage(&OVERWORLD, (1..=6).map(neighbor_at));
+        stack.stage(&OVERWORLD, std::iter::once(neighbor_at(7)));
+        stack.promote_staged();
+
+        assert!(!stack.gave_up);
+        assert_eq!(remaining_positions(&stack), vec![7, 6, 5, 4, 3, 2, 1]);
+
+        stack.stage(&OVERWORLD, std::iter::once(neighbor_at(8)));
+        assert!(stack.gave_up);
+    }
+
+    /// G5-14: a negative limit means no limit.
+    #[test]
+    fn an_unlimited_stack_never_gives_up() {
+        let mut stack = UpdateStack::new(None);
+        for x in 0..10_000 {
+            stack.stage(&OVERWORLD, std::iter::once(neighbor_at(x)));
+        }
+        assert!(!stack.gave_up);
+        assert_eq!(stack.staged.len(), 10_000);
+    }
+
+    /// G5-14: a block change reaches 512 shape updates deep and no further (vanilla
+    /// `Level.setBlock` `updateLimit`). Each portal block in a frameless row turns to air when its
+    /// neighbour along the axis goes, so breaking the first one removes the next 512 only.
+    #[tokio::test]
+    async fn shape_updates_stop_at_depth_512() {
+        use pumpkin_data::Block;
+        use pumpkin_data::block_properties::{HorizontalAxis, NetherPortalLikeProperties};
+
+        let world = crate::world::test_world_with_blocks();
+        for chunk_x in 0..40 {
+            world.level.loaded_chunks.insert(
+                pumpkin_util::math::vector2::Vector2::new(chunk_x, 0),
+                pumpkin_world::chunk::ChunkData::empty_sync(chunk_x, 0),
+            );
+        }
+        let mut props = NetherPortalLikeProperties::default(&Block::NETHER_PORTAL);
+        props.axis = HorizontalAxis::X;
+        let portal = props.to_state_id(&Block::NETHER_PORTAL);
+        let at = |x: i32| BlockPos(Vector3::new(x, 64, 4));
+        for x in 0..600 {
+            world.set_block_state(
+                &at(x),
+                portal,
+                BlockFlags::UPDATE_KNOWN_SHAPE | BlockFlags::SKIP_BLOCK_ADDED_CALLBACK,
+            );
+        }
+
+        world.set_block_state(&at(0), Block::AIR.default_state.id, BlockFlags::NOTIFY_ALL);
+
+        assert!((1..=512).all(|x| world.get_block_state_id(&at(x)) != portal));
+        assert_eq!(world.get_block_state_id(&at(513)), portal);
     }
 
     #[test]

@@ -84,6 +84,7 @@ fn release_files_migrate_to_the_current_version() {
             ))
         }));
         expected.extend([
+            info("pumpkin.toml: added max_chained_neighbor_updates = 1000000"),
             info("pumpkin.toml: added [world.entity_islands] with default values"),
             info("pumpkin.toml: added networking.java.validate_player_names = true"),
             info("pumpkin.toml: added networking.bedrock.combat_cooldown = true"),
