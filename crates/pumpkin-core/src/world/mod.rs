@@ -438,21 +438,10 @@ impl World {
         let raids = saved_data::load_raids(&level.level_folder.dim_folder);
         let scoreboard = scoreboard::shared_scoreboard(&level.level_folder.root_folder);
 
-        let custom_data_path = level
-            .level_folder
-            .root_folder
-            .join("pumpkin_custom_data.nbt");
-        let custom_data = if custom_data_path.exists()
-            && let Ok(bytes) = std::fs::read(&custom_data_path)
-            && let Ok(nbt) = pumpkin_nbt::Nbt::read_unnamed(
-                &mut pumpkin_nbt::deserializer::NbtReadHelperJava::new(&mut std::io::Cursor::new(
-                    bytes,
-                )),
-            ) {
-            nbt.root_tag
-        } else {
-            NbtCompound::new()
-        };
+        let custom_data = saved_data::load_custom_data(
+            &level.level_folder,
+            dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name,
+        );
 
         // Vanilla keeps one game time, day time and weather for the server; each world
         // starts from the saved ones.
@@ -7933,14 +7922,12 @@ impl World {
                 .custom_data
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if !custom_data.is_empty() {
-                let custom_data_path = self
-                    .level
-                    .level_folder
-                    .root_folder
-                    .join("pumpkin_custom_data.nbt");
-                let nbt = pumpkin_nbt::Nbt::from(custom_data.clone());
-                let _ = std::fs::write(custom_data_path, nbt.write());
+            if let Err(e) = saved_data::save_custom_data(
+                &self.level.level_folder,
+                self.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name,
+                &custom_data,
+            ) {
+                error!("Failed to save plugin data: {e}");
             }
         }
 

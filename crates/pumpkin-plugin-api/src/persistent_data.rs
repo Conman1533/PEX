@@ -2,6 +2,15 @@
 //!
 //! Provides namespaced persistent data storage on entities, block entities, chunks,
 //! worlds, and item stacks that is automatically persisted to disk in NBT format.
+//!
+//! Each world (dimension) keeps its data in `pumpkin_custom_data.nbt` in its own folder.
+//!
+//! # Opening the world with vanilla
+//!
+//! Vanilla Minecraft doesn't know PEX's `PumpkinCustomData` key, so a world saved by vanilla
+//! loses the data on entities, block entities and chunks that vanilla loaded. Item stack data
+//! lives in the `minecraft:custom_data` component and survives, and so do the world files,
+//! which vanilla leaves alone.
 
 use crate::wit::pumpkin::plugin::block_entity::BlockEntity;
 use crate::wit::pumpkin::plugin::common::{NbtTag, NbtTree};
