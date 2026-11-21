@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `5c72e204a`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4a500f1fd`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 11 | 1 | 33 | |
+| G1 Mob AI | 45 | 12 | 1 | 32 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 1 | 0 | 15 | |
+| G5 Redstone | 16 | 1 | 1 | 14 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 25 | 0 | 7 | |
+| G7 Worlds | 32 | 26 | 0 | 6 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 70 | 1 | 110 | 15 |
+| Total | 196 | 72 | 2 | 107 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -45,6 +45,8 @@ Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4
 
 - `test/bedrock-wire`, `fix/bedrock-oidc-keys`, `fix/bedrock-deploy-ports`, `perf/skin-fetch-off-join`: Bedrock wire checks, sign-in key handling, deploy ports, and the Java and Bedrock skin fetch moved off the join path (Goal 8 work from the Bedrock thread, tracked in `docs/BEDROCK-PARITY.md` on branch `docs/bedrock-parity`).
 - `fix/creaking-heart-test-flake`: the creaking heart unit test waits for the heart's update (every 22 to 26 ticks) instead of a fixed 25 ticks.
+
+Landing batch 7 (2026-11-21) also carried, outside the pieces: the Java login packet sent before the player joins the world (a client could get entity data before it had a level and hang on its first join; every bot join now checks it), held item attributes applied the tick they change like vanilla `detectEquipmentUpdates` (a sword given by `/give` hit with fist damage until the next hand sync), `fix/bedrock-dimensions` from the Bedrock thread, and a longer timeout for the flaky armadillo GameTest.
 
 What holds 2.0 back:
 
@@ -766,6 +768,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: D1-1.
 - Done when: `pumpkin:villager_claims_job_site_and_bed` passes and a villager saved and loaded keeps `minecraft:job_site` and `minecraft:home`.
 - Needed by: G7-24 (villager job site and home round-trip in vanilla's Brain memory layout).
+- Status (2026-11-21): landed (branch `feat/villager-poi-schedule`, built by the 2.0 loop). The villager runs on the PEX Brain with vanilla's core, idle, rest and meet activities and schedule, the GOLEM_DETECTED, NEAREST_BED, SECONDARY_POIS, VILLAGER_BABIES and VILLAGER_HOSTILES sensors, AcquirePoi for job sites, beds and meeting points, ValidateNearbyPoi, sleeping in and waking from beds, JumpOnBed for babies and the village strolls. Job site, potential job site, home, meeting point and last-worked-at-POI are Brain memories; the old `JobSite*`, `Home*`/`Bed*` and `LastWorkedAtPoi` keys move into them on load, and a sleeping villager saves `sleeping_pos`. The goal-based job claiming (`work_at_job_site.rs`) is gone. Work, trading restock at the job site (G1-43), breeding, golem summoning and raids (G1-44) are still out. GameTest `pumpkin:villager_claims_job_site_and_bed`, unit tests `villager::tests::{job_site_and_home_save_as_brain_memories, pre_2_0_job_site_and_home_keys_become_memories}`. Play test for Neon: put a lectern and a bed near an unemployed villager at dusk; expect it to become a librarian, walk to the bed at night and sleep in it, and keep both after a restart. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G1-43 Villager work
 - Scope: work activity, per-profession work behaviours, HarvestFarmland, trade restock at the job site. Out: trade tables.
@@ -1666,6 +1669,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/scheduled-tick-block-check
 - Needs decision: none
 - Done when: `pumpkin:redstone/tick_skips_replaced_block` (for example a lit lamp with a pending turn-off tick pushed away and replaced by an observer, which must not pulse) fails on alpha and passes on both.
+- Status (2026-11-21): built, proof missing (branch `fix/scheduled-tick-block-check`, second lane). Block and fluid ticks run only if the block or fluid at the position still matches (`World::run_block_tick`, `run_fluid_tick`); unit tests `a_block_tick_skips_a_replaced_block`, `a_fluid_tick_skips_a_replaced_fluid`. It exposed the bubble column scheduling its forming tick under the wrong block, fixed in the same batch. The GameTest `pumpkin:redstone/tick_skips_replaced_block` is on `test/tick-skips-replaced-block` for the next batch. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-03 willTickThisTick for diodes and torches
 
@@ -2379,6 +2383,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/vanilla-advancements-stats
 - Needs decision: none
 - Done when: a PEX 1.x player directory moves without losing a criterion or statistic, vanilla reads both files PEX wrote (G7-04), and PEX reads vanilla's. This is what Goal 4's vanilla-direction proof waits on.
+- Status (2026-11-21): landed (branch `fix/vanilla-advancements-stats`, built on the second lane). Advancements and statistics are read from and written to vanilla's `players/advancements/<uuid>.json` and `players/stats/<uuid>.json`, and a `config_version` 4 step moves PEX 1.x advancement files and NBT statistics there once, with backups. Unit tests in the migration module (`a_world_without_players_needs_nothing`, `statistics_files_sit_next_to_the_player_data` and others). Left over: the round trip still lists `players/data/*.dat Statistics` as a G7-22 known loss until the lane's known-losses follow-up lands. Play test for Neon: open a PEX 1.x world with a player who has advancements and statistics on this build, then on vanilla 26.3; expect the same advancements and statistics on both. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-23 Item stacks keep components PEX can't parse
 
@@ -2396,6 +2401,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/entity-nbt-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no entity diff outside the ignore list.
+- Status (2026-11-21): in progress. First part landed (branch `fix/entity-nbt-keys`, second lane): entities keep every saved key PEX doesn't model, base and per-type keys are written like vanilla, saddles moved to `equipment.saddle`. Unit tests `a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla`, `a_saved_skeleton_without_a_bow_loads_without_one`. Not done: the round trip still lists 189 entity known losses tagged G7-24 (many shown once force-loaded chunks started loading their entities), including a phantom `anchor_pos` PEX invents. Landed through merge branch `land/g7-batch-7` (`4a500f1fd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-25 Block entity NBT keys
 
