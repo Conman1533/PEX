@@ -952,6 +952,39 @@ impl Level {
             .map(|x| f(x.value()))
     }
 
+    /// Vanilla `StructureManager.getStructureWithPieceAt(pos, structure).isValid()`, as the
+    /// `minecraft:location` predicate's `structures` uses it: whether a piece of a `structure`
+    /// start referenced by the chunk at `position` contains it. Only loaded chunks are read.
+    #[must_use]
+    pub fn is_inside_structure(&self, position: &BlockPos, structure: &str) -> bool {
+        let (chunk, _) = position.chunk_and_chunk_relative_position();
+        let Some(mut starts) = self.read_chunk_sync(&chunk, |chunk| {
+            chunk
+                .passthrough
+                .get_compound("structures")
+                .and_then(|structures| structures.get_compound("References"))
+                .and_then(|references| references.get_long_array(structure))
+                .map(<[i64]>::to_vec)
+                .unwrap_or_default()
+        }) else {
+            return false;
+        };
+        let own = crate::generation::structure::save::pack_chunk_pos(chunk.x, chunk.y);
+        if !starts.contains(&own) {
+            starts.push(own);
+        }
+        starts.into_iter().any(|packed| {
+            let start_chunk = Vector2::new(packed as i32, (packed >> 32) as i32);
+            self.read_chunk_sync(&start_chunk, |chunk| {
+                chunk
+                    .passthrough
+                    .get_compound("structures")
+                    .is_some_and(|structures| start_has_piece_at(structures, structure, position))
+            })
+            .unwrap_or(false)
+        })
+    }
+
     pub fn get_rough_biome(&self, position: &BlockPos) -> &'static Biome {
         let (chunk_coordinate, relative) = position.chunk_and_chunk_relative_position();
         let id = self.read_chunk_sync(&chunk_coordinate, |chunk| {
@@ -1213,5 +1246,70 @@ mod tests {
         level.loaded_chunks.remove(&pos);
         level.get_tick_data(&inactive, 0);
         assert!(!level.chunks_with_scheduled_ticks.contains(&pos));
+    }
+}
+
+/// Whether the `structure` start in a chunk's `structures` compound has a piece whose `BB`
+/// (`[min_x, min_y, min_z, max_x, max_y, max_z]`, inclusive) contains `position`
+/// (vanilla `StructureManager.structureHasPieceAt`).
+fn start_has_piece_at(
+    structures: &pumpkin_nbt::compound::NbtCompound,
+    structure: &str,
+    position: &BlockPos,
+) -> bool {
+    let p = position.0;
+    structures
+        .get_compound("starts")
+        .and_then(|starts| starts.get_compound(structure))
+        .and_then(|start| start.get_list("Children"))
+        .is_some_and(|children| {
+            children.iter().any(|child| {
+                let pumpkin_nbt::tag::NbtTag::Compound(piece) = child else {
+                    return false;
+                };
+                piece.get_int_array("BB").is_some_and(|bb| {
+                    bb.len() == 6
+                        && (bb[0]..=bb[3]).contains(&p.x)
+                        && (bb[1]..=bb[4]).contains(&p.y)
+                        && (bb[2]..=bb[5]).contains(&p.z)
+                })
+            })
+        })
+}
+
+#[cfg(test)]
+mod structure_piece_tests {
+    use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
+    use pumpkin_util::math::position::BlockPos;
+
+    use super::start_has_piece_at;
+
+    #[test]
+    fn a_position_is_inside_a_structure_only_within_a_piece() {
+        let mut piece = NbtCompound::new();
+        piece.put("BB", NbtTag::IntArray(vec![0, 60, 0, 9, 70, 9]));
+        let mut start = NbtCompound::new();
+        start.put_list("Children", vec![NbtTag::Compound(piece)]);
+        let mut starts = NbtCompound::new();
+        starts.put_compound("minecraft:end_city", start);
+        let mut structures = NbtCompound::new();
+        structures.put_compound("starts", starts);
+
+        let inside = BlockPos::new(9, 70, 0);
+        assert!(start_has_piece_at(
+            &structures,
+            "minecraft:end_city",
+            &inside
+        ));
+        assert!(!start_has_piece_at(
+            &structures,
+            "minecraft:fortress",
+            &inside
+        ));
+        assert!(!start_has_piece_at(
+            &structures,
+            "minecraft:end_city",
+            &BlockPos::new(10, 70, 0)
+        ));
     }
 }
