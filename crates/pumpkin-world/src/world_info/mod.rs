@@ -10,6 +10,7 @@ use tracing::warn;
 
 pub mod anvil;
 pub mod data_files;
+pub mod session_lock;
 
 // Constraint: disk biome palette serialization changed in 1.21.5
 pub const MINIMUM_SUPPORTED_WORLD_DATA_VERSION: i32 = 4435; // 1.21.9
@@ -652,6 +653,8 @@ pub enum WorldInfoError {
     UnsupportedDataVersion(i32),
     #[error("Unsupported world level version: {0}")]
     UnsupportedLevelVersion(i32),
+    #[error("{}: already locked (possibly by other Minecraft instance?)", .0.display())]
+    SessionLocked(std::path::PathBuf),
 }
 
 #[cfg(test)]
