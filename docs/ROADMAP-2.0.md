@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4e9f0f46b`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `18778c5ff`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 9 | 1 | 35 | |
+| G1 Mob AI | 45 | 10 | 1 | 34 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 20 | 0 | 12 | |
+| G7 Worlds | 32 | 22 | 0 | 10 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 63 | 1 | 117 | 15 |
+| Total | 196 | 66 | 1 | 114 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -656,6 +656,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-piglin-brute`
 - Needs decision: D1-1, D1-3 (#3630).
 - Done when: `pumpkin:piglin_brute_attacks_player_in_gold_armor` passes.
+- Status (2026-11-21): landed (branch `feat/brain-piglin-brute`, through `land/g7-batch-2`). The brute runs vanilla's `PiglinBruteAi` on the PEX Brain: core look/move sinks, door interaction and dropping a dead anger target; idle looks, strolls, `InteractWith` piglins and brutes, and the `StrollToPoi`/`StrollAroundPoi` pair around its `HOME` spawn point; fight with melee attack, the angry sound, and anger spread to nearby adult piglins when hit. New shared pieces: `SetLookAndInteract`, `InteractWith`, `StrollToPoi`/`StrollAroundPoi` and `PIGLIN_BRUTE_SPECIFIC_SENSOR` (nemesis = wither skeleton or wither, nearby adult piglins). Spawns with a golden axe. `get_living_entity_from_uuid_memory` now also finds players, so `ANGRY_AT` a player works for every brain mob. GameTest `pumpkin:piglin_brute_attacks_player_in_gold_armor` passes. Answered by the 2.0 loop (2026-11-21): `PIGLIN_SPECIFIC_SENSOR` moves to G1-30, because the piglin brain is its only user and a sensor with no reader can't be tested. Until G1-30, goal piglins take a hit brute's anger as a plain attack target. Play test for Neon: in a bastion, hit a brute while other piglins stand nearby; expect the brute to swing its axe at you even in full gold armour, and nearby piglins to turn on you.
 
 #### G1-30 Piglin
 - Scope: PiglinAi with admiring, bartering, hunting hoglins, spear and crossbow behaviours, Mount and Dismount; fold `piglin_ai.rs` into it. Out: barter loot table contents.
@@ -2309,6 +2310,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/map-saved-data
 - Needs decision: D7-4
 - Done when: a fixture map shows its picture in PEX, and a map made in PEX shows in vanilla without reusing an existing id.
+- Status (2026-11-21): landed (branch `feat/map-saved-data`). Maps are read on first use from `data/minecraft/maps/<id>.dat` and written back when changed, keeping keys PEX doesn't model; loaded maps keep their picture. New ids come from `maps/last_id.dat`, and old PEX worlds continue from level.dat's `map_id`, which level.dat no longer writes (that known-loss line is closed). The live round trip vanilla to PEX to vanilla gave byte-identical map NBT. Unit tests `world::map::tests::{a_vanilla_map_loads_its_picture_and_saves_unchanged, new_ids_follow_last_id_and_are_saved_back, a_world_without_last_id_continues_from_the_old_level_dat_counter}`. Not run: a map drawn in PEX opened in vanilla. Play test for Neon: make and fill a map in PEX, stop, open the world in vanilla 26.3; expect the same picture and a new map to get the next id. Gap left for later: `MapData.update` ignores `locked` and the holder's dimension. Built on the second lane; landed through merge branch `land/g7-batch-2` (`18778c5ff`), which passed full CI and the whole tester on the Z420.
 
 #### G7-17 World border and forced chunks
 
@@ -2326,6 +2328,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/raids-saved-data
 - Needs decision: D7-4
 - Done when: a raid running at `stop` resumes with the same wave and omen level after a restart, in PEX and in vanilla.
+- Status (2026-11-21): landed (branch `feat/raids-saved-data`). Each dimension saves `data/minecraft/raids.dat` in vanilla's `Raids.CODEC` format (`next_id` starts at 1, so the first raid gets id 2 like vanilla), and a loaded raider rejoins its saved raid's wave and leader slot, or forgets the id if the raid is gone. Wave raiders now get their raid id when spawned, like vanilla's `joinRaid`, so they run the raid goals. The live vanilla to PEX raids.dat round trip passed. Unit tests `world::raid::tests::{vanilla_raids_load_and_save_unchanged, a_raid_part_way_through_keeps_its_wave_omen_and_heroes}` and `entity::mob::raider::tests::a_loaded_raider_rejoins_its_raid_or_forgets_a_missing_one`. Gap found, not fixed: PEX loads a chunk's entities only when a player watches it, while vanilla also loads them in force-loaded chunks. Play test for Neon: start a raid in a village, `stop` mid-wave, restart; expect the same wave, the boss bar back and the raiders still attacking. Built on the second lane; landed through merge branch `land/g7-batch-2` (`18778c5ff`), which passed full CI and the whole tester on the Z420.
 
 #### G7-19 Command storage and scheduled functions
 
