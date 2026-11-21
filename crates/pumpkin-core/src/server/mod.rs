@@ -167,6 +167,31 @@ pub struct Server {
     world_info_writer: Arc<dyn WorldInfoWriter>,
     /// Held from start until `shutdown` has saved the worlds.
     session_lock: std::sync::Mutex<Option<SessionLock>>,
+    /// Players joined and not yet saved after leaving, by profile id (see [`PlayerSession`]).
+    player_sessions: std::sync::Mutex<rustc_hash::FxHashMap<uuid::Uuid, u32>>,
+}
+
+/// A player's time on the server, from joining until its data is saved after it leaves. A login
+/// with the same profile waits for it to end, like vanilla's `WAITING_FOR_DUPE_DISCONNECT`.
+pub struct PlayerSession {
+    server: Arc<Server>,
+    id: uuid::Uuid,
+}
+
+impl Drop for PlayerSession {
+    fn drop(&mut self) {
+        let mut sessions = self
+            .server
+            .player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(count) = sessions.get_mut(&self.id) {
+            *count -= 1;
+            if *count == 0 {
+                sessions.remove(&self.id);
+            }
+        }
+    }
 }
 
 const CUSTOM_BOSS_EVENTS: &str = "custom_boss_events.dat";
@@ -353,6 +378,7 @@ impl Server {
             mojang_public_keys: ArcSwap::from_pointee(Vec::new()),
             world_info_writer: Arc::new(AnvilLevelInfo),
             session_lock: std::sync::Mutex::new(Some(session_lock)),
+            player_sessions: std::sync::Mutex::new(rustc_hash::FxHashMap::default()),
             level_info,
             management_hub,
         };
@@ -1156,6 +1182,51 @@ impl Server {
             }
         }
         None
+    }
+
+    /// Starts the session of a player that just joined; it ends when the guard is dropped.
+    #[must_use]
+    pub fn begin_player_session(self: &Arc<Self>, id: uuid::Uuid) -> PlayerSession {
+        *self
+            .player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(id)
+            .or_default() += 1;
+        PlayerSession {
+            server: self.clone(),
+            id,
+        }
+    }
+
+    /// Whether a player with this profile is on the server or still being saved after leaving.
+    #[must_use]
+    pub fn has_player_session(&self, id: uuid::Uuid) -> bool {
+        self.player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(&id)
+            || self.get_player_by_uuid(id).is_some()
+    }
+
+    /// Vanilla `PlayerList.disconnectAllPlayersWithProfile`: kicks every player with this
+    /// profile ("You logged in from another location"); true if one was on the server.
+    pub fn disconnect_players_with_profile(&self, id: uuid::Uuid) -> bool {
+        let message = TextComponent::translate_cross(
+            pumpkin_data::translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+            pumpkin_data::translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+            [],
+        );
+        let mut found = false;
+        for world in self.worlds.load().iter() {
+            for player in world.players.load().iter() {
+                if player.gameprofile.id == id {
+                    player.kick(DisconnectReason::LoggedInOtherLocation, &message);
+                    found = true;
+                }
+            }
+        }
+        found || self.has_player_session(id)
     }
 
     /// Counts the total number of players across all worlds.
