@@ -181,6 +181,39 @@ pub trait BlockEntity: Any + Send + Sync {
     }
 }
 
+/// Keys of a saved block entity that `write_internal` or the world's custom data side map own.
+const BASE_BLOCK_ENTITY_KEYS: [&str; 6] =
+    ["id", "x", "y", "z", "PumpkinCustomData", "BukkitValues"];
+
+/// The keys of a saved block entity that PEX doesn't model (D7-1).
+///
+/// These are the keys `saved` holds that `block_entity`, freshly loaded from it, doesn't write
+/// back. They are kept and written back unchanged, and a key PEX writes itself always wins.
+#[must_use]
+pub fn unmodeled_block_entity_keys(
+    saved: &NbtCompound,
+    block_entity: &dyn BlockEntity,
+) -> NbtCompound {
+    let mut written = NbtCompound::new();
+    block_entity.write_internal(&mut written);
+    let mut kept = NbtCompound::new();
+    for (key, tag) in &saved.child_tags {
+        if !BASE_BLOCK_ENTITY_KEYS.contains(&key.as_ref()) && !written.has(key) {
+            kept.put(key, tag.clone());
+        }
+    }
+    kept
+}
+
+/// Writes the kept keys `nbt` doesn't already hold.
+pub fn write_kept_block_entity_keys(nbt: &mut NbtCompound, kept: &NbtCompound) {
+    for (key, tag) in &kept.child_tags {
+        if !nbt.has(key) {
+            nbt.put(key, tag.clone());
+        }
+    }
+}
+
 #[must_use]
 pub fn block_entity_from_generic<T: BlockEntity>(nbt: &NbtCompound) -> T {
     let x = nbt.get_int("x").unwrap_or(0);
@@ -464,6 +497,44 @@ mod test {
     use pumpkin_nbt::compound::NbtCompound;
     use pumpkin_util::math::position::BlockPos;
     use std::sync::Arc;
+
+    /// A vanilla furnace's keys PEX doesn't model come back unchanged, and the times it does
+    /// model are read and written as vanilla's ints.
+    #[test]
+    fn a_vanilla_furnace_keeps_its_unmodelled_keys_and_times() {
+        use super::{unmodeled_block_entity_keys, write_kept_block_entity_keys};
+        use pumpkin_nbt::tag::NbtTag;
+
+        let mut saved = NbtCompound::new();
+        saved.put_string("id", "minecraft:furnace".to_string());
+        saved.put_int("x", 0);
+        saved.put_int("y", 100);
+        saved.put_int("z", 0);
+        saved.put_compound("components", NbtCompound::new());
+        saved.put_bool("keepPacked", false);
+        saved.put_float("speed_multiplier", 1.0);
+        saved.put_string("mymod:charge", "full".to_string());
+        saved.put_int("cooking_time_spent", 18);
+        saved.put_int("cooking_total_time", 100);
+        saved.put_int("lit_time_remaining", 0);
+        saved.put_int("lit_total_time", 0);
+        saved.put("RecipesUsed", NbtTag::Compound(NbtCompound::new()));
+        saved.put("Items", NbtTag::List(Vec::new()));
+
+        let furnace = block_entity_from_nbt(&saved).expect("a furnace");
+        let kept = unmodeled_block_entity_keys(&saved, furnace.as_ref());
+        let mut kept_keys: Vec<&str> = kept.child_tags.keys().map(AsRef::as_ref).collect();
+        kept_keys.sort_unstable();
+        assert_eq!(
+            kept_keys,
+            ["components", "keepPacked", "mymod:charge", "speed_multiplier"]
+        );
+
+        let mut written = NbtCompound::new();
+        furnace.write_internal(&mut written);
+        write_kept_block_entity_keys(&mut written, &kept);
+        assert_eq!(written, saved);
+    }
 
     /// The world only ticks a block entity that its block takes, so a block entity whose id
     /// differs from the block entity type of the blocks that create it would never tick.

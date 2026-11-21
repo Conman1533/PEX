@@ -181,6 +181,7 @@ impl CommandExecutor for CloneExecutor {
                         let block_entity_nbt = world.get_block_entity(&src_pos).map(|be| {
                             let mut nbt = NbtCompound::new();
                             be.write_internal(&mut nbt);
+                            world.write_kept_block_entity_nbt(be.as_ref(), &mut nbt);
                             nbt
                         });
 

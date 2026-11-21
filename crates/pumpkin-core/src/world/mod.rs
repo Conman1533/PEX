@@ -282,6 +282,9 @@ pub struct World {
     pub custom_data: std::sync::Mutex<NbtCompound>,
     /// Persistent custom data for block entities at specific positions
     pub custom_block_entity_data: DashMap<BlockPos, NbtCompound>,
+    /// The keys PEX doesn't model from each live block entity's saved NBT, with the type they
+    /// were saved for, written back when the block entity is saved (D7-1).
+    kept_block_entity_nbt: DashMap<BlockPos, (&'static str, NbtCompound)>,
     /// Entity tracker responsible for tracking entity visibility and sending delta/status packets to watchers.
     pub entity_tracker: entity_tracker::EntityTracker,
     /// Java chunk data packets, shared by every player in this world.
@@ -457,6 +460,7 @@ impl World {
             invalid_ticking_block_entities: std::sync::Mutex::new(Vec::new()),
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
+            kept_block_entity_nbt: DashMap::new(),
             entity_tracker: entity_tracker::EntityTracker::new(),
             chunk_packets: Arc::default(),
         }
@@ -805,6 +809,11 @@ impl World {
             .map(|(position, block_entity)| {
                 let mut nbt = NbtCompound::new();
                 block_entity.write_internal(&mut nbt);
+                if let Some((_, (kind, kept))) = self.kept_block_entity_nbt.remove(&position)
+                    && kind == block_entity.resource_location()
+                {
+                    crate::block::entities::write_kept_block_entity_keys(&mut nbt, &kept);
+                }
                 if let Some((_, custom_data)) = self.custom_block_entity_data.remove(&position)
                     && !custom_data.is_empty()
                 {
@@ -819,6 +828,19 @@ impl World {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .extend(saved);
         chunk.mark_dirty(true);
+    }
+
+    /// Writes the keys PEX doesn't model that `block_entity` was loaded with (D7-1).
+    pub fn write_kept_block_entity_nbt(
+        &self,
+        block_entity: &dyn BlockEntity,
+        nbt: &mut NbtCompound,
+    ) {
+        if let Some(entry) = self.kept_block_entity_nbt.get(&block_entity.get_position())
+            && entry.0 == block_entity.resource_location()
+        {
+            crate::block::entities::write_kept_block_entity_keys(nbt, &entry.1);
+        }
     }
 
     /// Serializes the live block entities of a chunk back into that chunk's block
@@ -838,6 +860,7 @@ impl World {
         for block_entity in block_entities {
             let mut nbt = NbtCompound::new();
             block_entity.write_internal(&mut nbt);
+            self.write_kept_block_entity_nbt(block_entity.as_ref(), &mut nbt);
             if let Some(custom_data) = self
                 .custom_block_entity_data
                 .get(&block_entity.get_position())
@@ -5427,7 +5450,12 @@ impl World {
 
         for chunk_pos in &chunks_set {
             self.save_block_entities(*chunk_pos);
-            self.block_entities.remove(chunk_pos);
+            if let Some((_, block_entities)) = self.block_entities.remove(chunk_pos) {
+                // The saved NBT holds the kept keys again, and reloading reads them from there.
+                for position in block_entities.keys() {
+                    self.kept_block_entity_nbt.remove(position);
+                }
+            }
         }
     }
 
@@ -6706,7 +6734,16 @@ impl World {
                 self.custom_block_entity_data
                     .insert(*block_pos, custom_data.clone());
             }
-            block_entity_from_nbt(&nbt)?
+            let block_entity = block_entity_from_nbt(&nbt)?;
+            let kept =
+                crate::block::entities::unmodeled_block_entity_keys(&nbt, block_entity.as_ref());
+            if kept.is_empty() {
+                self.kept_block_entity_nbt.remove(block_pos);
+            } else {
+                self.kept_block_entity_nbt
+                    .insert(*block_pos, (block_entity.resource_location(), kept));
+            }
+            block_entity
         } else {
             let state = self.get_block_state(block_pos);
             crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
@@ -6864,6 +6901,7 @@ impl World {
                 });
         if removed || removed_pending {
             self.custom_block_entity_data.remove(block_pos);
+            self.kept_block_entity_nbt.remove(block_pos);
             // Drop the chunk's map once its last block entity is gone.
             self.block_entities
                 .remove_if(&chunk_pos, |_, entities| entities.is_empty());

@@ -300,6 +300,8 @@ impl DataAccessor for BlockDataAccessor {
         if let Some(block_entity) = self.world.get_block_entity(&self.pos) {
             let mut nbt = NbtCompound::new();
             block_entity.write_internal(&mut nbt);
+            self.world
+                .write_kept_block_entity_nbt(block_entity.as_ref(), &mut nbt);
             Ok(nbt)
         } else {
             Err(ERROR_BLOCK_INVALID.create_without_context())
