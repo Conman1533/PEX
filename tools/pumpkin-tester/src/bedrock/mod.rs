@@ -2,6 +2,7 @@
 //! a 1.26.60 client does, and a Java [`HeadlessBot`] next to it for the cross-play checks.
 
 mod bot;
+mod dimensions;
 mod transport;
 
 use std::{
@@ -544,6 +545,7 @@ async fn run_mixed_play(
     run_combat_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
+    dimensions::run_dimension_checks(server, bedrock, &mut java, &mut checks).await?;
 
     drop(java);
     checks.record(

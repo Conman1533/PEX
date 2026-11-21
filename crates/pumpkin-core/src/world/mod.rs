@@ -4565,6 +4565,30 @@ impl World {
                 .await;
         }
 
+        let bedrock_dimension = match target_world.dimension.minecraft_name {
+            "minecraft:the_nether" => 1,
+            "minecraft:the_end" => 2,
+            _ => 0,
+        };
+
+        // Bedrock has no respawn packet that changes dimension. A respawn into another
+        // dimension is a `ChangeDimension`, flagged as a respawn after a death, and its loading
+        // screen ends with the `PlayerSpawn` sent once the new dimension's chunks are out.
+        if target_world.uuid != self.uuid
+            && let ClientPlatform::Bedrock(client) = player.client.as_ref()
+        {
+            let change = pumpkin_protocol::bedrock::client::CChangeDimension {
+                dimension_id: bedrock_dimension.into(),
+                position: Vector3::new(position.x as f32, position.y as f32, position.z as f32),
+                respawn: !alive,
+                loading_screen_id: None,
+            };
+            if let Ok(data) = client.serialize_packet(&change) {
+                client.enqueue_packet(data).await;
+            }
+            player.bedrock_spawned.store(false, Ordering::Relaxed);
+        }
+
         // Send respawn packet with target dimension (using send_packet_now to ensure proper order)
         player
             .send_client_packet(&CRespawn::new(
@@ -4591,11 +4615,6 @@ impl World {
             position.y.round() as i32,
             position.z.round() as i32,
         ));
-        let bedrock_dimension = match target_world.dimension.minecraft_name {
-            "minecraft:the_nether" => 1,
-            "minecraft:the_end" => 2,
-            _ => 0,
-        };
         player
             .send_packet_now_editioned(
                 &CPlayerSpawnPosition::new(
