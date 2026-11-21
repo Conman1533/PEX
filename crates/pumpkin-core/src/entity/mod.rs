@@ -2336,9 +2336,16 @@ impl Entity {
                 let entity_id = self.entity_id;
                 let yaw = self.yaw.load();
 
-                let rt_handle = world_clone.server.upgrade().map(|s| s.runtime.clone());
-                rayon::spawn(move || {
-                    let _guard = rt_handle.as_ref().map(tokio::runtime::Handle::enter);
+                // On the runtime's blocking pool, not rayon: this waits for the exit's chunks to
+                // generate. Spawned from a player's tick inside the world's `par_iter`, a rayon job
+                // can land on the same worker's queue and be run by that worker while it waits for
+                // its share of the `par_iter`, which blocks the whole server tick on the chunk
+                // loading, and for good if that loading needs a later tick.
+                let Some(rt_handle) = world_clone.server.upgrade().map(|s| s.runtime.clone())
+                else {
+                    return;
+                };
+                drop(rt_handle.spawn_blocking(move || {
                     let Some(entity_arc) = world_clone.get_entity_by_id(entity_id) else {
                         return;
                     };
@@ -2367,7 +2374,7 @@ impl Entity {
                             &dest_world,
                         );
                     }
-                });
+                }));
             } else if portal_processor.portal_time == 0 {
                 should_remove = true;
             }
