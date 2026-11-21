@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `18778c5ff`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c0b0b6076`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 10 | 1 | 34 | |
+| G1 Mob AI | 45 | 11 | 1 | 33 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 22 | 0 | 10 | |
+| G7 Worlds | 32 | 23 | 0 | 9 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 66 | 1 | 114 | 15 |
+| Total | 196 | 68 | 1 | 112 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -483,7 +483,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Status (2026-11-20): landed (branch `feat/brain-combat-zoglin`). New Brain behaviours `StartAttacking`, `StopAttackingIfTargetInvalid` (gives up after 200 unreachable ticks), `SetWalkTargetFromAttackTargetIfTargetOutOfReach` (vanilla `isWithinAttackRange`, bow 15 and crossbow 8 less the margin when the mob can shoot), `MeleeAttack` (shares the melee goal's hit path and hooks), `EraseMemoryIf`, `SetWalkTargetAwayFrom` (`pos` and `entity`, on a new `LandRandomPos.getPosAway` port), `StopBeingAngryIfTargetDead` (honours `forgiveDeadPlayers`), `BecomePassiveIfMemoryPresent`, `CopyMemoryWithExpiry` and `InteractWithDoor` (opens `#mob_interactable_doors` on the path's previous and next nodes, remembers them in `doors_to_close` and closes them behind it unless a same-type mob's own path goes through, read from that mob's brain only when it is free). New `Mob::can_use_non_melee_weapon` hook (vanilla `canUseNonMeleeWeapon`, false by default). The zoglin now runs vanilla's Brain (core, idle and fight activities) instead of goals: it targets the nearest visible attackable mob that is not a zoglin or creeper, not only players, attacks every 40 ticks (15 for babies), keeps a hurting attacker as its target for 10 seconds unless it is much further than the current one, plays the angry sound when a fight starts, and no longer swims, like vanilla. Also fixed on the way: ground navigation tested a waypoint by its round horizontal distance where vanilla `followThePath` tests each axis, so a mob wider than a block (zoglin, hoglin, ravager, iron golem) that spawned on a block corner never reached its first node and stood still. `pumpkin:zoglin_attacks_any_nearby_mob` passes (kills a cow in a closed pen) and so do `stop_attacking_if_target_invalid_forgets_a_dead_target` and four more unit tests beside it. Play test for Neon: spawn a zoglin near cows and a pig, expect it to chase and kill them one by one and then come for you; hit it from range while it chases a cow, expect it to switch to you.
 
 #### G1-06 Zombies
-- Scope: zombie, husk, zombie_villager, drowned, zombified_piglin, giant. Mob spear use (SpearUseGoal), MoveThroughVillageGoal, priorities and villager targeting in `ZombieEntityBase`, zombified piglin anger and alerting; remove the giant's goals. Out: drowned trident items and spear items.
+- Scope: zombie, husk, zombie_villager, drowned, zombified_piglin, giant. Mob spear use (SpearUseGoal, and the piglin's SpearApproach/SpearAttack/SpearRetreat from G1-30), MoveThroughVillageGoal, priorities and villager targeting in `ZombieEntityBase`, zombified piglin anger and alerting; remove the giant's goals. Out: drowned trident items and spear items.
 - Depends on: G1-01.
 - Branch: `fix/mobai-zombies`
 - Needs decision: none.
@@ -664,6 +664,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-piglin`
 - Needs decision: D1-1, D1-3 (#3630).
 - Done when: `pumpkin:piglin_barters_gold_ingot_for_loot` passes.
+- Status (2026-11-21): landed (branch `feat/brain-piglin`, through `land/g7-batch-3`). The piglin runs vanilla's `PiglinAi` on the PEX Brain with all seven activities: core (look/move sinks, doors, babies fleeing a nemesis, everyone fleeing a nearby zombified piglin, admiring a seen gold item, celebrating a kill, dropping a dead anger target), idle (watching a player who holds gold, attacking players not in gold, hunting hoglins, avoiding soul fire, babies riding baby hoglins), admire item, fight (melee, crossbow charge and shoot, backing off with a crossbow), celebrate (dancing after one in ten hoglin kills), avoid and ride. Bartering rolls the `piglin_bartering` loot table and still fires `PiglinBarterEvent`. New shared pieces: `PIGLIN_SPECIFIC_SENSOR` (vanilla's Manhattan-ordered repellent search), `abstract_piglin` (anger, retaliation and broadcasts, now also used by the brute), and the behaviours `CrossbowAttack`, `BackUpIfTooClose`, `Mount`, `DismountOrSkipMounting`, `GoToTargetLocation` and `StartCelebratingIfTargetDead`. `piglin_ai.rs` and the goal `GoToWantedItemGoal` are gone; the hand-made Brain NBT is replaced by the real brain's. Opening chests and breaking `guarded_by_piglins` blocks does not yet anger piglins (`PiglinAi.angerNearbyPiglins` exists, no callers). GameTest `pumpkin:piglin_barters_gold_ingot_for_loot` passes. Answered by the 2.0 loop (2026-11-21): the spear behaviours (`SpearApproach`, `SpearAttack`, `SpearRetreat`) move to G1-06 with the rest of mob spear use, because PEX's spear kinetic attack only works for players; until then a piglin with a golden spear fights in melee. Play test for Neon: in a bastion without gold armour, expect piglins to attack; with gold armour, drop a gold ingot and expect a piglin to pick it up, look at it for about six seconds and throw back a barter item; kill a hoglin near piglins and now and then see one dance.
 
 #### G1-31 Goat and long jump
 - Scope: GoatAi, PrepareRamNearestTarget, RamTarget, LongJumpToRandomPos, LongJumpMidJump. Out: goat horn items.
@@ -2355,6 +2356,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/player-data-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no diff in the fixture's player file outside the ignore list.
+- Status (2026-11-21): landed (branch `fix/player-data-keys`). Player files keep every vanilla key PEX doesn't model and write it back unchanged, without ever replacing what PEX wrote; `LastDeathLocation` is read and written as vanilla's global position; thrown ender pearls are saved in `ender_pearls` and come back thrown by their player, holding a 40-tick chunk ticket like vanilla. Also: effect amplifiers save as a byte, projectiles honour `NoGravity` and don't hit while at rest, respawn yaw and pitch, `XpTotal` and `XpSeed` are kept, equipment is no longer written twice, and PEX-only keys are gone from the file. The world round trip has a step 7 (a bot visits the fixture on vanilla and on PEX, then the player files are diffed); what still differs is listed in known-losses.txt under G7-22 (statistics), G7-23 (item components) and G7-24 (`TicksFrozen`, `CustomNameVisible`, the old `FallDistance`). Unit tests `entity::player::saved_keys::tests::{a_vanilla_player_file_keeps_the_keys_pex_does_not_model, a_saved_pearl_comes_back_thrown_by_its_player_and_is_saved_again, a_death_location_reads_and_writes_vanillas_global_pos, kept_keys_never_replace_what_pex_wrote}`. Play test for Neon: throw an ender pearl far away and log out before it lands, log back in; expect the pearl to keep flying and teleport you. Built on the second lane; landed through merge branch `land/g7-batch-3` (`c0b0b6076`), which passed full CI and the whole tester on the Z420.
 
 #### G7-22 Advancements and statistics in vanilla's files
 
