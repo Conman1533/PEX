@@ -174,6 +174,22 @@ fn palette_entry_tag(id: BlockStateId) -> pumpkin_nbt::tag::NbtTag {
     NbtTag::Compound(comp)
 }
 
+/// A block state as vanilla 26.3 `BlockState.CODEC` writes it, for entity and other saved data.
+#[must_use]
+pub fn block_state_tag(id: BlockStateId) -> pumpkin_nbt::tag::NbtTag {
+    palette_entry_tag(id)
+}
+
+/// Reads a block state `BlockState.CODEC` wrote, or a raw state id older PEX saves hold.
+#[must_use]
+pub fn block_state_from_tag(tag: &pumpkin_nbt::tag::NbtTag) -> Option<BlockStateId> {
+    match tag {
+        pumpkin_nbt::tag::NbtTag::Int(id) => Some(BlockStateId::new_or_air(*id as u16)),
+        _ => extract_u16_array(&pumpkin_nbt::tag::NbtTag::List(vec![tag.clone()]))
+            .and_then(|ids| ids.first().copied()),
+    }
+}
+
 fn extract_u16_array(tag: &pumpkin_nbt::tag::NbtTag) -> Option<Box<[BlockStateId]>> {
     match tag {
         pumpkin_nbt::tag::NbtTag::IntArray(arr) => Some(

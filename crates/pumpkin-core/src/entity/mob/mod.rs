@@ -694,15 +694,12 @@ impl MobEntity {
         if self.is_no_ai() {
             nbt.put_bool("NoAI", true);
         }
-        if self.is_left_handed() {
-            nbt.put_bool("LeftHanded", true);
-        }
-        if self.can_pick_up_loot() {
-            nbt.put_bool("CanPickUpLoot", true);
-        }
-        if self.persistence_required.load(Relaxed) {
-            nbt.put_bool("PersistenceRequired", true);
-        }
+        nbt.put_bool("LeftHanded", self.is_left_handed());
+        nbt.put_bool("CanPickUpLoot", self.can_pick_up_loot());
+        nbt.put_bool(
+            "PersistenceRequired",
+            self.persistence_required.load(Relaxed),
+        );
     }
 
     pub fn read_mob_nbt(&self, nbt: &NbtCompound) {
@@ -2171,6 +2168,9 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn init_data_tracker(&self) {
         self.mob_init_data_tracker();
+        if self.get_entity().loaded_from_save.load(Relaxed) {
+            return;
+        }
         let world = self.get_mob_entity().living_entity.entity.world.load();
         crate::entity::mob::equipment::equip_mob_on_spawn(self as &dyn EntityBase, &world);
 

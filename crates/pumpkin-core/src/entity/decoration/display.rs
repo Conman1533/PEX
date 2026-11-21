@@ -439,10 +439,6 @@ impl DisplayEntity {
             "interpolation_duration",
             self.interpolation_duration.load(Ordering::Relaxed),
         );
-        nbt.put_int(
-            "start_interpolation",
-            self.interpolation_start_delta_ticks.load(Ordering::Relaxed),
-        );
         nbt.put_float(
             "view_range",
             *self
@@ -691,13 +687,22 @@ impl BlockDisplayEntity {
 impl EntityBase for BlockDisplayEntity {
     fn write_custom_nbt(&self, nbt: &mut NbtCompound) {
         self.display.write_display_nbt(nbt);
-        nbt.put_int("block_state", self.block_state.load(Ordering::Relaxed));
+        nbt.put(
+            "block_state",
+            pumpkin_world::chunk::format::block_state_tag(pumpkin_data::BlockStateId::new_or_air(
+                self.block_state.load(Ordering::Relaxed) as u16,
+            )),
+        );
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
         self.display.read_display_nbt(nbt);
-        if let Some(state) = nbt.get_int("block_state") {
-            self.block_state.store(state, Ordering::Relaxed);
+        if let Some(state) = nbt
+            .get("block_state")
+            .and_then(pumpkin_world::chunk::format::block_state_from_tag)
+        {
+            self.block_state
+                .store(i32::from(state.as_u16()), Ordering::Relaxed);
         }
     }
 
@@ -1049,15 +1054,12 @@ impl TextDisplayEntity {
 impl EntityBase for TextDisplayEntity {
     fn write_custom_nbt(&self, nbt: &mut NbtCompound) {
         self.display.write_display_nbt(nbt);
-        let text_json_res = pumpkin_util::serde_json::to_string(
-            &*self
-                .text
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        );
-        if let Ok(text_json) = text_json_res {
-            nbt.put_string("text", text_json);
-        }
+        let text = self
+            .text
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .to_nbt_tag_for_version(&pumpkin_util::version::JavaMinecraftVersion::V_26_3);
+        nbt.put("text", text);
         nbt.put_int("line_width", self.line_width.load(Ordering::Relaxed));
         nbt.put_int("background", self.background.load(Ordering::Relaxed));
         nbt.put_byte("text_opacity", self.text_opacity.load(Ordering::Relaxed));
@@ -1078,9 +1080,15 @@ impl EntityBase for TextDisplayEntity {
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
         self.display.read_display_nbt(nbt);
-        if let Some(text_json) = nbt.get_string("text")
-            && let Ok(component) = pumpkin_util::serde_json::from_str(text_json)
-        {
+        if let Some(tag) = nbt.get("text") {
+            // Older PEX saves hold the component as a JSON string.
+            let component = match tag {
+                NbtTag::String(json) if json.starts_with('{') => {
+                    pumpkin_util::serde_json::from_str(json)
+                        .unwrap_or_else(|_| TextComponent::from_nbt(tag))
+                }
+                _ => TextComponent::from_nbt(tag),
+            };
             *self
                 .text
                 .lock()

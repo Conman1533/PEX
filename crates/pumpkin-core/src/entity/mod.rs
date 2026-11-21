@@ -205,6 +205,40 @@ impl MovementEmission {
     }
 }
 
+/// Keeps the `saddle` equipment slot of a saved mob in step with whether it is saddled:
+/// vanilla 26.3 saves the saddle there, not as a flag.
+pub fn write_saddle_equipment(nbt: &mut NbtCompound, saddled: bool) {
+    let mut equipment = nbt.get_compound("equipment").cloned().unwrap_or_default();
+    if saddled == equipment.has("saddle") {
+        return;
+    }
+    if saddled {
+        let mut saddle = NbtCompound::new();
+        saddle.put_string("id", "minecraft:saddle".to_string());
+        saddle.put_int("count", 1);
+        equipment.put_compound("saddle", saddle);
+    } else {
+        equipment.child_tags.remove("saddle");
+    }
+    if equipment.child_tags.is_empty() {
+        nbt.child_tags.remove("equipment");
+    } else {
+        nbt.put_compound("equipment", equipment);
+    }
+}
+
+/// Whether a saved mob is saddled: a `saddle` equipment item, or the old `Saddle` flag.
+#[must_use]
+pub fn saved_saddle(nbt: &NbtCompound) -> Option<bool> {
+    if nbt
+        .get_compound("equipment")
+        .is_some_and(|equipment| equipment.has("saddle"))
+    {
+        return Some(true);
+    }
+    nbt.get_bool("Saddle")
+}
+
 /// Vanilla `Entity.playStepSound`: the block's step sound at 0.15 of its volume.
 #[must_use]
 pub fn block_step_sound(block: &Block, state: &BlockState) -> (Sound, f32, f32) {
@@ -223,6 +257,10 @@ pub trait EntityBase: Send + Sync + std::any::Any {
             living.write_living_nbt(nbt);
         }
         self.write_custom_nbt(nbt);
+        self.get_entity().write_kept_nbt(nbt);
+        if !nbt.has("fall_distance") {
+            nbt.put_double("fall_distance", 0.0);
+        }
     }
 
     fn write_custom_nbt(&self, _nbt: &mut NbtCompound) {}
@@ -1034,6 +1072,10 @@ pub struct Entity {
     pub last_sent_velocity: AtomicCell<Vector3<f64>>,
     /// Persistent custom data container for plugins
     pub custom_data: std::sync::Mutex<NbtCompound>,
+    /// The saved keys PEX doesn't write, from the NBT this entity was loaded from (D7-1).
+    kept_nbt: std::sync::Mutex<Option<Box<NbtCompound>>>,
+    /// Loaded from a saved chunk, so spawn-time setup such as default equipment is skipped.
+    pub loaded_from_save: AtomicBool,
     /// The section this entity is filed under in its world's entity section storage.
     pub entity_section: std::sync::Mutex<Option<Vector3<i32>>>,
 }
@@ -1230,6 +1272,8 @@ impl Entity {
             last_sent_pos: AtomicCell::new(position),
             last_sent_velocity: AtomicCell::new(Vector3::default()),
             custom_data: std::sync::Mutex::new(NbtCompound::new()),
+            kept_nbt: std::sync::Mutex::new(None),
+            loaded_from_save: AtomicBool::new(false),
             entity_section: std::sync::Mutex::new(None),
         }
     }
@@ -4661,7 +4705,11 @@ impl Entity {
         if self.has_visual_fire.load(Relaxed) {
             nbt.put_bool("HasVisualFire", true);
         }
-        nbt.put_int("TicksFrozen", self.frozen_ticks.load(Relaxed));
+        let frozen_ticks = self.frozen_ticks.load(Relaxed);
+        if frozen_ticks > 0 {
+            nbt.put_int("TicksFrozen", frozen_ticks);
+        }
+        self.write_flag_keys(nbt);
         if let Some(custom_name) = &**self.custom_name.load() {
             let mut tag = custom_name
                 .to_nbt_tag_for_version(&pumpkin_util::version::JavaMinecraftVersion::V_26_3);
@@ -4675,7 +4723,9 @@ impl Entity {
             }
             nbt.put("CustomName", tag);
         }
-        nbt.put_bool("CustomNameVisible", self.custom_name_visible.load(Relaxed));
+        if self.custom_name_visible.load(Relaxed) {
+            nbt.put_bool("CustomNameVisible", true);
+        }
 
         let tags = self
             .scoreboard_tags
@@ -4721,6 +4771,73 @@ impl Entity {
         }
 
         // todo more...
+    }
+
+    /// Keeps the keys of `saved` that `entity` doesn't write, so a save writes them back as they
+    /// were (D7-1): the keys of entities, types and fields PEX doesn't model. Called once the
+    /// entity has read `saved`; a key PEX writes itself always wins.
+    pub fn keep_unmodelled_nbt(entity: &dyn EntityBase, saved: &NbtCompound) {
+        if entity.get_player().is_some() {
+            return;
+        }
+        let this = entity.get_entity();
+        *this
+            .kept_nbt
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        let mut written = NbtCompound::new();
+        entity.write_nbt(&mut written);
+        let mut kept = NbtCompound::new();
+        for (key, tag) in &saved.child_tags {
+            if !written.has(key) {
+                kept.put(key, tag.clone());
+            }
+        }
+        *this
+            .kept_nbt
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            (!kept.child_tags.is_empty()).then(|| Box::new(kept));
+    }
+
+    /// Vanilla `Entity.saveWithoutId` writes `Silent`, `NoGravity` and `Glowing` only when set.
+    fn write_flag_keys(&self, nbt: &mut NbtCompound) {
+        if self.is_silent() {
+            nbt.put_bool("Silent", true);
+        }
+        if self.has_no_gravity() {
+            nbt.put_bool("NoGravity", true);
+        }
+        if self.glowing.load(Relaxed) {
+            nbt.put_bool("Glowing", true);
+        }
+    }
+
+    fn read_flag_keys(&self, nbt: &NbtCompound) {
+        if let Some(silent) = nbt.get_bool("Silent") {
+            self.set_silent(silent);
+        }
+        if let Some(no_gravity) = nbt.get_bool("NoGravity") {
+            self.set_has_no_gravity(no_gravity);
+        }
+        if let Some(glowing) = nbt.get_bool("Glowing") {
+            self.set_glowing(glowing);
+        }
+    }
+
+    /// Writes the kept saved keys `nbt` doesn't already hold.
+    fn write_kept_nbt(&self, nbt: &mut NbtCompound) {
+        let kept = self
+            .kept_nbt
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(kept) = kept.as_deref() {
+            for (key, tag) in &kept.child_tags {
+                if !nbt.has(key) {
+                    nbt.put(key, tag.clone());
+                }
+            }
+        }
     }
 
     pub fn read_nbt_non_mut(&self, nbt: &NbtCompound) {
@@ -4782,6 +4899,7 @@ impl Entity {
         if let Some(frozen) = nbt.get_int("TicksFrozen") {
             self.frozen_ticks.store(frozen, Relaxed);
         }
+        self.read_flag_keys(nbt);
         if let Some(name) = nbt.get("CustomName") {
             // Vanilla stores a text component tag; a string is literal text. Older
             // Pumpkin saves hold a JSON string (same data version, so it can't be told

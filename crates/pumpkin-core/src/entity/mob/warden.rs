@@ -234,7 +234,9 @@ impl AngerManagement {
                 NbtTag::Compound(pair)
             })
             .collect();
-        nbt.put("suspects", NbtTag::List(list));
+        if !list.is_empty() {
+            nbt.put("suspects", NbtTag::List(list));
+        }
         nbt
     }
 

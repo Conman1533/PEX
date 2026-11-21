@@ -89,7 +89,8 @@ impl Mob for TadpoleEntity {
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        self.write_ageable_nbt(nbt);
+        nbt.put_int("Age", self.get_age());
+        nbt.put_bool("AgeLocked", self.is_age_locked());
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {

@@ -3004,7 +3004,7 @@ impl LivingEntity {
         };
         // Persist current absorption amount
         nbt.put("AbsorptionAmount", NbtTag::Float(self.absorption.load()));
-        nbt.put("FallDistance", NbtTag::Float(fall_distance));
+        nbt.put_double("fall_distance", f64::from(fall_distance));
         nbt.put_short("HurtTime", self.hurt_cooldown.load(Relaxed).max(0) as i16);
         nbt.put_short("DeathTime", i16::from(self.death_time.load(Relaxed)));
         nbt.put_bool("FallFlying", self.entity.is_fall_flying());
@@ -3080,8 +3080,9 @@ impl LivingEntity {
         // Load fall distance, but if this entity is currently marked dead ensure we don't restore
         // a lethal fall distance that would immediately re-kill on spawn.
         let fd = nbt
-            .get_float("FallDistance")
-            .or_else(|| nbt.get_float("fall_distance"))
+            .get_double("fall_distance")
+            .map(|distance| distance as f32)
+            .or_else(|| nbt.get_float("FallDistance"))
             .unwrap_or(0.0);
         if self.dead.load(Relaxed) {
             self.fall_distance.store(0.0);

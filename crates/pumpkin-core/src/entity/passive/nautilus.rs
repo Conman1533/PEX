@@ -500,9 +500,7 @@ impl Mob for NautilusEntity {
                 format!("minecraft:{}", self.get_variant().to_name()),
             );
         }
-        nbt.put_bool("IsTame", self.is_tame.load(Ordering::Relaxed));
-        nbt.put_bool("Saddled", self.is_saddled.load(Ordering::Relaxed));
-        nbt.put_int("DashCooldown", self.dash_cooldown.load(Ordering::Relaxed));
+        crate::entity::write_saddle_equipment(nbt, self.is_saddled.load(Ordering::Relaxed));
         if let Some(owner) = self.owner.load() {
             nbt.put_uuid("Owner", owner);
         }
@@ -517,10 +515,14 @@ impl Mob for NautilusEntity {
         {
             self.variant.store(variant.id(), Ordering::Relaxed);
         }
-        if let Some(is_tame) = nbt.get_bool("IsTame") {
+        if let Some(is_tame) = nbt
+            .get_bool("IsTame")
+            .or_else(|| nbt.get_uuid("Owner").map(|_| true))
+        {
             self.is_tame.store(is_tame, Ordering::Relaxed);
         }
-        if let Some(saddled) = nbt.get_bool("Saddled") {
+        if let Some(saddled) = crate::entity::saved_saddle(nbt).or_else(|| nbt.get_bool("Saddled"))
+        {
             self.is_saddled.store(saddled, Ordering::Relaxed);
         }
         if let Some(dash) = nbt.get_int("DashCooldown") {
