@@ -2436,6 +2436,8 @@ impl World {
     /// was scheduled for is still at its position.
     fn run_block_tick(self: &Arc<Self>, tick: &pumpkin_world::tick::OrderedTick<&'static Block>) {
         let pos = tick.position;
+        // Vanilla `LevelTicks.runCollectedTicks` takes it off this tick's list first.
+        self.level.mark_block_tick_run(&pos, tick.value);
         let block = self.get_block(&pos);
         if block.id != tick.value.id {
             return;
@@ -6144,6 +6146,13 @@ impl World {
             .schedule_fluid_tick(fluid, block_pos, delay.into(), priority);
     }
 
+    /// Whether a block tick collected for this game tick hasn't run yet, vanilla
+    /// `LevelTicks.willTickThisTick`. Unlike [`Self::is_block_tick_scheduled`], it is true for a
+    /// tick already taken out of the queue, and false for one due in a later game tick.
+    pub fn will_block_tick_this_tick(&self, block_pos: &BlockPos, block: &Block) -> bool {
+        self.level.will_block_tick_this_tick(block_pos, block)
+    }
+
     pub fn is_block_tick_scheduled(&self, block_pos: &BlockPos, block: &Block) -> bool {
         self.level.is_block_tick_scheduled(block_pos, block)
     }
@@ -8298,6 +8307,28 @@ mod tests {
 
         world.run_block_tick(&OrderedTick::new(pos, &Block::OBSERVER));
         assert!(powered(), "the observer's own tick runs");
+    }
+
+    /// G5-03: a repeater tick the world collected for this game tick will tick until it runs.
+    #[tokio::test]
+    async fn a_collected_block_tick_will_tick_until_it_runs() {
+        use pumpkin_world::tick::TickPriority;
+        use pumpkin_world::world::BlockFlags;
+
+        let world = world_with_chunk();
+        let pos = BlockPos::new(4, 64, 4);
+        world.set_block_state(&pos, Block::REPEATER.default_state.id, BlockFlags::empty());
+        world.schedule_block_tick(&Block::REPEATER, pos, 1, TickPriority::Normal);
+        assert!(!world.will_block_tick_this_tick(&pos, &Block::REPEATER));
+
+        let active = std::iter::once(pumpkin_util::math::vector2::Vector2::new(0, 0)).collect();
+        let ticks = world.level.get_tick_data(&active, 0);
+        assert_eq!(ticks.block_ticks.len(), 1);
+        assert!(!world.is_block_tick_scheduled(&pos, &Block::REPEATER));
+        assert!(world.will_block_tick_this_tick(&pos, &Block::REPEATER));
+
+        world.run_block_tick(&ticks.block_ticks[0]);
+        assert!(!world.will_block_tick_this_tick(&pos, &Block::REPEATER));
     }
 
     /// G5-02: a tick scheduled for water doesn't run for lava now in its place

@@ -191,7 +191,7 @@ impl RedstoneGateBlock<RepeaterProperties> for RepeaterBlock {
         let powered = props.powered;
         let has_power = RedstoneGateBlock::has_power(self, world, pos, state, block);
 
-        if powered != has_power && !world.is_block_tick_scheduled(&pos, block) {
+        if powered != has_power && !world.will_block_tick_this_tick(&pos, block) {
             let priority =
                 if RedstoneGateBlock::is_target_not_aligned(self, world, pos, state, block) {
                     TickPriority::ExtremelyHigh

@@ -11,6 +11,10 @@ use crate::tick::{MAX_TICK_DELAY, OrderedTick, ScheduledTick};
 pub struct ChunkTickScheduler<T> {
     inner: Mutex<Option<Box<ChunkTickSchedulerInner<T>>>>,
     offset: AtomicUsize,
+    /// The ticks [`Self::step_tick`] collected for this game tick that haven't run yet, vanilla
+    /// `LevelTicks.toRunThisTick`. They are no longer scheduled, but [`Self::will_tick_this_tick`]
+    /// still answers for them.
+    this_tick: Mutex<FxHashSet<(BlockPos, T)>>,
 }
 
 struct ChunkTickSchedulerInner<T> {
@@ -57,11 +61,13 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
         self.offset.store(next_offset, Ordering::SeqCst);
 
         let Some(inner) = inner_guard.as_mut() else {
+            self.collect_this_tick(&[]);
             return Vec::new();
         };
 
         let res = std::mem::take(&mut inner.tick_queue[current_offset]);
         inner.advance_far_ticks(next_offset);
+        self.collect_this_tick(&res);
 
         if !res.is_empty() {
             for next_tick in &res {
@@ -76,6 +82,16 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
         res
     }
 
+    /// Replaces the ticks collected for the game tick that ended with those collected now.
+    fn collect_this_tick(&self, collected: &[OrderedTick<&'a T>]) {
+        let mut this_tick = self
+            .this_tick
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        this_tick.clear();
+        this_tick.extend(collected.iter().map(|tick| (tick.position, tick.value)));
+    }
+
     /// Passes a tick without running it, for a chunk that isn't simulated. Vanilla keeps the
     /// absolute trigger tick, so the ticks due now carry over and run with the next slot's.
     pub fn skip_tick(&self) {
@@ -86,6 +102,7 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
         let current_offset = self.offset.load(Ordering::SeqCst);
         let next_offset = (current_offset + 1) % MAX_TICK_DELAY;
         self.offset.store(next_offset, Ordering::SeqCst);
+        self.collect_this_tick(&[]);
 
         if let Some(inner) = inner_guard.as_mut() {
             let mut overdue = std::mem::take(&mut inner.tick_queue[current_offset]);
@@ -139,7 +156,12 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let offset = self.offset.load(Ordering::SeqCst);
         let inner = inner_guard.get_or_insert_with(ChunkTickSchedulerInner::new);
+        let mut this_tick = self
+            .this_tick
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for mut tick in ticks {
+            this_tick.remove(&(tick.position, tick.value));
             if inner.queued_ticks.insert((tick.position, tick.value)) {
                 tick.overdue += 1;
                 inner.tick_queue[offset].push(tick);
@@ -148,6 +170,24 @@ impl<'a, T: std::hash::Hash + Eq> ChunkTickScheduler<&'a T> {
         if inner.queued_ticks.is_empty() {
             *inner_guard = None;
         }
+    }
+
+    /// Vanilla `LevelTicks.willTickThisTick`: whether a tick collected for this game tick is still
+    /// waiting to run.
+    pub fn will_tick_this_tick(&self, pos: BlockPos, value: &'a T) -> bool {
+        self.this_tick
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&(pos, value))
+    }
+
+    /// Marks a collected tick as run, which vanilla `LevelTicks.runCollectedTicks` does just
+    /// before it runs it.
+    pub fn mark_run(&self, pos: BlockPos, value: &'a T) {
+        self.this_tick
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&(pos, value));
     }
 
     pub fn is_scheduled(&self, pos: BlockPos, value: &T) -> bool {
@@ -278,6 +318,7 @@ impl<T> Default for ChunkTickScheduler<T> {
         Self {
             inner: Mutex::new(None),
             offset: AtomicUsize::new(0),
+            this_tick: Mutex::new(FxHashSet::default()),
         }
     }
 }
@@ -304,6 +345,42 @@ mod tests {
 
     fn xs(ticks: &[OrderedTick<&u8>]) -> Vec<i32> {
         ticks.iter().map(|tick| tick.position.0.x).collect()
+    }
+
+    /// G5-03: a tick taken out of the queue for this game tick is no longer scheduled, but it
+    /// will tick this tick until it has run (`LevelTicks.willTickThisTick`).
+    #[test]
+    fn collected_tick_will_tick_until_run() {
+        let scheduler = ChunkTickScheduler::<&u8>::default();
+        let pos = BlockPos::new(0, 0, 0);
+        scheduler.schedule_tick(&tick(1), 0);
+        assert!(!scheduler.will_tick_this_tick(pos, &BLOCK));
+
+        let collected = scheduler.step_tick();
+        assert_eq!(xs(&collected), [0]);
+        assert!(!scheduler.is_scheduled(pos, &BLOCK));
+        assert!(scheduler.will_tick_this_tick(pos, &BLOCK));
+
+        scheduler.mark_run(pos, &BLOCK);
+        assert!(!scheduler.will_tick_this_tick(pos, &BLOCK));
+    }
+
+    /// A tick put back over the cap waits for the next game tick, so it won't tick this one.
+    #[test]
+    fn a_carried_over_tick_wont_tick_this_tick() {
+        let scheduler = ChunkTickScheduler::<&u8>::default();
+        let pos = BlockPos::new(0, 0, 0);
+        scheduler.schedule_tick(&tick(1), 0);
+        let collected = scheduler.step_tick();
+        scheduler.carry_over(collected);
+        assert!(!scheduler.will_tick_this_tick(pos, &BLOCK));
+        assert!(scheduler.is_scheduled(pos, &BLOCK));
+
+        // A tick collected but never marked as run doesn't count in the next game tick.
+        assert_eq!(xs(&scheduler.step_tick()), [0]);
+        assert!(scheduler.will_tick_this_tick(pos, &BLOCK));
+        assert!(scheduler.step_tick().is_empty());
+        assert!(!scheduler.will_tick_this_tick(pos, &BLOCK));
     }
 
     #[test]

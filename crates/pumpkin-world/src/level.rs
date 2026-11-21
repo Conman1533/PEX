@@ -1072,6 +1072,23 @@ impl Level {
         }
     }
 
+    /// Vanilla `LevelTicks.willTickThisTick` for block ticks.
+    pub fn will_block_tick_this_tick(&self, block_pos: &BlockPos, block: &Block) -> bool {
+        let block = Block::from_id(block.id);
+        self.read_chunk_sync(&block_pos.chunk_position(), |chunk| {
+            chunk.block_ticks.will_tick_this_tick(*block_pos, block)
+        })
+        .unwrap_or(false)
+    }
+
+    /// Marks a block tick collected for this game tick as run.
+    pub fn mark_block_tick_run(&self, block_pos: &BlockPos, block: &Block) {
+        let block = Block::from_id(block.id);
+        self.read_chunk_sync(&block_pos.chunk_position(), |chunk| {
+            chunk.block_ticks.mark_run(*block_pos, block);
+        });
+    }
+
     pub fn is_block_tick_scheduled(&self, block_pos: &BlockPos, block: &Block) -> bool {
         self.read_chunk_sync(&block_pos.chunk_position(), |chunk| {
             chunk.block_ticks.is_scheduled(*block_pos, block)
