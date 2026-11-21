@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `995577bc8`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `5c72e204a`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -40,6 +40,11 @@ Landed on `alpha` on 2026-11-21 as landing batch 5 (branch `land/g7-batch-5`, `e
 - `fix/duplicate-login`: a second login with the same profile kicks the player already online with `multiplayer.disconnect.duplicate_login` and lets the new one in once the old one is saved, as vanilla `disconnectAllPlayersWithProfile` does (was "Invalid move player packet received" for the new client). Bot test `bot:duplicate_login_kicks_old_session`.
 - `fix/hunger-effect-rate`: Hunger adds 0.005 x (level) exhaustion every tick through the player, like vanilla, instead of 0.1 x (level) once a second; the leftover burst kept draining food after the effect ended and made `bot:eat_restores_food` flaky.
 - `fix/bedrock-combat`: Bedrock attackers use the Java attack rules and cooldown (Goal 8 work from the Bedrock thread, gated on Windows too).
+
+Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4f4734df2`), outside the pieces; it passed the world round trip, full CI and the whole tester on CT 117 and the Z420, and the Bedrock branches passed the Bedrock checks on Windows:
+
+- `test/bedrock-wire`, `fix/bedrock-oidc-keys`, `fix/bedrock-deploy-ports`, `perf/skin-fetch-off-join`: Bedrock wire checks, sign-in key handling, deploy ports, and the Java and Bedrock skin fetch moved off the join path (Goal 8 work from the Bedrock thread, tracked in `docs/BEDROCK-PARITY.md` on branch `docs/bedrock-parity`).
+- `fix/creaking-heart-test-flake`: the creaking heart unit test waits for the heart's update (every 22 to 26 ticks) instead of a fixed 25 ticks.
 
 What holds 2.0 back:
 
