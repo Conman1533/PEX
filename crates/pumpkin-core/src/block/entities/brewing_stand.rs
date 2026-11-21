@@ -346,7 +346,7 @@ impl BrewingStandBlockEntity {
                 .store(i32::from(fuel_power), Ordering::Relaxed);
             items[4].decrement(1);
             // The fuel slot shrank, comparators needs an update.
-            self.comparator_dirty.store(true, Ordering::Relaxed);
+            crate::block::entities::mark_changed(self.position, &self.comparator_dirty);
             true
         } else {
             false
@@ -422,7 +422,7 @@ impl pumpkin_inventory::Inventory for BrewingStandBlockEntity {
 
     fn mark_dirty(&self) {
         self.dirty.store(true, Ordering::Relaxed);
-        self.comparator_dirty.store(true, Ordering::Relaxed);
+        crate::block::entities::mark_changed(self.position, &self.comparator_dirty);
     }
 
     fn as_any(&self) -> &dyn Any {

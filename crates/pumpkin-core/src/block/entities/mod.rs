@@ -69,6 +69,70 @@ pub use furnace_like_block_entity::ExperienceContainer;
 pub use pumpkin_inventory::PropertyDelegate;
 
 //TODO: We need a mark_dirty for chests
+thread_local! {
+    /// Block entities changed inside a [`ChangeScope`] on this thread, in the order they changed.
+    static CHANGED_BLOCK_ENTITIES: std::cell::RefCell<Option<Vec<BlockPos>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Changes made outside any [`ChangeScope`] so far, so a world knows when to look for flags.
+static UNSCOPED_CHANGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The output-signal half of vanilla `BlockEntity.setChanged`.
+///
+/// Inside a [`ChangeScope`] the position queues for the world to tell comparators as soon as the
+/// current tick step ends. Elsewhere (players, entities, commands) the flag waits for the
+/// world's next flush.
+pub fn mark_changed(position: BlockPos, comparator_dirty: &std::sync::atomic::AtomicBool) {
+    let queued = CHANGED_BLOCK_ENTITIES.with(|changed| {
+        changed
+            .borrow_mut()
+            .as_mut()
+            .map(|queue| queue.push(position))
+            .is_some()
+    });
+    if !queued {
+        comparator_dirty.store(true, std::sync::atomic::Ordering::Relaxed);
+        UNSCOPED_CHANGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// While alive, block entity changes on this thread queue for [`take_changed`] instead of
+/// setting their flags. The world opens one around the steps of its tick that run on one thread.
+pub(crate) struct ChangeScope {
+    outer: Option<Vec<BlockPos>>,
+}
+
+impl ChangeScope {
+    pub(crate) fn enter() -> Self {
+        let outer = CHANGED_BLOCK_ENTITIES.with(|changed| changed.borrow_mut().replace(Vec::new()));
+        Self { outer }
+    }
+}
+
+impl Drop for ChangeScope {
+    fn drop(&mut self) {
+        let outer = self.outer.take();
+        CHANGED_BLOCK_ENTITIES.with(|changed| *changed.borrow_mut() = outer);
+    }
+}
+
+/// The positions changed inside this thread's [`ChangeScope`] since the last call.
+pub(crate) fn take_changed() -> Vec<BlockPos> {
+    CHANGED_BLOCK_ENTITIES.with(|changed| {
+        changed
+            .borrow_mut()
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    })
+}
+
+/// How many changes ever happened outside a [`ChangeScope`].
+pub(crate) fn unscoped_changes() -> u64 {
+    UNSCOPED_CHANGES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub trait BlockEntity: Any + Send + Sync {
     fn write_nbt(&self, nbt: &mut NbtCompound);
     fn from_nbt(nbt: &NbtCompound, position: BlockPos) -> Self
