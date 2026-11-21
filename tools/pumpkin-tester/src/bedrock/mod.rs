@@ -2300,6 +2300,7 @@ async fn run_combat_checks(
     );
     settle(bedrock, java).await?;
 
+    run_attack_cooldown_checks(server, bedrock, java, checks, java_runtime).await?;
     run_refused_hit_checks(server, bedrock, java, checks, java_runtime).await?;
 
     for name in [BEDROCK_NAME, JAVA_NAME] {
@@ -2309,6 +2310,97 @@ async fn run_combat_checks(
     for _ in 0..3 {
         tick(server, bedrock, Some(&mut *java)).await?;
     }
+    Ok(())
+}
+
+/// The Java attack cooldown for Bedrock attackers: a hit before the weapon has charged does
+/// less damage, and the Bedrock bot is drawn a charge bar that clears once charged.
+async fn run_attack_cooldown_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    java_runtime: u64,
+) -> Result<(), String> {
+    /// A wooden axe charges in 25 ticks (attack speed 0.8) and hits for 7.
+    const CHARGE_TICKS: usize = 30;
+    /// Past the victim's 10-tick hurt cooldown, but well short of a full charge.
+    const QUICK_HIT_TICKS: usize = 11;
+    const BAR_DOT: char = '\u{2d9}';
+    let java_player = server
+        .server
+        .get_player_by_name(JAVA_NAME)
+        .ok_or_else(|| format!("{JAVA_NAME} is not on the server"))?;
+    let java_health = || java_player.living_entity.health.load();
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    // `item replace` into the held slot applies the axe's attack modifiers straight away;
+    // `give` leaves them off until the next equipment sync, on Java too.
+    run_console(
+        server,
+        &format!("item replace entity {BEDROCK_NAME} hotbar.0 with wooden_axe"),
+    );
+    run_console(
+        server,
+        &format!("effect give {JAVA_NAME} instant_health 1 5"),
+    );
+    for _ in 0..CHARGE_TICKS {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+
+    // A charged hit, then one 11 ticks later.
+    let hit = async |bedrock: &mut BedrockBot, java: &mut HeadlessBot| {
+        let before = java_health();
+        bedrock.attack(java_runtime).await?;
+        for _ in 0..2 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        Ok::<f32, String>(before - java_health())
+    };
+    bedrock.titles.clear();
+    let charged = hit(bedrock, java).await?;
+    for _ in 0..QUICK_HIT_TICKS - 2 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let quick = hit(bedrock, java).await?;
+    checks.record(
+        "a quick bedrock hit does less damage",
+        if charged > 0.0 && quick < charged * 0.6 {
+            Ok(())
+        } else {
+            Err(format!(
+                "a charged hit did {charged}, one 11 ticks later did {quick}"
+            ))
+        },
+    );
+    checks.record(
+        "bedrock is shown the attack charge",
+        if bedrock
+            .titles
+            .iter()
+            .any(|(kind, text)| *kind == 3 && text.contains(BAR_DOT))
+        {
+            Ok(())
+        } else {
+            Err(format!("no charge bar subtitle in {:?}", bedrock.titles))
+        },
+    );
+    for _ in 0..CHARGE_TICKS {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let last_bar = bedrock.titles.iter().rposition(|(kind, _)| *kind == 3);
+    let last_clear = bedrock.titles.iter().rposition(|(kind, _)| *kind == 0);
+    checks.record(
+        "the charge bar clears once charged",
+        match (last_bar, last_clear) {
+            (Some(bar), Some(clear)) if clear > bar => Ok(()),
+            _ => Err(format!("titles after charging: {:?}", bedrock.titles)),
+        },
+    );
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(
+        server,
+        &format!("effect give {JAVA_NAME} instant_health 1 5"),
+    );
     Ok(())
 }
 

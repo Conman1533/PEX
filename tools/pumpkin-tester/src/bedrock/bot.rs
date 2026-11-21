@@ -95,6 +95,7 @@ const CONTAINER_OPEN_ID: i32 = 46;
 const CONTAINER_CLOSE_ID: i32 = 47;
 const ITEM_STACK_REQUEST_ID: i32 = 147;
 const ITEM_STACK_RESPONSE_ID: i32 = 148;
+const SET_TITLE_ID: i32 = 88;
 /// `ItemStackRequestAction::CraftRecipe`.
 const STACK_ACTION_CRAFT_RECIPE: u32 = 10;
 
@@ -176,6 +177,8 @@ pub struct BedrockBot {
     pub open_container: Option<(u8, u8)>,
     /// Every `ItemStackResponse` as (request id, result), where result 0 is success.
     pub stack_responses: Vec<(i32, u8)>,
+    /// Every `SetTitle` as (title type, text): 0 clear, 2 title, 3 subtitle, 5 times.
+    pub titles: Vec<(i32, String)>,
     pub health: i32,
     /// Whether inputs report standing on something, as a real client does when it isn't
     /// falling or jumping.
@@ -274,6 +277,7 @@ impl BedrockBot {
             block_updates: Vec::new(),
             open_container: None,
             stack_responses: Vec::new(),
+            titles: Vec::new(),
             health: 20,
             on_ground: true,
             disconnect: None,
@@ -617,6 +621,12 @@ impl BedrockBot {
                         .map(std::borrow::Cow::into_owned)
                         .collect(),
                 });
+            }
+            SET_TITLE_ID => {
+                let err = |err| read_error("SetTitle", err);
+                let kind = VarInt::read(reader).map_err(err)?.0;
+                let text = String::read(reader).map_err(err)?;
+                self.titles.push((kind, text));
             }
             CSetHealth::PACKET_ID => {
                 self.health = VarInt::read(reader)

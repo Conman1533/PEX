@@ -143,6 +143,13 @@ pub struct BedrockClient {
     last_food_rejection_tick: AtomicCell<Option<i32>>,
     /// The tick of the last click on a block that fell through to the item's own use.
     last_block_use_fallthrough_tick: AtomicCell<Option<i32>>,
+    /// Whether the attack charge bar should be drawn: set by a hit, cleared once charged.
+    attack_cooldown_shown: AtomicBool,
+    /// Whether the charge bar is on screen, so the title times need putting back.
+    attack_cooldown_drawn: AtomicBool,
+    /// The title times last set for this player (fade in, stay, fade out), put back after the
+    /// charge bar. Vanilla's defaults until a plugin or command sets others.
+    pub title_times: AtomicCell<(i32, i32, i32)>,
     pub client_cache_supported: AtomicBool,
     pub blob_cache: std::sync::Mutex<HashMap<u64, Vec<u8>>>,
     pub streaming_packs: std::sync::Mutex<HashMap<String, BedrockStreamingPack>>,
@@ -188,6 +195,9 @@ impl BedrockClient {
             input_tick: AtomicU64::new(0),
             last_food_rejection_tick: AtomicCell::new(None),
             last_block_use_fallthrough_tick: AtomicCell::new(None),
+            attack_cooldown_shown: AtomicBool::new(false),
+            attack_cooldown_drawn: AtomicBool::new(false),
+            title_times: AtomicCell::new((10, 70, 20)),
             client_cache_supported: AtomicBool::new(false),
             blob_cache: std::sync::Mutex::new(HashMap::new()),
             streaming_packs: std::sync::Mutex::new(HashMap::new()),

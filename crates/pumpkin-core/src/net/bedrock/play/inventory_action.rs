@@ -730,9 +730,11 @@ impl BedrockClient {
                 return false;
             }
         }
-        !player.cannot_attack_with_item(
-            &player.inventory().held_item(),
-            ATTACK_CHARGE_TOLERANCE_TICKS,
-        )
+        // Classic Bedrock combat has no charge, so no item needs one.
+        !server.advanced_config.networking.bedrock.combat_cooldown
+            || !player.cannot_attack_with_item(
+                &player.inventory().held_item(),
+                ATTACK_CHARGE_TOLERANCE_TICKS,
+            )
     }
 }

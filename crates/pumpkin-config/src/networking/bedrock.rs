@@ -145,6 +145,9 @@ pub struct BedrockConfig {
     pub chunk_caching: bool,
     /// Packet rate limiting settings.
     pub packet_limiter: PacketLimiterConfig,
+    /// Whether Bedrock players' hits follow the Java attack cooldown, with a charge bar under
+    /// the crosshair. Off gives them Bedrock's classic full-strength hits however fast they click.
+    pub combat_cooldown: bool,
 }
 
 impl Default for BedrockConfig {
@@ -165,6 +168,7 @@ impl Default for BedrockConfig {
             nethernet: NetherNetConfig::default(),
             chunk_caching: true,
             packet_limiter: PacketLimiterConfig::default(),
+            combat_cooldown: true,
         }
     }
 }
