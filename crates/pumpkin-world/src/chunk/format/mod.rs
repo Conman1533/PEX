@@ -40,6 +40,15 @@ impl SingleChunkDataSerializer for ChunkData {
         Self::internal_from_bytes(bytes, pos).map_err(ChunkReadingError::ParsingError)
     }
 
+    fn from_bytes_in(
+        bytes: &Bytes,
+        pos: Vector2<i32>,
+        dimension: &str,
+    ) -> Result<Self, ChunkReadingError> {
+        Self::internal_from_bytes_in(bytes, pos, Some(dimension))
+            .map_err(ChunkReadingError::ParsingError)
+    }
+
     #[inline]
     fn to_bytes(&self) -> Result<Bytes, ChunkSerializingError> {
         Ok(self.internal_to_bytes())
@@ -294,10 +303,20 @@ where
 }
 
 impl ChunkData {
-    #[allow(clippy::too_many_lines)]
     pub fn internal_from_bytes(
         chunk_data: &[u8],
         position: Vector2<i32>,
+    ) -> Result<Self, ChunkParsingError> {
+        Self::internal_from_bytes_in(chunk_data, position, None)
+    }
+
+    /// Parses a chunk, first upgrading data an older vanilla saved (roadmap D7-2). Without a
+    /// `dimension` the one fix that needs it, blending old overworld terrain, is skipped.
+    #[allow(clippy::too_many_lines)]
+    pub fn internal_from_bytes_in(
+        chunk_data: &[u8],
+        position: Vector2<i32>,
+        dimension: Option<&str>,
     ) -> Result<Self, ChunkParsingError> {
         if chunk_data.starts_with(&pump::PUMP_CHUNK_MAGIC) {
             return Self::internal_from_pump_bytes(chunk_data, position);
@@ -314,7 +333,10 @@ impl ChunkData {
         }
         .map_err(|e| ChunkParsingError::ErrorDeserializingChunk(e.to_string()))?;
 
-        let root_tag = nbt.root_tag;
+        let mut root_tag = nbt.root_tag;
+        if let Some(version) = crate::datafix::data_version(&root_tag) {
+            crate::datafix::upgrade_chunk(&mut root_tag, version, dimension);
+        }
 
         let x_pos = root_tag.get_int("xPos").ok_or_else(|| {
             ChunkParsingError::ErrorDeserializingChunk("Missing xPos".to_string())
@@ -1349,6 +1371,10 @@ impl ChunkEntityData {
             pumpkin_nbt::Nbt::read_unnamed(&mut reader)
         }
         .map_err(|e| ChunkParsingError::ErrorDeserializingChunk(e.to_string()))?;
+        let mut nbt = nbt;
+        if let Some(version) = crate::datafix::data_version(&nbt.root_tag) {
+            crate::datafix::upgrade_tree(&mut nbt.root_tag, version);
+        }
 
         let pos_array = match (nbt.get_int("Position-X"), nbt.get_int("Position-Z")) {
             (Some(x), Some(z)) => [x, z],
