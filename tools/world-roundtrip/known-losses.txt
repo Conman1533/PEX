@@ -172,6 +172,12 @@ dimensions/minecraft/*/entities/*.mca Entities[*].equipment.body.components G7-2
 dimensions/minecraft/*/entities/*.mca Entities[*].equipment.head.components G7-24; first run: step 1: 1 added
 dimensions/minecraft/*/entities/*.mca Entities[*].equipment.mainhand.components G7-24; first run: step 1: 4 added
 dimensions/minecraft/*/entities/*.mca Entities[*].equipment.saddle.components G7-24; first run: step 1: 2 added
+# Seen once batch 5 merged force-loaded entities onto batch 4 (2026-11-21): projectile and
+# fireball keys, and a helmet vanilla fills in again.
+dimensions/minecraft/*/entities/*.mca Entities[*].acceleration_power G7-24; 2026-11-21 batch 5 run: step 1: 4 lost, step 2: 4 added
+dimensions/minecraft/*/entities/*.mca Entities[*].Item G7-24; 2026-11-21 batch 5 run: step 1: 3 lost, step 2: 2 added
+dimensions/minecraft/*/entities/*.mca Entities[*].ExplosionPower G7-24; 2026-11-21 batch 5 run: steps 1 and 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].equipment.head G7-24; 2026-11-21 batch 5 run: step 3: 1 added
 dimensions/minecraft/*/entities/*.mca Entities[*].fall_distance G7-24; first run: step 1: 150 lost
 dimensions/minecraft/*/entities/*.mca Entities[*].from_bucket G7-24; first run: step 1: 1 lost
 dimensions/minecraft/*/entities/*.mca Entities[*].glow_color_override G7-24; first run: step 1: 3 lost
