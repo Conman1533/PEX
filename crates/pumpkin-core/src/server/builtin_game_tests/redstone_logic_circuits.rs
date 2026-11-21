@@ -111,6 +111,73 @@ pub(super) async fn test_torch_burnout(helper: GameTestHelper) -> GameTestResult
     Ok(())
 }
 
+/// G5-05: 32 pairs of repeaters, 64 ticks due in the same game tick. In each pair repeater A
+/// points into the side of repeater B, so A has the higher priority (vanilla
+/// `DiodeBlock.shouldPrioritize`) and turns on first, locking B before B's own tick: every B stays
+/// off. That only holds when the ticks run one at a time in sorted order (vanilla
+/// `LevelTicks.tick`), so the test also fails when they run in parallel batches.
+pub(super) async fn test_many_ticks_one_tick(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 16, 16).await?;
+
+    let repeater = |facing, powered| {
+        let mut props = RepeaterLikeProperties::default(&Block::REPEATER);
+        props.facing = facing;
+        props.delay = 1;
+        props.locked = false;
+        props.powered = powered;
+        props.to_state_id(&Block::REPEATER)
+    };
+    // A takes its input from the west and outputs east into B; B takes its input from the south.
+    let a_off = repeater(HorizontalFacing::West, false);
+    let b_off = repeater(HorizontalFacing::South, false);
+    let pairs: Vec<(BlockPos, BlockPos)> = (0..4)
+        .flat_map(|column| {
+            (0..8).map(move |row| {
+                let (x, z) = (column * 4, row * 2);
+                (BlockPos::new(x + 1, 1, z), BlockPos::new(x + 2, 1, z))
+            })
+        })
+        .collect();
+
+    for &(a, b) in &pairs {
+        helper.set_block(&a, a_off).await?;
+        helper.set_block(&b, b_off).await?;
+    }
+    // Power every input in the same game tick.
+    for &(a, b) in &pairs {
+        helper
+            .set_block_default(&BlockPos::new(a.0.x - 1, 1, a.0.z), &Block::REDSTONE_BLOCK)
+            .await?;
+        helper
+            .set_block_default(&BlockPos::new(b.0.x, 1, b.0.z + 1), &Block::REDSTONE_BLOCK)
+            .await?;
+    }
+
+    helper
+        .start_sequence()
+        .then_idle(6)
+        .then_execute(move |helper| {
+            let pairs = pairs.clone();
+            async move {
+                for (a, b) in pairs {
+                    let a_props =
+                        RepeaterLikeProperties::from_state_id(helper.block_state_id(&a).await);
+                    let b_props =
+                        RepeaterLikeProperties::from_state_id(helper.block_state_id(&b).await);
+                    helper
+                        .assert_true(a_props.powered, format!("repeater A at {a} should be on"))?;
+                    helper.assert_true(
+                        !b_props.powered && b_props.locked,
+                        format!("repeater B at {b} should be locked off by A"),
+                    )?;
+                }
+                Ok(())
+            }
+        })
+        .then_succeed();
+    Ok(())
+}
+
 pub(super) async fn test_redstone_wall_torch_inverter(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {

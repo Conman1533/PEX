@@ -2538,33 +2538,18 @@ impl World {
         let tick_data = self.level.get_tick_data(&active_chunks, random_tick_speed);
         let handle = server.runtime.clone();
 
-        // 1. Parallel Block Ticks via Rayon
-        let world = self.clone();
-        let block_handle = handle.clone();
-        tick_data
-            .block_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = block_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    world.run_block_tick(scheduled_tick);
-                }
-            });
-
-        // 2. Parallel Fluid Ticks via Rayon
-        let world = self.clone();
-        let fluid_handle = handle.clone();
-        tick_data
-            .fluid_ticks
-            .par_chunks(BATCH_SIZE)
-            .for_each(|batch| {
-                let _guard = fluid_handle.enter();
-                let world = world.clone();
-                for scheduled_tick in batch {
-                    world.run_fluid_tick(scheduled_tick);
-                }
-            });
+        // 1 and 2. Scheduled block ticks, then fluid ticks, one at a time in the sorted order
+        // `get_tick_data` gives them, like vanilla `ServerLevel.tick` (`blockTicks.tick`, then
+        // `fluidTicks.tick`): a tick sees every change the ticks before it made (roadmap D5-1).
+        {
+            let _guard = handle.enter();
+            for scheduled_tick in &tick_data.block_ticks {
+                self.run_block_tick(scheduled_tick);
+            }
+            for scheduled_tick in &tick_data.fluid_ticks {
+                self.run_fluid_tick(scheduled_tick);
+            }
+        }
 
         // 3. Parallel Random Ticks via Rayon
         let world = self.clone();
