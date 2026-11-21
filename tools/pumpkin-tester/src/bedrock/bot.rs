@@ -95,6 +95,8 @@ const CONTAINER_OPEN_ID: i32 = 46;
 const CONTAINER_CLOSE_ID: i32 = 47;
 const ITEM_STACK_REQUEST_ID: i32 = 147;
 const ITEM_STACK_RESPONSE_ID: i32 = 148;
+/// `ItemStackRequestAction::CraftRecipe`.
+const STACK_ACTION_CRAFT_RECIPE: u32 = 10;
 
 /// Which `ItemStackRequest` action a `StackMove` is.
 #[derive(Clone, Copy)]
@@ -818,11 +820,28 @@ impl BedrockBot {
         request_id: i32,
         actions: &[StackMove],
     ) -> Result<(), String> {
+        self.craft_request(request_id, None, actions).await
+    }
+
+    /// An `ItemStackRequest` that starts with `CraftRecipe` (recipe network id, times) when
+    /// `craft` is set, followed by `actions`, as a real client's crafting screen sends.
+    pub async fn craft_request(
+        &self,
+        request_id: i32,
+        craft: Option<(u32, u8)>,
+        actions: &[StackMove],
+    ) -> Result<(), String> {
         let mut payload = Vec::new();
         let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
             VarUInt(1).write(payload)?;
             VarInt(request_id).write(payload)?;
-            VarUInt(actions.len() as u32).write(payload)?;
+            VarUInt((actions.len() + usize::from(craft.is_some())) as u32).write(payload)?;
+            if let Some((recipe, times)) = craft {
+                VarUInt(STACK_ACTION_CRAFT_RECIPE).write(payload)?;
+                0u8.write(payload)?;
+                VarUInt(recipe).write(payload)?;
+                times.write(payload)?;
+            }
             for action in actions {
                 VarUInt(u32::from(action.kind as u8)).write(payload)?;
                 // The legacy action type, unused.

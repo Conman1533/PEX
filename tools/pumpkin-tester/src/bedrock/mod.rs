@@ -539,6 +539,8 @@ async fn run_mixed_play(
     run_place_checks(server, bedrock, &mut java, &mut checks).await?;
     run_item_use_checks(server, bedrock, &mut java, &mut checks).await?;
     run_chest_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_furnace_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_craft_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -1958,6 +1960,265 @@ async fn run_chest_checks(
         run_container_case(server, bedrock, java, checks, case).await?;
     }
     Ok(())
+}
+
+/// A survival Bedrock player smelts raw iron in a furnace: ingredient and fuel in through the
+/// furnace's own slots, the ingot out of the result slot.
+async fn run_furnace_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} raw_iron 1"));
+    run_console(server, &format!("give {BEDROCK_NAME} coal 1"));
+    let furnace = spot_beside(bedrock, java, 2.0);
+    let setblock = |block: &str| set_block(server, furnace, block);
+    setblock("furnace");
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    bedrock
+        .use_item_on_block(furnace, 1, 0, &ItemStack::new(1, &Item::RAW_IRON), &[])
+        .await?;
+    tick_until(
+        server,
+        bedrock,
+        Some(&mut *java),
+        "a ContainerOpen for the furnace",
+        |bot, _| bot.open_container.is_some(),
+    )
+    .await?;
+    move_through_cursor(
+        bedrock,
+        10,
+        None,
+        1,
+        (ContainerName::HotBar, 0),
+        (ContainerName::FurnaceIngredient, 0),
+    )
+    .await?;
+    move_through_cursor(
+        bedrock,
+        11,
+        None,
+        1,
+        (ContainerName::HotBar, 1),
+        (ContainerName::FurnaceFuel, 1),
+    )
+    .await?;
+    let world = bedrock_player.world();
+    let furnace_stack = |slot| {
+        world
+            .get_block_entity(&furnace)
+            .and_then(pumpkin_core::block::entities::BlockEntity::get_inventory)
+            .map(|inventory| inventory.get_stack(slot))
+    };
+    checks.record(
+        "bedrock smelts raw iron in a furnace",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "an iron ingot in the furnace's result slot",
+            |_, _| furnace_stack(2).is_some_and(|stack| stack.item.id == Item::IRON_INGOT.id),
+        )
+        .await,
+    );
+    move_through_cursor(
+        bedrock,
+        12,
+        None,
+        1,
+        (ContainerName::FurnaceResult, 2),
+        (ContainerName::HotBar, 2),
+    )
+    .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let taken = bedrock_player.inventory().get_stack(2);
+    checks.record(
+        "bedrock takes the ingot out of a furnace",
+        if !bedrock.stack_responses.contains(&(12, 0)) {
+            Err(format!("responses: {:?}", bedrock.stack_responses))
+        } else if taken.item.id != Item::IRON_INGOT.id {
+            Err(format!("hotbar slot 2 holds {}", taken.item.registry_key))
+        } else if furnace_stack(2).is_some_and(|stack| !stack.is_empty()) {
+            Err("the ingot is still in the furnace".to_string())
+        } else {
+            Ok(())
+        },
+    );
+    bedrock.close_container().await?;
+    setblock("air");
+    tick(server, bedrock, Some(&mut *java)).await?;
+    run_console(server, "kill @e[type=item]");
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// Crafting planks in the 2x2 grid of the Bedrock player's own inventory, as the client does:
+/// the log into the grid, `CraftRecipe`, then the result out of the created-output slot. A
+/// request for more crafts than the grid holds must not make more than the grid allows.
+async fn run_craft_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} oak_log 1"));
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    move_through_cursor(
+        bedrock,
+        20,
+        None,
+        1,
+        (ContainerName::HotBar, 0),
+        (ContainerName::CraftingInput, 28),
+    )
+    .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    // One log makes 4 planks. Ask for 5 crafts, and take all 20 the client would predict.
+    move_through_cursor(
+        bedrock,
+        21,
+        Some((1, 5)),
+        20,
+        (ContainerName::CreatedOutput, 50),
+        (ContainerName::HotBar, 1),
+    )
+    .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let inventory = bedrock_player.inventory();
+    let planks: u32 = (0..36)
+        .map(|slot| inventory.get_stack(slot))
+        .filter(|stack| stack.item.id == Item::OAK_PLANKS.id)
+        .map(|stack| u32::from(stack.item_count))
+        .sum();
+    checks.record(
+        "bedrock can't craft more than the grid holds",
+        if planks <= 4 {
+            Ok(())
+        } else {
+            Err(format!("1 log made {planks} planks"))
+        },
+    );
+
+    // A plain single craft makes exactly 4.
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} oak_log 1"));
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    move_through_cursor(
+        bedrock,
+        22,
+        None,
+        1,
+        (ContainerName::HotBar, 0),
+        (ContainerName::CraftingInput, 28),
+    )
+    .await?;
+    move_through_cursor(
+        bedrock,
+        23,
+        Some((1, 1)),
+        4,
+        (ContainerName::CreatedOutput, 50),
+        (ContainerName::HotBar, 1),
+    )
+    .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let crafted = inventory.get_stack(1);
+    checks.record(
+        "bedrock crafts planks from a log",
+        if crafted.item.id == Item::OAK_PLANKS.id && crafted.item_count == 4 {
+            Ok(())
+        } else {
+            Err(format!(
+                "hotbar slot 1 holds {} {}; responses {:?}",
+                crafted.item_count, crafted.item.registry_key, bedrock.stack_responses
+            ))
+        },
+    );
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// Moves `count` items from one slot to another through the cursor, with an optional
+/// `CraftRecipe` first, in one `ItemStackRequest`, as a real client's screen does.
+async fn move_through_cursor(
+    bedrock: &BedrockBot,
+    request_id: i32,
+    craft: Option<(u32, u8)>,
+    count: u8,
+    from: (ContainerName, u8),
+    to: (ContainerName, u8),
+) -> Result<(), String> {
+    bedrock
+        .craft_request(
+            request_id,
+            craft,
+            &[
+                StackMove {
+                    kind: StackMoveKind::Take,
+                    count,
+                    from,
+                    to: (ContainerName::Cursor, 0),
+                },
+                StackMove {
+                    kind: StackMoveKind::Place,
+                    count,
+                    from: (ContainerName::Cursor, 0),
+                    to,
+                },
+            ],
+        )
+        .await
+}
+
+/// The block at the Bedrock bot's feet level, `blocks` along x on the side away from the Java
+/// bot.
+fn spot_beside(bedrock: &BedrockBot, java: &HeadlessBot, blocks: f64) -> BlockPos {
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java.position.x > f64::from(bedrock.position.x) {
+        -1.0
+    } else {
+        1.0
+    };
+    BlockPos::floored(
+        f64::from(bedrock.position.x) + side * blocks,
+        feet,
+        f64::from(bedrock.position.z),
+    )
+}
+
+fn set_block(server: &BedrockTestServer, pos: BlockPos, block: &str) {
+    run_console(
+        server,
+        &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+    );
 }
 
 /// One container block for `run_container_case`, and the names of its four checks.
