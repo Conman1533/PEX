@@ -1,10 +1,11 @@
-//! Per-dimension vanilla saved data: `world_border.dat` and the forced chunks in
-//! `chunk_tickets.dat`.
+//! Per-dimension saved data: vanilla's `world_border.dat`, the forced chunks in
+//! `chunk_tickets.dat` and `raids.dat`, and plugin data in `pumpkin_custom_data.nbt`.
 
 use std::path::Path;
 
 use pumpkin_nbt::{compound::NbtCompound, tag::NbtTag};
 use pumpkin_util::math::vector2::Vector2;
+use pumpkin_world::level::LevelFolder;
 use pumpkin_world::world_info::{
     LevelData, WorldInfoError,
     data_files::{read_data_file, write_data_file},
@@ -19,8 +20,55 @@ const WORLD_BORDER: &str = "world_border.dat";
 const CHUNK_TICKETS: &str = "chunk_tickets.dat";
 const RAIDS: &str = "raids.dat";
 const FORCED: &str = "minecraft:forced";
+const CUSTOM_DATA: &str = "pumpkin_custom_data.nbt";
 /// Vanilla `ChunkMap.FORCED_TICKET_LEVEL`, the entity ticking level.
 const FORCED_TICKET_LEVEL: i32 = 31;
+
+/// A dimension's plugin data (roadmap G7-29), from `pumpkin_custom_data.nbt` in its folder.
+///
+/// Before G7-29 every dimension read and wrote one file in the root folder, so the overworld
+/// falls back to that file until it has its own. The file is a named NBT document, as
+/// [`save_custom_data`] and alpha wrote it (alpha read it back unnamed and so always got nothing).
+#[must_use]
+pub fn load_custom_data(folders: &LevelFolder, overworld: bool) -> NbtCompound {
+    let own = folders.dim_folder.join(CUSTOM_DATA);
+    let path = if overworld && !own.exists() {
+        folders.root_folder.join(CUSTOM_DATA)
+    } else {
+        own
+    };
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| {
+            pumpkin_nbt::Nbt::read(&mut pumpkin_nbt::deserializer::NbtReadHelperJava::new(
+                &mut std::io::Cursor::new(bytes),
+            ))
+            .ok()
+        })
+        .map_or_else(NbtCompound::new, |nbt| nbt.root_tag)
+}
+
+/// Writes a dimension's plugin data to its own folder.
+///
+/// Empty data still replaces a file that [`load_custom_data`] would read, so keys a plugin
+/// removed don't come back on the next start.
+pub fn save_custom_data(
+    folders: &LevelFolder,
+    overworld: bool,
+    data: &NbtCompound,
+) -> std::io::Result<()> {
+    let own = folders.dim_folder.join(CUSTOM_DATA);
+    if data.is_empty()
+        && !own.exists()
+        && !(overworld && folders.root_folder.join(CUSTOM_DATA).exists())
+    {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&folders.dim_folder)?;
+    let temp = folders.dim_folder.join(format!("{CUSTOM_DATA}.tmp"));
+    std::fs::write(&temp, pumpkin_nbt::Nbt::from(data.clone()).write())?;
+    std::fs::rename(temp, own)
+}
 
 #[must_use]
 pub fn load_raids(folder: &Path) -> Raids {
@@ -129,6 +177,63 @@ pub fn save_forced_chunks(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn folders(root: &Path, dimension: &str) -> LevelFolder {
+        let dim_folder = root.join("dimensions").join("minecraft").join(dimension);
+        LevelFolder {
+            root_folder: root.to_path_buf(),
+            region_folder: dim_folder.join("region"),
+            entities_folder: dim_folder.join("entities"),
+            poi_folder: dim_folder.join("poi"),
+            dim_folder,
+        }
+    }
+
+    fn plugin_data(value: &str) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        let mut plugin = NbtCompound::new();
+        plugin.put_string("home", value.to_string());
+        data.put_compound("myplugin", plugin);
+        data
+    }
+
+    /// G7-29: the overworld and the Nether keep their own plugin data through a restart
+    /// (alpha wrote both to one root file, so the last world to save won).
+    #[test]
+    fn each_dimension_keeps_its_own_plugin_data() {
+        let root = temp_folder("custom-data");
+        let overworld = folders(&root, "overworld");
+        let nether = folders(&root, "the_nether");
+        save_custom_data(&overworld, true, &plugin_data("overworld")).unwrap();
+        save_custom_data(&nether, false, &plugin_data("nether")).unwrap();
+
+        assert_eq!(load_custom_data(&overworld, true), plugin_data("overworld"));
+        assert_eq!(load_custom_data(&nether, false), plugin_data("nether"));
+        assert!(!root.join(CUSTOM_DATA).exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// G7-29: the shared root file from before is the overworld's until it saves its own, and
+    /// emptying it then doesn't bring the old file back.
+    #[test]
+    fn the_overworld_takes_over_the_old_root_file() {
+        let root = temp_folder("custom-data-root");
+        let overworld = folders(&root, "overworld");
+        let nether = folders(&root, "the_nether");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join(CUSTOM_DATA),
+            pumpkin_nbt::Nbt::from(plugin_data("old")).write(),
+        )
+        .unwrap();
+
+        assert_eq!(load_custom_data(&overworld, true), plugin_data("old"));
+        assert!(load_custom_data(&nether, false).is_empty());
+
+        save_custom_data(&overworld, true, &NbtCompound::new()).unwrap();
+        assert!(load_custom_data(&overworld, true).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     fn temp_folder(name: &str) -> std::path::PathBuf {
         let dir =
