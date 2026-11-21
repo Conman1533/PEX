@@ -3,18 +3,32 @@ use crate::entity::player::Player;
 #[derive(Debug, Clone)]
 pub enum AdvancementTrigger {
     InventoryChanged,
-    PlayerKilledEntity { entity_type_resource: String },
-    EnterBlock { block_id: String },
-    PlacedBlock { block_id: String },
-    ConsumeItem { item_id: String },
+    PlayerKilledEntity {
+        entity_type_resource: String,
+    },
+    EnterBlock {
+        block_id: String,
+    },
+    PlacedBlock {
+        block_id: String,
+    },
+    ConsumeItem {
+        item_id: String,
+    },
     SleptInBed,
-    FishedItem { item_id: String },
-    EnterDimension { dimension: String },
+    FishedItem {
+        item_id: String,
+    },
+    EnterDimension {
+        dimension: String,
+    },
     PlayerKilled,
     DeflectedDamage,
     LaunchedEyeOfEnder,
     GlowedSign,
-    BredAnimal { parent_type: String },
+    BredAnimal {
+        parent_type: String,
+    },
     DealtOverkillDamage,
     SniperDuel,
     TwoBirdsOneArrow,
@@ -22,8 +36,27 @@ pub enum AdvancementTrigger {
     Bullseye,
     CuredZombieVillager,
     TradedWithVillager,
-    AllayDropItemOnBlock { block_id: String, item_id: String },
-    ThrownItemPickedUpByPlayer { thrower_type: String },
+    AllayDropItemOnBlock {
+        block_id: String,
+        item_id: String,
+    },
+    ThrownItemPickedUpByPlayer {
+        thrower_type: String,
+    },
+    /// Vanilla `CriteriaTriggers.ENCHANTED_ITEM`: an enchanting table enchanted an item.
+    EnchantedItem,
+    /// Vanilla `CriteriaTriggers.BREWED_POTION`: a potion was taken out of a brewing stand.
+    BrewedPotion,
+    /// Vanilla `CriteriaTriggers.CONSTRUCT_BEACON`: a beacon nearby turned on at `level`.
+    ConstructBeacon {
+        level: i32,
+    },
+    /// Vanilla `CriteriaTriggers.FILLED_BUCKET`: a bucket was filled with `item` as the result.
+    FilledBucket {
+        item: &'static pumpkin_data::item::Item,
+    },
+    /// Vanilla `CriteriaTriggers.LOCATION`, fired every 20 ticks of the player.
+    Location,
 }
 
 impl Player {
@@ -44,18 +77,10 @@ impl Player {
                 }
 
                 if !self.has_advancement(Advancement::STORY_MINE_STONE) {
-                    let stone_items = [
-                        &Item::COBBLESTONE,
-                        &Item::STONE,
-                        &Item::ANDESITE,
-                        &Item::DIORITE,
-                        &Item::GRANITE,
-                        &Item::DEEPSLATE,
-                        &Item::COBBLED_DEEPSLATE,
-                        &Item::BLACKSTONE,
-                    ];
-                    for item in stone_items {
-                        if self.has_item_in_inventory(item) {
+                    // Vanilla `#minecraft:stone_tool_materials`.
+                    let stone_items = pumpkin_data::tag::Item::MINECRAFT_STONE_TOOL_MATERIALS.1;
+                    for id in stone_items {
+                        if Item::from_id(*id).is_some_and(|item| self.has_item_in_inventory(item)) {
                             self.trigger_advancement_criterion(
                                 Advancement::STORY_MINE_STONE,
                                 "get_stone",
@@ -199,95 +224,11 @@ impl Player {
                     }
                 }
 
-                if !self.has_advancement(Advancement::HUSBANDRY_TACTICAL_FISHING) {
-                    let fish_buckets = [
-                        (&Item::COD_BUCKET, "cod_bucket"),
-                        (&Item::SALMON_BUCKET, "salmon_bucket"),
-                        (&Item::PUFFERFISH_BUCKET, "pufferfish_bucket"),
-                        (&Item::TROPICAL_FISH_BUCKET, "tropical_fish_bucket"),
-                    ];
-                    for (item, criterion) in fish_buckets {
-                        if self.has_item_in_inventory(item) {
-                            self.trigger_advancement_criterion(
-                                Advancement::HUSBANDRY_TACTICAL_FISHING,
-                                criterion,
-                            );
-                        }
-                    }
-                }
-
-                if !self.has_advancement(Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET) {
-                    if self.has_item_in_inventory(&Item::AXOLOTL_BUCKET) {
-                        self.trigger_advancement_criterion(
-                            Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET,
-                            "axolotl_bucket",
-                        );
-                    }
-                }
-
-                if !self.has_advancement(Advancement::HUSBANDRY_TADPOLE_IN_A_BUCKET) {
-                    if self.has_item_in_inventory(&Item::TADPOLE_BUCKET) {
-                        self.trigger_advancement_criterion(
-                            Advancement::HUSBANDRY_TADPOLE_IN_A_BUCKET,
-                            "tadpole_bucket",
-                        );
-                    }
-                }
-
                 if !self.has_advancement(Advancement::HUSBANDRY_OBTAIN_NETHERITE_HOE) {
                     if self.has_item_in_inventory(&Item::NETHERITE_HOE) {
                         self.trigger_advancement_criterion(
                             Advancement::HUSBANDRY_OBTAIN_NETHERITE_HOE,
                             "netherite_hoe",
-                        );
-                    }
-                }
-
-                if !self.has_advancement(Advancement::STORY_ENCHANT_ITEM) {
-                    let has_enchanted = {
-                        let main_inv = self
-                            .inventory()
-                            .main_inventory
-                            .read()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        main_inv
-                            .iter()
-                            .any(|stack| !stack.is_empty() && stack.has_enchantments())
-                    };
-                    if has_enchanted {
-                        self.trigger_advancement_criterion(
-                            Advancement::STORY_ENCHANT_ITEM,
-                            "enchanted_item",
-                        );
-                    }
-                }
-
-                if !self.has_advancement(Advancement::NETHER_BREW_POTION) {
-                    let potions = [&Item::POTION, &Item::SPLASH_POTION, &Item::LINGERING_POTION];
-                    for item in potions {
-                        if self.has_item_in_inventory(item) {
-                            self.trigger_advancement_criterion(
-                                Advancement::NETHER_BREW_POTION,
-                                "potion",
-                            );
-                            break;
-                        }
-                    }
-                }
-
-                if !self.has_advancement(Advancement::NETHER_CREATE_BEACON) {
-                    if self.has_item_in_inventory(&Item::BEACON) {
-                        self.trigger_advancement_criterion(
-                            Advancement::NETHER_CREATE_BEACON,
-                            "beacon",
-                        );
-                    }
-                }
-                if !self.has_advancement(Advancement::NETHER_CREATE_FULL_BEACON) {
-                    if self.has_item_in_inventory(&Item::BEACON) {
-                        self.trigger_advancement_criterion(
-                            Advancement::NETHER_CREATE_FULL_BEACON,
-                            "beacon",
                         );
                     }
                 }
@@ -315,20 +256,8 @@ impl Player {
                         );
                     }
                 }
-
-                if !self.has_advancement(Advancement::END_FIND_END_CITY) {
-                    let city_items = [&Item::SHULKER_SHELL, &Item::CHORUS_FRUIT];
-                    for item in city_items {
-                        if self.has_item_in_inventory(item) {
-                            self.trigger_advancement_criterion(
-                                Advancement::END_FIND_END_CITY,
-                                "in_city",
-                            );
-                            break;
-                        }
-                    }
-                }
-
+            }
+            AdvancementTrigger::Location => {
                 if !self.has_advancement(Advancement::NETHER_EXPLORE_NETHER) {
                     let pos = self.position().to_block_pos();
                     let biome = self.world().level.get_rough_biome(&pos);
@@ -415,6 +344,78 @@ impl Player {
                             &biome_resource,
                         );
                     }
+                }
+
+                if !self.has_advancement(Advancement::END_FIND_END_CITY) {
+                    let pos = self.position().to_block_pos();
+                    if self
+                        .world()
+                        .level
+                        .is_inside_structure(&pos, "minecraft:end_city")
+                    {
+                        self.trigger_advancement_criterion(
+                            Advancement::END_FIND_END_CITY,
+                            "in_city",
+                        );
+                    }
+                }
+            }
+            AdvancementTrigger::EnchantedItem => {
+                if !self.has_advancement(Advancement::STORY_ENCHANT_ITEM) {
+                    self.trigger_advancement_criterion(
+                        Advancement::STORY_ENCHANT_ITEM,
+                        "enchanted_item",
+                    );
+                }
+            }
+            AdvancementTrigger::BrewedPotion => {
+                if !self.has_advancement(Advancement::NETHER_BREW_POTION) {
+                    self.trigger_advancement_criterion(Advancement::NETHER_BREW_POTION, "potion");
+                }
+            }
+            AdvancementTrigger::ConstructBeacon { level } => {
+                if level >= 1 && !self.has_advancement(Advancement::NETHER_CREATE_BEACON) {
+                    self.trigger_advancement_criterion(Advancement::NETHER_CREATE_BEACON, "beacon");
+                }
+                if level == 4 && !self.has_advancement(Advancement::NETHER_CREATE_FULL_BEACON) {
+                    self.trigger_advancement_criterion(
+                        Advancement::NETHER_CREATE_FULL_BEACON,
+                        "beacon",
+                    );
+                }
+            }
+            AdvancementTrigger::FilledBucket { item } => {
+                let fish_buckets = [
+                    (&Item::COD_BUCKET, "cod_bucket"),
+                    (&Item::SALMON_BUCKET, "salmon_bucket"),
+                    (&Item::PUFFERFISH_BUCKET, "pufferfish_bucket"),
+                    (&Item::TROPICAL_FISH_BUCKET, "tropical_fish_bucket"),
+                ];
+                for (bucket, criterion) in fish_buckets {
+                    if item.id == bucket.id
+                        && !self.has_advancement(Advancement::HUSBANDRY_TACTICAL_FISHING)
+                    {
+                        self.trigger_advancement_criterion(
+                            Advancement::HUSBANDRY_TACTICAL_FISHING,
+                            criterion,
+                        );
+                    }
+                }
+                if item.id == Item::AXOLOTL_BUCKET.id
+                    && !self.has_advancement(Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET)
+                {
+                    self.trigger_advancement_criterion(
+                        Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET,
+                        "axolotl_bucket",
+                    );
+                }
+                if item.id == Item::TADPOLE_BUCKET.id
+                    && !self.has_advancement(Advancement::HUSBANDRY_TADPOLE_IN_A_BUCKET)
+                {
+                    self.trigger_advancement_criterion(
+                        Advancement::HUSBANDRY_TADPOLE_IN_A_BUCKET,
+                        "tadpole_bucket",
+                    );
                 }
             }
             AdvancementTrigger::PlayerKilledEntity {
@@ -649,5 +650,110 @@ impl Player {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pumpkin_data::advancement::Advancement;
+    use pumpkin_data::item::Item;
+    use pumpkin_data::item_stack::ItemStack;
+    use pumpkin_util::math::vector3::Vector3;
+
+    use super::AdvancementTrigger;
+    use crate::world::{test_player, test_world};
+
+    fn player_with_advancements(
+        world: &std::sync::Arc<crate::world::World>,
+    ) -> std::sync::Arc<crate::entity::player::Player> {
+        let player = test_player(world, Vector3::new(0.5, 64.0, 0.5));
+        // A joining player gets this in `Player::new`'s caller; the test player doesn't.
+        player
+            .advancements
+            .try_lock()
+            .expect("the new player's advancements are free")
+            .set_player(&player);
+        player
+    }
+
+    fn give(player: &crate::entity::player::Player, stack: ItemStack) {
+        player.inventory().set_held_item(stack);
+    }
+
+    #[tokio::test]
+    async fn holding_an_enchanted_item_does_not_grant_enchant_item() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        let mut sword = ItemStack::new(1, &Item::DIAMOND_SWORD);
+        sword.add_enchantment(&pumpkin_data::Enchantment::SHARPNESS, 1);
+        give(&player, sword);
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(!player.has_advancement(Advancement::STORY_ENCHANT_ITEM));
+        player.trigger_advancement(AdvancementTrigger::EnchantedItem);
+        assert!(player.has_advancement(Advancement::STORY_ENCHANT_ITEM));
+    }
+
+    #[tokio::test]
+    async fn holding_a_potion_does_not_grant_brew_potion() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        give(&player, ItemStack::new(1, &Item::POTION));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(!player.has_advancement(Advancement::NETHER_BREW_POTION));
+        player.trigger_advancement(AdvancementTrigger::BrewedPotion);
+        assert!(player.has_advancement(Advancement::NETHER_BREW_POTION));
+    }
+
+    #[tokio::test]
+    async fn beacon_advancements_follow_the_constructed_level() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        give(&player, ItemStack::new(1, &Item::BEACON));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(!player.has_advancement(Advancement::NETHER_CREATE_BEACON));
+        player.trigger_advancement(AdvancementTrigger::ConstructBeacon { level: 2 });
+        assert!(player.has_advancement(Advancement::NETHER_CREATE_BEACON));
+        assert!(!player.has_advancement(Advancement::NETHER_CREATE_FULL_BEACON));
+        player.trigger_advancement(AdvancementTrigger::ConstructBeacon { level: 4 });
+        assert!(player.has_advancement(Advancement::NETHER_CREATE_FULL_BEACON));
+    }
+
+    #[tokio::test]
+    async fn bucket_advancements_need_a_filled_bucket() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        give(&player, ItemStack::new(1, &Item::AXOLOTL_BUCKET));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(!player.has_advancement(Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET));
+        player.trigger_advancement(AdvancementTrigger::FilledBucket {
+            item: &Item::AXOLOTL_BUCKET,
+        });
+        assert!(player.has_advancement(Advancement::HUSBANDRY_AXOLOTL_IN_A_BUCKET));
+        player.trigger_advancement(AdvancementTrigger::FilledBucket {
+            item: &Item::COD_BUCKET,
+        });
+        assert!(player.has_advancement(Advancement::HUSBANDRY_TACTICAL_FISHING));
+    }
+
+    #[tokio::test]
+    async fn holding_end_city_loot_does_not_grant_find_end_city() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        give(&player, ItemStack::new(1, &Item::SHULKER_SHELL));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        player.trigger_advancement(AdvancementTrigger::Location);
+        assert!(!player.has_advancement(Advancement::END_FIND_END_CITY));
+    }
+
+    #[tokio::test]
+    async fn mine_stone_wants_a_stone_tool_material() {
+        let world = test_world();
+        let player = player_with_advancements(&world);
+        give(&player, ItemStack::new(1, &Item::STONE));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(!player.has_advancement(Advancement::STORY_MINE_STONE));
+        give(&player, ItemStack::new(1, &Item::COBBLED_DEEPSLATE));
+        player.trigger_advancement(AdvancementTrigger::InventoryChanged);
+        assert!(player.has_advancement(Advancement::STORY_MINE_STONE));
     }
 }
