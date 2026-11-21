@@ -79,10 +79,12 @@ impl CommandExecutor for BlockReplaceExecutor {
         inventory.set_stack(slot, item_stack);
 
         let item_name = item.registry_key;
+        // 26.3 `BlockItemAccessor.RESPONSE_SET_KNOWN_ITEM`: the slot count comes first.
         let msg = TextComponent::translate_cross(
-            translation::java::COMMANDS_ITEM_BLOCK_SET_SUCCESS,
-            translation::java::COMMANDS_ITEM_BLOCK_SET_SUCCESS,
+            translation::java::COMMANDS_ITEM_BLOCK_REPLACE_SUCCESS_KNOWN_ITEM,
+            translation::java::COMMANDS_ITEM_BLOCK_REPLACE_SUCCESS_KNOWN_ITEM,
             [
+                TextComponent::text("1"),
                 TextComponent::text(pos.0.x.to_string()),
                 TextComponent::text(pos.0.y.to_string()),
                 TextComponent::text(pos.0.z.to_string()),
@@ -233,9 +235,10 @@ impl CommandExecutor for EntityReplaceExecutor {
         let item_name = item.registry_key;
         let msg = if targets.len() == 1 {
             TextComponent::translate_cross(
-                translation::java::COMMANDS_ITEM_ENTITY_SET_SUCCESS_SINGLE,
-                translation::java::COMMANDS_ITEM_ENTITY_SET_SUCCESS_SINGLE,
+                translation::java::COMMANDS_ITEM_ENTITY_REPLACE_SUCCESS_SINGLE_KNOWN_ITEM,
+                translation::java::COMMANDS_ITEM_ENTITY_REPLACE_SUCCESS_SINGLE_KNOWN_ITEM,
                 [
+                    TextComponent::text(modified_count.to_string()),
                     targets[0].as_ref().get_display_name(),
                     TextComponent::text("[")
                         .add_child(item.translated_name())
@@ -248,8 +251,8 @@ impl CommandExecutor for EntityReplaceExecutor {
             )
         } else {
             TextComponent::translate_cross(
-                translation::java::COMMANDS_ITEM_ENTITY_SET_SUCCESS_MULTIPLE,
-                translation::java::COMMANDS_ITEM_ENTITY_SET_SUCCESS_MULTIPLE,
+                translation::java::COMMANDS_ITEM_ENTITY_REPLACE_SUCCESS_MULTIPLE_KNOWN_ITEM,
+                translation::java::COMMANDS_ITEM_ENTITY_REPLACE_SUCCESS_MULTIPLE_KNOWN_ITEM,
                 [
                     TextComponent::text(modified_count.to_string()),
                     TextComponent::text("[")
