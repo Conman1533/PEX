@@ -250,7 +250,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:water_flow_breaks_redstone_torch",
     "pumpkin:sponge_absorbs_multi_block_water_pool",
     "pumpkin:sponge_does_not_absorb_lava",
-    // commands_and_entities_extended (11)
+    // commands_and_entities_extended (12)
     "pumpkin:impulse_command_block_setblock_on_power",
     "pumpkin:chain_command_block_three_stage_pipeline",
     "pumpkin:conditional_chain_command_block_skips_on_failure",
@@ -262,6 +262,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:iron_golem_pattern_clears_all_four_blocks",
     "pumpkin:different_item_entities_do_not_merge",
     "pumpkin:item_entities_stack_up_to_combined_count",
+    "pumpkin:commands/forceload_add_loads_before_answering",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -281,7 +282,6 @@ const MOB_TEST_IDS: &[&str] = &[
 const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
     "pumpkin:quoted_non_ascii_player_name_in_commands",
-    "pumpkin:commands/forceload_add_loads_before_answering",
     "pumpkin:zombie_targets_survival_mock_player",
     "pumpkin:nautilus_follows_tempting_player",
     "pumpkin:zombie_nautilus_charges_survival_player",
