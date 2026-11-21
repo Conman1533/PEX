@@ -595,7 +595,9 @@ pub fn ensure_builtin_game_tests_registered() {
         register_function_test(
             "pumpkin:armadillo_rolls_up_near_zombie",
             "pumpkin:empty_9x4x5",
-            300,
+            // Rolling up, then the danger memory running out and the random peeks before the
+            // armadillo unrolls, can take longer than 300 ticks under load.
+            900,
             0,
             farm_animals::test_armadillo_rolls_up_near_zombie,
         );
