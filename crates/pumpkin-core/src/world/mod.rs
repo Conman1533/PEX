@@ -463,7 +463,7 @@ impl World {
     }
 
     #[expect(clippy::too_many_lines)]
-    pub fn update_active_chunks(&self) {
+    pub fn update_active_chunks(self: &Arc<Self>) {
         let sim_dist = self.server.upgrade().map_or(10, |s| {
             s.advanced_config.networking.java.simulation_distance.get()
         }) as i32;
@@ -568,6 +568,7 @@ impl World {
         }
 
         self.update_chunk_forced(&unforced, &newly_forced);
+        self.update_forced_entity_chunks(&unforced, newly_forced);
 
         self.spawn_state.store(Arc::new(SpawnState::new(
             spawnable_chunks,
@@ -593,6 +594,96 @@ impl World {
         for &pos in newly_forced {
             chunk_loading.add_force_ticket(pos);
         }
+    }
+
+    /// Vanilla's force ticket makes a chunk entity-ticking, so its saved entities load without
+    /// a player nearby. The ticket counts as one watcher of the entity chunk, which keeps its
+    /// entities live until the chunk is unforced and nobody else watches it.
+    fn update_forced_entity_chunks(
+        self: &Arc<Self>,
+        unforced: &[Vector2<i32>],
+        newly_forced: Vec<Vector2<i32>>,
+    ) {
+        if !unforced.is_empty() {
+            let chunks_to_clean = self.level.mark_chunks_as_not_watched(unforced);
+            if !chunks_to_clean.is_empty() {
+                let world = self.clone();
+                self.level.spawn_task(async move {
+                    world.remove_entities_in_chunks(&chunks_to_clean).await;
+                    world.level.clean_entity_chunks(&chunks_to_clean);
+                });
+            }
+        }
+        if newly_forced.is_empty() {
+            return;
+        }
+        self.level.mark_chunks_as_newly_watched(&newly_forced);
+        let mut entity_receiver = self.level.receive_entity_chunks(newly_forced);
+        let world = self.clone();
+        self.level.spawn_task(async move {
+            while let Some((chunk, _)) = entity_receiver.recv().await {
+                let Some(chunk) = chunk.upgrade() else {
+                    continue;
+                };
+                if !world
+                    .level
+                    .is_chunk_watched(&Vector2::new(chunk.x, chunk.z))
+                {
+                    continue;
+                }
+                for entity in world.make_entity_chunk_live(&chunk) {
+                    world.add_entity_silent(entity);
+                }
+            }
+        });
+    }
+
+    /// The first watcher of a dormant entity chunk (fresh from disk, or unloaded but not yet
+    /// dropped from memory) takes its saved entities and builds them; empty when the chunk is
+    /// already live. The live entity list becomes the single source of truth, so the chunk's NBT
+    /// is taken (cleared) to avoid keeping a duplicate copy that would be re-appended on the next
+    /// unload and doubled on every reload.
+    fn make_entity_chunk_live(
+        self: &Arc<Self>,
+        chunk: &pumpkin_world::chunk::ChunkEntityData,
+    ) -> Vec<Arc<dyn EntityBase>> {
+        let entity_nbts = {
+            let mut data = chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if chunk.live.swap(true, Relaxed) {
+                return Vec::new();
+            }
+            std::mem::take(&mut *data)
+        };
+        let mut entities = Vec::with_capacity(entity_nbts.len());
+        for entity_nbt in &entity_nbts {
+            let Some(id) = entity_nbt.get_string("id") else {
+                debug!("Entity has no ID");
+                continue;
+            };
+            let Some(entity_type) =
+                EntityType::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
+            else {
+                warn!("Entity has no valid Entity Type {id}");
+                continue;
+            };
+
+            // Keep the persisted UUID so the entity keeps its identity across reloads
+            // (matching vanilla); only fall back to a fresh one if it is missing/corrupt.
+            let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
+            // Pos is zero since it will be read from nbt.
+            let entity = from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), self, uuid);
+            entity.read_nbt_non_mut(entity_nbt);
+            entity.init_data_tracker();
+
+            // Clear velocity so the client does not replay the drop animation; residual
+            // velocity from the original drop is stale data.
+            entity.get_entity().velocity.store(Vector3::default());
+            entities.push(entity);
+        }
+        entities
     }
 
     pub fn get_lighting_config(&self) -> LightingEngineConfig {
@@ -4592,58 +4683,19 @@ impl World {
                     continue 'main;
                 }
 
-                // The first watcher of a dormant chunk (fresh from disk, or unloaded but
-                // not yet dropped from memory) consumes the serialized entities and makes
-                // them live. The live entity list becomes the single source of truth, so
-                // the chunk's NBT is taken (cleared) to avoid keeping a duplicate copy that
-                // would be re-appended on the next unload and doubled on every reload.
-                let entity_nbts = {
-                    let mut data = chunk
-                        .data
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    (!chunk.live.swap(true, Relaxed)).then(|| std::mem::take(&mut *data))
-                };
-                if let Some(entity_nbts) = entity_nbts {
-                    for entity_nbt in &entity_nbts {
-                        let Some(id) = entity_nbt.get_string("id") else {
-                            debug!("Entity has no ID");
-                            continue;
-                        };
-                        let Some(entity_type) =
-                            EntityType::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
-                        else {
-                            warn!("Entity has no valid Entity Type {id}");
-                            continue;
-                        };
-
-                        // Keep the persisted UUID so the entity keeps its identity
-                        // across reloads (matching vanilla); only fall back to a
-                        // fresh one if it is missing/corrupt.
-                        let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
-                        // Pos is zero since it will be read from nbt.
-                        let entity =
-                            from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), &world, uuid);
-                        entity.read_nbt_non_mut(entity_nbt);
-                        entity.init_data_tracker();
-
-                        let base_entity = entity.get_entity();
-                        // Clear velocity so the client does not replay the drop
-                        // animation; residual velocity from the original drop is
-                        // stale data.
-                        base_entity.velocity.store(Vector3::default());
-
-                        // UUID-dedupes if another watcher already loaded this entity.
-                        // Tracker owns pairing (spawn packets + vehicle restore).
-                        world.add_entity_silent(entity.clone());
-                        player.try_restore_vehicle(&entity);
-                    }
-                } else {
+                let entities = world.make_entity_chunk_live(&chunk);
+                if entities.is_empty() {
                     // Already live for other watchers: pair this player now so
                     // spawn packets and vehicle restore do not wait on a tracker tick.
                     world
                         .entity_tracker
                         .update_player_chunks(&player, &world, &[position]);
+                }
+                for entity in entities {
+                    // UUID-dedupes if another watcher already loaded this entity.
+                    // Tracker owns pairing (spawn packets + vehicle restore).
+                    world.add_entity_silent(entity.clone());
+                    player.try_restore_vehicle(&entity);
                 }
             }
 
@@ -8160,6 +8212,75 @@ mod tests {
             .and_then(|entities| entities.get(&pos).cloned())
             .expect("shrieker block entity");
         assert!(entity.as_vibration_user().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_forced_chunk_loads_its_saved_entities_without_a_player() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicBool;
+
+        use pumpkin_nbt::tag::NbtTag;
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::chunk::ChunkEntityData;
+
+        let world = super::test_world();
+        let pos = Vector2::new(2, 3);
+        let uuid = Uuid::from_u128(7);
+        let mut pig = record(Some(uuid), "minecraft:pig");
+        pig.put(
+            "Pos",
+            NbtTag::List(vec![
+                NbtTag::Double(40.5),
+                NbtTag::Double(64.0),
+                NbtTag::Double(56.5),
+            ]),
+        );
+        world
+            .level
+            .insert_entity_chunk_for_test(Arc::new(ChunkEntityData {
+                x: pos.x,
+                z: pos.y,
+                data: std::sync::Mutex::new(vec![pig]),
+                live: AtomicBool::new(false),
+                dirty: AtomicBool::new(false),
+            }));
+        let has_pig = |world: &World| {
+            world
+                .entities
+                .load()
+                .iter()
+                .any(|entity| entity.get_entity().entity_uuid == uuid)
+        };
+
+        world
+            .forced_chunks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(pos);
+        world.update_active_chunks();
+        for _ in 0..200 {
+            if has_pig(&world) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(has_pig(&world), "the pig of the forced chunk never spawned");
+        assert!(world.level.is_chunk_watched(&pos));
+
+        world
+            .forced_chunks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&pos);
+        world.update_active_chunks();
+        for _ in 0..200 {
+            if !has_pig(&world) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(!has_pig(&world), "the unforced chunk kept its pig live");
+        assert!(!world.level.is_chunk_watched(&pos));
     }
 
     #[test]
