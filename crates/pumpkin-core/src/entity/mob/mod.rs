@@ -1367,6 +1367,18 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn set_saddled(&self, _saddled: bool) {}
 
+    /// Vanilla `PlayerRideableJumping.canJump`: whether the rider's jump does anything now.
+    fn can_rider_jump(&self) -> bool {
+        false
+    }
+
+    /// Vanilla `PlayerRideableJumping.handleStartJump`: the rider let go of a charged jump with
+    /// this power (1 to 100). The rider's client makes the jump itself.
+    fn handle_start_jump(&self, _power: i32) {}
+
+    /// Vanilla `PlayerRideableJumping.handleStopJump`.
+    fn handle_stop_jump(&self) {}
+
     fn check_spawn_obstruction(&self, world: &World) -> bool {
         let bounding_box = self.get_entity().bounding_box.load();
         !world.contains_any_liquid(bounding_box)
@@ -2389,6 +2401,19 @@ pub fn item_steering_player_controller(
 pub fn player_steers(mob: &dyn Mob) -> bool {
     mob.mob_controlling_passenger()
         .is_some_and(|rider| rider.get_player().is_some())
+}
+
+/// The power a rider's jump is sent with after holding jump for `held_ticks` ticks past the first,
+/// as vanilla `LocalPlayer` charges `jumpRidingScale`: a tenth a tick up to 0.9, then falling
+/// back towards 0.8.
+#[must_use]
+pub fn riding_jump_power(held_ticks: i32) -> i32 {
+    let scale = if held_ticks < 10 {
+        held_ticks as f32 * 0.1
+    } else {
+        0.8 + 2.0 / (held_ticks - 9) as f32 * 0.1
+    };
+    (scale * 100.0).floor() as i32
 }
 
 #[expect(dead_code)]

@@ -71,6 +71,9 @@ const INPUT_PERFORM_BLOCK_ACTIONS: i32 = 35;
 const INPUT_CLIENT_PREDICTED_VEHICLE: i32 = 45;
 /// `InputData::VerticalCollision`: the player is standing on something.
 pub const INPUT_VERTICAL_COLLISION: i32 = 50;
+/// `InputData::Jumping` and `InputData::Up`: the jump and forward keys held.
+pub const INPUT_JUMPING: i32 = 6;
+pub const INPUT_UP: i32 = 10;
 /// The vertical motion a Bedrock client on the ground sends: one tick of gravity, 0.08 * 0.98.
 const GROUND_GRAVITY_DELTA: f32 = -0.078_4;
 /// `InputMode::Mouse`, `PlayMode::Normal` and `InteractionModel::Crosshair`.
@@ -177,6 +180,8 @@ pub struct BedrockBot {
     /// While set, inputs say the client drives this vehicle (unique id) with this rotation
     /// (pitch, yaw), as `ClientPredictedVehicle`.
     pub driving: Option<(i64, Vector2<f32>)>,
+    /// `InputData` flags for keys held down, sent with every `PlayerAuthInput`.
+    pub held_flags: Vec<i32>,
     /// Every `Text` the server sent.
     pub texts: Vec<SeenText>,
     /// Every layer-0 `UpdateBlock`, as position and block network id.
@@ -290,6 +295,7 @@ impl BedrockBot {
             actor_longs: HashMap::new(),
             links: Vec::new(),
             driving: None,
+            held_flags: Vec::new(),
             texts: Vec::new(),
             block_updates: Vec::new(),
             open_container: None,
@@ -1144,12 +1150,11 @@ impl BedrockBot {
         position: Vector3<f32>,
         block_actions: &[(i32, BlockPos, i32)],
     ) -> Result<(), String> {
-        let flags: &[i32] = if self.on_ground {
-            &[INPUT_VERTICAL_COLLISION]
-        } else {
-            &[]
-        };
-        self.send_input_with_flags(position, flags, block_actions)
+        let mut flags = self.held_flags.clone();
+        if self.on_ground {
+            flags.push(INPUT_VERTICAL_COLLISION);
+        }
+        self.send_input_with_flags(position, &flags, block_actions)
             .await
     }
 

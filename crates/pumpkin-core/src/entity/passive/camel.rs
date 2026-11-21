@@ -43,12 +43,17 @@ const MIN_POSE_TICKS: i64 = 20 * 20;
 /// choices, each taking a few seconds.
 const SIT_CHOICE_INTERVAL: i32 = 240;
 
+/// Vanilla `Camel.DASH_COOLDOWN_TICKS`.
+const DASH_COOLDOWN_TICKS: i32 = 55;
+
 /// The camel and the camel husk (vanilla `CamelHusk extends Camel`).
 pub struct CamelEntity {
     pub mob_entity: MobEntity,
     pub ageable_data: AgeableData,
     pub flags: AtomicU8,
     pub dashing: AtomicBool,
+    /// Vanilla `dashCooldown`: ticks until the camel can dash again.
+    pub dash_cooldown: std::sync::atomic::AtomicI32,
     /// Vanilla `LAST_POSE_CHANGE_TICK`: game time of the last pose change, negative while
     /// sitting.
     pub last_pose_tick: AtomicI64,
@@ -72,6 +77,7 @@ impl CamelEntity {
             ageable_data: AgeableData::default(),
             flags: AtomicU8::new(0),
             dashing: AtomicBool::new(false),
+            dash_cooldown: std::sync::atomic::AtomicI32::new(0),
             last_pose_tick: AtomicI64::new(0),
             husk,
         };
@@ -317,6 +323,45 @@ impl Mob for CamelEntity {
 
     fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
         crate::entity::mob::player_steers(self)
+    }
+
+    /// Vanilla `Camel.canJump`: not while sitting or getting up.
+    fn can_rider_jump(&self) -> bool {
+        self.is_saddled()
+            && !self.refuse_to_move()
+            && self.dash_cooldown.load(Ordering::Relaxed) <= 0
+    }
+
+    /// Vanilla `Camel.handleStartJump` with its `executeRidersJump` bookkeeping: the dash sound,
+    /// the dash flag others see, and the cooldown.
+    fn handle_start_jump(&self, _power: i32) {
+        self.mob_entity
+            .living_entity
+            .make_sound(Sound::EntityCamelDash);
+        self.dash_cooldown
+            .store(DASH_COOLDOWN_TICKS, Ordering::Relaxed);
+        self.set_dashing(true);
+    }
+
+    /// Vanilla `Camel.tick`: the cooldown runs down, with a sound when the camel can dash
+    /// again, and the dash ends once it is back on the ground.
+    fn mob_tick(&self, _caller: &dyn crate::entity::EntityBase) {
+        let cooldown = self.dash_cooldown.load(Ordering::Relaxed);
+        if cooldown > 0 {
+            self.dash_cooldown.store(cooldown - 1, Ordering::Relaxed);
+            if cooldown == 1 {
+                self.mob_entity
+                    .living_entity
+                    .make_sound(Sound::EntityCamelDashReady);
+            }
+        }
+        let entity = self.get_entity();
+        if self.is_dashing()
+            && cooldown < DASH_COOLDOWN_TICKS - 5
+            && (entity.on_ground.load(Ordering::Relaxed) || entity.is_in_water())
+        {
+            self.set_dashing(false);
+        }
     }
 
     fn get_sound_volume(&self) -> f32 {

@@ -213,7 +213,12 @@ impl BedrockClient {
             if let Some(vehicle) = vehicle {
                 vehicle.set_paddle_state(paddling_left, paddling_right);
                 Self::steer_vehicle(player, &vehicle, &packet, new_pos.sub(&old_pos));
+                let jumping = input_data.get(InputData::Jumping as usize)
+                    || input_data.get(InputData::JumpDown as usize);
+                self.charge_riding_jump(player, &vehicle, jumping);
             }
+        } else {
+            self.riding_jump_ticks.store(-1, Ordering::Relaxed);
         }
 
         if let Some(block_actions) = packet.block_actions {
@@ -300,6 +305,36 @@ impl BedrockClient {
         if let Some(rotation) = packet.vehicle_rotation {
             // Pitch, then yaw, as in `AddActor`.
             vehicle_entity.set_rotation(rotation.y, rotation.x);
+        }
+    }
+
+    /// A Java client charges its mount's jump while the key is held and sends
+    /// `START_RIDING_JUMP` with the power when it is let go (vanilla `LocalPlayer.aiStep`). A
+    /// Bedrock client charges its own jump bar but tells the server nothing about it, so the
+    /// server counts the held ticks the same way and lets the mount play its part on release.
+    fn charge_riding_jump(
+        &self,
+        player: &Arc<Player>,
+        vehicle: &Arc<dyn EntityBase>,
+        jumping: bool,
+    ) {
+        let in_control = vehicle
+            .get_controlling_passenger()
+            .is_some_and(|rider| rider.get_entity().entity_id == player.entity_id());
+        let Some(mob) = vehicle.get_mob().filter(|_| in_control) else {
+            self.riding_jump_ticks.store(-1, Ordering::Relaxed);
+            return;
+        };
+        let held = self.riding_jump_ticks.load(Ordering::Relaxed);
+        if jumping {
+            self.riding_jump_ticks
+                .store(if held < 0 { 0 } else { held + 1 }, Ordering::Relaxed);
+        } else if held >= 0 {
+            self.riding_jump_ticks.store(-1, Ordering::Relaxed);
+            let power = crate::entity::mob::riding_jump_power(held);
+            if power > 0 && mob.can_rider_jump() {
+                mob.handle_start_jump(power);
+            }
         }
     }
 
