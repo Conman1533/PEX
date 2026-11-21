@@ -60,19 +60,7 @@ pub(super) async fn test_armadillo_rolls_up_near_zombie(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
     build_stone_floor(&helper, 9, 5).await?;
-    // A wall two blocks high keeps the idle armadillo's random strolls inside the box it is
-    // looked for in.
-    for x in 0..9 {
-        for z in 0..5 {
-            if x == 0 || x == 8 || z == 0 || z == 4 {
-                for y in 1..3 {
-                    helper
-                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
-                        .await?;
-                }
-            }
-        }
-    }
+    build_pen_wall(&helper, 9, 5).await?;
     helper
         .spawn_entity_at("minecraft:armadillo", Vector3::new(2.5, 1.0, 2.5))
         .await?;
@@ -120,11 +108,13 @@ pub(super) async fn test_armadillo_rolls_up_near_zombie(
 /// camel to a player holding cactus and stops it 3.5 blocks short.
 pub(super) async fn test_camel_follows_cactus(helper: GameTestHelper) -> GameTestResult<()> {
     build_stone_floor(&helper, 13, 5).await?;
+    build_pen_wall(&helper, 13, 5).await?;
     helper
         .spawn_mock_player_at("minecraft:cactus", Vector3::new(11.5, 1.0, 2.5))
         .await?;
     helper
-        .spawn_entity_at("minecraft:camel", Vector3::new(1.5, 1.0, 2.5))
+        // Clear of the wall: a camel is 1.7 blocks wide.
+        .spawn_entity_at("minecraft:camel", Vector3::new(2.5, 1.0, 2.5))
         .await?;
 
     let near_player_min = BlockPos::new(6, 1, 0);
@@ -181,5 +171,22 @@ pub(super) async fn test_husk_rider_steers_camel_husk_to_target(
                 .await
         })
         .then_succeed();
+    Ok(())
+}
+
+/// A stone wall two blocks high around the edge of a `width` by `depth` floor, which keeps a
+/// mob's random strolls inside the box a test looks for it in.
+async fn build_pen_wall(helper: &GameTestHelper, width: i32, depth: i32) -> GameTestResult<()> {
+    for x in 0..width {
+        for z in 0..depth {
+            if x == 0 || x == width - 1 || z == 0 || z == depth - 1 {
+                for y in 1..3 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
     Ok(())
 }
