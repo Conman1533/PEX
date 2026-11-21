@@ -745,15 +745,35 @@ impl Player {
             return;
         }
         let player = Arc::downgrade(self);
+        let name = self.gameprofile.name.clone();
         server.spawn_task(async move {
             let Some(skin) = Self::fetch_skin(&properties).await else {
+                tracing::debug!(
+                    "Could not fetch {name}'s Java skin for Bedrock players; they see the default"
+                );
                 return;
             };
             let Some(player) = player.upgrade() else {
                 return;
             };
             player.bedrock_skin.store(Arc::new(skin.clone()));
-            player.world().broadcast_bedrock_packet(
+            let world = player.world();
+            let viewers = world
+                .players
+                .load()
+                .iter()
+                .filter(|other| {
+                    other.gameprofile.id != player.gameprofile.id
+                        && matches!(other.client.as_ref(), ClientPlatform::Bedrock(_))
+                })
+                .count();
+            tracing::debug!(
+                "Fetched {name}'s Java skin ({}x{}, {}); sending it to {viewers} Bedrock players",
+                skin.image_width,
+                skin.image_height,
+                skin.arm_size
+            );
+            world.broadcast_bedrock_packet(
                 &[player.gameprofile.id],
                 &pumpkin_protocol::bedrock::client::CPlayerSkin {
                     uuid: player.gameprofile.id,
