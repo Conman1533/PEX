@@ -123,6 +123,48 @@ fn remove_dead_keys(document: &mut DocumentMut) -> Vec<String> {
     migration::remove_keys(document, DEAD_KEYS)
 }
 
+/// Upstream Pumpkin's issue tracker, which PEX 1.x wrote as `server_links.bug_report`.
+const UPSTREAM_BUG_REPORT: &str = "https://github.com/Pumpkin-MC/Pumpkin/issues";
+
+/// `config_version` 5 (D3-5): telemetry reports to upstream Pumpkin, which PEX is not, so it is
+/// turned off where a file has it on. A generated `true` can't be told apart from one an admin
+/// chose, so the log line says how to turn it back on. The link to upstream's issue tracker that
+/// PEX 1.x wrote as the bug report link is cleared; a link the admin set is kept.
+fn turn_off_upstream_defaults(document: &mut DocumentMut) -> Vec<String> {
+    let mut changes = Vec::new();
+    if let Some(value) = document
+        .get_mut("telemetry")
+        .and_then(|telemetry| telemetry.get_mut("enabled"))
+        .and_then(toml_edit::Item::as_value_mut)
+        && value.as_bool() == Some(true)
+    {
+        let decor = value.decor().clone();
+        *value = false.into();
+        *value.decor_mut() = decor;
+        changes.push(
+            "set telemetry.enabled = false, as PEX no longer reports to upstream Pumpkin unless \
+             asked; set it to true again to keep reporting"
+                .to_owned(),
+        );
+    }
+    if let Some(value) = document
+        .get_mut("server_links")
+        .and_then(|links| links.get_mut("bug_report"))
+        .and_then(toml_edit::Item::as_value_mut)
+        && value.as_str() == Some(UPSTREAM_BUG_REPORT)
+    {
+        let decor = value.decor().clone();
+        *value = "".into();
+        *value.decor_mut() = decor;
+        changes.push(
+            "cleared server_links.bug_report, which pointed players at upstream Pumpkin's issue \
+             tracker"
+                .to_owned(),
+        );
+    }
+    changes
+}
+
 impl LoadConfiguration for PumpkinConfig {
     const MIGRATIONS: &'static [Migration] = &[
         Migration {
@@ -136,6 +178,10 @@ impl LoadConfiguration for PumpkinConfig {
         Migration {
             version: VANILLA_PLAYER_FILES_VERSION,
             step: Step::ServerFiles,
+        },
+        Migration {
+            version: 5,
+            step: Step::Config(turn_off_upstream_defaults),
         },
     ];
 
@@ -411,7 +457,8 @@ impl PendingSave {
                 &mut messages,
             ),
             None => {
-                if let Err(err) = fs::write(&self.path, self.document.to_string()) {
+                if let Err(err) = migration::write_atomically(&self.path, self.document.to_string())
+                {
                     messages.push(LoadMessage::Warn(format!(
                         "Couldn't write default config to {:?}. Reason: {}",
                         self.path.display(),
@@ -605,6 +652,75 @@ fn line_and_column(text: &str, offset: usize) -> (usize, usize) {
     (before.matches('\n').count() + 1, line.chars().count() + 1)
 }
 
+/// Sets the dotted `key` in the TOML file at `path` to `value` and saves it through
+/// [`migration::write_atomically`]. Returns whether the file changed.
+///
+/// Like vanilla `DedicatedServerSettings.update` for `server.properties` (D3-4): the rest of the
+/// file, its comments, order and spacing included, stays as it is, and the value keeps the
+/// comment after it. A missing key is added to its table.
+pub fn set_config_key<T: Serialize>(path: &Path, key: &str, value: &T) -> std::io::Result<bool> {
+    let invalid = |err: String| std::io::Error::new(std::io::ErrorKind::InvalidData, err);
+    let text = fs::read_to_string(path)?;
+    let mut document: DocumentMut = text
+        .parse()
+        .map_err(|err: toml_edit::TomlError| invalid(err.to_string()))?;
+    let new: toml_edit::Value = toml::Value::try_from(value)
+        .map_err(|err| invalid(err.to_string()))?
+        .to_string()
+        .parse()
+        .map_err(|err: toml_edit::TomlError| invalid(err.to_string()))?;
+    let (parents, last) = key
+        .rsplit_once('.')
+        .map_or((None, key), |(p, l)| (Some(p), l));
+    let mut table: &mut dyn toml_edit::TableLike = document.as_table_mut();
+    for part in parents.into_iter().flat_map(|parents| parents.split('.')) {
+        table = table
+            .entry(part)
+            .or_insert_with(toml_edit::table)
+            .as_table_like_mut()
+            .ok_or_else(|| invalid(format!("{part} in {key} is not a table")))?;
+    }
+    match table.get_mut(last).and_then(toml_edit::Item::as_value_mut) {
+        Some(old) if old.clone().decorated("", "").to_string() == new.to_string() => {
+            return Ok(false);
+        }
+        Some(old) => {
+            let decor = old.decor().clone();
+            *old = new;
+            *old.decor_mut() = decor;
+        }
+        None => {
+            table.insert(last, toml_edit::value(new));
+        }
+    }
+    migration::write_atomically(path, document.to_string())?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod set_config_key_tests {
+    use super::set_config_key;
+
+    #[test]
+    fn set_key_changes_only_that_line() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("pumpkin.toml");
+        let original = "# Survival server\nwhite_list = false # turned on by command\n\n\
+                        [networking.java]\nmotd = \"Hi\"\nmax_players = 20\n";
+        std::fs::write(&path, original).unwrap();
+
+        assert!(set_config_key(&path, "white_list", &true).unwrap());
+        assert!(set_config_key(&path, "networking.java.max_players", &30u32).unwrap());
+        assert!(!set_config_key(&path, "networking.java.motd", &"Hi").unwrap());
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        let expected = original
+            .replace("white_list = false", "white_list = true")
+            .replace("max_players = 20", "max_players = 30");
+        assert_eq!(written, expected);
+    }
+}
+
 /// Backs the file up as it was, then writes the migrated document in its place.
 fn save_migrated(
     path: &Path,
@@ -616,17 +732,19 @@ fn save_migrated(
 ) {
     let file_name = file_name(path);
     match migration::write_backup(path, original, version) {
-        Ok(backup) => {
-            messages.push(LoadMessage::Info(format!(
+        Ok(backup) => match migration::write_atomically(path, document.to_string()) {
+            Ok(()) => messages.push(LoadMessage::Info(format!(
                 "Saved a copy of {file_name} as {} before changing it",
                 backup.file_name().unwrap_or_default().to_string_lossy()
-            )));
-            if let Err(err) = fs::write(path, document.to_string()) {
+            ))),
+            Err(err) => {
+                // The file is unchanged, so its copy would only pile up at every start.
+                let _ = fs::remove_file(&backup);
                 messages.push(LoadMessage::Warn(format!(
-                    "Couldn't write the updated {file_name}: {err}. The changes below apply until the next start."
+                    "Couldn't write the updated {file_name}, so it was left unchanged: {err}. The changes below apply until the next start."
                 )));
             }
-        }
+        },
         Err(err) => messages.push(LoadMessage::Warn(format!(
             "Couldn't back up {file_name}, so it was left unchanged: {err}. The changes below apply until the next start."
         ))),

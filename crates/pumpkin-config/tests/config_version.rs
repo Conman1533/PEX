@@ -27,6 +27,11 @@ const DEAD_KEYS: [(&str, &str); 8] = [
     ("pvp", "swing"),
 ];
 
+/// The keys `config_version` 5 changes when they hold the defaults that pointed at upstream, as
+/// table and key.
+const UPSTREAM_DEFAULTS: [(&str, &str); 2] =
+    [("telemetry", "enabled"), ("server_links", "bug_report")];
+
 fn load_file(dir: &Path, contents: &str) -> (PumpkinConfig, Vec<LoadMessage>, Option<PendingSave>) {
     fs::write(dir.join("pumpkin.toml"), contents).unwrap();
     PumpkinConfig::load(dir).unwrap()
@@ -84,6 +89,14 @@ fn release_files_migrate_to_the_current_version() {
             ))
         }));
         expected.extend([
+            info(
+                "pumpkin.toml: set telemetry.enabled = false, as PEX no longer reports to upstream \
+                 Pumpkin unless asked; set it to true again to keep reporting",
+            ),
+            info(
+                "pumpkin.toml: cleared server_links.bug_report, which pointed players at upstream \
+                 Pumpkin's issue tracker",
+            ),
             info("pumpkin.toml: added [world.entity_islands] with default values"),
             info("pumpkin.toml: added networking.java.validate_player_names = true"),
             info("pumpkin.toml: added networking.bedrock.combat_cooldown = true"),
@@ -114,6 +127,7 @@ fn release_files_migrate_to_the_current_version() {
             let key = line.split_once(" = ").map_or("", |(key, _)| key);
             if removed.contains(&&(header, key))
                 || header == "networking.java.authentication.textures.types"
+                || UPSTREAM_DEFAULTS.contains(&(header, key))
             {
                 continue;
             }
@@ -123,6 +137,16 @@ fn release_files_migrate_to_the_current_version() {
             );
         }
         assert!(!migrated.contains("write_in_place"), "{release}");
+        assert_eq!(
+            table["telemetry"]["enabled"].as_bool(),
+            Some(false),
+            "{release}"
+        );
+        assert_eq!(
+            table["server_links"]["bug_report"].as_str(),
+            Some(""),
+            "{release}"
+        );
         assert_eq!(
             config.basic.seed.0.to_string(),
             table["seed"].as_str().unwrap(),
@@ -291,4 +315,57 @@ fn inline_chunk_table_loses_write_in_place() {
             "chunk = { type = \"anvil\" }",
         )
     );
+}
+
+#[test]
+fn version_5_keeps_a_chosen_bug_report_link_and_comments() {
+    let dir = TempDir::new().unwrap();
+    let file = format!(
+        "{CONFIG_VERSION_KEY} = 4\n\n[server_links]\nbug_report = \"https://example.org/bugs\"\n\n\
+         [telemetry]\nenabled = true # on for the community directory\n"
+    );
+    fs::write(dir.path().join("pumpkin.toml"), &file).unwrap();
+    let messages = load_and_save(dir.path());
+    assert!(
+        messages.iter().all(
+            |message| !matches!(message, LoadMessage::Info(line) if line.contains("bug_report"))
+        ),
+        "{messages:?}"
+    );
+    let migrated = read(dir.path(), "pumpkin.toml");
+    assert!(
+        migrated.contains("bug_report = \"https://example.org/bugs\""),
+        "{migrated}"
+    );
+    assert!(
+        migrated.contains("enabled = false # on for the community directory"),
+        "{migrated}"
+    );
+}
+
+#[test]
+fn failed_write_leaves_the_file_and_no_new_backup() {
+    let dir = TempDir::new().unwrap();
+    let (_, original) = RELEASE_FILES[2];
+    fs::write(dir.path().join("pumpkin.toml"), original).unwrap();
+    // Root ignores file modes, so a directory in the way is what makes the write fail.
+    fs::create_dir(pumpkin_config::migration::temp_path(
+        &dir.path().join("pumpkin.toml"),
+    ))
+    .unwrap();
+    for start in 0..2 {
+        let messages = load_and_save(dir.path());
+        let warnings = messages
+            .iter()
+            .filter(|message| matches!(message, LoadMessage::Warn(_)))
+            .count();
+        assert_eq!(warnings, 1, "start {start}: {messages:?}");
+        assert_eq!(read(dir.path(), "pumpkin.toml"), original, "start {start}");
+        let backups: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+            .collect();
+        assert!(backups.is_empty(), "start {start}: {backups:?}");
+    }
 }
