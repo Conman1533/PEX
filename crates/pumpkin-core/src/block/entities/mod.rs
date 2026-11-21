@@ -527,7 +527,12 @@ mod test {
         kept_keys.sort_unstable();
         assert_eq!(
             kept_keys,
-            ["components", "keepPacked", "mymod:charge", "speed_multiplier"]
+            [
+                "components",
+                "keepPacked",
+                "mymod:charge",
+                "speed_multiplier"
+            ]
         );
 
         let mut written = NbtCompound::new();

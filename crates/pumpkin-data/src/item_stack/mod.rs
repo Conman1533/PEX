@@ -1021,7 +1021,10 @@ mod tests {
         effect.put_bool("show_icon", true);
         let mut expected = NbtCompound::new();
         expected.put_string("potion", "minecraft:awkward".to_string());
-        expected.put("custom_effects", NbtTag::List(vec![NbtTag::Compound(effect)]));
+        expected.put(
+            "custom_effects",
+            NbtTag::List(vec![NbtTag::Compound(effect)]),
+        );
         assert_eq!(contents.write_data(), NbtTag::Compound(expected));
 
         let bare = PotionContentsImpl::read_data(&NbtTag::String("minecraft:awkward".into()))
