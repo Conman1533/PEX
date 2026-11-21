@@ -1,9 +1,10 @@
 use crate::entity::player::{DATA_VERSION, Player};
+use crate::world::World;
 use dashmap::{DashMap, DashSet};
 use pumpkin_data::dimension::Dimension;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
-use pumpkin_util::math::{position::BlockPos, vector2::Vector2};
+use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
 use pumpkin_world::world_info::data_files::{read_data_file, write_data_file};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -226,13 +227,27 @@ impl MapData {
         }
     }
 
+    /// Whether a holder in `dimension` draws on this map: vanilla `MapItem.inventoryTick` skips
+    /// a locked map, and `MapItem.update` a map of another dimension.
+    #[must_use]
+    pub fn updates_in(&self, dimension: &Dimension) -> bool {
+        !self.locked && self.dimension.minecraft_name == dimension.minecraft_name
+    }
+
     pub fn update(&mut self, player: &Player) {
         let world = player.world();
+        self.update_from(&world, player.position());
+    }
+
+    /// Vanilla `MapItem.update`: draws the area around a holder at `player_pos` in `world`.
+    pub fn update_from(&mut self, world: &World, player_pos: Vector3<f64>) {
+        if !self.updates_in(&world.dimension) {
+            return;
+        }
         let scale = 1 << self.scale;
         let center_x = self.center_x;
         let center_z = self.center_z;
 
-        let player_pos = player.position();
         let player_x = player_pos.x as i32;
         let player_z = player_pos.z as i32;
 
@@ -336,6 +351,27 @@ mod tests {
                 .get_int("map"),
             Some(2)
         );
+    }
+
+    #[tokio::test]
+    async fn only_an_unlocked_map_of_the_holders_dimension_updates() {
+        let world = crate::world::test_world();
+        let pos = Vector3::new(0.5, 64.0, 0.5);
+
+        let mut map = MapData::new(Dimension::OVERWORLD.clone(), 0, 0, 0);
+        map.update_from(&world, pos);
+        assert!(map.fully_updated);
+
+        let mut locked = MapData::new(Dimension::OVERWORLD.clone(), 0, 0, 0);
+        locked.locked = true;
+        locked.update_from(&world, pos);
+        assert!(!locked.fully_updated);
+
+        let mut nether = MapData::new(Dimension::THE_NETHER.clone(), 0, 0, 0);
+        nether.update_from(&world, pos);
+        assert!(!nether.fully_updated);
+        assert!(!nether.updates_in(&Dimension::OVERWORLD));
+        assert!(nether.updates_in(&Dimension::THE_NETHER));
     }
 
     #[test]
