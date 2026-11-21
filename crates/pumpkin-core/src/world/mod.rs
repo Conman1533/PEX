@@ -393,6 +393,7 @@ impl World {
             })
             .unwrap_or_else(|| Worldborder::new(0.0, 0.0, 5.999_996_8E7, 0, 5, 300));
         let forced_chunks = saved_data::load_forced_chunks(&level.level_folder.dim_folder);
+        let raids = saved_data::load_raids(&level.level_folder.dim_folder);
         let scoreboard = scoreboard::shared_scoreboard(&level.level_folder.root_folder);
 
         let custom_data_path = level
@@ -442,7 +443,7 @@ impl World {
             unsent_block_changes: std::sync::Mutex::new(HashMap::new()),
             portal_poi: std::sync::Mutex::new(portal_poi),
             villager_poi: std::sync::Mutex::new(villager_poi::VillagerPoiStorage::default()),
-            raids: std::sync::Mutex::new(raid::Raids::default()),
+            raids: std::sync::Mutex::new(raids),
             dragon_fight,
             spawn_state: ArcSwap::new(Arc::new(SpawnState::empty())),
             active_chunks: RwLock::new(Arc::default()),
@@ -689,6 +690,16 @@ impl World {
             .clone();
         if let Err(e) = saved_data::save_forced_chunks(folder, &forced) {
             error!("Failed to save forced chunks: {e}");
+        }
+        let saved = saved_data::save_raids(
+            folder,
+            &self
+                .raids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        if let Err(e) = saved {
+            error!("Failed to save raids: {e}");
         }
         // The scoreboard belongs to the save, so only the overworld writes it.
         if self.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name {
