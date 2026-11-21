@@ -111,6 +111,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:redstone_repeater_delay_4_ticks",
     "pumpkin:redstone_repeater_locking_holds_off",
     "pumpkin:redstone_repeater_locking_holds_on",
+    "pumpkin:redstone/repeater_lock_updates_front",
     // comparators_extended (14)
     "pumpkin:comparator_composter_levels_1_to_4",
     "pumpkin:comparator_composter_levels_5_to_8",
@@ -898,6 +899,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             redstone_logic_circuits::test_redstone_repeater_locking_holds_on,
+        );
+        register_function_test(
+            "pumpkin:redstone/repeater_lock_updates_front",
+            "pumpkin:empty_5x4x5",
+            30,
+            0,
+            redstone_logic_circuits::test_repeater_lock_updates_front,
         );
 
         // comparators_extended (14)
