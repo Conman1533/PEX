@@ -6,6 +6,7 @@ use pumpkin_data::dimension::Dimension;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
+use pumpkin_world::chunk_system::ChunkLoading;
 use pumpkin_world::world::BlockFlags;
 
 use super::World;
@@ -227,23 +228,18 @@ impl PortalType {
                     approximate_exit_pos,
                 )
                 .or_else(|| {
-                    // Ensure the chunks around approximate_exit_pos are generated/loaded in dest_world
+                    // Ensure the chunks around approximate_exit_pos are generated/loaded in
+                    // dest_world, and stay loaded until the new portal is built in them.
+                    let chunks = ChunkHold::around(Vector2::new(
+                        approximate_exit_pos.0.x >> 4,
+                        approximate_exit_pos.0.z >> 4,
+                    ));
+                    let _hold = ChunkHold::new(&dest_world, chunks.clone());
                     if let Ok(handle) = tokio::runtime::Handle::try_current() {
                         tokio::task::block_in_place(|| {
                             handle.block_on(async {
-                                let center_chunk = Vector2::new(
-                                    approximate_exit_pos.0.x >> 4,
-                                    approximate_exit_pos.0.z >> 4,
-                                );
-                                for dx in -1..=1 {
-                                    for dz in -1..=1 {
-                                        let chunk_pos =
-                                            Vector2::new(center_chunk.x + dx, center_chunk.y + dz);
-                                        dest_world
-                                            .level
-                                            .get_or_fetch_chunk(chunk_pos, |_| ())
-                                            .await;
-                                    }
+                                for &chunk_pos in &chunks {
+                                    dest_world.level.get_or_fetch_chunk(chunk_pos, |_| ()).await;
                                 }
                             });
                         });
@@ -299,6 +295,59 @@ impl PortalType {
                 })
             }
         }
+    }
+}
+
+/// Chunk tickets held while an exit portal is looked for or built, released on drop.
+///
+/// `get_or_fetch_chunk` drops its own ticket as soon as the chunk arrives, so the chunk loader
+/// can unload the chunk again before the synchronous reads and writes of the portal search and
+/// build reach it. The search then sees air where a portal or the ground is, and the new
+/// portal's blocks are written into nothing, so the traveller arrives with no portal. Vanilla
+/// holds a `TicketType.PORTAL` ticket around the exit for the same reason.
+pub(super) struct ChunkHold {
+    world: Arc<World>,
+    chunks: Vec<Vector2<i32>>,
+}
+
+impl ChunkHold {
+    pub(super) fn new(world: &Arc<World>, chunks: Vec<Vector2<i32>>) -> Self {
+        let mut loading = world
+            .level
+            .chunk_loading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for &chunk in &chunks {
+            loading.add_ticket(chunk, ChunkLoading::FULL_CHUNK_LEVEL);
+        }
+        loading.send_change();
+        drop(loading);
+        Self {
+            world: world.clone(),
+            chunks,
+        }
+    }
+
+    /// The chunk and its eight neighbours.
+    pub(super) fn around(center: Vector2<i32>) -> Vec<Vector2<i32>> {
+        (-1..=1)
+            .flat_map(|dx| (-1..=1).map(move |dz| Vector2::new(center.x + dx, center.y + dz)))
+            .collect()
+    }
+}
+
+impl Drop for ChunkHold {
+    fn drop(&mut self) {
+        let mut loading = self
+            .world
+            .level
+            .chunk_loading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for &chunk in &self.chunks {
+            loading.remove_ticket(chunk, ChunkLoading::FULL_CHUNK_LEVEL);
+        }
+        loading.send_change();
     }
 }
 
