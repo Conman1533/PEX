@@ -520,28 +520,21 @@ impl NetherPortal {
 
         let mut candidate_chunks: Vec<Vector2<i32>> = Vec::new();
         for pos in &portal_positions {
-            let chunk = Vector2::new(pos.0.x >> 4, pos.0.z >> 4);
-            if !candidate_chunks.contains(&chunk) {
-                candidate_chunks.push(chunk);
+            for chunk in super::ChunkHold::around(Vector2::new(pos.0.x >> 4, pos.0.z >> 4)) {
+                if !candidate_chunks.contains(&chunk) {
+                    candidate_chunks.push(chunk);
+                }
             }
         }
+        // Held until the candidates are checked below.
+        let _hold = super::ChunkHold::new(world, candidate_chunks.clone());
         if !candidate_chunks.is_empty()
             && let Ok(handle) = tokio::runtime::Handle::try_current()
         {
             tokio::task::block_in_place(|| {
                 handle.block_on(async {
-                    for chunk in &candidate_chunks {
-                        for dx in -1..=1 {
-                            for dz in -1..=1 {
-                                world
-                                    .level
-                                    .get_or_fetch_chunk(
-                                        Vector2::new(chunk.x + dx, chunk.y + dz),
-                                        |_| (),
-                                    )
-                                    .await;
-                            }
-                        }
+                    for &chunk in &candidate_chunks {
+                        world.level.get_or_fetch_chunk(chunk, |_| ()).await;
                     }
                 });
             });
