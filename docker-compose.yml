@@ -5,7 +5,12 @@ services:
     #image: ghcr.io/pumpkin-mc/pumpkin:master
     build: .
     ports:
+      # Java Edition.
       - "25565:25565"
+      # Bedrock Edition: signaling over TCP, then WebRTC over UDP, both on 19132. The
+      # server tells clients its own UDP port, so keep the host and container ports equal;
+      # to use another port, change networking.bedrock.nethernet.address to match.
+      - "19132:19132/tcp"
       - "19132:19132/udp"
     volumes:
       # Pumpkin runs as UID/GID 2613. On Linux hosts, make sure the data
