@@ -69,6 +69,48 @@ pub(super) async fn test_redstone_double_inverter_buffer(
     Ok(())
 }
 
+/// G5-13: a torch whose support is powered eight times within 60 ticks burns out. Vanilla
+/// `RedstoneTorchBlock.tick` keeps it off once the power goes, until its restart tick 160 ticks
+/// later lights it again.
+pub(super) async fn test_torch_burnout(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let support = BlockPos::new(2, 0, 2);
+    let torch = BlockPos::new(2, 1, 2);
+    helper
+        .set_block_default(&torch, &Block::REDSTONE_TORCH)
+        .await?;
+
+    // Each cycle powers the support (the torch turns off 2 ticks later) and unpowers it again.
+    let mut sequence = helper.start_sequence();
+    for _ in 0..8 {
+        sequence = sequence
+            .then_execute(move |helper| async move {
+                helper
+                    .set_block_default(&support, &Block::REDSTONE_BLOCK)
+                    .await
+            })
+            .then_idle(3)
+            .then_execute(move |helper| async move {
+                helper.set_block_default(&support, &Block::STONE).await
+            })
+            .then_idle(3);
+    }
+    sequence
+        .then_idle(10)
+        .then_execute(move |helper| async move {
+            let lit =
+                RedstoneOreLikeProperties::from_state_id(helper.block_state_id(&torch).await).lit;
+            helper.assert_true(!lit, "the torch should stay burnt out with its power gone")
+        })
+        .then_wait_until(move |helper| async move {
+            let lit =
+                RedstoneOreLikeProperties::from_state_id(helper.block_state_id(&torch).await).lit;
+            helper.assert_true(lit, "the torch should light again after its restart delay")
+        })
+        .then_succeed();
+    Ok(())
+}
+
 pub(super) async fn test_redstone_wall_torch_inverter(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {

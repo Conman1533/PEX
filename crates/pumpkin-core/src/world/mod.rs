@@ -251,6 +251,9 @@ pub struct World {
     pub min_y: i32,
     /// The world's weather, including rain and thunder levels.
     pub weather: std::sync::Mutex<Weather>,
+    /// Vanilla `RedstoneTorchBlock.RECENT_TOGGLES`: each torch that turned off, with the game time,
+    /// oldest first.
+    pub(crate) recent_torch_toggles: std::sync::Mutex<std::collections::VecDeque<(BlockPos, i64)>>,
     /// Block Behaviour
     pub block_registry: Arc<BlockRegistry>,
     pub server: Weak<Server>,
@@ -442,6 +445,7 @@ impl World {
             level_time: std::sync::Mutex::new(level_time),
             dimension,
             weather: std::sync::Mutex::new(weather),
+            recent_torch_toggles: std::sync::Mutex::new(std::collections::VecDeque::new()),
             block_registry,
             sea_level: generation_settings.sea_level,
             min_y: i32::from(generation_settings.shape.min_y),
