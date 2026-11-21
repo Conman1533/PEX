@@ -1,6 +1,7 @@
 use piston::PistonBlock;
 use pumpkin_data::Block;
 use pumpkin_data::BlockDirection;
+use pumpkin_data::BlockState;
 use pumpkin_data::block_state::PistonBehavior;
 use pumpkin_util::math::position::BlockPos;
 
@@ -52,6 +53,8 @@ impl<'a> PistonHandler<'a> {
         let (block, block_state) = self.world.get_block_and_state(&self.pos_to);
 
         if !PistonBlock::is_movable(
+            self.world,
+            &self.pos_to,
             block,
             block_state,
             self.motion_direction,
@@ -96,12 +99,32 @@ impl<'a> PistonHandler<'a> {
             || (!self.retracted && pos == self.pos_from.offset(self.piston_direction.to_offset()))
     }
 
+    /// [`PistonBlock::is_movable`] for a block this piston moves.
+    fn can_move(
+        &self,
+        pos: &BlockPos,
+        block: &Block,
+        state: &BlockState,
+        can_break: bool,
+        piston_dir: BlockDirection,
+    ) -> bool {
+        PistonBlock::is_movable(
+            self.world,
+            pos,
+            block,
+            state,
+            self.motion_direction,
+            can_break,
+            piston_dir,
+        )
+    }
+
     fn try_move(&mut self, pos: BlockPos, dir: BlockDirection) -> bool {
         let (mut block, block_state) = self.world.get_block_and_state(&pos);
         if block_state.is_air() {
             return true;
         }
-        if !PistonBlock::is_movable(block, block_state, self.motion_direction, false, dir) {
+        if !self.can_move(&pos, block, block_state, false, dir) {
             return true;
         }
         if self.is_piston_head_or_base(pos) {
@@ -120,10 +143,10 @@ impl<'a> PistonHandler<'a> {
             let (next_block, next_state) = self.world.get_block_and_state(&block_pos);
             if next_state.is_air()
                 || !Self::is_adjacent_block_stuck(block2, next_block)
-                || !PistonBlock::is_movable(
+                || !self.can_move(
+                    &block_pos,
                     next_block,
                     next_state,
-                    self.motion_direction,
                     false,
                     self.motion_direction.opposite(),
                 )
@@ -166,13 +189,8 @@ impl<'a> PistonHandler<'a> {
             {
                 return true;
             }
-            if !PistonBlock::is_movable(
-                block,
-                block_state,
-                self.motion_direction,
-                true,
-                self.motion_direction,
-            ) || self.is_piston_head_or_base(block_pos2)
+            if !self.can_move(&block_pos2, block, block_state, true, self.motion_direction)
+                || self.is_piston_head_or_base(block_pos2)
             {
                 return false;
             }

@@ -51,6 +51,69 @@ pub(super) async fn test_piston_pushes_upward_and_retracts(
     Ok(())
 }
 
+/// G5-08: a lit torch under a piston that faces down powers only the piston's face, which vanilla
+/// `PistonBaseBlock.getNeighborSignal` never counts, so the piston stays in.
+pub(super) async fn test_piston_ignores_power_into_face(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let piston = BlockPos::new(2, 2, 2);
+    let torch = BlockPos::new(2, 1, 2);
+    let retracted = piston_state(&Block::PISTON, Facing::Down);
+
+    helper.set_block(&piston, retracted).await?;
+    helper
+        .set_block_default(&torch, &Block::REDSTONE_TORCH)
+        .await?;
+
+    helper
+        .start_sequence()
+        .then_execute_for(10, move |helper| async move {
+            helper.assert_block_state(&piston, retracted).await?;
+            helper
+                .assert_block_present(&torch, &Block::REDSTONE_TORCH)
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// The top block of the tester's overworld.
+const TOP_Y: i32 = 319;
+
+/// G5-08: a powered piston under a block at the top of the world stays in, as vanilla
+/// `PistonBaseBlock.isPushable` won't move a block up out of the world.
+pub(super) async fn test_piston_stops_at_build_limit(helper: GameTestHelper) -> GameTestResult<()> {
+    let top = TOP_Y - helper.absolute_pos(&BlockPos::new(0, 0, 0)).0.y;
+    let cargo = BlockPos::new(1, top, 1);
+    let piston = BlockPos::new(1, top - 1, 1);
+    let power = BlockPos::new(2, top - 1, 1);
+    let retracted = piston_state(&Block::PISTON, Facing::Up);
+
+    helper.set_block_default(&cargo, &Block::GOLD_BLOCK).await?;
+    helper.set_block(&piston, retracted).await?;
+    helper
+        .set_block_default(&power, &Block::REDSTONE_BLOCK)
+        .await?;
+
+    helper
+        .start_sequence()
+        .then_execute_for(10, move |helper| async move {
+            helper.assert_block_state(&piston, retracted).await?;
+            helper
+                .assert_block_present(&cargo, &Block::GOLD_BLOCK)
+                .await
+        })
+        .then_execute(move |helper| async move {
+            for pos in [power, piston, cargo] {
+                helper.set_block_default(&pos, &Block::AIR).await?;
+            }
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}
+
 pub(super) async fn test_piston_pushes_downward_and_retracts(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
