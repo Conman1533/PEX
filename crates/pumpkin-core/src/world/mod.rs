@@ -857,7 +857,9 @@ impl World {
         let mut groups: FxHashMap<Vector2<i32>, Vec<NbtCompound>> = FxHashMap::default();
         for entity in entities {
             let base_entity = entity.get_entity();
-            if base_entity.is_removed() {
+            // Vanilla `EntityType.canSerialize`: leash knots, lightning bolts, fishing bobbers and
+            // the like are never saved.
+            if base_entity.is_removed() || !base_entity.entity_type.saveable {
                 continue;
             }
             let mut nbt = NbtCompound::new();

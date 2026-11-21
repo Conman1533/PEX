@@ -42,197 +42,58 @@ data/minecraft/scoreboard.dat data.Teams[*].SeeFriendlyInvisibles G7-15; first r
 # Visible since G7-05, when vanilla stopped reading the lab's sections as air and kept its block
 # entities.
 
-# G7-24: entity keys (D7-1), or values that changed while the entity ticked
 dimensions/minecraft/*/entities/*.mca - ticking: an entity chunk appears or goes (a campfire popped its beef in step 3 of the 2026-11-20 G7-05 run)
-dimensions/minecraft/*/entities/*.mca Entities[*] G7-24; first run: step 2: 2 lost
-# G7-24: entities in force-loaded chunks now go live in PEX without a player, so PEX
-# saves them through its own entity model instead of passing their NBT through
-dimensions/minecraft/*/entities/*.mca Entities[*].AX G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].anchor_pos G7-24; PEX writes an anchor ([0,5,0]) for a phantom vanilla saved without one; 2026-11-21 batch 7 run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].AY G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].AZ G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].AgeLocked G7-24; first run: step 1: 5 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].AttackTick G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Brain G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Brain.memories."minecraft:meeting_point" G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Bred G7-24; first run: step 1: 11 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].CanBreakDoors G7-24; first run: step 1: 5 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].CanPickUpLoot G7-24; first run: step 1: 92 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].CannotBeHunted G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].CannotHunt G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Color G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Command G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Count G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].CustomNameVisible G7-24; first run: step 1: 150 added
-dimensions/minecraft/*/entities/*.mca Entities[*].DarkTicksRemaining G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].DashCooldown G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].DealtDamage G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Delay G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].DropSeedAtTick G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].DrownedConversionTime G7-24; first run: step 1: 5 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Duration G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].DurationOnUse G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].EatingHaystack G7-24; first run: step 1: 11 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].FallDistance G7-24; first run: step 1: 99 added
-dimensions/minecraft/*/entities/*.mca Entities[*].FlippedRotation G7-24; first run: step 1: 9 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].FoodLevel G7-24; first run: step 1: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].ForcedAge G7-24; first run: step 1: 5 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].FreezingTime G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].FromBucket G7-24; first run: step 1: 4 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Gossips G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].HasEgg G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].HasTicked G7-24; first run: step 1: 9 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Health G7-24; first run: step 1: 3 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].HurtTime G7-24; first run: step 1: 3 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].InWaterTime G7-24; first run: step 1: 5 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Inventory G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Inventory[*].components G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].IsBaby G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].IsImmuneToZombification G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].IsTame G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Item.components G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Items G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Items[*].components G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].LastPoseTick G7-24; first run: step 1: 3 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].LeftHanded G7-24; first run: step 1: 97 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Lifetime G7-24; first run: step 1: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].MaxNearbyEntities G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].MaxSpawnDelay G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].MinSpawnDelay G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].NoBasePlate G7-24; first run: step 1: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].buy.components G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].demand G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].rewardExp G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].sell.components G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].specialPrice G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].OnGround G7-24; first run: step 1: 12 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Passengers G7-24; first run: step 1: 6 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Peek G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].PeekAmount G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].PierceLevel G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].PersistenceRequired G7-24; first run: step 2: 4 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pose.Body G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pose.LeftArm G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pose.LeftLeg G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pose.RightArm G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pose.RightLeg G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Radius G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].RadiusOnUse G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].RadiusPerTick G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].ReapplicationDelay G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].RequiredPlayerRange G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].RoarTick G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Saddle G7-24; first run: step 1: 6 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Saddled G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].ShowBottom G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Silent G7-24; first run: step 1: 149 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Sitting G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Size G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].SkeletonTrap G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SkeletonTrapTime G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SoundEvent G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SpawnCount G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SpawnData G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SpawnPotentials G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SpawnRange G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].State G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].StrayConversionTime G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].StunTick G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].SuccessCount G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Tame G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Temper G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].TicksFrozen G7-24; first run: step 1: 150 added
-dimensions/minecraft/*/entities/*.mca Entities[*].TimeInOverworld G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].TrackOutput G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Trusted G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].UpdateLastExecution G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Value G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].Variant G7-24; first run: step 1: 2 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Level G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Profession G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Type G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.level G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.profession G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.type G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].VillagerDataFinalized G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].WaitTime G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].anger.suspects G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].attributes G7-24; first run: step 1: 99 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].beam_target G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].block_pos G7-24; first run: step 1: 4 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].block_state G7-24; first run: step 1: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].carriedBlockState G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].color G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].crit G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].current_impulse_context_reset_grace_time G7-24; first run: step 1: 99 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].damage G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].drop_chances G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment G7-24; first run: step 1: 11 added
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.feet.components G7-24; first run: step 2: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.body.components G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.head.components G7-24; first run: step 1: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.mainhand.components G7-24; first run: step 1: 4 added
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.saddle.components G7-24; first run: step 1: 2 added
-# Seen once batch 5 merged force-loaded entities onto batch 4 (2026-11-21): projectile and
-# fireball keys, and a helmet vanilla fills in again.
-dimensions/minecraft/*/entities/*.mca Entities[*].acceleration_power G7-24; 2026-11-21 batch 5 run: step 1: 4 lost, step 2: 4 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Item G7-24; 2026-11-21 batch 5 run: step 1: 3 lost, step 2: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].ExplosionPower G7-24; 2026-11-21 batch 5 run: steps 1 and 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].equipment.head G7-24; 2026-11-21 batch 5 run: step 3: 1 added
+
+# ticking: entities in the force-loaded lab go on living while each server runs. Mobs move and
+# push each other, projectiles settle, timers count, vanilla creates the attribute instances a
+# ticking mob reads (movement speed, armour) and saves them, the eye of ender breaks after 80
+# ticks and items drop. Every entity key is saved like vanilla's since G7-24, and only values move.
+dimensions/minecraft/*/entities/*.mca Entities[*].attributes[*] ticking; 2026-11-21 G7-24 run: steps 2 and 3: 98 added (5 on passengers)
+dimensions/minecraft/*/entities/*.mca Entities[*].Motion[*] ticking; 2026-11-21 G7-24 run: step 1: 33, step 2: 31, step 3: 6 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].Pos[*] ticking; 2026-11-21 G7-24 run: step 1: 6, steps 2 and 3: 6 changed (passengers)
+dimensions/minecraft/*/entities/*.mca Entities[*].Rotation[*] ticking; 2026-11-21 G7-24 run: step 1: 5, step 2: 3, step 3: 2 changed
+dimensions/minecraft/*/entities/*.mca Entities[{UUID:[I;*]}] ticking; the eye of ender breaks, items drop; 2026-11-21 G7-24 run: step 1: 1 lost, step 3: 2 added
+dimensions/minecraft/*/entities/*.mca Entities[*].Age ticking; 2026-11-21 G7-24 run: step 2: 3, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].DespawnDelay ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].EggLayTime ticking; 2026-11-21 G7-24 run: step 1: 2, step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].Fire ticking; 2026-11-21 G7-24 run: step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].Fuel ticking; 2026-11-21 G7-24 run: step 1: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].HasBeenShot ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 14, step 3: 14
+dimensions/minecraft/*/entities/*.mca Entities[*].LastPoseTick ticking; 2026-11-21 G7-24 run: step 1: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].LeftOwner ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 14, step 3: 14
+dimensions/minecraft/*/entities/*.mca Entities[*].Lifetime ticking; 2026-11-21 G7-24 run: step 1: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].NoGravity ticking; 2026-11-21 G7-24 run: step 1: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].OnGround ticking; 2026-11-21 G7-24 run: step 1: 11, step 2: 11
+dimensions/minecraft/*/entities/*.mca Entities[*].Time ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].Warmup ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].anger_end_time ticking; 2026-11-21 G7-24 run: step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].angry_at ticking; 2026-11-21 G7-24 run: step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].fuse ticking; 2026-11-21 G7-24 run: step 1: 1, step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].hive_pos ticking; 2026-11-21 G7-24 run: step 2: 1, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].home_pos ticking; 2026-11-21 G7-24 run: step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].home_radius ticking; 2026-11-21 G7-24 run: step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].inGround ticking; 2026-11-21 G7-24 run: step 1: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].life ticking; 2026-11-21 G7-24 run: step 1: 2, step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].next_weather_age ticking; 2026-11-21 G7-24 run: step 2: 1, step 3: 1
+
+# villager: villager save keys PEX writes in its own form (VillagerData's Level, Profession and
+# Type where vanilla writes them in lower case, FoodLevel as another number type) or leaves out;
+# the villager files belong to the villager lane (G1-42 to G1-44).
+dimensions/minecraft/*/entities/*.mca Entities[*].Brain.memories."minecraft:meeting_point" villager; 2026-11-21 G7-24 run: step 1: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].FoodLevel villager; 2026-11-21 G7-24 run: step 1: 2, step 2: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].LastGossipDecay villager; 2026-11-21 G7-24 run: step 1: 1, step 2: 2, step 3: 2
+dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].demand villager; 2026-11-21 G7-24 run: step 1: 1, step 2: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].rewardExp villager; 2026-11-21 G7-24 run: step 1: 1, step 2: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].Offers.Recipes[*].specialPrice villager; 2026-11-21 G7-24 run: step 1: 1, step 2: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Level villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Profession villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3, step 3: 1
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.Type villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.level villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.profession villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerData.type villager; 2026-11-21 G7-24 run: step 1: 3, step 2: 3
+dimensions/minecraft/*/entities/*.mca Entities[*].VillagerDataFinalized villager; 2026-11-21 G7-24 run: step 2: 2, step 3: 2
 dimensions/minecraft/*/entities/*.mca Entities[*].equipment.mainhand.id ticking; a live mob in a force-loaded chunk picks up an item; 2026-11-21 batch 5 run: step 3: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].fall_distance G7-24; first run: step 1: 150 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].from_bucket G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].glow_color_override G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].has_egg G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].hidden_layers G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].immovable G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].inBlockState G7-24; first run: step 2: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].inGround G7-24; first run: step 1: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].item G7-24; first run: step 1: 3 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].item.components G7-24; first run: step 1: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].leash G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].life G7-24; first run: step 1: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].main_hand G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].pickup G7-24; first run: step 1: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].pickup_timer G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].pose G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].potion_contents G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].profile G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].shake G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].size G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].spawn_item_after_ticks G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].start_interpolation G7-24; first run: step 1: 3 added
-dimensions/minecraft/*/entities/*.mca Entities[*].text G7-24; first run: step 1: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].type G7-24; first run: step 1: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].weather_state G7-24; first run: step 1: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Age G7-24; first run: step 2: 3 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Air G7-24; first run: step 2: 7 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].DespawnDelay G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].EggLayTime G7-24; first run: step 2: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Fire G7-24; first run: step 2: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Fuel G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].HasBeenShot G7-24; first run: step 2: 18 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].LastGossipDecay G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].LeftOwner G7-24; first run: step 2: 18 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Life G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Motion[*] G7-24; first run: step 2: 3 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].NoGravity G7-24; first run: step 2: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].LastGossipDecay G7-24; first run: step 2: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].Pos[*] G7-24; first run: step 2: 6 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].VillagerDataFinalized G7-24; first run: step 2: 2 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Passengers[*].attributes[*] G7-24; first run: step 2: 5 added
-dimensions/minecraft/*/entities/*.mca Entities[*].Pos[*] G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Rotation[*] G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Time G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].Warmup G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].anger_end_time G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].angry_at G7-24; first run: step 2: 1 added
-dimensions/minecraft/*/entities/*.mca Entities[*].attributes[*] G7-24; first run: step 2: 92 added
-dimensions/minecraft/*/entities/*.mca Entities[*].fuse G7-24; first run: step 2: 1 changed
-dimensions/minecraft/*/entities/*.mca Entities[*].hive_pos G7-24; first run: step 2: 1 lost
-dimensions/minecraft/*/entities/*.mca Entities[*].home_pos G7-24; first run: step 2: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].home_radius G7-24; first run: step 2: 2 added
-dimensions/minecraft/*/entities/*.mca Entities[*].next_weather_age G7-24; first run: step 2: 1 changed
+dimensions/minecraft/*/entities/*.mca Entities[*].drop_chances ticking; a live mob picks up an item and vanilla guarantees its drop; 2026-11-21 G7-24 run: step 1: 1 added
 
 # Visible since G7-05 (vanilla keeps the lab's block entities): PEX writes trial spawner config
 # fields vanilla leaves out, and keys that changed while the block entity ticked.
@@ -274,11 +135,6 @@ level.dat Data.Time ticking; first run: step 1: 1 changed
 # Step 7, the fixture bot visit (G7-21): what is left in the player file belongs to other pieces.
 players/data/*.dat Inventory* G7-23; item components PEX drops or rewrites: step 7
 players/data/*.dat EnderItems* G7-23; item components PEX drops or rewrites: step 7
-players/data/*.dat TicksFrozen G7-24; Entity::write_nbt writes it when 0: step 7: 1 added
-players/data/*.dat CustomNameVisible G7-24; Entity::write_nbt writes it when false: step 7: 1 added
-players/data/*.dat FallDistance G7-24; living entities write the old float key next to fall_distance: step 7: 1 added
-players/data/*.dat ender_pearls[*].TicksFrozen G7-24; Entity::write_nbt writes it when 0: step 7: 1 added
-players/data/*.dat ender_pearls[*].CustomNameVisible G7-24; Entity::write_nbt writes it when false: step 7: 1 added
 
 # ticking: block entities keep running while each server is up, so furnaces smelt and cool,
 # brewing stands finish, pistons finish moving, hoppers and sensors count down. Their keys are

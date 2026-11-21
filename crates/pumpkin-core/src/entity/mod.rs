@@ -58,7 +58,7 @@ use pumpkin_util::math::{
 use pumpkin_util::text::TextComponent;
 use pumpkin_util::text::hover::HoverEvent;
 use pumpkin_util::version::JavaMinecraftVersion;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::{
     Arc,
     atomic::{
@@ -1040,7 +1040,7 @@ pub struct Entity {
     pub has_no_gravity: AtomicBool,
     /// Scoreboard tags attached to this entity, managed with `/tag`.
     /// Vanilla allows at most [`MAX_SCOREBOARD_TAGS`] tags per entity.
-    pub scoreboard_tags: std::sync::Mutex<HashSet<String>>,
+    pub scoreboard_tags: std::sync::Mutex<indexmap::IndexSet<String>>,
     /// The data send in the Entity Spawn packet
     pub data: AtomicI32,
     /// Stores entity boolean flags (on fire, sneaking, invisible, glowing, etc.)
@@ -1259,7 +1259,7 @@ impl Entity {
             silent: AtomicBool::new(false),
             air_supply: AtomicI32::new(breath::MAX_AIR),
             has_no_gravity: AtomicBool::new(false),
-            scoreboard_tags: std::sync::Mutex::new(HashSet::new()),
+            scoreboard_tags: std::sync::Mutex::new(indexmap::IndexSet::new()),
             no_physics: AtomicBool::new(false),
             synched_data: synched_entity_data::SynchedEntityData::new(),
             movement_multiplier: AtomicCell::new(Vector3::default()),
@@ -1377,7 +1377,7 @@ impl Entity {
         self.scoreboard_tags
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(tag)
+            .shift_remove(tag)
     }
 
     /// Sets a custom name for the entity, typically used with nametags
@@ -3846,12 +3846,13 @@ impl Entity {
 
         let world = self.world.load();
         let holder: Option<Arc<dyn EntityBase>> = match pending {
-            // Only reattach to a knot that is already loaded. Creating one here would spawn a
-            // duplicate when the saved knot's chunk loads a moment later; keeping the reference
-            // pending lets the next tick retry once it is in the world.
-            LeashRef::Knot(pos) => {
-                crate::entity::decoration::leash_knot::LeashKnotEntity::find_knot(&world, pos)
-            }
+            // Vanilla `Leashable.restoreLeashFromSave`: knots aren't saved, so the mob makes its
+            // own (`LeashFenceKnotEntity.getOrCreateKnot`).
+            LeashRef::Knot(pos) => Some(
+                crate::entity::decoration::leash_knot::LeashKnotEntity::find_or_spawn_knot(
+                    &world, pos,
+                ),
+            ),
             LeashRef::Entity(uuid) => world.get_entity_by_uuid(uuid).or_else(|| {
                 world
                     .get_player_by_uuid(uuid)
@@ -4735,8 +4736,9 @@ impl Entity {
             nbt.put(
                 "Tags",
                 NbtTag::List(
-                    tags.iter()
-                        .map(|tag| NbtTag::String(tag.as_str().into()))
+                    java_hash_set_order(&tags)
+                        .into_iter()
+                        .map(|tag| NbtTag::String(tag.into()))
                         .collect(),
                 ),
             );
@@ -4851,13 +4853,8 @@ impl Entity {
             self.set_pos(pos);
             self.last_sent_pos.store(pos);
         }
-        if let Some(velocity) = nbt.get_list("Motion")
-            && velocity.len() >= 3
-        {
-            let x = velocity[0].extract_double().unwrap_or(0.0);
-            let y = velocity[1].extract_double().unwrap_or(0.0);
-            let z = velocity[2].extract_double().unwrap_or(0.0);
-            self.velocity.store(Vector3::new(x, y, z));
+        if let Some(velocity) = saved_motion(nbt) {
+            self.velocity.store(velocity);
         }
         if let Some(rotation) = nbt.get_list("Rotation")
             && rotation.len() >= 2
@@ -5082,9 +5079,199 @@ const BEDROCK_LINK_REMOVE: u8 = 0;
 const BEDROCK_LINK_RIDER: u8 = 1;
 const BEDROCK_LINK_PASSENGER: u8 = 2;
 
+/// The order a Java `HashSet<String>` like vanilla's `Entity.tags` iterates `tags` in, given the
+/// order they were added: by hash bucket, then by insertion within a bucket.
+fn java_hash_set_order(tags: &indexmap::IndexSet<String>) -> Vec<&str> {
+    let mut capacity = 16usize;
+    while tags.len() > capacity / 4 * 3 {
+        capacity *= 2;
+    }
+    let mut ordered: Vec<(usize, usize, &str)> = tags
+        .iter()
+        .enumerate()
+        .map(|(added, tag)| {
+            // `String.hashCode`, then `HashMap.hash` spreads the high bits down.
+            let hash = tag.encode_utf16().fold(0u32, |hash, unit| {
+                hash.wrapping_mul(31).wrapping_add(u32::from(unit))
+            });
+            let bucket = (hash ^ (hash >> 16)) as usize & (capacity - 1);
+            (bucket, added, tag.as_str())
+        })
+        .collect();
+    ordered.sort_unstable();
+    ordered.into_iter().map(|(_, _, tag)| tag).collect()
+}
+
+/// The saved `Motion`, with any component over 10 blocks a tick read as 0 like vanilla
+/// `Entity.load`.
+fn saved_motion(nbt: &NbtCompound) -> Option<Vector3<f64>> {
+    let motion = nbt.get_list("Motion")?;
+    let component = |i: usize| {
+        let value = motion.get(i)?.extract_double().unwrap_or(0.0);
+        Some(if value.abs() > 10.0 { 0.0 } else { value })
+    };
+    Some(Vector3::new(component(0)?, component(1)?, component(2)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Reads `saved` into a new entity of `entity_type` the way a chunk load does, then saves it.
+    fn round_trip(entity_type: &'static EntityType, saved: &NbtCompound) -> NbtCompound {
+        let world = crate::world::test_world();
+        let entity = crate::entity::r#type::from_type(
+            entity_type,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        entity.read_nbt_non_mut(saved);
+        Entity::keep_unmodelled_nbt(entity.as_ref(), saved);
+        let mut written = NbtCompound::new();
+        entity.write_nbt(&mut written);
+        written
+    }
+
+    /// G7-24: an item vanilla made never to despawn or be picked up comes back the same.
+    #[tokio::test]
+    async fn an_item_keeps_its_infinite_age_and_pickup_delay() {
+        let mut saved = NbtCompound::new();
+        let mut item = NbtCompound::new();
+        item.put_string("id", "minecraft:diamond".to_string());
+        item.put_int("count", 3);
+        saved.put_compound("Item", item);
+        saved.put_short("Age", -32768);
+        saved.put_short("PickupDelay", 32767);
+        let written = round_trip(&EntityType::ITEM, &saved);
+        assert_eq!(written.get_short("Age"), Some(-32768));
+        assert_eq!(written.get_short("PickupDelay"), Some(32767));
+    }
+
+    /// G7-24: a firework rocket keeps its flight time and item instead of exploding early.
+    #[tokio::test]
+    async fn a_firework_rocket_keeps_its_lifetime() {
+        let mut saved = NbtCompound::new();
+        saved.put_int("Life", 3);
+        saved.put_int("LifeTime", i32::MAX);
+        saved.put_bool("ShotAtAngle", true);
+        let written = round_trip(&EntityType::FIREWORK_ROCKET, &saved);
+        assert_eq!(written.get_int("Life"), Some(3));
+        assert_eq!(written.get_int("LifeTime"), Some(i32::MAX));
+        assert_eq!(written.get_bool("ShotAtAngle"), Some(true));
+        assert!(written.get_compound("FireworksItem").is_some());
+    }
+
+    /// G7-24: a rocket without explosions that flies into a block stays, like vanilla's.
+    #[tokio::test]
+    async fn a_firework_without_explosions_survives_hitting_a_block() {
+        let world = crate::world::test_world();
+        let rocket = crate::entity::r#type::from_type(
+            &EntityType::FIREWORK_ROCKET,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        rocket.on_hit(crate::entity::projectile::ProjectileHit::Block {
+            pos: BlockPos::new(0, 65, 0),
+            face: BlockDirection::Down,
+            hit_pos: Vector3::new(0.5, 65.0, 0.5),
+            normal: Vector3::new(0.0, -1.0, 0.0),
+        });
+        assert!(!rocket.get_entity().is_removed());
+    }
+
+    /// G7-24: tags save in vanilla's `HashSet` order whatever order they were read in.
+    #[tokio::test]
+    async fn tags_save_in_vanillas_hash_set_order() {
+        let mut saved = NbtCompound::new();
+        saved.put(
+            "Tags",
+            NbtTag::List(vec![
+                NbtTag::String("keeper".into()),
+                NbtTag::String("fixture".into()),
+            ]),
+        );
+        let written = round_trip(&EntityType::PIG, &saved);
+        let tags: Vec<String> = written
+            .get_list("Tags")
+            .map(|list| {
+                list.iter()
+                    .filter_map(|tag| tag.extract_string().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(tags, vec!["fixture", "keeper"]);
+    }
+
+    /// G7-24: like vanilla `Entity.load`, a saved speed over 10 blocks a tick reads as 0.
+    #[tokio::test]
+    async fn motion_over_ten_reads_as_zero() {
+        let mut saved = NbtCompound::new();
+        saved.put(
+            "Motion",
+            NbtTag::List(vec![11.0f64.into(), 0.5f64.into(), (-20.0f64).into()]),
+        );
+        let written = round_trip(&EntityType::PIG, &saved);
+        let motion: Vec<f64> = written
+            .get_list("Motion")
+            .map(|list| list.iter().filter_map(NbtTag::extract_double).collect())
+            .unwrap_or_default();
+        assert_eq!(motion, vec![0.0, 0.5, 0.0]);
+    }
+
+    /// G7-24: a falling block keeps its block and fall time, and the keys PEX doesn't model.
+    #[tokio::test]
+    async fn a_falling_block_keeps_its_block_and_time() {
+        let mut saved = NbtCompound::new();
+        saved.put_string("BlockState", "minecraft:anvil".to_string());
+        saved.put_int("Time", i32::MIN);
+        saved.put_bool("HurtEntities", true);
+        let written = round_trip(&EntityType::FALLING_BLOCK, &saved);
+        assert!(
+            matches!(written.get("BlockState"), Some(NbtTag::String(name)) if &**name == "minecraft:anvil")
+        );
+        assert_eq!(written.get_int("Time"), Some(i32::MIN));
+        assert_eq!(written.get_bool("HurtEntities"), Some(true));
+    }
+
+    /// G7-24: vanilla's tadpole isn't an `AgeableMob`, so it has no `ForcedAge`.
+    #[tokio::test]
+    async fn a_tadpole_saves_no_forced_age() {
+        let mut saved = NbtCompound::new();
+        saved.put_int("Age", 7);
+        let written = round_trip(&EntityType::TADPOLE, &saved);
+        assert_eq!(written.get_int("Age"), Some(7));
+        assert!(!written.has("ForcedAge"));
+    }
+
+    /// G7-24: knots aren't saved, so a mob leashed to a fence makes its own knot when it loads.
+    #[tokio::test]
+    async fn a_mob_leashed_to_a_fence_rebuilds_its_knot() {
+        let world = crate::world::test_world();
+        let cow = crate::entity::r#type::from_type(
+            &EntityType::COW,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        let mut saved = NbtCompound::new();
+        saved.put("leash", LeashRef::Knot(BlockPos::new(2, 64, 0)).to_nbt());
+        cow.read_nbt_non_mut(&saved);
+        cow.get_entity().try_restore_leash();
+        let knot = crate::entity::decoration::leash_knot::LeashKnotEntity::find_knot(
+            &world,
+            BlockPos::new(2, 64, 0),
+        )
+        .expect("the knot");
+        assert!(!knot.get_entity().entity_type.saveable);
+        let mut written = NbtCompound::new();
+        cow.write_nbt(&mut written);
+        assert!(
+            matches!(written.get("leash"), Some(NbtTag::IntArray(pos)) if pos == &[2, 64, 0]),
+            "the cow is still leashed to the fence"
+        );
+    }
 
     #[test]
     fn equipment_break_status_maps_all_slots() {
