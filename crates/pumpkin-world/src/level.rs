@@ -964,6 +964,13 @@ impl Level {
         Biome::from_id(id.flatten().unwrap_or(0)).unwrap_or(&Biome::THE_VOID)
     }
 
+    /// Puts an entity chunk in memory as if it had been read from disk.
+    #[doc(hidden)]
+    pub fn insert_entity_chunk_for_test(&self, chunk: SyncEntityChunk) {
+        self.loaded_entity_chunks
+            .insert(Vector2::new(chunk.x, chunk.z), chunk);
+    }
+
     pub fn get_entity_chunk_sync(&self, pos: &Vector2<i32>) -> Option<SyncEntityChunk> {
         self.loaded_entity_chunks
             .get(pos)

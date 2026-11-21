@@ -1,4 +1,10 @@
+use std::net::SocketAddr;
+
+use pumpkin_data::translation;
 use pumpkin_protocol::bedrock::client::PackIdVersion;
+use pumpkin_util::text::TextComponent;
+
+use crate::net::can_not_join;
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
@@ -18,6 +24,73 @@ fn build_username(display_name: &str, prefix: &str, replace_spaces: bool) -> Str
         name.push_str(display_name);
     }
     name
+}
+
+/// The checks a Java login runs before the player joins, for a Bedrock login: the player limit,
+/// bans and the whitelist, then an online player with the same UUID or name.
+async fn login_refusal(
+    server: &Server,
+    profile: &GameProfile,
+    address: &SocketAddr,
+) -> Option<(DisconnectReason, TextComponent)> {
+    let max_players = server.advanced_config.networking.bedrock.max_players;
+    if max_players > 0 && server.get_player_count() >= max_players as usize {
+        return Some((
+            DisconnectReason::ServerFull,
+            TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_SERVER_FULL,
+                translation::bedrock::DISCONNECTIONSCREEN_SERVERFULL,
+                [],
+            ),
+        ));
+    }
+    if let Some(reason) = can_not_join(profile, address, server).await {
+        return Some((DisconnectReason::NotAllowed, reason));
+    }
+    if server.get_player_by_uuid(profile.id).is_some()
+        || server.get_player_by_name(&profile.name).is_some()
+    {
+        return Some((
+            DisconnectReason::LoggedInOtherLocation,
+            TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+                [],
+            ),
+        ));
+    }
+    None
+}
+
+/// The `ResourcePacksInfo` a login gets: the configured Bedrock packs, if any.
+fn resource_packs_info(server: &Server) -> CResourcePacksInfo {
+    let br_config = &server.advanced_config.resource_pack.bedrock;
+
+    let mut entries = Vec::new();
+    if br_config.enabled {
+        for pack in &br_config.packs {
+            entries.push(PackInfoData {
+                pack_id_version: PackIdVersion::new(pack.uuid, pack.version.clone()),
+                pack_size: pack.size,
+                cdn_url: pack.download_url.clone(),
+                content_key: pack.content_key.clone(),
+                subpack_name: pack.sub_pack_name.clone(),
+                content_identity: pack.content_id.clone(),
+                has_scripts: pack.has_scripts,
+                is_addon_pack: pack.addon_pack,
+                is_ray_tracing_capable: pack.rtx_enabled,
+            });
+        }
+    }
+
+    CResourcePacksInfo {
+        resource_pack_required: br_config.force,
+        has_addon_packs: false,
+        has_scripts: false,
+        force_disable_vibrant_visuals: false,
+        world_template_id_and_version: PackIdVersion::new(uuid::Uuid::nil(), String::new()),
+        resource_packs: entries,
+    }
 }
 
 impl BedrockClient {
@@ -102,35 +175,21 @@ impl BedrockClient {
             ));
         }
 
-        self.enqueue_client_packet(&CPlayStatus::LoginSuccess).await;
-        let br_config = &server.advanced_config.resource_pack.bedrock;
-
-        let mut entries = Vec::new();
-        if br_config.enabled {
-            for pack in &br_config.packs {
-                entries.push(PackInfoData {
-                    pack_id_version: PackIdVersion::new(pack.uuid, pack.version.clone()),
-                    pack_size: pack.size,
-                    cdn_url: pack.download_url.clone(),
-                    content_key: pack.content_key.clone(),
-                    subpack_name: pack.sub_pack_name.clone(),
-                    content_identity: pack.content_id.clone(),
-                    has_scripts: pack.has_scripts,
-                    is_addon_pack: pack.addon_pack,
-                    is_ray_tracing_capable: pack.rtx_enabled,
-                });
-            }
+        if let Some((reason, message)) = login_refusal(server, &profile, &self.address).await {
+            debug!(
+                "Refused Bedrock login for {} ({}) from {}: {}",
+                profile.name,
+                profile.id,
+                self.address,
+                message.clone().get_text()
+            );
+            self.kick(reason, message.get_text()).await;
+            return Ok(PacketHandlerResult::Stop);
         }
 
-        let packs_info = CResourcePacksInfo {
-            resource_pack_required: br_config.force,
-            has_addon_packs: false,
-            has_scripts: false,
-            force_disable_vibrant_visuals: false,
-            world_template_id_and_version: PackIdVersion::new(uuid::Uuid::nil(), String::new()),
-            resource_packs: entries,
-        };
-        self.enqueue_client_packet(&packs_info).await;
+        self.enqueue_client_packet(&CPlayStatus::LoginSuccess).await;
+        self.enqueue_client_packet(&resource_packs_info(server))
+            .await;
 
         let new_config = PlayerConfig {
             locale: client_data.language_code.clone(),

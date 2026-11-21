@@ -2,8 +2,12 @@
 use super::*;
 
 impl BedrockClient {
-    pub fn handle_interaction(&self, packet: &SInteract) {
-        if matches!(packet.action, Action::OpenInventory) {
+    pub fn handle_interaction(&self, player: &Player, packet: &SInteract) {
+        if matches!(packet.action, Action::StopRiding) {
+            // The client sends where it would land; the server picks the spot itself, as
+            // vanilla's dismount does for Java players.
+            player.dismount();
+        } else if matches!(packet.action, Action::OpenInventory) {
             if self.inventory_opened.load(Ordering::Relaxed) {
                 return;
             }

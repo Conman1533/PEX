@@ -86,6 +86,7 @@ fn release_files_migrate_to_the_current_version() {
         expected.extend([
             info("pumpkin.toml: added [world.entity_islands] with default values"),
             info("pumpkin.toml: added networking.java.validate_player_names = true"),
+            info("pumpkin.toml: added networking.bedrock.combat_cooldown = true"),
             info(&format!(
                 "pumpkin.toml: set {CONFIG_VERSION_KEY} to {latest}"
             )),

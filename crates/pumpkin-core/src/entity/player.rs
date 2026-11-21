@@ -1525,8 +1525,19 @@ impl Player {
             .living_entity
             .get_attribute_value(&Attributes::ATTACK_SPEED);
 
-        let is_bedrock = matches!(self.client.as_ref(), ClientPlatform::Bedrock(_));
-        let attack_cooldown_progress = if is_bedrock {
+        // Bedrock players follow the Java cooldown and get a charge bar, unless the server
+        // gives them classic Bedrock combat.
+        let classic_bedrock = match self.client.as_ref() {
+            ClientPlatform::Bedrock(client) => {
+                let cooldown = server.advanced_config.networking.bedrock.combat_cooldown;
+                if cooldown {
+                    client.show_attack_cooldown();
+                }
+                !cooldown
+            }
+            ClientPlatform::Java(_) => false,
+        };
+        let attack_cooldown_progress = if classic_bedrock {
             1.0
         } else {
             self.get_attack_cooldown_progress(0.5, attack_speed)
@@ -2393,6 +2404,48 @@ impl Player {
         self.living_entity.set_sprinting(is_sprinting);
     }
 
+    /// A Bedrock client's start or stop sneaking, with the `PlayerToggleSneakEvent` the Java
+    /// input path fires, so plugins see and can cancel it on both editions.
+    pub fn set_sneaking_from_bedrock(self: &Arc<Self>, server: &Arc<Server>, sneaking: bool) {
+        if self.get_entity().is_sneaking() == sneaking {
+            return;
+        }
+        let mut event =
+            crate::plugin::player::player_toggle_sneak_event::PlayerToggleSneakEvent::new(
+                self.clone(),
+                sneaking,
+            );
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        self.get_entity().set_sneaking(event.is_sneaking);
+        self.update_bedrock_shield_sneaking();
+        // Sneaking gets off a vehicle, as in the Java input path.
+        if event.is_sneaking {
+            self.dismount();
+        }
+    }
+
+    /// A Bedrock client's start or stop sprinting, with the `PlayerToggleSprintEvent` the Java
+    /// player command path fires.
+    pub fn set_sprinting_from_bedrock(self: &Arc<Self>, server: &Arc<Server>, sprinting: bool) {
+        if self.get_entity().is_sprinting() == sprinting {
+            return;
+        }
+        let mut event =
+            crate::plugin::player::player_toggle_sprint_event::PlayerToggleSprintEvent::new(
+                self.clone(),
+                sprinting,
+            );
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        self.set_sprinting(event.is_sprinting);
+        self.update_player_pose();
+    }
+
     pub fn try_start_fall_flying(&self, server: &Arc<Server>) {
         let entity = self.get_entity();
         let has_glider = self
@@ -2620,6 +2673,9 @@ impl Player {
     }
 
     pub fn send_title_animation(&self, fade_in: i32, stay: i32, fade_out: i32) {
+        if let ClientPlatform::Bedrock(client) = self.client.as_ref() {
+            client.title_times.store((fade_in, stay, fade_out));
+        }
         self.try_enqueue_packet_editioned(
             &CTitleAnimation::new(fade_in, stay, fade_out),
             &pumpkin_protocol::bedrock::client::set_title::CSetTitle::new(
@@ -2897,7 +2953,17 @@ impl Player {
                         && let Err(err) =
                             client.handle_play_packet(&player_arc, &server_arc, &packet)
                     {
-                        tracing::error!("Failed to handle Bedrock play packet: {err}");
+                        // As on Java: a packet the server can't read ends the connection, rather
+                        // than leaving the client and server out of step.
+                        tracing::warn!(
+                            "Failed to handle Bedrock play packet id {} (payload {} bytes): {err}",
+                            packet.id,
+                            packet.payload.len()
+                        );
+                        client.try_kick(
+                            DisconnectReason::BadPacket,
+                            format!("Error while handling incoming packet {}: {err}", packet.id),
+                        );
                     }
                 }
             }
@@ -3059,11 +3125,20 @@ impl Player {
                 );
                 if finished && matches!(p.client.as_ref(), ClientPlatform::Bedrock(_)) {
                     p.stop_mining();
-                    p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
+                    // The game mode or held item can change during the dig.
+                    let refused = server_clone.as_deref().is_some_and(|server| {
+                        p.cannot_mine(server, Block::from_state_id(state.id))
+                    });
+                    if !refused {
+                        p.break_bedrock_dug_block(&world, server_clone.as_deref(), pos, state);
+                    }
                 }
             }
         }
         self.last_attacked_ticks.fetch_add(1, Ordering::Relaxed);
+        if let ClientPlatform::Bedrock(client) = self.client.as_ref() {
+            client.tick_attack_cooldown(self);
+        }
 
         self.living_entity.tick(self, server);
 
@@ -4464,27 +4539,52 @@ impl Player {
         match self.client.as_ref() {
             ClientPlatform::Java(client) => client.teleport(self, position, yaw, pitch, Vec::new()),
             ClientPlatform::Bedrock(client) => {
-                let packet = CBedrockMovePlayer::new(
-                    VarULong(self.entity_id() as u64),
-                    Vector3::new(
-                        position.x as f32,
-                        position.y as f32 + entity.entity_type.eye_height,
-                        position.z as f32,
-                    ),
-                    pitch,
-                    yaw,
-                    yaw,
-                    CBedrockMovePlayer::MODE_TELEPORT,
-                    false,
-                    VarULong(0),
-                    0,
-                    0,
-                    VarULong(self.tick_counter.load(Ordering::Relaxed).max(0) as u64),
-                );
-                if let Ok(data) = client.serialize_packet(&packet) {
-                    client.try_enqueue_packet(data);
-                }
+                self.send_bedrock_teleport(client, position, yaw, pitch);
             }
+        }
+    }
+
+    /// Moves a Bedrock client to `position` (feet) with a teleport `MovePlayer`. Only the
+    /// packet: the caller has already moved the server-side player.
+    pub fn send_bedrock_teleport(
+        &self,
+        client: &crate::net::bedrock::BedrockClient,
+        position: Vector3<f64>,
+        yaw: f32,
+        pitch: f32,
+    ) {
+        let packet = CBedrockMovePlayer::new(
+            VarULong(self.entity_id() as u64),
+            Vector3::new(
+                position.x as f32,
+                position.y as f32 + self.get_entity().entity_type.eye_height,
+                position.z as f32,
+            ),
+            pitch,
+            yaw,
+            yaw,
+            CBedrockMovePlayer::MODE_TELEPORT,
+            false,
+            VarULong(0),
+            0,
+            0,
+            VarULong(self.tick_counter.load(Ordering::Relaxed).max(0) as u64),
+        );
+        if let Ok(data) = client.serialize_packet(&packet) {
+            client.try_enqueue_packet(data);
+        }
+    }
+
+    /// Takes the player off its vehicle, as sneaking or a Bedrock `StopRiding` does.
+    pub fn dismount(&self) {
+        let vehicle = self
+            .get_entity()
+            .vehicle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Some(vehicle) = vehicle {
+            vehicle.get_entity().remove_passenger(self.entity_id());
         }
     }
 
@@ -5696,13 +5796,20 @@ impl Player {
                             &pumpkin_data::map_decoration::MapDecorationType::PLAYER
                         };
 
-                        let mut icons = vec![MapIcon {
-                            icon_type: VarInt(decoration_type.id as i32),
-                            x: icon_x,
-                            z: icon_z,
-                            direction: icon_direction,
-                            display_name: None,
-                        }];
+                        // Vanilla `MapItemSavedData.tickCarriedBy` only shows the holder in
+                        // the map's own dimension.
+                        let same_dimension = map_data.dimension.minecraft_name
+                            == self.world().dimension.minecraft_name;
+                        let mut icons = Vec::with_capacity(map_data.decorations.len() + 1);
+                        if same_dimension {
+                            icons.push(MapIcon {
+                                icon_type: VarInt(decoration_type.id as i32),
+                                x: icon_x,
+                                z: icon_z,
+                                direction: icon_direction,
+                                display_name: None,
+                            });
+                        }
                         icons.extend(map_data.decorations.iter().map(|decoration| {
                             MapIcon {
                                 icon_type: VarInt(decoration.icon_type),

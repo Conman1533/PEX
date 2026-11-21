@@ -10,6 +10,7 @@ use std::{
 
 use bytes::{BufMut, Bytes, BytesMut};
 use pumpkin_auth::p384::PublicKey;
+use pumpkin_protocol::MAX_PACKET_DATA_SIZE;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
@@ -353,6 +354,15 @@ impl FragmentBuffer {
                 ));
             }
         }
+        // 256 segments of a large data-channel message would otherwise reassemble into far more
+        // than any packet can be.
+        if self.data.len() + payload.len() > MAX_PACKET_DATA_SIZE {
+            self.next_remaining = None;
+            self.data = Vec::new();
+            return Err(format!(
+                "reassembled packet is over {MAX_PACKET_DATA_SIZE} bytes"
+            ));
+        }
         self.data.extend_from_slice(payload);
         if remaining == 0 {
             self.next_remaining = None;
@@ -399,6 +409,19 @@ mod tests {
         assert!(fragments.push(2, b"one").unwrap().is_none());
         assert!(fragments.push(1, b"two").unwrap().is_none());
         assert_eq!(fragments.push(0, b"three").unwrap().unwrap(), "onetwothree");
+    }
+
+    #[test]
+    fn fragment_buffer_rejects_oversized_packet() {
+        let mut fragments = FragmentBuffer::default();
+        // Four segments fill the limit exactly; one more byte is over it.
+        let segment = vec![0; MAX_PACKET_DATA_SIZE / 4];
+        for remaining in (1..=4).rev() {
+            assert!(fragments.push(remaining, &segment).unwrap().is_none());
+        }
+        assert!(fragments.push(0, b"x").is_err());
+        assert_eq!(fragments.data.capacity(), 0);
+        assert_eq!(fragments.push(0, b"next").unwrap().unwrap(), "next");
     }
 
     #[test]

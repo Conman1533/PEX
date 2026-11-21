@@ -3,7 +3,7 @@ pub mod play;
 pub(crate) mod recipe;
 use crossbeam::atomic::AtomicCell;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::{Cursor, Error, Write},
     net::SocketAddr,
     sync::{
@@ -75,6 +75,9 @@ use pumpkin_protocol::bedrock::server::login::ClientData;
 use pumpkin_util::version::BedrockMinecraftVersion;
 use pumpkin_world::level::SyncChunk;
 
+/// How long a kick waits for its `Disconnect` to be acknowledged before closing the peer.
+const KICK_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
 pub struct OutgoingPacket {
     pub data: Bytes,
     pub completion: Option<oneshot::Sender<()>>,
@@ -138,6 +141,15 @@ pub struct BedrockClient {
     pub input_tick: AtomicU64,
     /// Separate from normal vitals caching so the first rejected use always gets corrected.
     last_food_rejection_tick: AtomicCell<Option<i32>>,
+    /// The tick of the last click on a block that fell through to the item's own use.
+    last_block_use_fallthrough_tick: AtomicCell<Option<i32>>,
+    /// Whether the attack charge bar should be drawn: set by a hit, cleared once charged.
+    attack_cooldown_shown: AtomicBool,
+    /// Whether the charge bar is on screen, so the title times need putting back.
+    attack_cooldown_drawn: AtomicBool,
+    /// The title times last set for this player (fade in, stay, fade out), put back after the
+    /// charge bar. Vanilla's defaults until a plugin or command sets others.
+    pub title_times: AtomicCell<(i32, i32, i32)>,
     pub client_cache_supported: AtomicBool,
     pub blob_cache: std::sync::Mutex<HashMap<u64, Vec<u8>>>,
     pub streaming_packs: std::sync::Mutex<HashMap<String, BedrockStreamingPack>>,
@@ -148,6 +160,9 @@ pub struct BedrockClient {
     incoming_game_packet_recv: Mutex<Option<Receiver<RawPacket>>>,
     /// Packet rate limiter for incoming client packets.
     pub packet_limiter: PacketRateLimiter,
+    /// Unknown packet ids already logged for this client, so a client can't flood the log by
+    /// repeating one. Ids are 10 bits, so this stays small.
+    unknown_packet_ids: std::sync::Mutex<HashSet<i32>>,
 }
 
 impl BedrockClient {
@@ -179,6 +194,10 @@ impl BedrockClient {
             inventory_opened: AtomicBool::new(false),
             input_tick: AtomicU64::new(0),
             last_food_rejection_tick: AtomicCell::new(None),
+            last_block_use_fallthrough_tick: AtomicCell::new(None),
+            attack_cooldown_shown: AtomicBool::new(false),
+            attack_cooldown_drawn: AtomicBool::new(false),
+            title_times: AtomicCell::new((10, 70, 20)),
             client_cache_supported: AtomicBool::new(false),
             blob_cache: std::sync::Mutex::new(HashMap::new()),
             streaming_packs: std::sync::Mutex::new(HashMap::new()),
@@ -187,6 +206,7 @@ impl BedrockClient {
             incoming_game_packet_send: incoming_send,
             incoming_game_packet_recv: Mutex::new(Some(incoming_recv)),
             packet_limiter,
+            unknown_packet_ids: std::sync::Mutex::new(HashSet::new()),
         }
     }
 
@@ -326,7 +346,16 @@ impl BedrockClient {
         warn!("Closing connection for {}: {message}", self.address);
         self.send_packet(&CDisconnect::new(reason as i32, message))
             .await;
+        self.flush_before_close().await;
         self.close().await;
+    }
+
+    /// Waits a moment for the reliable channel to deliver what was sent: closing the peer drops
+    /// queued messages, which would lose a kick's `Disconnect` and its reason.
+    async fn flush_before_close(&self) {
+        if let Err(error) = self.session.flush_reliable(KICK_FLUSH_TIMEOUT).await {
+            debug!(address = %self.address, %error, "Failed to flush before closing");
+        }
     }
 
     pub async fn kick_explicit(
@@ -346,6 +375,7 @@ impl BedrockClient {
                 filtered_message,
             })
             .await;
+            self.flush_before_close().await;
         }
         self.close().await;
     }
@@ -596,12 +626,29 @@ impl BedrockClient {
     }
 
     pub async fn close(&self) {
-        if self.close_token.is_cancelled() {
-            return;
-        }
+        // A kick or a full outgoing buffer may have cancelled the token already; the session
+        // still has to close and the client still has to leave the client list.
+        let kicked = self.close_token.is_cancelled();
         self.close_token.cancel();
+        if kicked {
+            // `try_kick` queues its `Disconnect` and then cancels: let the outgoing task hand
+            // it to the session, and the session deliver it, before the peer goes away.
+            let deadline = std::time::Instant::now() + KICK_FLUSH_TIMEOUT;
+            while self.pending_bytes.load(Ordering::Acquire) > 0
+                && std::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            self.flush_before_close().await;
+        }
         self.session.close().await;
-        self.be_clients.lock().await.remove(&self.address);
+        let mut clients = self.be_clients.lock().await;
+        if clients
+            .get(&self.address)
+            .is_some_and(|client| std::ptr::eq(Arc::as_ptr(client), self))
+        {
+            clients.remove(&self.address);
+        }
     }
 
     pub async fn await_tasks(&self) {
@@ -680,8 +727,10 @@ impl BedrockClient {
                     let packet = match SRequestNetworkSettings::read(payload) {
                         Ok(p) => p,
                         Err(err) => {
-                            error!("Failed to read SRequestNetworkSettings: {err}");
-                            continue;
+                            warn!("Failed to read SRequestNetworkSettings: {err}");
+                            self.kick(DisconnectReason::BadPacket, err.to_string())
+                                .await;
+                            return PacketHandlerResult::Stop;
                         }
                     };
                     if !self.handle_request_network_settings(packet, server).await {
@@ -740,7 +789,7 @@ impl BedrockClient {
             }
             SClientCacheBlobStatus::PACKET_ID => {
                 let packet = SClientCacheBlobStatus::read(reader)?;
-                self.handle_client_cache_blob_status(packet);
+                self.handle_client_cache_blob_status(&packet);
             }
             SResourcePackClientResponse::PACKET_ID => {
                 let packet = SResourcePackClientResponse::read(reader)?;
@@ -780,7 +829,7 @@ impl BedrockClient {
             }
             SInteract::PACKET_ID => {
                 let packet = SInteract::read(reader)?;
-                self.handle_interaction(&packet);
+                self.handle_interaction(player, &packet);
             }
             SContainerClose::PACKET_ID => {
                 let packet = SContainerClose::read(reader)?;
@@ -875,34 +924,31 @@ impl BedrockClient {
                 );
             }
             _ => {
-                warn!("Bedrock: Received Unknown Game packet: {}", packet.id);
+                if self
+                    .unknown_packet_ids
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(packet.id)
+                {
+                    warn!(
+                        "Bedrock client {} sent unknown packet {}; later ones with this id are not logged",
+                        self.address, packet.id
+                    );
+                }
             }
         }
         Ok(())
     }
 
-    pub fn handle_client_cache_blob_status(&self, packet: SClientCacheBlobStatus) {
-        if packet.miss_hashes.is_empty() {
-            return;
-        }
-        let missing_blobs = {
-            let cache = self
+    pub fn handle_client_cache_blob_status(&self, packet: &SClientCacheBlobStatus) {
+        let missing_blobs = take_status_blobs(
+            &mut self
                 .blob_cache
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut missing_blobs = Vec::with_capacity(packet.miss_hashes.len());
-            for hash in packet.miss_hashes {
-                if let Some(payload) = cache.get(&hash) {
-                    missing_blobs.push(MissingBlobData {
-                        blob_id: hash,
-                        blob_data: payload.clone(),
-                    });
-                } else {
-                    warn!("Client requested missing blob {hash:#x} not found in server cache");
-                }
-            }
-            missing_blobs
-        };
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            &packet.miss_hashes,
+            &packet.hit_hashes,
+        );
         if !missing_blobs.is_empty() {
             self.try_enqueue_client_packet(&CClientCacheMissResponse { missing_blobs });
         }
@@ -946,5 +992,46 @@ impl BedrockClient {
             let _guard = self.rt_handle.enter();
             Some(self.tasks.spawn(task))
         }
+    }
+}
+
+/// Answers a `ClientCacheBlobStatus`: the blobs the client is missing, to send now. Every blob
+/// the status lists leaves the cache, since the client has it or is about to, so the cache only
+/// holds blobs still waiting for a status.
+fn take_status_blobs(
+    cache: &mut HashMap<u64, Vec<u8>>,
+    misses: &[u64],
+    hits: &[u64],
+) -> Vec<MissingBlobData> {
+    for hash in hits {
+        cache.remove(hash);
+    }
+    let mut missing_blobs = Vec::with_capacity(misses.len());
+    for &hash in misses {
+        if let Some(blob_data) = cache.remove(&hash) {
+            missing_blobs.push(MissingBlobData {
+                blob_id: hash,
+                blob_data,
+            });
+        } else {
+            warn!("Client requested missing blob {hash:#x} not found in server cache");
+        }
+    }
+    missing_blobs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blob_cache_drops_acknowledged_blobs() {
+        let mut cache = HashMap::from([(1, vec![1]), (2, vec![2]), (3, vec![3])]);
+        let missing = take_status_blobs(&mut cache, &[2], &[1]);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].blob_id, 2);
+        assert_eq!(missing[0].blob_data, vec![2]);
+        assert_eq!(cache.len(), 1, "only the blob no status listed is left");
+        assert!(cache.contains_key(&3));
     }
 }

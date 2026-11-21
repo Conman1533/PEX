@@ -11,14 +11,17 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::difficulty::Difficulty;
 use pumpkin_util::math::position::BlockPos;
+use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
+use pumpkin_world::chunk::ChunkHeightmapType;
 
 use crate::entity::EntityBase;
 use crate::entity::mob::raider::create_ominous_banner;
 use crate::entity::r#type::from_type;
 use crate::world::World;
 use crate::world::bossbar::{Bossbar, BossbarColor, BossbarDivisions};
+use crate::world::natural_spawner::is_spawn_position_ok;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RaidStatus {
@@ -475,8 +478,13 @@ impl Raid {
         }
     }
 
+    /// Vanilla `Raid.findRandomSpawnPos`: a surface spot on a ring around the centre that is
+    /// loaded with 10 blocks around it and where a ravager could stand, or `None`.
+    ///
+    /// PEX has no village sections (vanilla `ServerLevel.isVillage`), so the spot isn't kept
+    /// out of the village while more than 7 seconds remain.
     #[must_use]
-    pub fn find_random_spawn_pos(&self, max_tries: usize) -> Option<BlockPos> {
+    pub fn find_random_spawn_pos(&self, world: &Arc<World>, max_tries: usize) -> Option<BlockPos> {
         let seconds_remaining = self.raid_cooldown_ticks / 20;
         let how_far = 0.22 * (seconds_remaining as f32) - 0.24;
         let start_angle = rand::random::<f32>() * std::f32::consts::PI * 2.0;
@@ -484,15 +492,30 @@ impl Raid {
         for i in 0..max_tries {
             let angle = start_angle + std::f32::consts::PI * (i as f32) / 8.0;
             let spawn_x = self.center.0.x
-                + ((angle.cos() * 32.0 * how_far) as i32)
-                + (rand::random::<i32>().rem_euclid(3)) * (how_far as i32);
+                + (angle.cos() * 32.0 * how_far).floor() as i32
+                + rand::random_range(0..3) * how_far.floor() as i32;
             let spawn_z = self.center.0.z
-                + ((angle.sin() * 32.0 * how_far) as i32)
-                + (rand::random::<i32>().rem_euclid(3)) * (how_far as i32);
-            let spawn_y = self.center.0.y;
-
-            if (spawn_y - self.center.0.y).abs() <= 96 {
-                let spawn_pos = BlockPos(Vector3::new(spawn_x, spawn_y, spawn_z));
+                + (angle.sin() * 32.0 * how_far).floor() as i32
+                + rand::random_range(0..3) * how_far.floor() as i32;
+            // Vanilla `getHeight(WORLD_SURFACE)` is the first block above the surface.
+            let spawn_y =
+                world.get_heightmap_height(ChunkHeightmapType::WorldSurface, spawn_x, spawn_z) + 1;
+            if (spawn_y - self.center.0.y).abs() > 96 {
+                continue;
+            }
+            let spawn_pos = BlockPos(Vector3::new(spawn_x, spawn_y, spawn_z));
+            if !chunks_loaded(
+                world,
+                spawn_x - 10,
+                spawn_z - 10,
+                spawn_x + 10,
+                spawn_z + 10,
+            ) {
+                continue;
+            }
+            let on_snow = world.get_block(&spawn_pos.down()) == &pumpkin_data::Block::SNOW
+                && world.get_block_state(&spawn_pos).is_air();
+            if on_snow || is_spawn_position_ok(world, &spawn_pos, &EntityType::RAVAGER) {
                 return Some(spawn_pos);
             }
         }
@@ -611,8 +634,23 @@ impl Raid {
         }
 
         if self.status == RaidStatus::Ongoing {
+            // Vanilla `Raid.tick`: a raid only runs while its centre is loaded.
+            let was_active = self.active;
+            self.active = chunks_loaded(
+                world,
+                self.center.0.x,
+                self.center.0.z,
+                self.center.0.x,
+                self.center.0.z,
+            );
             if world.level_info.load().difficulty == Difficulty::Peaceful {
                 self.stop(world);
+                return;
+            }
+            if was_active && !self.active {
+                self.remove_all_players(world);
+            }
+            if !self.active {
                 return;
             }
 
@@ -625,13 +663,20 @@ impl Raid {
             let raiders_alive = self.get_total_raiders_alive();
             if raiders_alive == 0 && self.has_more_waves() {
                 if self.raid_cooldown_ticks <= 0 {
-                    if self.groups_spawned > 0 {
+                    if self.raid_cooldown_ticks == 0 && self.groups_spawned > 0 {
                         self.raid_cooldown_ticks = 300;
                         self.bossbar.title = TextComponent::translate("event.minecraft.raid", []);
+                        return;
                     }
                 } else {
-                    if self.wave_spawn_pos.is_none() && self.raid_cooldown_ticks % 5 == 0 {
-                        self.wave_spawn_pos = self.find_random_spawn_pos(8);
+                    // PEX has no entity-ticking chunk level, so a loaded spot counts as ticking.
+                    let try_find = self
+                        .wave_spawn_pos
+                        .map_or(self.raid_cooldown_ticks % 5 == 0, |pos| {
+                            !chunks_loaded(world, pos.0.x, pos.0.z, pos.0.x, pos.0.z)
+                        });
+                    if try_find {
+                        self.wave_spawn_pos = self.find_random_spawn_pos(world, 8);
                     }
 
                     if self.raid_cooldown_ticks == 300 || self.raid_cooldown_ticks % 20 == 0 {
@@ -659,15 +704,27 @@ impl Raid {
                 self.update_bossbar(world);
             }
 
+            // Vanilla stops the raid when a wave finds nowhere to spawn after six tries.
+            let mut sound_played = false;
+            let mut failed_tries = 0;
             while self.should_spawn_group() {
-                let spawn_pos = self
+                if let Some(spawn_pos) = self
                     .wave_spawn_pos
-                    .or_else(|| self.find_random_spawn_pos(20))
-                    .unwrap_or(self.center);
-
-                self.started = true;
-                self.spawn_group(world, spawn_pos);
-                self.play_sound(world, spawn_pos);
+                    .or_else(|| self.find_random_spawn_pos(world, 20))
+                {
+                    self.started = true;
+                    self.spawn_group(world, spawn_pos);
+                    if !sound_played {
+                        self.play_sound(world, spawn_pos);
+                        sound_played = true;
+                    }
+                } else {
+                    failed_tries += 1;
+                }
+                if failed_tries > 5 {
+                    self.stop(world);
+                    break;
+                }
             }
 
             let raiders_alive = self.get_total_raiders_alive();
@@ -874,6 +931,18 @@ impl Raids {
     }
 }
 
+/// Vanilla `Level.hasChunksAt`: whether every chunk the block box touches is loaded.
+fn chunks_loaded(world: &World, min_x: i32, min_z: i32, max_x: i32, max_z: i32) -> bool {
+    (min_x >> 4..=max_x >> 4).all(|chunk_x| {
+        (min_z >> 4..=max_z >> 4).all(|chunk_z| {
+            world
+                .level
+                .loaded_chunks
+                .contains_key(&Vector2::new(chunk_x, chunk_z))
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -914,5 +983,50 @@ mod tests {
         assert_eq!((back.groups_spawned, back.raid_omen_level), (3, 4));
         assert_eq!(back.num_groups, Raid::get_num_groups(Difficulty::Hard));
         assert!(back.heroes_of_the_village.contains(&Uuid::from_u128(42)));
+    }
+
+    fn load_empty_chunks(world: &World, center: BlockPos, radius: i32) {
+        let (cx, cz) = (center.0.x >> 4, center.0.z >> 4);
+        for x in cx - radius..=cx + radius {
+            for z in cz - radius..=cz + radius {
+                world.level.loaded_chunks.insert(
+                    Vector2::new(x, z),
+                    pumpkin_world::chunk::ChunkData::empty_sync(x, z),
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_raid_waits_while_its_centre_is_not_loaded() {
+        let world = crate::world::test_world();
+        let mut raid = Raid::new(2, BlockPos::new(104, 200, 4), Difficulty::Normal);
+        for _ in 0..400 {
+            raid.tick(&world);
+        }
+        assert_eq!(raid.status, RaidStatus::Ongoing);
+        assert!(!raid.active);
+        assert_eq!((raid.ticks_active, raid.raid_cooldown_ticks), (0, 300));
+    }
+
+    /// The world round trip fixture's raid: its centre is in the air, so its first wave finds
+    /// no surface spot within 96 blocks and vanilla stops the raid when the cooldown runs out.
+    #[tokio::test]
+    async fn a_raid_stops_when_its_wave_has_nowhere_to_spawn() {
+        let world = crate::world::test_world();
+        let center = BlockPos::new(104, 200, 4);
+        load_empty_chunks(&world, center, 4);
+        let mut raid = Raid::new(2, center, Difficulty::Normal);
+        for _ in 0..299 {
+            raid.tick(&world);
+        }
+        assert_eq!(raid.status, RaidStatus::Ongoing);
+        assert!(raid.active);
+        assert_eq!((raid.ticks_active, raid.raid_cooldown_ticks), (299, 1));
+
+        raid.tick(&world);
+        assert_eq!(raid.status, RaidStatus::Stopped);
+        assert_eq!(raid.groups_spawned, 0);
+        assert!(!raid.started);
     }
 }

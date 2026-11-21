@@ -19,12 +19,13 @@ use pumpkin_protocol::{
             config::{CFinishConfig, CKnownPacks},
             login::CLoginSuccess,
             play::{
-                CChunkBatchEnd, CChunkData, CCloseContainer, CEntityPositionSync, CEntityVelocity,
-                CGameEvent, CHeadRot, CKeepAlive, CLogin, COpenScreen, CPingResponse,
-                CPlayDisconnect, CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
-                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetHealth,
-                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CUnloadChunk,
-                CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
+                CBlockUpdate, CChunkBatchEnd, CChunkData, CCloseContainer, CDisguisedChatMessage,
+                CEntityPositionSync, CEntityVelocity, CGameEvent, CHeadRot, CKeepAlive, CLogin,
+                CMultiBlockUpdate, COpenScreen, CPingResponse, CPlayDisconnect, CPlayerChatMessage,
+                CPlayerPosition, CRemoveEntities, CRespawn, CSetContainerContent,
+                CSetContainerSlot, CSetCursorItem, CSetEntityMetadata, CSetHealth, CSetPassengers,
+                CSetPlayerInventory, CSetSelectedSlot, CSpawnEntity, CSystemChatMessage,
+                CUnloadChunk, CUpdateEntityPos, CUpdateEntityPosRot, CUpdateEntityRot,
             },
         },
         packet_decoder::TCPNetworkDecoder,
@@ -34,11 +35,12 @@ use pumpkin_protocol::{
             handshake::SHandShake,
             login::{SLoginAcknowledged, SLoginStart},
             play::{
-                Action, ActionType, SAttack, SChatCommand, SChunkBatch, SClickSlot, SClientCommand,
-                SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive, SPickItemFromEntity,
-                SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerLoaded, SPlayerPosition,
-                SPlayerPositionRotation, SPlayerRotation, SSetHeldItem, SSpectateEntity, SSwingArm,
-                SUseItem, SUseItemOn, SlotActionType, Status,
+                Action, ActionType, SAttack, SChatCommand, SChatMessage, SChunkBatch, SClickSlot,
+                SClientCommand, SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive,
+                SPickItemFromEntity, SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerInput,
+                SPlayerLoaded, SPlayerPosition, SPlayerPositionRotation, SPlayerRotation,
+                SSetHeldItem, SSpectateEntity, SSwingArm, SUseItem, SUseItemOn, SlotActionType,
+                Status,
             },
         },
     },
@@ -86,7 +88,23 @@ pub struct TrackedEntity {
     /// The `minecraft:entity_type` registry id.
     pub entity_type: i32,
     pub position: Vector3<f64>,
+    /// The shared flags byte (on fire, sneaking, sprinting, swimming and so on), from the last
+    /// `SetEntityData` that carried it.
+    pub flags: u8,
+    /// The `EntityPose` id, from the last `SetEntityData` that carried it.
+    pub pose: i32,
 }
+
+/// `Entity.DATA_SHARED_FLAGS_ID` and `Entity.DATA_POSE`, and the data types the bot can skip
+/// over to reach them.
+const DATA_SHARED_FLAGS: u8 = 0;
+const DATA_POSE: u8 = 6;
+const DATA_TYPE_BYTE: i32 = 0;
+const DATA_TYPE_INT: i32 = 1;
+const DATA_TYPE_FLOAT: i32 = 3;
+const DATA_TYPE_BOOLEAN: i32 = 8;
+const DATA_TYPE_POSE: i32 = 20;
+const DATA_END: u8 = 0xFF;
 
 type PacketResult = Result<RawPacket, String>;
 
@@ -113,6 +131,8 @@ pub struct HeadlessBot {
     pub entity_packets: HashMap<(i32, i32), usize>,
     /// Every entity the server has spawned for the bot and not removed, by entity id.
     pub entities: HashMap<i32, TrackedEntity>,
+    /// The passenger ids of each vehicle, from the last `SetPassengers` for it.
+    pub passengers: HashMap<i32, Vec<i32>>,
     /// The dimension the bot is in, from the last `CRespawn`.
     pub dimension: String,
     /// From the last `CSetHealth`.
@@ -123,6 +143,10 @@ pub struct HeadlessBot {
     pub won_game: bool,
     /// The server said the bot's bed or respawn anchor was missing or blocked.
     pub no_respawn_block: bool,
+    /// Payloads of every system, player and disguised chat message.
+    pub chat: Vec<Bytes>,
+    /// Every single block update, as position and state id.
+    pub block_updates: Vec<(BlockPos, i32)>,
     teleports_confirmed: u32,
     last_pong: i64,
     next_ping: i64,
@@ -261,12 +285,15 @@ impl HeadlessBot {
             disconnect_reason: None,
             entity_packets: HashMap::new(),
             entities: HashMap::new(),
+            passengers: HashMap::new(),
             dimension: "minecraft:overworld".to_string(),
             health: 20.0,
             food: 20,
             saturation: 5.0,
             won_game: false,
             no_respawn_block: false,
+            chat: Vec::new(),
+            block_updates: Vec::new(),
             teleports_confirmed: 0,
             last_pong: 0,
             next_ping: 0,
@@ -424,12 +451,56 @@ impl HeadlessBot {
             id if id == CPlayDisconnect::to_id(CURRENT_MC_VERSION) => {
                 self.disconnect_reason = Some(packet.payload.clone());
             }
+            id if [
+                CSystemChatMessage::to_id(CURRENT_MC_VERSION),
+                CPlayerChatMessage::to_id(CURRENT_MC_VERSION),
+                CDisguisedChatMessage::to_id(CURRENT_MC_VERSION),
+            ]
+            .contains(&id) =>
+            {
+                self.chat.push(packet.payload.clone());
+            }
+            id if id == CBlockUpdate::to_id(CURRENT_MC_VERSION) => {
+                let position =
+                    BlockPos::from_i64(payload.get_i64_be().map_err(|err| read_error(id, &err))?);
+                let state = payload.get_var_int().map_err(|err| read_error(id, &err))?.0;
+                self.block_updates.push((position, state));
+            }
+            id if id == CMultiBlockUpdate::to_id(CURRENT_MC_VERSION) => {
+                self.read_multi_block_update(id, &mut payload)?;
+            }
             id => {
                 self.handle_inventory_packet(id, &mut payload)
                     .map_err(|err| read_error(id, &err))?;
                 self.handle_entity_packet(id, &mut payload)
                     .map_err(|err| read_error(id, &err))?;
             }
+        }
+        Ok(())
+    }
+
+    /// `SectionBlocksUpdate`: several changes in one section in one tick come as one packet.
+    fn read_multi_block_update(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), String> {
+        // Several changes in one section in one tick come as one packet.
+        let section = payload.get_i64_be().map_err(|err| read_error(id, &err))?;
+        let (section_x, section_y, section_z) = (
+            (section >> 42) as i32,
+            ((section << 44) >> 44) as i32,
+            ((section << 22) >> 42) as i32,
+        );
+        let count = payload.get_var_int().map_err(|err| read_error(id, &err))?.0;
+        for _ in 0..count {
+            let packed = payload
+                .get_var_long()
+                .map_err(|err| read_error(id, &err))?
+                .0;
+            let local = |shift: i64| ((packed >> shift) & 0xF) as i32;
+            let position = BlockPos::new(
+                section_x * 16 + local(8),
+                section_y * 16 + local(0),
+                section_z * 16 + local(4),
+            );
+            self.block_updates.push((position, (packed >> 12) as i32));
         }
         Ok(())
     }
@@ -479,6 +550,41 @@ impl HeadlessBot {
         Ok(())
     }
 
+    /// Takes the shared flags and the pose from a `SetEntityData`. Stops at the first value of a
+    /// type it can't skip; the entity tracker sends the flags and pose before any of those.
+    fn read_entity_data(
+        &mut self,
+        entity_id: i32,
+        payload: &mut &[u8],
+    ) -> Result<(), ReadingError> {
+        loop {
+            let index = payload.get_u8()?;
+            if index == DATA_END {
+                return Ok(());
+            }
+            let value = match payload.get_var_int()?.0 {
+                DATA_TYPE_BYTE => i32::from(payload.get_u8()?),
+                DATA_TYPE_INT | DATA_TYPE_POSE => payload.get_var_int()?.0,
+                DATA_TYPE_FLOAT => {
+                    payload.get_f32_be()?;
+                    continue;
+                }
+                DATA_TYPE_BOOLEAN => {
+                    payload.get_bool()?;
+                    continue;
+                }
+                _ => return Ok(()),
+            };
+            if let Some(entity) = self.entities.get_mut(&entity_id) {
+                match index {
+                    DATA_SHARED_FLAGS => entity.flags = value as u8,
+                    DATA_POSE => entity.pose = value,
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn handle_entity_packet(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), ReadingError> {
         if is_counted_entity_packet(id) {
             let mut peek = *payload;
@@ -502,6 +608,8 @@ impl HeadlessBot {
                 TrackedEntity {
                     entity_type: spawn.r#type.0,
                     position: spawn.position,
+                    flags: 0,
+                    pose: 0,
                 },
             );
         } else if id == CUpdateEntityPos::to_id(CURRENT_MC_VERSION)
@@ -515,6 +623,17 @@ impl HeadlessBot {
             if let Some(entity) = self.entities.get_mut(&entity_id) {
                 entity.position += delta;
             }
+        } else if id == CSetPassengers::to_id(CURRENT_MC_VERSION) {
+            let vehicle = payload.get_var_int()?.0;
+            let count = read_list_length(payload)?;
+            let mut ids = Vec::with_capacity(count);
+            for _ in 0..count {
+                ids.push(payload.get_var_int()?.0);
+            }
+            self.passengers.insert(vehicle, ids);
+        } else if id == CSetEntityMetadata::to_id(CURRENT_MC_VERSION) {
+            let entity_id = payload.get_var_int()?.0;
+            self.read_entity_data(entity_id, payload)?;
         } else if id == CEntityPositionSync::to_id(CURRENT_MC_VERSION) {
             let entity_id = payload.get_var_int()?.0;
             // Since 26.3 the position is a `PositionPath`; type 0 is `Linear`, a single position.
@@ -669,6 +788,27 @@ impl HeadlessBot {
             .collect()
     }
 
+    /// Sends an unsigned chat message, as an offline-mode client does.
+    pub async fn send_chat(&mut self, message: &str) -> Result<(), String> {
+        self.send_packet(&SChatMessage {
+            message,
+            timestamp: 0,
+            salt: 0,
+            signature: None,
+            message_count: VarInt(0),
+            acknowledged: &[0; 3],
+            checksum: 0,
+        })
+        .await
+    }
+
+    /// Whether a chat message whose text contains `text` arrived.
+    pub fn saw_chat_containing(&self, text: &str) -> bool {
+        self.chat
+            .iter()
+            .any(|payload| String::from_utf8_lossy(payload).contains(text))
+    }
+
     pub async fn send_command(&mut self, command: &str) -> Result<(), String> {
         self.send_packet(&SChatCommand { command }).await
     }
@@ -678,6 +818,11 @@ impl HeadlessBot {
             self.inventory.select(selected);
         }
         self.send_packet(&SSetHeldItem { slot }).await
+    }
+
+    /// Sends the movement keys held this tick, as `SPlayerInput` bits.
+    pub async fn send_input(&mut self, input: i8) -> Result<(), String> {
+        self.send_packet(&SPlayerInput { input }).await
     }
 
     pub async fn send_player_command(
@@ -717,6 +862,19 @@ impl HeadlessBot {
             entity_id: VarInt(entity_id),
             r#type: VarInt(ActionType::InteractAt as i32),
             target_position: Some(location),
+            hand: Some(VarInt(0)),
+            sneaking: false,
+        })
+        .await
+    }
+
+    /// Right-clicks an entity with the main hand without a hit position, the packet that boards
+    /// boats and mounts.
+    pub async fn use_entity(&mut self, entity_id: i32) -> Result<(), String> {
+        self.send_packet(&SInteract {
+            entity_id: VarInt(entity_id),
+            r#type: VarInt(ActionType::Interact as i32),
+            target_position: None,
             hand: Some(VarInt(0)),
             sneaking: false,
         })
