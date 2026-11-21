@@ -1,4 +1,4 @@
-use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::data_component_impl::{EquipmentSlot, StatusEffectInstance};
 use pumpkin_data::sound::Sound;
 use pumpkin_nbt::compound::NbtCompound;
 use std::sync::Arc;
@@ -51,5 +51,10 @@ impl Mob for ParchedSkeletonEntity {
 
     fn get_ambient_sound(&self) -> Option<Sound> {
         Some(Sound::EntityParchedAmbient)
+    }
+
+    /// Vanilla `Parched.getArrow`: every arrow carries 30 seconds of weakness.
+    fn arrow_effect(&self) -> Option<StatusEffectInstance> {
+        Some(super::arrow_effect_instance("minecraft:weakness", 600))
     }
 }

@@ -1,8 +1,9 @@
-use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::data_component_impl::{EquipmentSlot, PotionContentsImpl};
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_util::Hand;
 use rand::RngExt;
 use std::sync::Arc;
@@ -53,20 +54,49 @@ impl BowAttackGoal {
         }
     }
 
-    fn main_hand_item(mob: &dyn Mob) -> ItemStack {
+    /// Vanilla `ProjectileUtil.getWeaponHoldingHand(mob, Items.BOW)`: the main hand if it holds
+    /// the bow, the off hand otherwise.
+    fn bow_hand(mob: &dyn Mob) -> (Hand, ItemStack) {
         mob.get_mob_entity()
             .living_entity
             .entity_equipment
             .try_lock()
             .map_or_else(
-                |_| ItemStack::EMPTY.clone(),
-                |eq| eq.get(&EquipmentSlot::MAIN_HAND),
+                |_| (Hand::Right, ItemStack::EMPTY.clone()),
+                |eq| {
+                    let main_hand = eq.get(&EquipmentSlot::MAIN_HAND);
+                    if main_hand.item.id == Item::BOW.id {
+                        (Hand::Right, main_hand)
+                    } else {
+                        (Hand::Left, eq.get(&EquipmentSlot::OFF_HAND))
+                    }
+                },
             )
     }
 
+    /// Vanilla `Mob.isHolding(Items.BOW)`: a bow in either hand.
     #[must_use]
     pub fn is_holding_bow(mob: &dyn Mob) -> bool {
-        Self::main_hand_item(mob).item.id == Item::BOW.id
+        Self::bow_hand(mob).1.item.id == Item::BOW.id
+    }
+
+    /// Vanilla `Monster.getProjectile` for a bow: an arrow held in the off hand, then one in the
+    /// main hand, or else a plain arrow.
+    fn held_projectile(mob: &dyn Mob) -> ItemStack {
+        if let Ok(equipment) = mob
+            .get_mob_entity()
+            .living_entity
+            .entity_equipment
+            .try_lock()
+        {
+            for slot in [EquipmentSlot::OFF_HAND, EquipmentSlot::MAIN_HAND] {
+                let stack = equipment.get(&slot);
+                if stack.item.has_tag(&tag::Item::MINECRAFT_ARROWS) {
+                    return stack;
+                }
+            }
+        }
+        ItemStack::new(1, &Item::ARROW)
     }
 
     fn stop_drawing(&mut self, mob: &dyn Mob) {
@@ -83,13 +113,31 @@ impl BowAttackGoal {
         let world = entity.world.load();
         let world_full = entity.world.load_full();
 
-        let arrow_entity = Entity::new(world.clone(), entity.pos.load(), &EntityType::ARROW);
+        let mut projectile = Self::held_projectile(mob);
+        // The variants' `getArrow` adds the effect to an `Arrow` only, not a spectral arrow, and
+        // the arrow then applies it with the projectile's potion duration scale.
+        if projectile.item.id != Item::SPECTRAL_ARROW.id
+            && let Some(effect) = mob.arrow_effect()
+        {
+            let mut contents = projectile
+                .get_data_component::<PotionContentsImpl>()
+                .cloned()
+                .unwrap_or(PotionContentsImpl {
+                    potion_id: None,
+                    custom_color: None,
+                    custom_effects: Vec::new(),
+                    custom_name: None,
+                });
+            contents.custom_effects.push(effect);
+            projectile.set_data_component(contents);
+        }
+        let arrow_entity = Entity::new(
+            world.clone(),
+            entity.pos.load(),
+            ArrowEntity::entity_type_for_item(projectile.item),
+        );
 
-        let projectile = mob
-            .get_arrow_projectile()
-            .unwrap_or_else(|| ItemStack::new(1, &Item::ARROW));
-
-        let bow_item = Self::main_hand_item(mob);
+        let bow_item = Self::bow_hand(mob).1;
         let arrow = ArrowEntity::new_shot_with_weapon(
             arrow_entity,
             entity,
@@ -269,10 +317,10 @@ impl Goal for BowAttackGoal {
         } else {
             self.attack_time -= 1;
             if self.attack_time <= 0 && self.see_time >= -60 {
-                let stack = Self::main_hand_item(mob);
+                let (hand, stack) = Self::bow_hand(mob);
                 mob.get_mob_entity()
                     .living_entity
-                    .set_active_hand(Hand::Right, stack, i32::MAX);
+                    .set_active_hand(hand, stack, i32::MAX);
                 self.drawing = true;
                 self.draw_ticks = 0;
             }
