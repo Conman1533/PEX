@@ -127,7 +127,14 @@ fn reconcile_action(
 }
 
 fn schedule_reconcile(world: &Arc<World>, position: BlockPos, delay: u8) {
-    world.schedule_block_tick(&Block::BUBBLE_COLUMN, position, delay, TickPriority::Normal);
+    // A scheduled tick only runs for the block that is still there (vanilla
+    // `ServerLevel.tickBlock`), so a column that has yet to form is scheduled as water.
+    let block = if world.get_block(&position) == &Block::WATER {
+        &Block::WATER
+    } else {
+        &Block::BUBBLE_COLUMN
+    };
+    world.schedule_block_tick(block, position, delay, TickPriority::Normal);
 }
 
 fn bubble_column_vertical_velocity(
