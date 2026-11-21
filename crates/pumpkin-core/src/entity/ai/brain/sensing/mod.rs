@@ -13,6 +13,7 @@ pub mod mob_sensor;
 pub mod nearest_items;
 pub mod nearest_living_entities;
 pub mod nearest_players;
+pub mod piglin_brute_specific;
 pub mod tempting;
 
 pub use adult::AdultSensor;
@@ -45,6 +46,7 @@ pub enum SensorType {
     NearestAdult,
     NearestAdultAnyType,
     ArmadilloScareDetected,
+    PiglinBruteSpecific,
 }
 
 impl SensorType {
@@ -62,6 +64,7 @@ impl SensorType {
             Self::NearestAdult => "minecraft:nearest_adult",
             Self::NearestAdultAnyType => "minecraft:nearest_adult_any_type",
             Self::ArmadilloScareDetected => "minecraft:armadillo_scare_detected",
+            Self::PiglinBruteSpecific => "minecraft:piglin_brute_specific_sensor",
         }
     }
 
@@ -77,7 +80,8 @@ impl SensorType {
             | Self::FrogTemptations
             | Self::NautilusTemptations
             | Self::NearestAdult
-            | Self::NearestAdultAnyType => DEFAULT_SCAN_RATE,
+            | Self::NearestAdultAnyType
+            | Self::PiglinBruteSpecific => DEFAULT_SCAN_RATE,
             Self::ArmadilloScareDetected => ARMADILLO_SCARE_SCAN_RATE,
         }
     }
@@ -94,6 +98,7 @@ impl SensorType {
             Self::NautilusTemptations => Box::new(TemptingSensor::for_nautilus()),
             Self::NearestAdult => Box::new(AdultSensor::same_type()),
             Self::NearestAdultAnyType => Box::new(AdultSensor::any_type()),
+            Self::PiglinBruteSpecific => Box::new(piglin_brute_specific::PiglinBruteSpecificSensor),
             Self::ArmadilloScareDetected => Box::new(MobSensor::new(
                 crate::entity::passive::armadillo::is_scared_by_mob,
                 crate::entity::passive::armadillo::can_stay_rolled_up_in_brain,
