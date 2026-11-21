@@ -122,15 +122,7 @@ pub fn ensure_minecraft_data_dir(level_folder: &Path) -> Result<PathBuf, WorldIn
 /// Reads the `data` compound of the vanilla saved-data file `name` in `<folder>/data/minecraft/`.
 #[must_use]
 pub fn read_data_file(folder: &Path, name: &str) -> Option<NbtCompound> {
-    let path = minecraft_data_dir(folder).join(name);
-    let file = File::open(&path).ok()?;
-    match read_gzip_compound_tag(file) {
-        Ok(root) => Some(root.get_compound("data").cloned().unwrap_or(root)),
-        Err(e) => {
-            warn!("Failed to read {}: {e}", path.display());
-            None
-        }
-    }
+    read_namespaced_data_file(folder, "minecraft", name)
 }
 
 /// Writes `data` as the vanilla saved-data file `name` in `<folder>/data/minecraft/`. It goes
@@ -141,7 +133,38 @@ pub fn write_data_file(
     data_version: i32,
     data: NbtCompound,
 ) -> Result<(), WorldInfoError> {
-    let dir = ensure_minecraft_data_dir(folder)?;
+    write_namespaced_data_file(folder, "minecraft", name, data_version, data)
+}
+
+/// Reads the `data` compound of the saved-data file `name` in `<folder>/data/<namespace>/`.
+#[must_use]
+pub fn read_namespaced_data_file(
+    folder: &Path,
+    namespace: &str,
+    name: &str,
+) -> Option<NbtCompound> {
+    let path = folder.join("data").join(namespace).join(name);
+    let file = File::open(&path).ok()?;
+    match read_gzip_compound_tag(file) {
+        Ok(root) => Some(root.get_compound("data").cloned().unwrap_or(root)),
+        Err(e) => {
+            warn!("Failed to read {}: {e}", path.display());
+            None
+        }
+    }
+}
+
+/// Writes `data` as the saved-data file `name` in `<folder>/data/<namespace>/`, through a
+/// temporary file.
+pub fn write_namespaced_data_file(
+    folder: &Path,
+    namespace: &str,
+    name: &str,
+    data_version: i32,
+    data: NbtCompound,
+) -> Result<(), WorldInfoError> {
+    let dir = folder.join("data").join(namespace);
+    fs::create_dir_all(&dir)?;
     let tmp = dir.join(format!("{name}.tmp"));
     let mut root = NbtCompound::new();
     root.put_int("DataVersion", data_version);

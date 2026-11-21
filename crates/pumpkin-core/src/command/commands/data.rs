@@ -366,7 +366,12 @@ impl DataAccessor for StorageDataAccessor {
             .command_storage
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        storage.insert(self.id.clone(), tag.clone());
+        // Vanilla's `CommandStorage.Container.put` forgets a storage set to an empty compound.
+        if tag.is_empty() {
+            storage.remove(&self.id);
+        } else {
+            storage.insert(self.id.clone(), tag.clone());
+        }
         Ok(())
     }
 
