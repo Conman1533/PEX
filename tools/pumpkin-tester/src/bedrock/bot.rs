@@ -76,6 +76,8 @@ const PLAY_MODE_NORMAL: u32 = 0;
 const INTERACTION_MODEL_CROSSHAIR: i32 = 1;
 /// `PlayerActionType::StartDestroyBlock`, which breaks the block at once in creative.
 pub const ACTION_START_BREAK: i32 = 0;
+/// `PlayerActionType::PredictDestroyBlock`: the client thinks its timed break is done.
+pub const ACTION_PREDICT_BREAK: i32 = 26;
 /// `PlayerAuthInput`, for tests that send it raw.
 pub const PLAYER_AUTH_INPUT_ID: i32 = SPlayerAuthInput::PACKET_ID;
 /// `ActorLinkType`s.

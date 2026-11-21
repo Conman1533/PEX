@@ -527,6 +527,7 @@ async fn run_mixed_play(
     run_mount_checks(server, bedrock, &mut java, &mut checks).await?;
     // Before `run_block_checks`, which puts both players in creative.
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -1384,6 +1385,153 @@ async fn run_command_checks(
         )
         .await,
     );
+    Ok(())
+}
+
+/// Digging from Bedrock outside creative follows the Java rules: a timed break ends on the
+/// server's clock, and adventure and spectator players can't break blocks.
+async fn run_survival_break_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    // Spawn protection lets only operators build.
+    run_console(server, &format!("op {BEDROCK_NAME}"));
+    run_console(server, &format!("gamemode survival {BEDROCK_NAME}"));
+
+    // A head-high block beside the Bedrock bot, on the side away from the Java bot.
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java.position.x > f64::from(bedrock.position.x) {
+        -1.0
+    } else {
+        1.0
+    };
+    let target = BlockPos::floored(
+        f64::from(bedrock.position.x) + side,
+        feet + 1.0,
+        f64::from(bedrock.position.z),
+    );
+    let setblock = format!("setblock {} {} {} dirt", target.0.x, target.0.y, target.0.z);
+    run_console(server, &setblock);
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let dirt = bedrock
+        .block_updates
+        .iter()
+        .rev()
+        .find(|(pos, _)| *pos == target)
+        .map(|(_, state)| *state)
+        .ok_or("the Bedrock bot never saw the dirt placed")?;
+
+    // Survival: dirt by hand takes 15 ticks. The client claims it after 2; the server keeps the
+    // block and finishes the break itself once its own progress gets there, as for Java.
+    bedrock
+        .send_input(bedrock.position, &[(bot::ACTION_START_BREAK, target, 1)])
+        .await?;
+    for _ in 0..2 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    bedrock
+        .send_input(bedrock.position, &[(bot::ACTION_PREDICT_BREAK, target, 1)])
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    checks.record(
+        "an early bedrock break waits for the server",
+        if world.get_block_state(&target).is_air() {
+            Err("the dirt broke 5 ticks into a 15-tick dig".to_string())
+        } else {
+            Ok(())
+        },
+    );
+    checks.record(
+        "java sees bedrock finish a survival break",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "an air block update at the dug block on the Java bot",
+            |_, java| {
+                java.is_some_and(|java| {
+                    java.block_updates
+                        .iter()
+                        .any(|(pos, state)| *pos == target && *state == 0)
+                })
+            },
+        )
+        .await,
+    );
+
+    run_no_break_checks(server, bedrock, java, checks, target, dirt).await?;
+    run_console(server, &format!("gamemode survival {BEDROCK_NAME}"));
+    run_console(
+        server,
+        &format!("setblock {} {} {} air", target.0.x, target.0.y, target.0.z),
+    );
+    tick(server, bedrock, Some(&mut *java)).await?;
+    Ok(())
+}
+
+/// Adventure (without a `can_break` item) and spectator players dig the block for 20 ticks; it
+/// must stay, and the Bedrock bot must be sent it back.
+async fn run_no_break_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    target: BlockPos,
+    dirt: u32,
+) -> Result<(), String> {
+    let world = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?
+        .world();
+    let setblock = format!("setblock {} {} {} dirt", target.0.x, target.0.y, target.0.z);
+    for (mode, name) in [
+        ("adventure", "adventure bedrock can't break a block"),
+        ("spectator", "spectator bedrock can't break a block"),
+    ] {
+        run_console(server, &format!("gamemode {mode} {BEDROCK_NAME}"));
+        run_console(server, &setblock);
+        for _ in 0..3 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        let seen = bedrock.block_updates.len();
+        bedrock
+            .send_input(bedrock.position, &[(bot::ACTION_START_BREAK, target, 1)])
+            .await?;
+        for _ in 0..20 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        bedrock
+            .send_input(bedrock.position, &[(bot::ACTION_PREDICT_BREAK, target, 1)])
+            .await?;
+        for _ in 0..3 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        let resent = bedrock.block_updates[seen..]
+            .iter()
+            .any(|(pos, state)| *pos == target && *state == dirt);
+        checks.record(
+            name,
+            if world.get_block_state(&target).is_air() {
+                Err(format!("the dirt broke in {mode}"))
+            } else if !resent {
+                Err("the Bedrock bot was not sent the dirt back".to_string())
+            } else {
+                Ok(())
+            },
+        );
+    }
     Ok(())
 }
 
