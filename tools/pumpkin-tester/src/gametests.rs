@@ -31,12 +31,10 @@ const CREEPER_TEST_Z: i32 = -64;
 /// the zombie's 35-block follow range, the longest of the mobs they spawn.
 const MOB_TEST_GRID_SPACING: i32 = 56;
 /// Mob tests fill the cells around the creeper test, in units of `MOB_TEST_GRID_SPACING`, the
-/// nearest first. The creeper comes from a structure, so it has no persistence and despawns when
-/// the nearest mock player is more than 128 blocks away (`Mob.checkDespawn`); these cells keep
-/// every mock player within that: the outer cells are 112 blocks out along one axis or lean back
-/// towards the creeper, so the player spots near each cell's origin stay under 126 blocks. More
-/// cells need the creeper made persistent or moved.
-const MOB_TEST_CELLS: [(i32, i32); 18] = [
+/// nearest first. The test helper's spawns are persistent and so is the creeper test's (its
+/// `summon` gives `PersistenceRequired`), so a cell may sit more than 128 blocks from the
+/// nearest mock player without its mobs despawning (`Mob.checkDespawn`).
+const MOB_TEST_CELLS: [(i32, i32); 44] = [
     (0, -1),
     (-1, 0),
     (1, 0),
@@ -55,6 +53,32 @@ const MOB_TEST_CELLS: [(i32, i32); 18] = [
     (-2, 1),
     (-1, 2),
     (2, -1),
+    (2, 1),
+    (1, 2),
+    (-2, -2),
+    (2, -2),
+    (-2, 2),
+    (2, 2),
+    (0, -3),
+    (-3, 0),
+    (3, 0),
+    (0, 3),
+    (-1, -3),
+    (-3, -1),
+    (1, -3),
+    (-3, 1),
+    (-1, 3),
+    (3, -1),
+    (1, 3),
+    (3, 1),
+    (-2, -3),
+    (-3, -2),
+    (2, -3),
+    (-3, 2),
+    (-2, 3),
+    (3, -2),
+    (2, 3),
+    (3, 2),
 ];
 /// The suite always gets at least this many ticks, plus a margin over the longest test.
 const MIN_GAMETEST_TICKS: usize = 500;
