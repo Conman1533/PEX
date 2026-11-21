@@ -48,6 +48,7 @@ dimensions/minecraft/*/entities/*.mca Entities[*] G7-24; first run: step 2: 2 lo
 # G7-24: entities in force-loaded chunks now go live in PEX without a player, so PEX
 # saves them through its own entity model instead of passing their NBT through
 dimensions/minecraft/*/entities/*.mca Entities[*].AX G7-24; first run: step 1: 1 added
+dimensions/minecraft/*/entities/*.mca Entities[*].anchor_pos G7-24; PEX writes an anchor ([0,5,0]) for a phantom vanilla saved without one; 2026-11-21 batch 7 run: step 1: 1 added
 dimensions/minecraft/*/entities/*.mca Entities[*].AY G7-24; first run: step 1: 1 added
 dimensions/minecraft/*/entities/*.mca Entities[*].AZ G7-24; first run: step 1: 1 added
 dimensions/minecraft/*/entities/*.mca Entities[*].AgeLocked G7-24; first run: step 1: 5 lost
