@@ -270,6 +270,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:commands/forceload_add_loads_before_answering",
     "pumpkin:commands/execute_if_blocks_compares_states",
     "pumpkin:commands/setblock_and_fill_parse_block_states",
+    "pumpkin:commands/block_predicates_check_states_tags_and_nbt",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -730,6 +731,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_setblock_and_fill_parse_block_states,
+        );
+        register_function_test(
+            "pumpkin:commands/block_predicates_check_states_tags_and_nbt",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            commands_and_entities_extended::test_block_predicates_check_states_tags_and_nbt,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",

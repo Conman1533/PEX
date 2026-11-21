@@ -14,7 +14,7 @@
 )]
 
 use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
-use crate::command::argument_types::block::BlockArgumentType;
+use crate::command::argument_types::block_predicate::BlockPredicateArgumentType;
 use crate::command::argument_types::coordinates::block_pos::BlockPosArgumentType;
 use crate::command::argument_types::coordinates::rotation::RotationArgumentType;
 use crate::command::argument_types::coordinates::swizzle::SwizzleArgumentType;
@@ -297,13 +297,12 @@ fn execute_if_block_modifier(
     context: &CommandContext,
 ) -> crate::command::node::RedirectModifierResult {
     let pos = BlockPosArgumentType::get_block_pos(context, "pos")?;
-    let expected_block = BlockArgumentType::get(context, "block")?;
+    let predicate = BlockPredicateArgumentType::get(context, "block")?;
 
-    if let Some(ref world) = context.source.world {
-        let block = world.get_block(&pos);
-        if block == expected_block {
-            return Ok(vec![context.source.clone()]);
-        }
+    if let Some(ref world) = context.source.world
+        && world.block_matches(&pos, &predicate)
+    {
+        return Ok(vec![context.source.clone()]);
     }
     Ok(vec![])
 }
@@ -312,11 +311,10 @@ fn execute_unless_block_modifier(
     context: &CommandContext,
 ) -> crate::command::node::RedirectModifierResult {
     let pos = BlockPosArgumentType::get_block_pos(context, "pos")?;
-    let expected_block = BlockArgumentType::get(context, "block")?;
+    let predicate = BlockPredicateArgumentType::get(context, "block")?;
 
     if let Some(ref world) = context.source.world {
-        let block = world.get_block(&pos);
-        if block != expected_block {
+        if !world.block_matches(&pos, &predicate) {
             return Ok(vec![context.source.clone()]);
         }
     } else {
@@ -1412,9 +1410,12 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                     ),
                 ))
                 .then(
-                    literal("block").then(argument("pos", BlockPosArgumentType).then(
-                        argument("block", BlockArgumentType).conditional(execute_if_block_modifier),
-                    )),
+                    literal("block").then(
+                        argument("pos", BlockPosArgumentType).then(
+                            argument("block", BlockPredicateArgumentType)
+                                .conditional(execute_if_block_modifier),
+                        ),
+                    ),
                 )
                 .then(literal("loaded").then(
                     argument("pos", BlockPosArgumentType).conditional(execute_if_loaded_modifier),
@@ -1554,7 +1555,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                 .then(
                     literal("block").then(
                         argument("pos", BlockPosArgumentType).then(
-                            argument("block", BlockArgumentType)
+                            argument("block", BlockPredicateArgumentType)
                                 .conditional(execute_unless_block_modifier),
                         ),
                     ),

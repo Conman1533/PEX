@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use pumpkin_data::tag::{RegistryKey, get_tag_ids};
-use pumpkin_data::{Block, translation};
+use pumpkin_data::{Block, BlockStateId, translation};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::text::TextComponent;
 
 use crate::argument_types::argument_type::{ArgumentType, JavaClientArgumentType};
-use crate::argument_types::block::INVALID_BLOCK_ERROR_TYPE;
+use crate::argument_types::block::{INVALID_BLOCK_ERROR_TYPE, read_properties};
 use crate::argument_types::nbt::NbtCompoundArgumentType;
+use crate::argument_types::nbt_path::compare_nbt;
 use crate::context::command_context::CommandContext;
 use crate::errors::command_syntax_error::CommandSyntaxError;
 use crate::errors::error_types::CommandErrorType;
@@ -45,14 +46,43 @@ pub enum BlockPredicate {
 }
 
 impl BlockPredicate {
+    /// Vanilla `BlockPredicateArgument`'s `BlockPredicate` and `TagPredicate.test`: the block or
+    /// tag, then every named property against `state`, then the NBT as a partial match of the
+    /// block entity's (`NbtUtils.compareNbt`). `block_entity_nbt` is only called when the
+    /// predicate has NBT, and a block without a block entity never matches one that does.
     #[must_use]
-    pub fn test(&self, block: &Block) -> bool {
-        match self {
+    pub fn test(
+        &self,
+        state: BlockStateId,
+        block_entity_nbt: impl FnOnce() -> Option<NbtCompound>,
+    ) -> bool {
+        let block = Block::from_state_id(state);
+        let (matches, properties, nbt) = match self {
             Self::Block {
-                block: expected, ..
-            } => block.id == expected.id,
-            Self::Tag { block_ids, .. } => block_ids.contains(&block.id.as_u16()),
+                block: expected,
+                properties,
+                nbt,
+            } => (block.id == expected.id, properties, nbt),
+            Self::Tag {
+                block_ids,
+                properties,
+                nbt,
+                ..
+            } => (block_ids.contains(&block.id.as_u16()), properties, nbt),
+        };
+        if !matches || !has_properties(block, state, properties) {
+            return false;
         }
+        nbt.as_ref().is_none_or(|expected| {
+            block_entity_nbt().is_some_and(|actual| {
+                expected.child_tags.iter().all(|(key, value)| {
+                    actual
+                        .child_tags
+                        .get(key)
+                        .is_some_and(|actual_value| compare_nbt(value, actual_value))
+                })
+            })
+        })
     }
 
     #[must_use]
@@ -61,6 +91,27 @@ impl BlockPredicate {
             Self::Block { nbt, .. } | Self::Tag { nbt, .. } => nbt.is_some(),
         }
     }
+}
+
+/// Whether `state` has each named property at the named value. A name the block doesn't have,
+/// or a value the property doesn't take, fails, as vanilla's `TagPredicate` does.
+fn has_properties(
+    block: &Block,
+    state: BlockStateId,
+    properties: &HashMap<String, String>,
+) -> bool {
+    if properties.is_empty() {
+        return true;
+    }
+    let Some(props) = block.properties(state) else {
+        return false;
+    };
+    let props = props.to_props();
+    properties.iter().all(|(name, value)| {
+        props
+            .iter()
+            .any(|prop| prop.key().to_str() == name && prop.value_str() == value)
+    })
 }
 
 fn parse_properties(
@@ -185,10 +236,19 @@ impl<S: crate::source::CommandSource> ArgumentType<S> for BlockPredicateArgument
             };
 
             let block = Block::from_name(&normalized).ok_or_else(|| {
-                INVALID_BLOCK_ERROR_TYPE.create(reader, TextComponent::text(normalized))
+                INVALID_BLOCK_ERROR_TYPE.create(reader, TextComponent::text(normalized.clone()))
             })?;
 
-            let properties = parse_properties(reader)?;
+            // A block's properties are checked against it, like vanilla `readProperties`; a
+            // tag's are vague and only checked when tested.
+            let properties = if reader.peek() == Some('[') {
+                read_properties(reader, block, &normalized)?
+                    .into_iter()
+                    .map(|(name, value)| (name.to_string(), value.to_string()))
+                    .collect()
+            } else {
+                HashMap::new()
+            };
             let nbt = parse_nbt(reader)?;
 
             Ok(BlockPredicate::Block {
