@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `0028f6d80`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4086dbc0e`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -16,14 +16,14 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G1 Mob AI | 45 | 12 | 1 | 32 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
-| G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
+| G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 31 | 17 | 0 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 33 | 18 | 1 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 201 | 88 | 6 | 91 | 16 |
+| Total | 203 | 90 | 7 | 90 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -1551,6 +1551,7 @@ Format and place of the lists, outside the migration:
 - Branch: fix/offline-name-lookup
 - Needs decision: D4-1
 - Done when: the GameTest passes, with expected UUIDs written as literals taken from a vanilla 26.3 offline server (its `whitelist.json` and `ops.json` after the same commands, or its `usercache.json` after the player logs in, whichever D4-1's rule matches), and fails on alpha if D4-1 changes the rule.
+- Status (2026-11-21): landed (branch `fix/offline-name-lookup`, second lane). Offline, a name the server has never seen is lowercased with full Unicode, asked of Mojang only when it passes vanilla `isValidPlayerName`, and otherwise gets the offline UUID of the lowercased name, as D4-1 decides; `UserCache::get_by_name` lowercases like vanilla. The GameTest `pumpkin:commands/unseen_names_get_vanilla_offline_uuids` fails on `alpha` and passes; its names both fail `isValidPlayerName`, so it never calls Mojang. Its expected UUIDs come from a real offline vanilla 26.3 server on CT 117: `whitelist add ÜNSEEN_Ö` wrote `71a40931-0171-32ae-9ad7-f1fe3f10bdd5` as `ünseen_ö`, and `op Pex_Unseen_Operator` wrote `cc0dca9b-f304-394a-b001-6cc071e65d7c` as `pex_unseen_operator` (and `op Pex_Unseen_Op`, a valid name with no Mojang account, gave `a6bba466-81d4-3e84-ad56-62e34d06e440` after the Mojang lookup found no account). Landed through merge branch `land/g7-batch-14` (`4086dbc0e`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G4-04 Upgrade notes for admins and plugin authors
 
@@ -1780,7 +1781,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: feat/rail-junction-switching
 - Needs decision: none
 - Done when: `pumpkin:redstone/rail_junction_switches` (a torch beside a T-junction turns off) fails on alpha and passes on both.
-- Status (2026-11-21): landed (branch `feat/rail-junction-switching`, second lane, carrying G5-11). Vanilla `RailState` is ported, and a three-way rail junction re-orients when a signal source updates it; repeaters, comparators and torches pass themselves as the update source. The GameTest `pumpkin:redstone/rail_junction_switches` fails on `alpha` and passes, and the other rail and redstone GameTests still pass. The other emitters (lever, buttons, pressure plates, lightning rod, lectern, tripwire hook, trapped chest, detector rail) pass themselves too since batch 13 (branch `fix/emitter-update-source`, `36fe25bef`), with the GameTest `pumpkin:redstone/lever_and_button_switch_rail_junctions`; a detector rail's removal still skips `BaseRailBlock`'s always and slope updates (a G9 note). Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+- Status (2026-11-21): landed (branch `feat/rail-junction-switching`, second lane, carrying G5-11). Vanilla `RailState` is ported, and a three-way rail junction re-orients when a signal source updates it; repeaters, comparators and torches pass themselves as the update source. The GameTest `pumpkin:redstone/rail_junction_switches` fails on `alpha` and passes, and the other rail and redstone GameTests still pass. The agent harness passes G5-11 (which `alpha` failed) and G5-09, and found one soft fail in G5-12: placing a lit torch beside a junction does not switch it, which vanilla does not either, so the scenario now uses `/setblock`, whose neighbour update source the second lane is fixing on `fix/setblock-update-source`. The other emitters (lever, buttons, pressure plates, lightning rod, lectern, tripwire hook, trapped chest, detector rail) pass themselves too since batch 13 (branch `fix/emitter-update-source`, `36fe25bef`), with the GameTest `pumpkin:redstone/lever_and_button_switch_rail_junctions`; a detector rail's removal still skips `BaseRailBlock`'s always and slope updates (a G9 note). Landed through merge branch `land/g7-batch-12` (`9f63cd53d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-13 Torch burnout
 
@@ -2150,7 +2151,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/block-state-argument
 - Needs decision: none
 - Done when: from the console, `setblock 3 200 0 minecraft:piston[facing=east]` places an east-facing piston and `setblock 3 201 0 minecraft:chest{Items:[{Slot:0b,id:"minecraft:stone",count:3}]}` a chest holding 3 stone, as vanilla 26.3 does (run both); an unknown property or value fails with vanilla's `argument.block.property.unknown` / `argument.block.property.invalid` messages; `fill` with a state fills that state; unit tests for the parser.
-- Status (2026-11-21): added by the 2.0 loop after the agent harness found `/setblock 3 200 0 minecraft:piston[facing=east]` fails with "Expected whitespace to end one argument, but found trailing data" on `alpha` `7b3ae93e3`, which vanilla accepts.
+- Status (2026-11-21): landed (branch `fix/block-state-argument`, second lane). The block argument of `setblock`, `fill` and `clone` is a port of vanilla `BlockStateParser`: `[property=value,...]` and `{nbt}` with vanilla's error keys, and the command places that state and loads the data into the new block entity. The GameTest `pumpkin:commands/setblock_and_fill_parse_block_states` fails on `alpha` and passes, with parser unit tests beside it. Side-by-side console run on CT 117, PEX batch 14 against vanilla 26.3 on the same seed: the east-facing piston, the chest holding 3 stone, `fill` with stairs states, `fill` and `clone` of a west-facing chest with its items, and the four errors (unknown property, bad value, a property set twice, a property the block lacks) printed the same lines, apart from two bugs outside this piece that the run found: G6-32 and G6-33. The agent harness's G6-28 scenario passes 19 of 19 on the branch. Landed through merge branch `land/g7-batch-14` (`4086dbc0e`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G6-29 Nether portal exits are placed where vanilla places them
 
@@ -2178,6 +2179,24 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: from the console, `forceload add 400 400` then `setblock 400 100 400 minecraft:stone` in the next command succeeds every time on PEX, as on vanilla 26.3; a test that runs the two commands back to back 20 times.
 - Status (2026-11-21): landed (branch `fix/forceload-sync`, second lane). `forceload add` loads its chunks before it answers, so the next command finds them loaded. The GameTest `pumpkin:commands/forceload_add_loads_before_answering` fails on `alpha` and passes. Like vanilla it holds the command until the chunks exist, so ungenerated chunks hold it for their generation: 9 fresh Nether chunks took about 16 s on the ThinkPad (a G9 note: check whether that wait stalls the whole tick). Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+
+#### G6-32 Block predicates test states, tags and NBT
+
+- Scope: in: `execute if|unless block` takes a block predicate like vanilla `BlockPredicateArgument` (a tag such as `#minecraft:logs`, `[property=value,...]` and `{nbt}`) instead of `BlockArgumentType`, which compares only the block type; `BlockPredicate::test` in `pumpkin-command` `argument_types/block_predicate.rs` checks the named properties against the block state and the NBT against the block entity like vanilla `BlockPredicateArgument.BlockPredicate.test` (partial `NbtUtils.compareNbt`), and `fill ... replace <filter>` and `clone ... filtered <filter>` use that test. Out: new commands.
+- Depends on: G6-28 (the state parser)
+- Branch: fix/block-predicate-states
+- Needs decision: none
+- Done when: from the console on PEX and vanilla 26.3 (the CT 117 side-by-side, `/srv/pex/scratch/pb2/cons/cons2.sh <pex-binary> <commands>`), `execute if block 3 200 0 minecraft:piston[facing=north]` on an east-facing piston answers "Test failed", `execute if block` on an oak log with `#minecraft:logs` answers "Test passed", `execute if block` on a chest with `minecraft:chest{Items:[{Slot:0b}]}` passes only when slot 0 holds an item, and `fill ... replace minecraft:oak_stairs[facing=north]` replaces only those stairs; a GameTest.
+- Status (2026-11-21): added by the 2.0 loop after the G6-28 side-by-side on batch 14 (`4086dbc0e`): `execute if block 3 200 0 minecraft:piston[facing=north]` and `execute if block 6 200 1 minecraft:oak_stairs[facing=south]` answer "Test passed" for an east-facing piston and north-facing stairs, where vanilla answers "Test failed".
+
+#### G6-33 data block messages name the position like vanilla
+
+- Scope: in: `commands.data.block.query` and `commands.data.block.modified` in `core/command/commands/data.rs` get x, y and z as three arguments, like vanilla `BlockDataAccessor`, instead of one "x, y, z" text. Out: the key order inside printed SNBT (vanilla prints a `CompoundTag` in hash order).
+- Depends on: none
+- Branch: fix/data-block-query-args
+- Needs decision: none
+- Done when: `data get block` and `data modify block` on a chest print the same lines on PEX and vanilla 26.3 in the side-by-side, apart from SNBT key order.
+- Status (2026-11-21): built, proof missing (branch `fix/data-block-query-args`, `b62eeec08`, the 2.0 loop). Found in the G6-28 side-by-side: PEX printed `3, 201, 0, [...], [...] has the following block data: [...]` where vanilla prints `3, 201, 0 has the following block data: [...]`. Missing: the side-by-side run on a build with the fix.
 
 ### Proof
 
