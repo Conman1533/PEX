@@ -99,6 +99,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     // redstone_logic_circuits (12)
     "pumpkin:redstone_double_inverter_buffer",
     "pumpkin:redstone_wall_torch_inverter",
+    "pumpkin:redstone/torch_burnout",
     "pumpkin:redstone_or_gate",
     "pumpkin:redstone_nor_gate",
     "pumpkin:redstone_and_gate_three_torches",
@@ -809,6 +810,13 @@ pub fn ensure_builtin_game_tests_registered() {
             30,
             0,
             redstone_logic_circuits::test_redstone_wall_torch_inverter,
+        );
+        register_function_test(
+            "pumpkin:redstone/torch_burnout",
+            "pumpkin:empty_5x4x5",
+            300,
+            0,
+            redstone_logic_circuits::test_torch_burnout,
         );
         register_function_test(
             "pumpkin:redstone_or_gate",
