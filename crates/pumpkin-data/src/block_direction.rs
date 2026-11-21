@@ -220,18 +220,26 @@ impl BlockDirection {
     }
 
     /// The four horizontal directions in vanilla `Direction.Plane.HORIZONTAL` order NORTH, EAST,
-    /// SOUTH, WEST (matching vanilla's `getRandomDirection(random)` indexes with `nextInt(4)`).
-    /// Worldgen-parity code that samples or iterates a random horizontal direction MUST use this,
-    /// not [`Self::horizontal`] (whose `[North, South, West, East]` order would pick a different
-    /// direction for the same draw).
+    /// SOUTH, WEST. Code that runs updates while going round a block, where vanilla loops over
+    /// `Direction.Plane.HORIZONTAL`, uses this rather than [`Self::horizontal`] (`[North, South,
+    /// West, East]`).
     #[must_use]
-    pub const fn horizontal_worldgen() -> [HorizontalFacing; 4] {
+    pub const fn horizontal_plane() -> [HorizontalFacing; 4] {
         [
             HorizontalFacing::North,
             HorizontalFacing::East,
             HorizontalFacing::South,
             HorizontalFacing::West,
         ]
+    }
+
+    /// [`Self::horizontal_plane`], for worldgen (matching vanilla's `getRandomDirection(random)`
+    /// indexes with `nextInt(4)`). Worldgen-parity code that samples or iterates a random
+    /// horizontal direction MUST use this, not [`Self::horizontal`] (whose order would pick a
+    /// different direction for the same draw).
+    #[must_use]
+    pub const fn horizontal_worldgen() -> [HorizontalFacing; 4] {
+        Self::horizontal_plane()
     }
 
     #[must_use]

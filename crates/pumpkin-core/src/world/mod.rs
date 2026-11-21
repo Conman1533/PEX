@@ -6768,7 +6768,8 @@ impl World {
         pos: &BlockPos,
         changed_block: &Block,
     ) {
-        for direction in BlockDirection::horizontal() {
+        // Vanilla `Level.updateNeighbourForOutputSignal` goes round `Direction.Plane.HORIZONTAL`.
+        for direction in BlockDirection::horizontal_plane() {
             let mut relative_pos = pos.offset(direction.to_offset());
             if self.is_loaded(&relative_pos) {
                 let state = self.get_block_state(&relative_pos);

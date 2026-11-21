@@ -81,7 +81,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:wither_pattern_spawns",
     "pumpkin:item_entities_merge",
     "pumpkin:dragon_fireball_leaves_breath_cloud",
-    // redstone_wire_and_power (14)
+    // redstone_wire_and_power (15)
     "pumpkin:redstone_wire_attenuation_1_to_4",
     "pumpkin:redstone_wire_attenuation_5_to_8",
     "pumpkin:redstone_wire_attenuation_9_to_12",
@@ -96,6 +96,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:redstone_wire_repeater_reboosts_to_15",
     "pumpkin:redstone_wire_strong_power_through_stone",
     "pumpkin:redstone_block_powers_all_horizontal_wires",
+    "pumpkin:redstone/wire_washed_away_unpowers_lamp",
     // redstone_logic_circuits (12)
     "pumpkin:redstone_double_inverter_buffer",
     "pumpkin:redstone_wall_torch_inverter",
@@ -711,7 +712,7 @@ pub fn ensure_builtin_game_tests_registered() {
             water_mobs::test_zombie_nautilus_charges_survival_player,
         );
 
-        // redstone_wire_and_power (14)
+        // redstone_wire_and_power (15)
         register_function_test(
             "pumpkin:redstone_wire_attenuation_1_to_4",
             "pumpkin:empty_6x4x4",
@@ -809,6 +810,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             redstone_wire_and_power::test_redstone_wire_corner_south_west,
+        );
+        register_function_test(
+            "pumpkin:redstone/wire_washed_away_unpowers_lamp",
+            "pumpkin:empty_5x4x5",
+            40,
+            0,
+            redstone_wire_and_power::test_wire_washed_away_unpowers_lamp,
         );
 
         // redstone_logic_circuits (12)
