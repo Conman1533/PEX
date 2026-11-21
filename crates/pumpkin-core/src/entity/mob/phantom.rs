@@ -26,7 +26,9 @@ enum PhantomMovementType {
 pub struct PhantomEntity {
     pub mob_entity: MobEntity,
     target_position: Mutex<Vector3<f64>>,
-    circling_center: Mutex<BlockPos>,
+    /// Vanilla `Phantom.anchorPoint`: unset until the phantom finishes spawning or starts
+    /// circling.
+    circling_center: Mutex<Option<BlockPos>>,
     movement_type: AtomicU8,
     phantom_size: AtomicI32,
 }
@@ -37,7 +39,7 @@ impl PhantomEntity {
         let phantom = Self {
             mob_entity,
             target_position: Mutex::new(Vector3::new(0.0, 0.0, 0.0)),
-            circling_center: Mutex::new(BlockPos::new(0, 0, 0)),
+            circling_center: Mutex::new(None),
             movement_type: AtomicU8::new(PhantomMovementType::Circle as u8),
             phantom_size: AtomicI32::new(0),
         };
@@ -48,13 +50,8 @@ impl PhantomEntity {
         };
         let phantom_weak = Arc::downgrade(&mob_arc);
 
-        // Set no gravity and flying
-        mob_arc
-            .mob_entity
-            .living_entity
-            .entity
-            .set_has_no_gravity(true);
-
+        // Flies without the NoGravity flag, which vanilla never sets on a phantom: its gravity is
+        // zero (`get_mob_gravity`), like a bat.
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
@@ -80,18 +77,8 @@ impl PhantomEntity {
             );
         }
 
-        // Initialize circling center to current pos up 5
         {
             let pos = mob_arc.mob_entity.living_entity.entity.pos.load();
-            let block_pos = BlockPos::new(
-                pos.x.floor() as i32,
-                pos.y.floor() as i32 + 5,
-                pos.z.floor() as i32,
-            );
-            *mob_arc
-                .circling_center
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = block_pos;
             *mob_arc
                 .target_position
                 .lock()
@@ -207,15 +194,36 @@ impl Mob for PhantomEntity {
         );
     }
 
-    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        let center = *self
+    /// Vanilla `Phantom.finalizeSpawn` anchors the phantom five blocks above where it spawned.
+    fn finalize_spawn(
+        &self,
+        _world: &Arc<crate::world::World>,
+        group_data: Option<super::spawn::SpawnGroupData>,
+    ) -> Option<super::spawn::SpawnGroupData> {
+        self.mob_entity.finalize_spawn_base();
+        let pos = self.get_entity().block_pos.load();
+        *self
             .circling_center
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        nbt.put(
-            "anchor_pos",
-            pumpkin_nbt::tag::NbtTag::IntArray(vec![center.0.x, center.0.y, center.0.z]),
-        );
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pos.up_height(5));
+        self.phantom_size.store(0, Ordering::Relaxed);
+        self.get_entity()
+            .set_synced_data(tracked_data::phantom::ID_SIZE, 0);
+        group_data
+    }
+
+    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
+        // Vanilla `storeNullable`: no key while the anchor is unset.
+        if let Some(center) = *self
+            .circling_center
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        {
+            nbt.put(
+                "anchor_pos",
+                pumpkin_nbt::tag::NbtTag::IntArray(vec![center.0.x, center.0.y, center.0.z]),
+            );
+        }
         nbt.put_int("size", self.phantom_size.load(Ordering::Relaxed));
     }
 
@@ -230,12 +238,10 @@ impl Mob for PhantomEntity {
                 )
             }),
         };
-        if let Some(anchor) = anchor {
-            *self
-                .circling_center
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = anchor;
-        }
+        *self
+            .circling_center
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = anchor;
         if let Some(size) = nbt.get_int("size").or_else(|| nbt.get_int("Size")) {
             self.phantom_size.store(size, Ordering::Relaxed);
             let entity = self.get_entity();
@@ -270,22 +276,13 @@ impl CircleMovementGoal {
             return;
         };
         let center = {
-            let mut c = phantom
+            // Vanilla `selectNext`: an unset anchor becomes the phantom's own block.
+            let block_pos = phantom.mob_entity.living_entity.entity.block_pos.load();
+            *phantom
                 .circling_center
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if c.0.x == 0 && c.0.y == 0 && c.0.z == 0 {
-                let pos = phantom.mob_entity.living_entity.entity.pos.load();
-                let new_center = BlockPos::new(
-                    pos.x.floor() as i32,
-                    pos.y.floor() as i32,
-                    pos.z.floor() as i32,
-                );
-                *c = new_center;
-                new_center
-            } else {
-                *c
-            }
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get_or_insert(block_pos)
         };
         self.angle += self.direction * 15.0 * std::f32::consts::PI / 180.0;
         let target = Vector3::new(
@@ -521,6 +518,15 @@ impl StartAttackGoal {
         let Some(target) = phantom.mob_entity.get_target() else {
             return;
         };
+        // Vanilla moves the anchor only once it is set.
+        if phantom
+            .circling_center
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_none()
+        {
+            return;
+        }
         let target_pos = target.get_entity().pos.load();
         let world = phantom.mob_entity.living_entity.entity.world.load();
         let mut center = BlockPos::new(
@@ -536,7 +542,7 @@ impl StartAttackGoal {
         *phantom
             .circling_center
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = center;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(center);
     }
 }
 
@@ -563,19 +569,15 @@ impl Goal for StartAttackGoal {
             return;
         };
         // Lift circling center to top motion blocking + 10-30
-        let center = *phantom
-            .circling_center
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let world = phantom.mob_entity.living_entity.entity.world.load();
         // Simplified: just up 10 + rand 20
-        let new_y = center.0.y + 10 + rand::rng().random_range(0..20);
-        *phantom
+        if let Some(center) = phantom
             .circling_center
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            BlockPos::new(center.0.x, new_y, center.0.z);
-        let _ = world;
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            *center = center.up_height(10 + rand::rng().random_range(0..20));
+        }
     }
 
     fn tick(&mut self, _mob: &dyn Mob) {
@@ -693,5 +695,61 @@ impl Goal for FindTargetGoal {
             return false;
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pumpkin_data::entity::EntityType;
+    use pumpkin_nbt::compound::NbtCompound;
+    use pumpkin_util::math::vector3::Vector3;
+
+    use crate::entity::mob::spawn::finalize_spawn;
+    use crate::entity::r#type::from_type;
+    use crate::world::test_world;
+
+    fn saved_anchor(phantom: &std::sync::Arc<dyn crate::entity::EntityBase>) -> Option<Vec<i32>> {
+        let mut nbt = NbtCompound::new();
+        phantom.get_mob().expect("a mob").mob_write_nbt(&mut nbt);
+        nbt.get_int_array("anchor_pos").map(<[i32]>::to_vec)
+    }
+
+    /// G7-24: a phantom has no anchor until it finishes spawning, so one vanilla saved without
+    /// `anchor_pos` doesn't come back with one. Spawning anchors it five blocks up.
+    #[tokio::test]
+    async fn the_anchor_is_unset_until_the_phantom_spawns() {
+        let world = test_world();
+        let phantom = from_type(
+            &EntityType::PHANTOM,
+            Vector3::new(10.5, 70.0, -3.5),
+            &world,
+            uuid::Uuid::new_v4(),
+        );
+        assert_eq!(saved_anchor(&phantom), None);
+        let mut nbt = NbtCompound::new();
+        phantom.write_nbt(&mut nbt);
+        assert!(
+            !nbt.has("NoGravity"),
+            "vanilla never sets NoGravity on a phantom"
+        );
+
+        finalize_spawn(&phantom, &world, None);
+        assert_eq!(saved_anchor(&phantom), Some(vec![10, 75, -4]));
+
+        let mob = phantom.get_mob().expect("a mob");
+        mob.mob_read_nbt(&NbtCompound::new());
+        assert_eq!(
+            saved_anchor(&phantom),
+            None,
+            "a save without an anchor clears it"
+        );
+
+        let mut nbt = NbtCompound::new();
+        nbt.put(
+            "anchor_pos",
+            pumpkin_nbt::tag::NbtTag::IntArray(vec![1, 2, 3]),
+        );
+        mob.mob_read_nbt(&nbt);
+        assert_eq!(saved_anchor(&phantom), Some(vec![1, 2, 3]));
     }
 }

@@ -64,6 +64,23 @@ impl LeashKnotEntity {
     }
 
     pub fn create_knot(world: &Arc<World>, pos: BlockPos) -> Arc<Self> {
+        let knot = Self::spawn_knot(world, pos);
+        world.play_sound(
+            Sound::ItemLeadTied,
+            SoundCategory::Neutral,
+            &knot.entity.pos.load(),
+        );
+        knot
+    }
+
+    /// Vanilla `LeashFenceKnotEntity.getOrCreateKnot`: no sound. Vanilla never saves a knot, so
+    /// a mob leashed to a fence rebuilds its knot from its `leash` key when it loads.
+    pub fn find_or_spawn_knot(world: &Arc<World>, pos: BlockPos) -> Arc<dyn EntityBase> {
+        Self::find_knot(world, pos)
+            .unwrap_or_else(|| Self::spawn_knot(world, pos) as Arc<dyn EntityBase>)
+    }
+
+    fn spawn_knot(world: &Arc<World>, pos: BlockPos) -> Arc<Self> {
         let raw_pos = Vector3::new(
             f64::from(pos.0.x) + 0.5,
             f64::from(pos.0.y) + Self::OFFSET_Y,
@@ -73,9 +90,6 @@ impl LeashKnotEntity {
         let entity = Entity::new(world.clone(), raw_pos, &EntityType::LEASH_KNOT);
         let knot = Arc::new(Self::new(entity));
         world.spawn_entity(knot.clone() as Arc<dyn EntityBase>);
-
-        world.play_sound(Sound::ItemLeadTied, SoundCategory::Neutral, &raw_pos);
-
         knot
     }
 

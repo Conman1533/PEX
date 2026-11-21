@@ -1,3 +1,4 @@
+use crossbeam::atomic::AtomicCell;
 use pumpkin_data::Block;
 use pumpkin_data::BlockState;
 use pumpkin_data::BlockStateId;
@@ -10,7 +11,10 @@ use pumpkin_protocol::bedrock::client::CUpdateBlock;
 use pumpkin_protocol::java::client::play::CBlockUpdate;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_world::world::BlockFlags;
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicI32, Ordering},
+};
 
 use crate::{
     block::{blocks::falling::FallingBlock, registry::can_replace_with_other_block},
@@ -21,15 +25,21 @@ use crate::{
 
 pub struct FallingEntity {
     entity: Entity,
-    block_state_id: BlockStateId,
+    block_state_id: AtomicCell<BlockStateId>,
+    /// Vanilla `FallingBlockEntity.time`: ticks since it started falling.
+    time: AtomicI32,
 }
 
 impl FallingEntity {
+    /// Vanilla `FallingBlockEntity.tick` drops a block still falling after this many ticks.
+    const MAX_FALL_TICKS: i32 = 600;
+
     pub const fn new(mut entity: Entity, block_state_id: BlockStateId) -> Self {
         entity.blocks_building = true;
         Self {
             entity,
-            block_state_id,
+            block_state_id: AtomicCell::new(block_state_id),
+            time: AtomicI32::new(0),
         }
     }
 
@@ -59,8 +69,11 @@ impl FallingEntity {
 impl EntityBase for FallingEntity {
     fn tick(&self, caller: &dyn EntityBase, _server: &Server) {
         let entity = &self.entity;
+        let time = self.time.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
         let mut velo = entity.velocity.load();
-        velo.y -= self.get_gravity();
+        if !entity.has_no_gravity() {
+            velo.y -= self.get_gravity();
+        }
 
         entity.velocity.store(velo);
 
@@ -73,7 +86,7 @@ impl EntityBase for FallingEntity {
             let (current_block, current_state) = world.get_block_and_state(&landing_pos);
             // Vanilla waits until a piston has finished moving a block through the landing cell.
             if current_block != &Block::MOVING_PISTON {
-                let mut state_id = self.block_state_id;
+                let mut state_id = self.block_state_id.load();
                 let block = Block::from_state_id(state_id);
                 let (below_block, below_state) = world.get_block_and_state(&landing_pos.down());
                 let may_replace = can_replace_with_other_block(current_block, current_state);
@@ -118,9 +131,43 @@ impl EntityBase for FallingEntity {
                 }
                 self.entity.remove();
             }
+        } else if time > Self::MAX_FALL_TICKS {
+            let world = entity.world.load();
+            if world.level_info.load().game_rules.entity_drops
+                && let Some(item) =
+                    Item::from_id(Block::from_state_id(self.block_state_id.load()).item_id)
+            {
+                entity.spawn_at_location(ItemStack::new(1, item));
+            }
+            self.entity.remove();
         }
 
         entity.velocity.store(velo.multiply(0.98, 0.98, 0.98));
+    }
+
+    /// Vanilla `FallingBlockEntity.addAdditionalSaveData`. The keys PEX doesn't model
+    /// (`DropItem`, `HurtEntities`, `FallHurtAmount`, `FallHurtMax`, `CancelDrop`,
+    /// `TileEntityData`) are kept as they were read.
+    fn write_custom_nbt(&self, nbt: &mut pumpkin_nbt::compound::NbtCompound) {
+        nbt.put(
+            "BlockState",
+            pumpkin_world::chunk::format::block_state_tag(self.block_state_id.load()),
+        );
+        nbt.put_int("Time", self.time.load(Ordering::Relaxed));
+    }
+
+    fn read_custom_nbt(&self, nbt: &pumpkin_nbt::compound::NbtCompound) {
+        // Vanilla falls back to sand.
+        let state = nbt
+            .get("BlockState")
+            .and_then(pumpkin_world::chunk::format::block_state_from_tag)
+            .unwrap_or(Block::SAND.default_state.id);
+        self.block_state_id.store(state);
+        self.entity
+            .data
+            .store(i32::from(state.as_u16()), Ordering::Relaxed);
+        self.time
+            .store(nbt.get_int("Time").unwrap_or(0), Ordering::Relaxed);
     }
 
     fn init_data_tracker(&self) {
@@ -150,7 +197,7 @@ impl EntityBase for FallingEntity {
     ) -> Option<pumpkin_protocol::bedrock::client::set_actor_data::SyncedActorDataList> {
         let mut meta =
             pumpkin_protocol::bedrock::client::set_actor_data::SyncedActorDataList::new();
-        let runtime_id = BlockState::to_be_network_id(self.block_state_id);
+        let runtime_id = BlockState::to_be_network_id(self.block_state_id.load());
         meta.set(
             pumpkin_protocol::bedrock::client::set_actor_data::entity_data_key::VARIANT,
             pumpkin_protocol::bedrock::client::set_actor_data::MetadataValue::Int(

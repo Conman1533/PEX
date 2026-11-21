@@ -73,6 +73,12 @@ impl AgeableMob for TadpoleEntity {
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }
+
+    /// Vanilla `Tadpole` isn't an `AgeableMob`: it saves `Age` and `AgeLocked`, no `ForcedAge`.
+    fn write_ageable_nbt(&self, nbt: &mut NbtCompound) {
+        nbt.put_int("Age", self.get_age());
+        nbt.put_bool("AgeLocked", self.is_age_locked());
+    }
 }
 
 impl Mob for TadpoleEntity {
@@ -86,11 +92,6 @@ impl Mob for TadpoleEntity {
 
     fn as_ageable(&self) -> Option<&dyn AgeableMob> {
         Some(self)
-    }
-
-    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        nbt.put_int("Age", self.get_age());
-        nbt.put_bool("AgeLocked", self.is_age_locked());
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {

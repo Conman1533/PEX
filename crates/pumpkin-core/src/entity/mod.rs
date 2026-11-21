@@ -3846,12 +3846,13 @@ impl Entity {
 
         let world = self.world.load();
         let holder: Option<Arc<dyn EntityBase>> = match pending {
-            // Only reattach to a knot that is already loaded. Creating one here would spawn a
-            // duplicate when the saved knot's chunk loads a moment later; keeping the reference
-            // pending lets the next tick retry once it is in the world.
-            LeashRef::Knot(pos) => {
-                crate::entity::decoration::leash_knot::LeashKnotEntity::find_knot(&world, pos)
-            }
+            // Vanilla `Leashable.restoreLeashFromSave`: knots aren't saved, so the mob makes its
+            // own (`LeashFenceKnotEntity.getOrCreateKnot`).
+            LeashRef::Knot(pos) => Some(
+                crate::entity::decoration::leash_knot::LeashKnotEntity::find_or_spawn_knot(
+                    &world, pos,
+                ),
+            ),
             LeashRef::Entity(uuid) => world.get_entity_by_uuid(uuid).or_else(|| {
                 world
                     .get_player_by_uuid(uuid)
@@ -5085,6 +5086,104 @@ const BEDROCK_LINK_PASSENGER: u8 = 2;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Reads `saved` into a new entity of `entity_type` the way a chunk load does, then saves it.
+    fn round_trip(entity_type: &'static EntityType, saved: &NbtCompound) -> NbtCompound {
+        let world = crate::world::test_world();
+        let entity = crate::entity::r#type::from_type(
+            entity_type,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        entity.read_nbt_non_mut(saved);
+        Entity::keep_unmodelled_nbt(entity.as_ref(), saved);
+        let mut written = NbtCompound::new();
+        entity.write_nbt(&mut written);
+        written
+    }
+
+    /// G7-24: an item vanilla made never to despawn or be picked up comes back the same.
+    #[tokio::test]
+    async fn an_item_keeps_its_infinite_age_and_pickup_delay() {
+        let mut saved = NbtCompound::new();
+        let mut item = NbtCompound::new();
+        item.put_string("id", "minecraft:diamond".to_string());
+        item.put_int("count", 3);
+        saved.put_compound("Item", item);
+        saved.put_short("Age", -32768);
+        saved.put_short("PickupDelay", 32767);
+        let written = round_trip(&EntityType::ITEM, &saved);
+        assert_eq!(written.get_short("Age"), Some(-32768));
+        assert_eq!(written.get_short("PickupDelay"), Some(32767));
+    }
+
+    /// G7-24: a firework rocket keeps its flight time and item instead of exploding early.
+    #[tokio::test]
+    async fn a_firework_rocket_keeps_its_lifetime() {
+        let mut saved = NbtCompound::new();
+        saved.put_int("Life", 3);
+        saved.put_int("LifeTime", i32::MAX);
+        saved.put_bool("ShotAtAngle", true);
+        let written = round_trip(&EntityType::FIREWORK_ROCKET, &saved);
+        assert_eq!(written.get_int("Life"), Some(3));
+        assert_eq!(written.get_int("LifeTime"), Some(i32::MAX));
+        assert_eq!(written.get_bool("ShotAtAngle"), Some(true));
+        assert!(written.get_compound("FireworksItem").is_some());
+    }
+
+    /// G7-24: a falling block keeps its block and fall time, and the keys PEX doesn't model.
+    #[tokio::test]
+    async fn a_falling_block_keeps_its_block_and_time() {
+        let mut saved = NbtCompound::new();
+        saved.put_string("BlockState", "minecraft:anvil".to_string());
+        saved.put_int("Time", i32::MIN);
+        saved.put_bool("HurtEntities", true);
+        let written = round_trip(&EntityType::FALLING_BLOCK, &saved);
+        assert!(
+            matches!(written.get("BlockState"), Some(NbtTag::String(name)) if &**name == "minecraft:anvil")
+        );
+        assert_eq!(written.get_int("Time"), Some(i32::MIN));
+        assert_eq!(written.get_bool("HurtEntities"), Some(true));
+    }
+
+    /// G7-24: vanilla's tadpole isn't an `AgeableMob`, so it has no `ForcedAge`.
+    #[tokio::test]
+    async fn a_tadpole_saves_no_forced_age() {
+        let mut saved = NbtCompound::new();
+        saved.put_int("Age", 7);
+        let written = round_trip(&EntityType::TADPOLE, &saved);
+        assert_eq!(written.get_int("Age"), Some(7));
+        assert!(!written.has("ForcedAge"));
+    }
+
+    /// G7-24: knots aren't saved, so a mob leashed to a fence makes its own knot when it loads.
+    #[tokio::test]
+    async fn a_mob_leashed_to_a_fence_rebuilds_its_knot() {
+        let world = crate::world::test_world();
+        let cow = crate::entity::r#type::from_type(
+            &EntityType::COW,
+            Vector3::new(0.5, 64.0, 0.5),
+            &world,
+            Uuid::new_v4(),
+        );
+        let mut saved = NbtCompound::new();
+        saved.put("leash", LeashRef::Knot(BlockPos::new(2, 64, 0)).to_nbt());
+        cow.read_nbt_non_mut(&saved);
+        cow.get_entity().try_restore_leash();
+        let knot = crate::entity::decoration::leash_knot::LeashKnotEntity::find_knot(
+            &world,
+            BlockPos::new(2, 64, 0),
+        )
+        .expect("the knot");
+        assert!(!knot.get_entity().entity_type.saveable);
+        let mut written = NbtCompound::new();
+        cow.write_nbt(&mut written);
+        assert!(
+            matches!(written.get("leash"), Some(NbtTag::IntArray(pos)) if pos == &[2, 64, 0]),
+            "the cow is still leashed to the fence"
+        );
+    }
 
     #[test]
     fn equipment_break_status_maps_all_slots() {
