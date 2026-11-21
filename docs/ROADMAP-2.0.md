@@ -8,12 +8,12 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7ade74378`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c05dcfe01`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 8 | 1 | 36 | |
+| G1 Mob AI | 45 | 9 | 1 | 35 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 56 | 1 | 124 | 15 |
+| Total | 196 | 57 | 1 | 123 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -677,7 +677,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-camels`
 - Needs decision: D1-1.
 - Done when: `pumpkin:camel_follows_cactus` and `pumpkin:husk_rider_steers_camel_husk_to_target` pass.
-- Status (2026-11-19): partly built by `feat/water-mob-ai` (on `alpha` since 2026-11-05): the camel husk is a camel that eats rabbit feet and never breeds, and natural husk groups sometimes ride one (unit tests `camel_husk_is_a_camel_that_eats_rabbit_feet_and_never_breeds`, `a_natural_husk_group_sometimes_rides_a_camel_husk`). Camel AI and both named GameTests are still missing. `fix/wrong-mob-behaviours` (pushed 2026-11-16, not on `alpha`) adds vanilla camel speeds and random sitting.
+- Status (2026-11-20): landed (branch `feat/brain-camels`). The camel and camel husk now run vanilla `CamelAi` on the Brain instead of goals (D1-1): core activity with swim, `CamelPanic` (gets up at once, no panic while a mob steers it), look and walk sinks and both cooldowns; idle activity with look-at-player, breeding (`AnimalMakeLove`), tempting (speed 2.5, stops 3.5 blocks short, 2.5 for babies) or following an adult, random look around, and a random stroll, walk to the look target, `RandomSitting` or a pause. Strolls and following wait while the camel sits or changes pose. `CamelMoveControl` gets a sitting camel up when it is told to walk (not while leashed), `CamelLookControl` holds still while someone steers it, the navigation floats and walks over fences, and the head turns at most 30 degrees. A sitting adult camel has vanilla's lower box (1.43 blocks less), sitting down or getting up checks the other pose's box for blocks (`canCamelChangePose`), and pose changes send the entity action game event and the camel husk's own sit and stand sounds. The dash ends on landing and its cooldown counts down to the dash-ready sound. Camel husk: `isMobControlled` while a mob rides in front, and then it cannot be leashed. The G1-02 exception was already gone (camel husk got its own entity in `feat/water-mob-ai`). `pumpkin:camel_follows_cactus` and `pumpkin:husk_rider_steers_camel_husk_to_target` pass. Play test for Neon: hold a cactus near a camel, expect it to walk over and stop a few blocks away; watch an idle camel, expect it to sit down now and then and get up when you lead it on a leash or when it is hit; find a husk riding a camel husk in a desert at night, expect the pair to come for you.
 
 #### G1-33 Sniffer
 - Scope: SnifferAi in place of the `transition_to` state machine. Out: sniffer egg hatching.
