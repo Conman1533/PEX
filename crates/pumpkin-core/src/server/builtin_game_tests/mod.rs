@@ -604,7 +604,7 @@ pub fn ensure_builtin_game_tests_registered() {
         register_function_test(
             "pumpkin:cow_follows_wheat_and_panics_when_hit",
             "pumpkin:empty_11x4x5",
-            140,
+            200,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
         );

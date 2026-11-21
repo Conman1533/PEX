@@ -25,7 +25,8 @@ pub(super) async fn test_cow_follows_wheat_and_panics_when_hit(
     let near_player_min = BlockPos::new(6, 1, 2);
     let near_player_max = BlockPos::new(10, 3, 3);
     // The hit's knockback throws the cow about two blocks back along the lane it walked in on,
-    // and TemptGoal walks it back. Only a panic run leaves the lane.
+    // and TemptGoal walks it back. Only a panic run leaves the lane. A panic lasts 100 to 120
+    // ticks and runs to random spots, some inside the lane, so the test allows the whole panic.
     let lane_min = BlockPos::new(3, 1, 2);
     let lane_max = BlockPos::new(10, 3, 3);
     helper
