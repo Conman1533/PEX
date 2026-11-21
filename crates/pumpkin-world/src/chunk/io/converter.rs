@@ -63,17 +63,48 @@ impl RegionFormat {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ConversionStats {
     pub regions_converted: usize,
     pub chunks_converted: usize,
+    /// Where the source files went, one folder per converted folder.
+    pub backup_folders: Vec<PathBuf>,
 }
 
 impl ConversionStats {
-    const fn add(&mut self, other: Self) {
+    fn add(&mut self, other: Self) {
         self.regions_converted += other.regions_converted;
         self.chunks_converted += other.chunks_converted;
+        self.backup_folders.extend(other.backup_folders);
     }
+}
+
+/// A new folder beside `folder` for the files a conversion replaces, such as
+/// `region-backup-1763683200`.
+fn new_backup_folder(folder: &Path) -> std::io::Result<PathBuf> {
+    let name = folder
+        .file_name()
+        .map_or_else(|| "region".into(), |name| name.to_string_lossy());
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |time| time.as_secs());
+    let base = folder.with_file_name(format!("{name}-backup-{secs}"));
+    let mut backup = base.clone();
+    let mut n = 1;
+    while backup.exists() {
+        backup = base.with_file_name(format!("{name}-backup-{secs}-{n}"));
+        n += 1;
+    }
+    std::fs::create_dir_all(&backup)?;
+    Ok(backup)
+}
+
+/// Moves a converted file into the backup folder; conversion never deletes a source.
+fn move_to_backup(file: &Path, backup: &Path) -> std::io::Result<()> {
+    let Some(name) = file.file_name() else {
+        return Ok(());
+    };
+    std::fs::rename(file, backup.join(name))
 }
 
 /// Parses a region filename (`r.<x>.<z>.<ext>`) into its region coordinates and format.
@@ -163,7 +194,7 @@ fn convert_into_dst<Dst: RegionFile>(
     dst_format: RegionFormat,
     region: Vector2<i32>,
     dst_config: &Dst::Config,
-    remove_source: bool,
+    backup: &Path,
 ) -> Result<usize, ChunkConversionError> {
     if src_path == dst_path {
         return Ok(0);
@@ -181,9 +212,7 @@ fn convert_into_dst<Dst: RegionFile>(
     let count = match src_format {
         RegionFormat::Anvil => {
             let src = AnvilRegion::open(src_path, region)?;
-            if remove_source {
-                external_files = src.external_chunk_paths();
-            }
+            external_files = src.external_chunk_paths();
             transcode_chunks(
                 &src,
                 &mut dst,
@@ -218,30 +247,30 @@ fn convert_into_dst<Dst: RegionFile>(
     };
     drop(dst);
 
-    if remove_source {
-        std::fs::remove_file(src_path)?;
-        for external in external_files {
-            if let Err(err) = std::fs::remove_file(&external)
-                && err.kind() != std::io::ErrorKind::NotFound
-            {
-                warn!(
-                    "Failed to remove external chunk {}: {err}",
-                    external.display()
-                );
-            }
+    move_to_backup(src_path, backup)?;
+    for external in external_files {
+        if let Err(err) = move_to_backup(&external, backup)
+            && err.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                "Failed to move external chunk {} to {}: {err}",
+                external.display(),
+                backup.display()
+            );
         }
     }
 
     Ok(count)
 }
 
-/// Converts a single region file at `src_path` into the format configured by `target`.
+/// Converts a single region file at `src_path` into the format configured by `target`, and
+/// moves the source file into `backup`.
 pub fn convert_region(
     src_path: &Path,
     src_format: RegionFormat,
     region: Vector2<i32>,
     target: &ChunkConfig,
-    remove_source: bool,
+    backup: &Path,
 ) -> Result<usize, ChunkConversionError> {
     let dst_format = RegionFormat::from_config(target);
     if src_format == dst_format {
@@ -250,13 +279,7 @@ pub fn convert_region(
     let dst_path = src_path.with_file_name(dst_format.file_name(region));
     match target {
         ChunkConfig::Anvil(config) => convert_into_dst::<AnvilRegion>(
-            src_path,
-            src_format,
-            &dst_path,
-            dst_format,
-            region,
-            config,
-            remove_source,
+            src_path, src_format, &dst_path, dst_format, region, config, backup,
         ),
         ChunkConfig::Linear => convert_into_dst::<LinearV2File>(
             src_path,
@@ -265,7 +288,7 @@ pub fn convert_region(
             dst_format,
             region,
             &(),
-            remove_source,
+            backup,
         ),
         ChunkConfig::Pump => convert_into_dst::<PumpFile>(
             src_path,
@@ -274,7 +297,7 @@ pub fn convert_region(
             dst_format,
             region,
             &(),
-            remove_source,
+            backup,
         ),
     }
 }
@@ -299,11 +322,11 @@ pub fn region_files(folder: &Path) -> std::io::Result<Vec<(PathBuf, Vector2<i32>
 }
 
 /// Converts all region files in `folder` (such as a dimension's `region/` or `entities/` folder)
-/// that are in another format into `target`.
+/// that are in another format into `target`. The source files move to a new backup folder
+/// beside `folder`.
 pub fn convert_folder(
     folder: &Path,
     target: &ChunkConfig,
-    remove_source: bool,
 ) -> Result<ConversionStats, ChunkConversionError> {
     let target_format = RegionFormat::from_config(target);
     let to_convert: Vec<(PathBuf, Vector2<i32>, RegionFormat)> = region_files(folder)?
@@ -315,10 +338,11 @@ pub fn convert_folder(
         return Ok(ConversionStats::default());
     }
 
+    let backup = new_backup_folder(folder)?;
     let results: Result<Vec<usize>, ChunkConversionError> = to_convert
         .into_par_iter()
         .map(|(path, region, src_format)| {
-            convert_region(&path, src_format, region, target, remove_source)
+            convert_region(&path, src_format, region, target, &backup)
         })
         .collect();
     let counts = results?;
@@ -326,6 +350,7 @@ pub fn convert_folder(
     Ok(ConversionStats {
         regions_converted: counts.len(),
         chunks_converted: counts.into_iter().sum(),
+        backup_folders: vec![backup],
     })
 }
 
@@ -357,14 +382,13 @@ pub fn dimension_folders(root_folder: &Path) -> Vec<PathBuf> {
 pub fn convert_world(
     root_folder: &Path,
     target: &ChunkConfig,
-    remove_source: bool,
 ) -> Result<ConversionStats, ChunkConversionError> {
     let mut total = ConversionStats::default();
     for dim_folder in dimension_folders(root_folder) {
         for subfolder in ["region", "entities"] {
             let folder = dim_folder.join(subfolder);
             if folder.is_dir() {
-                total.add(convert_folder(&folder, target, remove_source)?);
+                total.add(convert_folder(&folder, target)?);
             }
         }
     }
@@ -413,7 +437,7 @@ mod tests {
         drop(anvil);
 
         // Anvil -> Pump
-        let stats = convert_folder(&region_dir, &ChunkConfig::Pump, true).unwrap();
+        let stats = convert_folder(&region_dir, &ChunkConfig::Pump).unwrap();
         assert_eq!(stats.regions_converted, 1);
         assert_eq!(stats.chunks_converted, 2);
         assert!(!mca_path.exists());
@@ -432,7 +456,7 @@ mod tests {
         drop(pump);
 
         // Pump -> Linear
-        let stats = convert_folder(&region_dir, &ChunkConfig::Linear, true).unwrap();
+        let stats = convert_folder(&region_dir, &ChunkConfig::Linear).unwrap();
         assert_eq!(stats.regions_converted, 1);
         assert_eq!(stats.chunks_converted, 2);
         assert!(!pump_path.exists());
@@ -440,7 +464,7 @@ mod tests {
         assert!(linear_path.exists());
 
         // Linear -> Anvil
-        let stats = convert_folder(&region_dir, &ChunkConfig::Anvil(anvil_cfg), true).unwrap();
+        let stats = convert_folder(&region_dir, &ChunkConfig::Anvil(anvil_cfg)).unwrap();
         assert_eq!(stats.regions_converted, 1);
         assert_eq!(stats.chunks_converted, 2);
         assert!(!linear_path.exists());
@@ -455,6 +479,57 @@ mod tests {
             AnvilRegion::decode_chunk(reopened.read_chunk(511).unwrap().unwrap()).unwrap(),
             payload_b
         );
+    }
+
+    #[test]
+    fn conversion_moves_every_source_file_to_a_backup() {
+        let dir = TempDir::new().unwrap();
+        let region_dir = dir.path().join("region");
+        std::fs::create_dir_all(&region_dir).unwrap();
+        let coords = Vector2::new(0, 0);
+        let mca_path = region_dir.join(AnvilRegion::file_name(coords));
+        let config = AnvilChunkConfig::default();
+        let mut anvil = AnvilRegion::open(&mca_path, coords).unwrap();
+        anvil.stage_chunk(
+            0,
+            AnvilRegion::encode_chunk(Bytes::from(vec![0xAA; 512]), &config).unwrap(),
+        );
+        // Incompressible and over 255 sectors, so it goes to c.1.1.mcc.
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let big: Vec<u8> = (0..4096 * 300)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state.to_le_bytes()[0]
+            })
+            .collect();
+        anvil.stage_chunk(
+            33,
+            AnvilRegion::encode_chunk(Bytes::from(big), &config).unwrap(),
+        );
+        anvil.flush(true).unwrap();
+        drop(anvil);
+        let sources: Vec<_> = ["r.0.0.mca", "c.1.1.mcc"]
+            .map(|name| (name, std::fs::read(region_dir.join(name)).unwrap()))
+            .into();
+
+        let stats = convert_folder(&region_dir, &ChunkConfig::Pump).unwrap();
+        assert_eq!(stats.regions_converted, 1);
+        let [backup] = stats.backup_folders.as_slice() else {
+            panic!("expected one backup folder, got {:?}", stats.backup_folders);
+        };
+        assert_eq!(backup.parent(), Some(dir.path()));
+        for (name, bytes) in sources {
+            assert!(!region_dir.join(name).exists(), "{name} left in region/");
+            assert_eq!(std::fs::read(backup.join(name)).unwrap(), bytes, "{name}");
+        }
+        assert!(region_dir.join(PumpFile::file_name(coords)).exists());
+
+        // A second conversion in the same second gets its own folder.
+        let stats = convert_folder(&region_dir, &ChunkConfig::Anvil(config)).unwrap();
+        assert_ne!(stats.backup_folders.first(), Some(backup));
+        assert!(backup.join("r.0.0.mca").exists());
     }
 
     #[test]
@@ -518,7 +593,7 @@ mod tests {
         drop(anvil);
 
         // Convert Anvil (.mca with Java NBT) -> Pump (.pump with PCHK binary)
-        convert_folder(&region_dir, &ChunkConfig::Pump, true).unwrap();
+        convert_folder(&region_dir, &ChunkConfig::Pump).unwrap();
         let pump_path = region_dir.join(PumpFile::file_name(region_coords));
         let pump = PumpFile::open(&pump_path, region_coords).unwrap();
         let pump_decoded =
@@ -540,7 +615,7 @@ mod tests {
         drop(pump);
 
         // Convert Pump (.pump with PCHK binary) -> Anvil (.mca with Java NBT)
-        convert_folder(&region_dir, &ChunkConfig::Anvil(anvil_cfg), true).unwrap();
+        convert_folder(&region_dir, &ChunkConfig::Anvil(anvil_cfg)).unwrap();
         let anvil = AnvilRegion::open(&mca_path, region_coords).unwrap();
         let anvil_decoded =
             AnvilRegion::decode_chunk(anvil.read_chunk(chunk_index).unwrap().unwrap()).unwrap();
