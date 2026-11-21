@@ -61,6 +61,7 @@ use tokio_util::task::TaskTracker;
 
 pub mod builtin_game_tests;
 pub mod command_storage;
+pub mod config_write_back;
 mod connection_cache;
 pub(crate) mod debug_profiler;
 pub mod enchantment;

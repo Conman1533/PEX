@@ -883,6 +883,10 @@ async fn execute_method(
                     .settings
                     .difficulty
                     .store(Arc::new(lower.clone()));
+                crate::server::config_write_back::write_back(
+                    "default_difficulty",
+                    crate::server::config_write_back::capitalized(&lower),
+                );
                 Ok(json!(lower))
             } else {
                 Err(RpcError::invalid_params(Some(format!(
@@ -911,6 +915,7 @@ async fn execute_method(
             if enforce {
                 kick_non_whitelisted_players(server);
             }
+            crate::server::config_write_back::write_back("enforce_whitelist", enforce);
             Ok(json!(enforce))
         }
 
@@ -930,6 +935,7 @@ async fn execute_method(
             {
                 kick_non_whitelisted_players(server);
             }
+            crate::server::config_write_back::write_back("white_list", use_list);
             Ok(json!(use_list))
         }
 
@@ -950,6 +956,7 @@ async fn execute_method(
                 .settings
                 .max_players
                 .store(max, Ordering::Relaxed);
+            crate::server::config_write_back::write_back("networking.java.max_players", max);
             Ok(json!(max))
         }
 
@@ -1014,6 +1021,7 @@ async fn execute_method(
                 .settings
                 .motd
                 .store(Arc::new(motd.clone()));
+            crate::server::config_write_back::write_back("networking.java.motd", motd.clone());
             Ok(json!(motd))
         }
 
@@ -1034,6 +1042,7 @@ async fn execute_method(
                 .settings
                 .spawn_protection_radius
                 .store(radius, Ordering::Relaxed);
+            crate::server::config_write_back::write_back("spawn_protection", radius);
             Ok(json!(radius))
         }
 
@@ -1054,6 +1063,7 @@ async fn execute_method(
                 .settings
                 .force_game_mode
                 .store(force, Ordering::Relaxed);
+            crate::server::config_write_back::write_back("force_gamemode", force);
             Ok(json!(force))
         }
 
@@ -1075,6 +1085,10 @@ async fn execute_method(
                     .settings
                     .game_mode
                     .store(Arc::new(lower.clone()));
+                crate::server::config_write_back::write_back(
+                    "default_gamemode",
+                    crate::server::config_write_back::capitalized(&lower),
+                );
                 Ok(json!(lower))
             } else {
                 Err(RpcError::invalid_params(Some(format!(
@@ -1100,6 +1114,13 @@ async fn execute_method(
                 .settings
                 .view_distance
                 .store(dist, Ordering::Relaxed);
+            // The key is a non-zero u8; a value it can't hold applies until the next start.
+            if let Ok(dist) = std::num::NonZero::<u8>::try_from(u8::try_from(dist).unwrap_or(0)) {
+                crate::server::config_write_back::write_back(
+                    "networking.java.view_distance",
+                    dist.get(),
+                );
+            }
             Ok(json!(dist))
         }
 
@@ -1120,6 +1141,12 @@ async fn execute_method(
                 .settings
                 .simulation_distance
                 .store(dist, Ordering::Relaxed);
+            if let Ok(dist) = std::num::NonZero::<u8>::try_from(u8::try_from(dist).unwrap_or(0)) {
+                crate::server::config_write_back::write_back(
+                    "networking.java.simulation_distance",
+                    dist.get(),
+                );
+            }
             Ok(json!(dist))
         }
 
@@ -1140,6 +1167,7 @@ async fn execute_method(
                 .settings
                 .accept_transfers
                 .store(accept, Ordering::Relaxed);
+            crate::server::config_write_back::write_back("accepts_transfers", accept);
             Ok(json!(accept))
         }
 
@@ -1160,6 +1188,12 @@ async fn execute_method(
                 .settings
                 .status_heartbeat_interval
                 .store(sec, Ordering::Relaxed);
+            if let Ok(sec) = u32::try_from(sec) {
+                crate::server::config_write_back::write_back(
+                    "networking.management.status_heartbeat_interval",
+                    sec,
+                );
+            }
             Ok(json!(sec))
         }
 
@@ -1181,6 +1215,7 @@ async fn execute_method(
                     .settings
                     .operator_user_permission_level
                     .store(lvl, Ordering::Relaxed);
+                crate::server::config_write_back::write_back("op_permission_level", lvl);
                 Ok(json!(lvl))
             } else {
                 Err(RpcError::invalid_params(Some(

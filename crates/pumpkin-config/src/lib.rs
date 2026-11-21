@@ -652,6 +652,75 @@ fn line_and_column(text: &str, offset: usize) -> (usize, usize) {
     (before.matches('\n').count() + 1, line.chars().count() + 1)
 }
 
+/// Sets the dotted `key` in the TOML file at `path` to `value` and saves it through
+/// [`migration::write_atomically`]. Returns whether the file changed.
+///
+/// Like vanilla `DedicatedServerSettings.update` for `server.properties` (D3-4): the rest of the
+/// file, its comments, order and spacing included, stays as it is, and the value keeps the
+/// comment after it. A missing key is added to its table.
+pub fn set_config_key<T: Serialize>(path: &Path, key: &str, value: &T) -> std::io::Result<bool> {
+    let invalid = |err: String| std::io::Error::new(std::io::ErrorKind::InvalidData, err);
+    let text = fs::read_to_string(path)?;
+    let mut document: DocumentMut = text
+        .parse()
+        .map_err(|err: toml_edit::TomlError| invalid(err.to_string()))?;
+    let new: toml_edit::Value = toml::Value::try_from(value)
+        .map_err(|err| invalid(err.to_string()))?
+        .to_string()
+        .parse()
+        .map_err(|err: toml_edit::TomlError| invalid(err.to_string()))?;
+    let (parents, last) = key
+        .rsplit_once('.')
+        .map_or((None, key), |(p, l)| (Some(p), l));
+    let mut table: &mut dyn toml_edit::TableLike = document.as_table_mut();
+    for part in parents.into_iter().flat_map(|parents| parents.split('.')) {
+        table = table
+            .entry(part)
+            .or_insert_with(toml_edit::table)
+            .as_table_like_mut()
+            .ok_or_else(|| invalid(format!("{part} in {key} is not a table")))?;
+    }
+    match table.get_mut(last).and_then(toml_edit::Item::as_value_mut) {
+        Some(old) if old.clone().decorated("", "").to_string() == new.to_string() => {
+            return Ok(false);
+        }
+        Some(old) => {
+            let decor = old.decor().clone();
+            *old = new;
+            *old.decor_mut() = decor;
+        }
+        None => {
+            table.insert(last, toml_edit::value(new));
+        }
+    }
+    migration::write_atomically(path, document.to_string())?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod set_config_key_tests {
+    use super::set_config_key;
+
+    #[test]
+    fn set_key_changes_only_that_line() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("pumpkin.toml");
+        let original = "# Survival server\nwhite_list = false # turned on by command\n\n\
+                        [networking.java]\nmotd = \"Hi\"\nmax_players = 20\n";
+        std::fs::write(&path, original).unwrap();
+
+        assert!(set_config_key(&path, "white_list", &true).unwrap());
+        assert!(set_config_key(&path, "networking.java.max_players", &30u32).unwrap());
+        assert!(!set_config_key(&path, "networking.java.motd", &"Hi").unwrap());
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        let expected = original
+            .replace("white_list = false", "white_list = true")
+            .replace("max_players = 20", "max_players = 30");
+        assert_eq!(written, expected);
+    }
+}
+
 /// Backs the file up as it was, then writes the migrated document in its place.
 fn save_migrated(
     path: &Path,
