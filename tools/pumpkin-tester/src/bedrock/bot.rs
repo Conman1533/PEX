@@ -49,7 +49,7 @@ use pumpkin_protocol::{
     packet::Packet,
     serial::{PacketRead, PacketWrite},
 };
-use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
 use pumpkin_world::CURRENT_BEDROCK_MC_PROTOCOL;
 use serde_json::{Value, json};
 use tokio::time::timeout;
@@ -64,6 +64,8 @@ const PLAY_STATUS_PLAYER_SPAWN: i32 = 3;
 const AUTHENTICATION_SELF_SIGNED: u8 = 2;
 /// `InputData` flags the bot sets in `PlayerAuthInput`.
 const INPUT_PERFORM_BLOCK_ACTIONS: i32 = 35;
+/// `InputData::ClientPredictedVehicle`: the client moves the vehicle it rides.
+const INPUT_CLIENT_PREDICTED_VEHICLE: i32 = 45;
 /// `InputData::VerticalCollision`: the player is standing on something.
 pub const INPUT_VERTICAL_COLLISION: i32 = 50;
 /// The vertical motion a Bedrock client on the ground sends: one tick of gravity, 0.08 * 0.98.
@@ -128,6 +130,9 @@ pub struct BedrockBot {
     pub actor_longs: HashMap<(u64, u32), i64>,
     /// Every `SetActorLink` as (ridden, rider, link type), oldest first.
     pub links: Vec<(i64, i64, u8)>,
+    /// While set, inputs say the client drives this vehicle (unique id) with this rotation
+    /// (pitch, yaw), as `ClientPredictedVehicle`.
+    pub driving: Option<(i64, Vector2<f32>)>,
     /// Every `Text` the server sent.
     pub texts: Vec<SeenText>,
     /// Every layer-0 `UpdateBlock`, as position and block network id.
@@ -225,6 +230,7 @@ impl BedrockBot {
             actor_flags: HashMap::new(),
             actor_longs: HashMap::new(),
             links: Vec::new(),
+            driving: None,
             texts: Vec::new(),
             block_updates: Vec::new(),
             health: 20,
@@ -812,6 +818,10 @@ impl BedrockBot {
         if !block_actions.is_empty() {
             flags.push(INPUT_PERFORM_BLOCK_ACTIONS);
         }
+        if self.driving.is_some() {
+            flags.push(INPUT_CLIENT_PREDICTED_VEHICLE);
+        }
+        let driving = self.driving;
         let mut payload = Vec::new();
         let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
             self.pitch.write(payload)?;
@@ -845,9 +855,15 @@ impl BedrockBot {
                     VarInt(*face).write(payload)?;
                 }
             }
-            // No vehicle rotation, no vehicle.
-            false.write(payload)?;
-            false.write(payload)?;
+            if let Some((vehicle, rotation)) = driving {
+                true.write(payload)?;
+                rotation.write(payload)?;
+                true.write(payload)?;
+                VarLong(vehicle).write(payload)?;
+            } else {
+                false.write(payload)?;
+                false.write(payload)?;
+            }
             0.0f32.write(payload)?;
             0.0f32.write(payload)?;
             Vector3::new(0.0f32, 0.0, 0.0).write(payload)?;

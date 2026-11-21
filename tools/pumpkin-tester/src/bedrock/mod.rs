@@ -8,7 +8,12 @@ use std::{
     collections::HashMap, future::Future, net::SocketAddr, path::Path, sync::Arc, time::Duration,
 };
 
-use pumpkin_core::{PumpkinServer, net::bedrock::BedrockClient, server::Server};
+use pumpkin_core::{
+    PumpkinServer,
+    entity::{EntityBase, player::Player},
+    net::bedrock::BedrockClient,
+    server::Server,
+};
 use pumpkin_data::entity::{EntityPose, EntityType};
 use pumpkin_protocol::{
     bedrock::{
@@ -17,7 +22,7 @@ use pumpkin_protocol::{
     },
     java::server::play::{Action as PlayerCommandAction, SPlayerInput},
 };
-use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
+use pumpkin_util::math::{position::BlockPos, vector2::Vector2, vector3::Vector3};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
@@ -1160,8 +1165,52 @@ async fn run_boat_checks(
         .await,
     );
     java.send_input(0).await?;
+
+    run_steer_check(server, bedrock, java, checks, &boat, &bedrock_player).await?;
     boat.get_entity().remove();
 
+    Ok(())
+}
+
+/// Alone in the boat, the Bedrock player drives it and the Java player sees it move.
+async fn run_steer_check(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    boat: &Arc<dyn EntityBase>,
+    bedrock_player: &Arc<Player>,
+) -> Result<(), String> {
+    let boat_id = boat.get_entity().entity_id;
+    boat.get_entity()
+        .add_passenger(boat.clone(), bedrock_player.clone());
+    tick(server, bedrock, Some(&mut *java)).await?;
+    let boat_start = boat.get_entity().pos.load();
+    bedrock.driving = Some((i64::from(boat_id), Vector2::new(0.0, 90.0)));
+    let rider_start = bedrock.position;
+    for step in 1..=4u8 {
+        let position = rider_start + Vector3::new(f32::from(step) * 0.5, 0.0, 0.0);
+        bedrock.send_input(position, &[]).await?;
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let boat_target = boat_start.x + 2.0;
+    checks.record(
+        "java sees bedrock steer the boat",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the boat two blocks on, on the Java bot",
+            |_, java| {
+                java.and_then(|java| java.entities.get(&boat_id))
+                    .is_some_and(|seen| (seen.position.x - boat_target).abs() < 0.3)
+            },
+        )
+        .await,
+    );
+    bedrock.driving = None;
+    bedrock.stop_riding(boat_id as u64).await?;
+    tick(server, bedrock, Some(&mut *java)).await?;
     Ok(())
 }
 
