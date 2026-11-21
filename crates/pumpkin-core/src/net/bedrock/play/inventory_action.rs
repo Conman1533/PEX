@@ -246,6 +246,11 @@ impl BedrockClient {
                 if !in_reach {
                     return;
                 }
+                // A Java spectator who clicks an entity looks through its eyes instead; Bedrock
+                // has no camera packet for that, but a spectator still never hits or uses it.
+                if player.gamemode.load() == GameMode::Spectator {
+                    return;
+                }
                 let Some(server) = world.server.upgrade() else {
                     return;
                 };
@@ -302,7 +307,12 @@ impl BedrockClient {
                         }
                         player.inventory().set_held_item(stack);
                     }
-                    ActionType::Attack => player.attack(&event.target),
+                    ActionType::Attack => {
+                        if !Self::attack_allowed(player, &server, &world, &event.target) {
+                            return;
+                        }
+                        player.attack(&event.target);
+                    }
                 }
             }
             TransactionData::ReleaseItem(_data) => {
@@ -688,5 +698,41 @@ impl BedrockClient {
                 server.item_registry.on_use(&stack_for_use, player, hand);
             }
         }}
+    }
+
+    /// The rules the Java attack handler checks before `Player::attack`: the `pvp` config, never
+    /// oneself, never a dead player, `protect_creative`, and the held item's minimum attack
+    /// charge.
+    fn attack_allowed(
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        world: &Arc<crate::world::World>,
+        target: &Arc<dyn EntityBase>,
+    ) -> bool {
+        /// Vanilla `handleAttack` adds 5 ticks of attack strength before checking an item's
+        /// `minimum_attack_charge`, as `ATTACK_CHARGE_TOLERANCE_TICKS` on the Java side.
+        const ATTACK_CHARGE_TOLERANCE_TICKS: u32 = 5;
+        let config = &server.advanced_config.pvp;
+        let target_id = target.get_entity().entity_id;
+        if target_id == player.entity_id() {
+            return false;
+        }
+        if let Some(victim) = world.get_player_by_id(target_id) {
+            if !config.enabled || victim.living_entity.health.load() <= 0.0 {
+                return false;
+            }
+            if config.protect_creative && victim.gamemode.load() == GameMode::Creative {
+                world.play_sound(
+                    pumpkin_data::sound::Sound::EntityPlayerAttackNodamage,
+                    pumpkin_data::sound::SoundCategory::Players,
+                    &victim.position(),
+                );
+                return false;
+            }
+        }
+        !player.cannot_attack_with_item(
+            &player.inventory().held_item(),
+            ATTACK_CHARGE_TOLERANCE_TICKS,
+        )
     }
 }
