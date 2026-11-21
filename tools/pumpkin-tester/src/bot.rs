@@ -361,6 +361,12 @@ impl HeadlessBot {
             let pkt = bot.next_packet().await?;
             if pkt.id == play_login_id {
                 saw_play_login = true;
+            } else if !saw_play_login {
+                // The vanilla client has no level until `CLogin` and fails on anything before it.
+                return Err(format!(
+                    "Bot '{name}' got play packet 0x{:02x} before Login",
+                    pkt.id
+                ));
             } else {
                 bot.handle_play_packet(&pkt).await?;
             }
