@@ -112,7 +112,7 @@ impl BedrockClient {
     }
 
     /// Puts the server's copy of a block back on the client, after a break the server refused.
-    fn resend_block(&self, world: &crate::world::World, position: BlockPos) {
+    pub(super) fn resend_block(&self, world: &crate::world::World, position: BlockPos) {
         let state_id = world.get_block_state_id(&position);
         let runtime_id = pumpkin_data::BlockState::to_be_network_id(state_id);
         self.try_enqueue_client_packet(&CUpdateBlock::new(position, runtime_id));

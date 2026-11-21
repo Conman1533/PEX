@@ -1,7 +1,7 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 use crate::item::registry::should_try_block_placement;
-use pumpkin_protocol::bedrock::server::inventory_transaction::HandSlot;
+use pumpkin_protocol::bedrock::server::inventory_transaction::{HandSlot, UseItemTransactionData};
 
 impl BedrockClient {
     fn correct_rejected_food_use(&self, player: &Player) {
@@ -84,7 +84,15 @@ impl BedrockClient {
             drop(player_screen_handler);
         }
 
-        for action in &packet.actions {
+        // In an item use the actions are the client's prediction of what the use does to its
+        // inventory. The server works the result out itself, as for Java, and sends it back.
+        let predicted = matches!(
+            packet.transaction_data,
+            TransactionData::UseItem(_)
+                | TransactionData::UseItemOnEntity(_)
+                | TransactionData::ReleaseItem(_)
+        );
+        for action in packet.actions.iter().filter(|_| !predicted) {
             use pumpkin_protocol::bedrock::server::inventory_transaction::InventoryActionSource;
             let source_type = InventoryActionSource::from(action.source_type);
             if source_type == InventoryActionSource::World {
@@ -179,146 +187,23 @@ impl BedrockClient {
                     _ => BlockDirection::Up,
                 };
                 let world = player.world();
-                let block = world.get_block(&data.block_position);
                 let Some(server) = world.server.upgrade() else {
                     return;
                 };
 
-                if player.gamemode.load() == GameMode::Spectator {
-                    if let Some(factory) = server.block_registry.get_screen_handler_factory(
-                        block,
-                        player,
-                        &data.block_position,
-                        &server,
-                        &world,
-                    ) {
-                        player.open_handled_screen(factory.as_ref(), Some(data.block_position));
-                    }
+                if player.gamemode.load() == GameMode::Spectator && data.action_type.0 != 0 {
                     return;
                 }
 
                 if data.action_type.0 == 0 {
-                    // Click block
-                    let client_stack = descriptor_to_stack(&data.item_in_hand);
-
-                    let mut held_item = player.inventory().held_item();
-                    if !client_stack.is_empty()
-                        && (held_item.is_empty() || held_item.item.id != client_stack.item.id)
-                    {
-                        held_item = client_stack;
-                    }
-
-                    let result = server.block_registry.use_with_item(
-                        block,
-                        player,
-                        &data.block_position,
-                        &BlockHitResult {
-                            face: &face,
-                            cursor_pos: &data.click_position,
-                        },
-                        &mut held_item,
-                        &EquipmentSlot::MAIN_HAND,
-                        &server,
-                        &world,
-                    );
-
-                    if result.consumes_action() {
-                        return;
-                    }
-
-                    if matches!(result, BlockActionResult::PassToDefaultBlockAction) {
-                        let result = server.block_registry.on_use(
-                            block,
-                            player,
-                            &data.block_position,
-                            &BlockHitResult {
-                                face: &face,
-                                cursor_pos: &data.click_position,
-                            },
-                            &server,
-                            &world,
-                        );
-
-                        if result.consumes_action() {
-                            return;
-                        }
-                    }
-
-                    let mut stack = held_item;
-                    if !stack.is_empty() {
-                        let item_id = stack.item.id;
-                        let before = stack.clone();
-                        player.increment_stat(
-                            pumpkin_data::statistic::StatisticCategory::Used,
-                            item_id as i32,
-                            1,
-                        );
-                        let item_result = server.item_registry.use_on_block(
-                            &mut stack,
-                            player,
-                            data.block_position,
-                            face,
-                            data.click_position,
-                            block,
-                            &server,
-                        );
-
-                        if should_try_block_placement(&item_result) {
-                            let item_id = stack.item.id;
-                            if let Some(placed_block) = pumpkin_data::Block::from_item_id(item_id) {
-                                let dummy_use_item_on =
-                                    pumpkin_protocol::java::server::play::SUseItemOn {
-                                        hand: VarInt(0),
-                                        position: data.block_position,
-                                        face: VarInt(i32::from(data.block_face)),
-                                        cursor_pos: data.click_position,
-                                        inside_block: false,
-                                        is_against_world_border: false,
-                                        sequence: VarInt(0),
-                                    };
-
-                                if let Ok(Some(_)) = server.block_registry.place_block(
-                                    player,
-                                    placed_block,
-                                    &server,
-                                    &dummy_use_item_on,
-                                    data.block_position,
-                                    face,
-                                ) && player.gamemode.load() != GameMode::Creative
-                                {
-                                    stack.decrement(1);
-                                }
-                            }
-                        }
-                        if before.is_damageable() && stack.is_empty() {
-                            player.increment_stat(
-                                pumpkin_data::statistic::StatisticCategory::Broken,
-                                item_id as i32,
-                                1,
-                            );
-                            player.world().send_entity_status(
-                                player.get_entity(),
-                                crate::entity::equipment_break_status(&EquipmentSlot::MAIN_HAND),
-                                ActorEventID::None,
-                            );
-                        }
-                        player.inventory().set_held_item(stack);
-                    }
+                    self.use_item_on_block(player, &server, &world, &data, face);
                 } else if data.action_type.0 == 1 {
                     // Click air / Use item
-                    let client_stack = descriptor_to_stack(&data.item_in_hand);
-
                     let hand = match data.hand {
                         HandSlot::Mainhand => Hand::Right,
                         HandSlot::Offhand => Hand::Left,
                     };
                     let mut held = player.inventory().get_stack_in_hand(hand);
-                    if !client_stack.is_empty()
-                        && (held.is_empty() || held.item.id != client_stack.item.id)
-                    {
-                        held = client_stack;
-                        player.inventory().set_stack_in_hand(hand, held.clone());
-                    }
                     if !held.is_empty() {
                         player.increment_stat(
                             pumpkin_data::statistic::StatisticCategory::Used,
@@ -578,5 +463,211 @@ impl BedrockClient {
                 }],
             });
         }
+    }
+
+    /// A Bedrock click on a block (`UseItem` action 0), with the steps of the Java
+    /// `handle_use_item_on`. The client's item in hand and its predicted slot changes are not
+    /// trusted: the server uses its own inventory. Afterwards the client gets the server's copy of
+    /// the clicked block, the block beside it and the hand slot, so a refused use or placement
+    /// leaves no ghost block and no wrong count.
+    fn use_item_on_block(
+        &self,
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        world: &Arc<crate::world::World>,
+        data: &UseItemTransactionData,
+        face: BlockDirection,
+    ) {
+        let hand = match data.hand {
+            HandSlot::Mainhand => Hand::Right,
+            HandSlot::Offhand => Hand::Left,
+        };
+        Self::use_item_on_block_inner(player, server, world, data, face, hand);
+
+        let position = data.block_position;
+        self.resend_block(world, position);
+        self.resend_block(world, position.offset(face.to_offset()));
+        let slot = if hand == Hand::Right {
+            player.inventory().get_selected_slot() as usize
+        } else {
+            PlayerInventory::OFF_HAND_SLOT
+        };
+        player.try_send_slot_set_packet(
+            &pumpkin_protocol::java::client::play::CSetPlayerInventory::new(
+                (slot as i32).into(),
+                &pumpkin_protocol::codec::item_stack_seralizer::ItemStackSerializer::from(
+                    player.inventory().get_stack_in_hand(hand),
+                ),
+            ),
+        );
+    }
+
+    fn use_item_on_block_inner(
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        world: &Arc<crate::world::World>,
+        data: &UseItemTransactionData,
+        face: BlockDirection,
+        hand: Hand,
+    ) {
+        let position = data.block_position;
+        if !player.can_interact_with_block_at(&position, 1.0) {
+            return;
+        }
+        player.update_last_action_time();
+        let inventory = player.inventory();
+        let mut item = inventory.get_stack_in_hand(hand);
+        player.increment_stat(
+            pumpkin_data::statistic::StatisticCategory::Used,
+            item.item.id as i32,
+            1,
+        );
+        let block = world.get_block(&position);
+        let mut event = PlayerInteractEvent::new(
+            player,
+            InteractAction::RightClickBlock,
+            block,
+            Some(position),
+        );
+        server.plugin_manager.fire_blocking(server, &mut event);
+        if event.cancelled {
+            return;
+        }
+        if player.gamemode.load() == GameMode::Spectator {
+            if let Some(factory) = server
+                .block_registry
+                .get_screen_handler_factory(block, player, &position, server, world)
+            {
+                player.open_handled_screen(factory.as_ref(), Some(position));
+            }
+            return;
+        }
+
+        let hit = BlockHitResult {
+            face: &face,
+            cursor_pos: &data.click_position,
+        };
+        // Sneaking with something in either hand skips the block's own use, so a sneaking
+        // player places against a chest instead of opening it.
+        let hands_empty = inventory.held_item().is_empty() && inventory.off_hand_item().is_empty();
+        if !player.get_entity().is_sneaking() || hands_empty {
+            let result = server.block_registry.use_with_item(
+                block,
+                player,
+                &position,
+                &hit,
+                &mut item,
+                &EquipmentSlot::from_hand(hand),
+                server,
+                world,
+            );
+            if result.consumes_action() {
+                return;
+            }
+            if matches!(result, BlockActionResult::PassToDefaultBlockAction)
+                && server
+                    .block_registry
+                    .on_use(block, player, &position, &hit, server, world)
+                    .consumes_action()
+            {
+                return;
+            }
+        }
+        if item.is_empty() {
+            return;
+        }
+
+        let before = item.clone();
+        let item_result = server.item_registry.use_on_block(
+            &mut item,
+            player,
+            position,
+            face,
+            data.click_position,
+            block,
+            server,
+        );
+        if should_try_block_placement(&item_result)
+            && let Some(placed_block) = pumpkin_data::Block::from_item_id(item.item.id)
+            && Self::place_block(player, server, world, placed_block, data, face, hand)
+        {
+            // SolidBucketItem.useOn swaps in the empty bucket after placing the block.
+            if item.item.id == pumpkin_data::item::Item::POWDER_SNOW_BUCKET.id {
+                item = crate::item::items::bucket::get_empty_success_item(item, player);
+            } else if player.gamemode.load() != GameMode::Creative {
+                item.decrement(1);
+            }
+        }
+
+        Self::store_hand_item(player, world, hand, &before, item);
+    }
+
+    /// Puts the used item back in the hand, with the break status and stat when it ran out.
+    fn store_hand_item(
+        player: &Arc<Player>,
+        world: &Arc<crate::world::World>,
+        hand: Hand,
+        before: &ItemStack,
+        item: ItemStack,
+    ) {
+        let inventory = player.inventory();
+        if !before.is_empty() && item.is_empty() {
+            if before.is_damageable() {
+                player.increment_stat(
+                    pumpkin_data::statistic::StatisticCategory::Broken,
+                    before.item.id as i32,
+                    1,
+                );
+            }
+            world.send_entity_status(
+                player.get_entity(),
+                crate::entity::equipment_break_status(&EquipmentSlot::from_hand(hand)),
+                ActorEventID::None,
+            );
+        }
+        if !item.are_equal(before) {
+            inventory.set_stack_in_hand(hand, item.clone());
+            player
+                .living_entity
+                .send_equipment_changes(&[(EquipmentSlot::from_hand(hand), item)]);
+        }
+    }
+
+    /// Places the held block item, as the Java `run_is_block_place`. Returns whether it placed.
+    fn place_block(
+        player: &Arc<Player>,
+        server: &Arc<Server>,
+        world: &Arc<crate::world::World>,
+        block: &'static pumpkin_data::Block,
+        data: &UseItemTransactionData,
+        face: BlockDirection,
+        hand: Hand,
+    ) -> bool {
+        let use_item_on = pumpkin_protocol::java::server::play::SUseItemOn {
+            hand: VarInt(i32::from(hand == Hand::Left)),
+            position: data.block_position,
+            face: VarInt(face.to_index() as i32),
+            cursor_pos: data.click_position,
+            inside_block: false,
+            is_against_world_border: false,
+            sequence: VarInt(0),
+        };
+        let Ok(Some((placed_at, new_state))) = server.block_registry.place_block(
+            player,
+            block,
+            server,
+            &use_item_on,
+            data.block_position,
+            face,
+        ) else {
+            return false;
+        };
+        // BlockItem.place: sculk sensors and wardens hear it.
+        world.game_event(
+            pumpkin_data::game_event::GameEvent::BlockPlace,
+            placed_at.to_centered_f64(),
+            crate::world::vibration::GameEventContext::of(Some(player.clone()), Some(new_state)),
+        );
+        true
     }
 }
