@@ -1,5 +1,7 @@
 use pumpkin_data::translation;
+use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::PermissionLvl;
+use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world::BlockFlags;
@@ -11,6 +13,7 @@ use crate::command::context::command_context::CommandContext;
 use crate::command::errors::error_types::CommandErrorType;
 use crate::command::node::dispatcher::CommandDispatcher;
 use crate::command::node::{CommandExecutor, CommandExecutorResult};
+use crate::world::World;
 
 const DESCRIPTION: &str = "Place a block.";
 const PERMISSION: &str = "minecraft:command.setblock";
@@ -35,12 +38,31 @@ enum Mode {
     Strict,
 }
 
+/// Loads the block entity data a block argument gave into the block entity at `pos`, as
+/// vanilla `BlockInput.place` does. The block entity keeps its own id and position.
+pub(super) fn load_block_entity_data(world: &World, pos: &BlockPos, data: &NbtCompound) {
+    let Some(block_entity) = world.get_block_entity(pos) else {
+        return;
+    };
+    let mut nbt = NbtCompound::new();
+    block_entity.write_internal(&mut nbt);
+    world.write_kept_block_entity_nbt(block_entity.as_ref(), &mut nbt);
+    nbt.merge(data);
+    nbt.put_string("id", block_entity.resource_location().to_string());
+    nbt.put_int("x", pos.0.x);
+    nbt.put_int("y", pos.0.y);
+    nbt.put_int("z", pos.0.z);
+    if let Some(loaded) = crate::block::entities::block_entity_from_nbt(&nbt) {
+        world.add_block_entity(loaded);
+    }
+}
+
 struct SetBlockExecutor(Mode);
 
 impl CommandExecutor for SetBlockExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
-        let block = BlockArgumentType::get(context, "block")?;
-        let block_state_id = block.default_state.id;
+        let block = BlockArgumentType::get_input(context, "block")?;
+        let block_state_id = block.state;
         let mode = self.0;
         let world = context.source.world();
         let pos = BlockPosArgumentType::get_loaded_block_pos(context, "pos")?;
@@ -93,6 +115,9 @@ impl CommandExecutor for SetBlockExecutor {
         };
 
         if success {
+            if let Some(data) = &block.nbt {
+                load_block_entity_data(world, &pos, data);
+            }
             world.flush_block_updates();
             context.source.send_feedback(
                 TextComponent::translate_cross(

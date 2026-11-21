@@ -1,6 +1,9 @@
 use pumpkin_data::{
     Block,
-    block_properties::{CommandBlockLikeProperties, Facing},
+    block_properties::{
+        CommandBlockLikeProperties, Facing, Half, HorizontalFacing, StairsShape,
+        StickyPistonLikeProperties, WhiteWoolStairsLikeProperties,
+    },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
 use pumpkin_nbt::NbtCompound;
@@ -378,6 +381,72 @@ pub(super) async fn test_forceload_add_loads_before_answering(
                 .await?;
             placed?;
             Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// `setblock` and `fill` take block states and block entity data, as vanilla
+/// `BlockStateParser` reads them, and reject properties or values the block does not have.
+pub(super) async fn test_setblock_and_fill_parse_block_states(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(0, 1, 0);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, "setblock ~1 ~ ~ minecraft:piston[facing=east]")
+                .await?;
+            helper
+                .execute_command(
+                    &origin,
+                    "setblock ~3 ~ ~ minecraft:chest{Items:[{Slot:0b,id:\"minecraft:stone\",count:3}]}",
+                )
+                .await?;
+            helper
+                .execute_command(
+                    &origin,
+                    "fill ~1 ~ ~2 ~3 ~ ~2 minecraft:oak_stairs[facing=south,half=top]",
+                )
+                .await?;
+            let unknown = helper
+                .execute_command(&origin, "setblock ~1 ~1 ~ minecraft:piston[color=red]")
+                .await;
+            helper.assert_true(unknown.is_err(), "an unknown property should fail")?;
+            let invalid = helper
+                .execute_command(&origin, "setblock ~1 ~1 ~ minecraft:piston[facing=sideways]")
+                .await;
+            helper.assert_true(invalid.is_err(), "an invalid property value should fail")?;
+            Ok(())
+        })
+        .then_execute(|helper| async move {
+            let piston = StickyPistonLikeProperties {
+                extended: false,
+                facing: Facing::East,
+            };
+            helper
+                .assert_block_state(&BlockPos::new(1, 1, 0), piston.to_state_id(&Block::PISTON))
+                .await?;
+            helper
+                .assert_container_contains_count(&BlockPos::new(3, 1, 0), "minecraft:stone", 3)
+                .await?;
+            let stairs = WhiteWoolStairsLikeProperties {
+                facing: HorizontalFacing::South,
+                half: Half::Top,
+                shape: StairsShape::Straight,
+                waterlogged: false,
+            }
+            .to_state_id(&Block::OAK_STAIRS);
+            for x in 1..=3 {
+                helper
+                    .assert_block_state(&BlockPos::new(x, 1, 2), stairs)
+                    .await?;
+            }
+            helper
+                .assert_block_present(&BlockPos::new(1, 2, 0), &Block::AIR)
+                .await
         })
         .then_succeed();
     Ok(())
