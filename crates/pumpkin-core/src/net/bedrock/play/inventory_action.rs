@@ -3,6 +3,9 @@ use super::*;
 use crate::item::registry::should_try_block_placement;
 use pumpkin_protocol::bedrock::server::inventory_transaction::{HandSlot, UseItemTransactionData};
 
+/// `ReleaseItem` action for the end of eating or drinking (0 is letting go of a bow).
+const RELEASE_ITEM_CONSUME: i32 = 1;
+
 impl BedrockClient {
     fn correct_rejected_food_use(&self, player: &Player) {
         // Holding use can repeat rejected transactions. Limit prediction corrections
@@ -315,6 +318,10 @@ impl BedrockClient {
                     }
                 }
             }
+            // The end of the client's own eating or drinking animation. The server finishes the
+            // use on its own tick, as for a Java client, which sends nothing here; letting this
+            // clear the hand would cancel a meal the server is a tick or two from finishing.
+            TransactionData::ReleaseItem(data) if data.action_type.0 == RELEASE_ITEM_CONSUME => {}
             TransactionData::ReleaseItem(_data) => {
                 let item_in_use = player
                     .living_entity
