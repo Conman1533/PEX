@@ -49,6 +49,10 @@ impl EventHandler<EntityDamageByEntityEvent> for Hits {
     }
 }
 
+/// Tries for one case: an attack the server handled a tick late spoils the gap, so the case runs
+/// again.
+const ATTEMPTS: usize = 5;
+
 /// Vanilla `Player.getAttackStrengthScale(0.5)` and the damage scale in `Player.attack`.
 fn expected_damage(ticks: u32, attack_speed: f64) -> f32 {
     let delay = 20.0 / attack_speed;
@@ -122,7 +126,7 @@ async fn cases(
                 bot.name
             ),
         )?;
-        let damage = punch_after(server, bot, player, hits, gap).await?;
+        let damage = punch_after_retrying(server, bot, player, hits, gap).await?;
         let expected = expected_damage(gap, attack_speed);
         if (damage - expected).abs() > 1e-4 {
             return Err(format!(
@@ -138,7 +142,7 @@ async fn cases(
         server,
         &format!("attribute {} minecraft:attack_speed base set 4", bot.name),
     )?;
-    let damage = punch_after(server, bot, player, hits, 2).await?;
+    let damage = punch_after_retrying(server, bot, player, hits, 2).await?;
     let expected = expected_damage(2, 4.0);
     if (damage - expected).abs() > 1e-4 {
         return Err(format!(
@@ -148,15 +152,40 @@ async fn cases(
     Ok(())
 }
 
-/// Punches one pig, ticks the server `gap` times counting the tick that handled that punch, then
-/// punches a second pig in the next tick and returns the damage the second punch dealt.
-async fn punch_after(
+/// [`punch_after`] until both punches were handled in the tick after they arrived.
+async fn punch_after_retrying(
     server: &Arc<Server>,
     bot: &mut HeadlessBot,
     player: &Arc<Player>,
     hits: &Hits,
     gap: u32,
 ) -> Result<f32, String> {
+    for _ in 0..ATTEMPTS {
+        if let Some(damage) = punch_after(server, bot, player, hits, gap).await? {
+            return Ok(damage);
+        }
+        // Let the late attack land before the next try.
+        for _ in 0..40 {
+            server.tick();
+        }
+    }
+    Err(format!(
+        "in {ATTEMPTS} tries the server never handled both punches {gap} ticks apart in the tick \
+         after they arrived"
+    ))
+}
+
+/// Punches one pig, ticks the server `gap` times counting the tick that handled that punch, then
+/// punches a second pig in the next tick and returns the damage the second punch dealt. Returns
+/// `None` when a punch wasn't handled in the tick after it arrived, which happens on a slow
+/// machine and leaves the gap unknown.
+async fn punch_after(
+    server: &Arc<Server>,
+    bot: &mut HeadlessBot,
+    player: &Arc<Player>,
+    hits: &Hits,
+    gap: u32,
+) -> Result<Option<f32>, String> {
     let world = player.world();
     let mut pigs = Vec::new();
     for side in [1.5, -1.5] {
@@ -175,21 +204,25 @@ async fn punch_after(
     let result = async {
         let first = pigs[0].get_entity().entity_id;
         let second = pigs[1].get_entity().entity_id;
+        let take = || {
+            hits.damage
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take()
+        };
+        hits.target.store(first, Ordering::Relaxed);
+        take();
         attack_in_next_tick(server, bot, player, first).await?;
+        if take().is_none() {
+            return Ok(None);
+        }
         for _ in 1..gap {
             server.tick();
         }
         hits.target.store(second, Ordering::Relaxed);
-        *hits
-            .damage
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        take();
         attack_in_next_tick(server, bot, player, second).await?;
-        hits.damage
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-            .ok_or_else(|| format!("the punch after {gap} ticks did no damage"))
+        Ok(take())
     }
     .await;
     for pig in pigs {
