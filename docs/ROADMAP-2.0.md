@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `c0b0b6076`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `995577bc8`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -31,6 +31,15 @@ Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by th
 - `fix/systemic-mob-parity` (13 commits, 2026-11-14): spawn health in metadata, step, swim and ambient sounds, sound variants, mob sound volume and pitch, hurt sounds to other players, `/effect` on any living entity, melee pathing, fluid spreading. Goal 1.
 - `fix/wrong-mob-behaviours` (15 commits, 2026-11-16): warden roar, sniff and sonic boom, vex and evoker, dolphin treasure, sniffer, panda, camel, rabbit, parrot, armadillo, llama spit, axolotls, tamed wolf health, horse food, goat and copper golem panic. Goal 1.
 - `fix/worldgen-fluid-ticks`, `fix/ore-placement`, `fix/sculk-worldgen`, `fix/speleothem-worldgen` (2026-11-14 to 2026-11-15): world generation parity. No goal of this roadmap covers world generation; they are parity fixes outside it.
+
+Landed on `alpha` on 2026-11-21 as landing batch 5 (branch `land/g7-batch-5`, `e351adc78`), outside the pieces; it passed the world round trip, full CI and the whole tester on CT 117 and the Z420:
+
+- `fix/raid-persistence`: a raid whose wave has nowhere to spawn stops after vanilla's tries instead of staying alive (`raid.rs` follows vanilla `Raid.tick` and `findRandomSpawnPos`). A G7-18 follow-up; `isVillage` waits for G1-42.
+- `fix/forced-chunk-entities`: force-loaded chunks load their saved entities without a player nearby. The entity keys PEX drops that this shows are G7-24's known losses.
+- `fix/map-locked-dimension`: locked maps, and maps of another dimension, no longer update.
+- `fix/duplicate-login`: a second login with the same profile kicks the player already online with `multiplayer.disconnect.duplicate_login` and lets the new one in once the old one is saved, as vanilla `disconnectAllPlayersWithProfile` does (was "Invalid move player packet received" for the new client). Bot test `bot:duplicate_login_kicks_old_session`.
+- `fix/hunger-effect-rate`: Hunger adds 0.005 x (level) exhaustion every tick through the player, like vanilla, instead of 0.1 x (level) once a second; the leftover burst kept draining food after the effect ended and made `bot:eat_restores_food` flaky.
+- `fix/bedrock-combat`: Bedrock attackers use the Java attack rules and cooldown (Goal 8 work from the Bedrock thread, gated on Windows too).
 
 What holds 2.0 back:
 
