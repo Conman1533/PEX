@@ -22,7 +22,8 @@ WORKDIR /pumpkin
 USER pumpkin:pumpkin
 
 ENV RUST_BACKTRACE=1
-EXPOSE 25565
+# Java Edition on 25565; Bedrock Edition signaling (TCP) and WebRTC (UDP) on 19132.
+EXPOSE 25565 19132/tcp 19132/udp
 
 ENTRYPOINT [ "pumpkin" ]
 

@@ -3,10 +3,10 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use pumpkin_auth::{jwt::Jwks, p384::ecdsa::SigningKey};
-use tokio::sync::{OnceCell, mpsc};
+use pumpkin_auth::p384::ecdsa::SigningKey;
+use tokio::sync::mpsc;
 
-use crate::server::Server;
+use crate::{net::bedrock::oidc_keys::OidcKeys, server::Server};
 
 use super::{ice_router::IceRouter, session::IncomingSession};
 
@@ -16,7 +16,7 @@ pub(super) struct NetherNetState {
     pub(super) incoming: mpsc::Sender<IncomingSession>,
     pub(super) identity_key: Arc<SigningKey>,
     pub(super) require_client_identity: bool,
-    pub(super) oidc_verifier: Option<Arc<OnceCell<(String, Jwks)>>>,
+    pub(super) oidc_verifier: Option<Arc<OidcKeys>>,
     pub(super) stun_servers: Arc<[String]>,
     pub(super) ice_local_addr: SocketAddr,
     pub(super) external_ip: Option<IpAddr>,

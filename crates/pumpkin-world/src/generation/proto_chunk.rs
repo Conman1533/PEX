@@ -155,6 +155,9 @@ pub struct ProtoChunk {
     pub flat_motion_blocking_no_leaves_height_map: [i16; CHUNK_AREA],
     pub(crate) structure_starts: FxHashMap<StructureKeys, StructureInstance>,
     pub(crate) structure_references: Vec<(StructureKeys, Arc<Mutex<StructurePiecesCollector>>)>,
+    /// The start chunk of each structure reaching into this chunk, for its saved `References`
+    /// (G7-07).
+    pub(crate) structure_reference_starts: Vec<(StructureKeys, i32, i32)>,
 
     height: u16,
     bottom_y: i8,
@@ -275,6 +278,7 @@ impl ProtoChunk {
             flat_motion_blocking_no_leaves_height_map: default_heightmap,
             structure_starts: FxHashMap::default(),
             structure_references: Vec::new(),
+            structure_reference_starts: Vec::new(),
             height,
             bottom_y,
             generation_height,
@@ -1697,6 +1701,7 @@ impl ProtoChunk {
             crate::generation::structure::height_sampler::NoiseHeightSampler::new(generator);
 
         let mut references = Vec::new();
+        let mut reference_starts = Vec::new();
         // Constant across every chunk in the dimension, so hoist it out of the loop
         // and out of the (cached) structure-start computation below.
         // Matches vanilla WorldGenerationContext:
@@ -1812,6 +1817,11 @@ impl ProtoChunk {
                                 .intersects_raw_xz(start_x, start_z, end_x, end_z)
                             {
                                 references.push((entry.structure, start_data.collector.clone()));
+                                reference_starts.push((
+                                    entry.structure,
+                                    candidate_chunk_x,
+                                    candidate_chunk_z,
+                                ));
                             }
                             break;
                         }
@@ -1820,6 +1830,7 @@ impl ProtoChunk {
             }
         }
 
+        self.structure_reference_starts = reference_starts;
         for (key, pos) in references {
             self.structure_starts
                 .entry(key)

@@ -99,18 +99,15 @@ impl MobSpawnerBlockEntity {
                 .spawn_potentials
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let list = if potentials.is_empty() {
-                vec![Self::weighted_entry(spawn_entry.clone(), 1)]
-            } else {
-                potentials
-                    .iter()
-                    .map(|potential| {
-                        let mut data = NbtCompound::new();
-                        potential.data.write_nbt(&mut data);
-                        Self::weighted_entry(data, potential.weight)
-                    })
-                    .collect()
-            };
+            // Vanilla saves the list as it is, empty included (a placed or generated spawner).
+            let list = potentials
+                .iter()
+                .map(|potential| {
+                    let mut data = NbtCompound::new();
+                    potential.data.write_nbt(&mut data);
+                    Self::weighted_entry(data, potential.weight)
+                })
+                .collect();
             nbt.put_list("SpawnPotentials", list);
         }
         nbt.put_compound("SpawnData", spawn_entry);
@@ -234,7 +231,8 @@ impl BlockEntity for MobSpawnerBlockEntity {
         let required_player_range =
             get_num("RequiredPlayerRange").unwrap_or(Self::DEFAULT_REQUIRED_PLAYER_RANGE);
 
-        let spawn_potentials: Vec<WeightedSpawnData> = nbt
+        let saved_potentials = nbt.get_list("SpawnPotentials").is_some();
+        let mut spawn_potentials: Vec<WeightedSpawnData> = nbt
             .get_list("SpawnPotentials")
             .map(|list| {
                 list.iter()
@@ -261,6 +259,13 @@ impl BlockEntity for MobSpawnerBlockEntity {
                 equipment: None,
                 raw_entity_nbt: None,
             });
+        // Vanilla `BaseSpawner.load`: with no saved list, the spawn data is the only potential.
+        if !saved_potentials {
+            spawn_potentials.push(WeightedSpawnData {
+                data: spawn_data.clone(),
+                weight: 1,
+            });
+        }
 
         Self {
             position,
@@ -574,20 +579,32 @@ mod tests {
     }
 
     #[test]
-    fn a_spawner_without_potentials_saves_its_spawn_data_as_the_only_one() {
+    fn a_spawner_without_potentials_saves_an_empty_list_like_vanilla() {
         let spawner = MobSpawnerBlockEntity::new(BlockPos::new(0, 64, 0), Some(&EntityType::PIG));
         let mut saved = NbtCompound::new();
         spawner.write_nbt(&mut saved);
-        let potentials = saved.get_list("SpawnPotentials").unwrap();
+        assert_eq!(saved.get_list("SpawnPotentials").map(<[_]>::len), Some(0));
+        let reloaded = MobSpawnerBlockEntity::from_nbt(&saved, BlockPos::new(0, 64, 0));
+        assert_eq!(reloaded.entity_type(), Some(&EntityType::PIG));
+    }
+
+    #[test]
+    fn a_spawner_saved_without_a_list_takes_its_spawn_data_as_the_only_potential() {
+        let mut nbt = spawner_nbt();
+        nbt.child_tags.remove("SpawnPotentials");
+        let spawner = MobSpawnerBlockEntity::from_nbt(&nbt, BlockPos::new(0, 64, 0));
+        let mut saved = NbtCompound::new();
+        spawner.write_nbt(&mut saved);
+        let potentials = saved.get_list("SpawnPotentials").expect("potentials saved");
         assert_eq!(potentials.len(), 1);
-        let entry = potentials[0].extract_compound().unwrap();
+        let entry = potentials[0].extract_compound().expect("an entry");
         assert_eq!(entry.get_int("weight"), Some(1));
         assert_eq!(
             entry
                 .get_compound("data")
                 .and_then(|data| data.get_compound("entity"))
                 .and_then(|entity| entity.get_string("id")),
-            Some("minecraft:pig")
+            Some("minecraft:zombie")
         );
     }
 }

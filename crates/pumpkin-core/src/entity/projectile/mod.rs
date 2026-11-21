@@ -251,6 +251,12 @@ impl ThrownItemEntity {
         let chunk_pos = entity.chunk_pos.load();
         world.broadcast_to_chunk(chunk_pos, &packet);
 
+        // Vanilla `ProjectileUtil.getHitResultOnMoveVector`: a clip from a point to itself misses,
+        // so a projectile that doesn't move (a `NoGravity` pearl at rest) hits nothing.
+        if delta.x == 0.0 && delta.y == 0.0 && delta.z == 0.0 {
+            return;
+        }
+
         // Calculate search box for collisions
         let search_box = BoundingBox::new(
             Vector3::new(
@@ -409,8 +415,13 @@ impl ThrownItemEntity {
     const fn get_living_entity(&self) -> Option<&LivingEntity> {
         None
     }
-    const fn get_gravity(&self) -> f64 {
-        self.gravity
+    /// Vanilla `Entity.getGravity`: none while `NoGravity` is set.
+    fn get_gravity(&self) -> f64 {
+        if self.entity.has_no_gravity() {
+            0.0
+        } else {
+            self.gravity
+        }
     }
 }
 

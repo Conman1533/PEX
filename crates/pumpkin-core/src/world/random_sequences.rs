@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hasher};
 
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::identifier::Identifier;
 use pumpkin_util::random::RandomImpl;
 use pumpkin_util::random::xoroshiro128::Xoroshiro;
@@ -136,5 +138,75 @@ impl RandomSequences {
     #[must_use]
     pub fn get_sequence_keys(&self) -> Vec<String> {
         self.sequences.keys().cloned().collect()
+    }
+
+    /// The `data` compound of vanilla's `random_sequences.dat` (`RandomSequences.CODEC`).
+    #[must_use]
+    #[expect(clippy::cast_possible_wrap)]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        data.put_int("salt", self.salt);
+        // Both flags are `optionalFieldOf(.., true)`, which leaves out the default.
+        if !self.include_world_seed {
+            data.put_bool("include_world_seed", false);
+        }
+        if !self.include_sequence_id {
+            data.put_bool("include_sequence_id", false);
+        }
+        let mut sequences = NbtCompound::new();
+        for (id, sequence) in &self.sequences {
+            let (lo, hi) = sequence.rng.state();
+            let mut tag = NbtCompound::new();
+            tag.put("source", NbtTag::LongArray(vec![lo as i64, hi as i64]));
+            sequences.put_compound(id, tag);
+        }
+        data.put_compound("sequences", sequences);
+        data
+    }
+
+    /// Reads the `data` compound of vanilla's `random_sequences.dat`.
+    #[must_use]
+    #[expect(clippy::cast_sign_loss)]
+    pub fn from_nbt(data: &NbtCompound) -> Self {
+        let mut result = Self::new();
+        result.salt = data.get_int("salt").unwrap_or(0);
+        result.include_world_seed = data.get_bool("include_world_seed").unwrap_or(true);
+        result.include_sequence_id = data.get_bool("include_sequence_id").unwrap_or(true);
+        if let Some(sequences) = data.get_compound("sequences") {
+            for (id, tag) in &sequences.child_tags {
+                let NbtTag::Compound(sequence) = tag else {
+                    continue;
+                };
+                if let Some(&[lo, hi]) = sequence.get_long_array("source") {
+                    result.sequences.insert(
+                        id.to_string(),
+                        RandomSequence {
+                            rng: Xoroshiro::from_state(lo as u64, hi as u64),
+                        },
+                    );
+                }
+            }
+        }
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `testdata/random_sequences_vanilla_26_3.dat` is what vanilla 26.3 saved after two
+    /// `/random value 1..1000000 test:seq`; the next value it gave after that save was 848662.
+    #[test]
+    fn a_vanilla_sequence_continues_where_vanilla_left_it() {
+        let root = pumpkin_nbt::nbt_compress::read_gzip_compound_tag(std::io::Cursor::new(
+            include_bytes!("testdata/random_sequences_vanilla_26_3.dat"),
+        ))
+        .unwrap();
+        let data = root.get_compound("data").unwrap();
+        let mut sequences = RandomSequences::from_nbt(data);
+        assert_eq!(sequences.to_nbt(), *data);
+        let sequence = sequences.sequences.get_mut("test:seq").unwrap();
+        assert_eq!(sequence.random_between_inclusive(1, 1_000_000), 848_662);
     }
 }

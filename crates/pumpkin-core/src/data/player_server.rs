@@ -55,6 +55,8 @@ impl ServerPlayerData {
 
         let mut nbt = NbtCompound::new();
         player.write_nbt(&mut nbt);
+        // Vanilla `PlayerList.remove`: the player's thrown pearls leave the world with it.
+        player.unload_ender_pearls();
 
         self.storage.save_player_data(&player.gameprofile.id, nbt)?;
         Ok(())

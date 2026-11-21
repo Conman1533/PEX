@@ -7,16 +7,21 @@ use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::potion::Effect;
 use pumpkin_data::sound::Sound;
+use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::difficulty::Difficulty;
 use pumpkin_util::math::position::BlockPos;
+use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
+use pumpkin_world::chunk::ChunkHeightmapType;
 
 use crate::entity::EntityBase;
 use crate::entity::mob::raider::create_ominous_banner;
 use crate::entity::r#type::from_type;
 use crate::world::World;
 use crate::world::bossbar::{Bossbar, BossbarColor, BossbarDivisions};
+use crate::world::natural_spawner::is_spawn_position_ok;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RaidStatus {
@@ -35,6 +40,13 @@ impl RaidStatus {
             Self::Loss => "loss",
             Self::Stopped => "stopped",
         }
+    }
+
+    #[must_use]
+    pub fn from_serialized_name(name: &str) -> Option<Self> {
+        [Self::Ongoing, Self::Victory, Self::Loss, Self::Stopped]
+            .into_iter()
+            .find(|status| status.get_serialized_name() == name)
     }
 }
 
@@ -137,6 +149,66 @@ impl Raid {
             players_in_raid: HashSet::new(),
             wave_spawn_pos: None,
         }
+    }
+
+    /// One entry of vanilla's `raids` list: the id and `Raid.MAP_CODEC`'s fields.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        nbt.put_int("id", self.id);
+        nbt.put_bool("started", self.started);
+        nbt.put_bool("active", self.active);
+        nbt.put_long("ticks_active", self.ticks_active as i64);
+        nbt.put_int("raid_omen_level", self.raid_omen_level);
+        nbt.put_int("groups_spawned", self.groups_spawned);
+        nbt.put_int("cooldown_ticks", self.raid_cooldown_ticks);
+        nbt.put_int("post_raid_ticks", self.post_raid_ticks);
+        nbt.put_float("total_health", self.total_health);
+        nbt.put_int("group_count", self.num_groups);
+        nbt.put_string("status", self.status.get_serialized_name().to_string());
+        nbt.put(
+            "center",
+            NbtTag::IntArray(vec![self.center.0.x, self.center.0.y, self.center.0.z]),
+        );
+        let mut heroes: Vec<&Uuid> = self.heroes_of_the_village.iter().collect();
+        heroes.sort_unstable();
+        nbt.put_list(
+            "heroes_of_the_village",
+            heroes
+                .into_iter()
+                .map(|uuid| NbtTag::from_uuid(*uuid))
+                .collect(),
+        );
+        nbt
+    }
+
+    /// Reads one entry of vanilla's `raids` list. Raiders join again as their entities load.
+    #[must_use]
+    pub fn from_nbt(nbt: &NbtCompound) -> Option<Self> {
+        let &[x, y, z] = nbt.get_int_array("center")? else {
+            return None;
+        };
+        let mut raid = Self::new(
+            nbt.get_int("id")?,
+            BlockPos::new(x, y, z),
+            Difficulty::Normal,
+        );
+        raid.started = nbt.get_bool("started")?;
+        raid.active = nbt.get_bool("active")?;
+        raid.ticks_active = nbt.get_long("ticks_active")?.max(0) as u64;
+        raid.raid_omen_level = nbt.get_int("raid_omen_level")?;
+        raid.groups_spawned = nbt.get_int("groups_spawned")?;
+        raid.raid_cooldown_ticks = nbt.get_int("cooldown_ticks")?;
+        raid.post_raid_ticks = nbt.get_int("post_raid_ticks")?;
+        raid.total_health = nbt.get_float("total_health")?;
+        raid.num_groups = nbt.get_int("group_count")?;
+        raid.status = RaidStatus::from_serialized_name(nbt.get_string("status")?)?;
+        raid.heroes_of_the_village = nbt
+            .get_list("heroes_of_the_village")?
+            .iter()
+            .filter_map(NbtTag::extract_uuid)
+            .collect();
+        Some(raid)
     }
 
     #[must_use]
@@ -352,6 +424,8 @@ impl Raid {
                         self.group_to_leader_map.insert(group_number, uuid);
                         leader_set = true;
                     }
+                    // Vanilla `Raid.joinRaid` sets the raider's raid with its wave.
+                    raider.get_raider_data().raid_id.store(Some(self.id));
                     raider.set_wave(group_number);
                     raider.set_can_join_raid(true);
                     raider.apply_raid_buffs(group_number, false);
@@ -379,6 +453,7 @@ impl Raid {
                         if let Some(mob) = rider_base.get_mob()
                             && let Some(raider) = mob.as_raider()
                         {
+                            raider.get_raider_data().raid_id.store(Some(self.id));
                             raider.set_wave(group_number);
                             raider.set_can_join_raid(true);
                             raider.apply_raid_buffs(group_number, false);
@@ -403,8 +478,13 @@ impl Raid {
         }
     }
 
+    /// Vanilla `Raid.findRandomSpawnPos`: a surface spot on a ring around the centre that is
+    /// loaded with 10 blocks around it and where a ravager could stand, or `None`.
+    ///
+    /// PEX has no village sections (vanilla `ServerLevel.isVillage`), so the spot isn't kept
+    /// out of the village while more than 7 seconds remain.
     #[must_use]
-    pub fn find_random_spawn_pos(&self, max_tries: usize) -> Option<BlockPos> {
+    pub fn find_random_spawn_pos(&self, world: &Arc<World>, max_tries: usize) -> Option<BlockPos> {
         let seconds_remaining = self.raid_cooldown_ticks / 20;
         let how_far = 0.22 * (seconds_remaining as f32) - 0.24;
         let start_angle = rand::random::<f32>() * std::f32::consts::PI * 2.0;
@@ -412,15 +492,30 @@ impl Raid {
         for i in 0..max_tries {
             let angle = start_angle + std::f32::consts::PI * (i as f32) / 8.0;
             let spawn_x = self.center.0.x
-                + ((angle.cos() * 32.0 * how_far) as i32)
-                + (rand::random::<i32>().rem_euclid(3)) * (how_far as i32);
+                + (angle.cos() * 32.0 * how_far).floor() as i32
+                + rand::random_range(0..3) * how_far.floor() as i32;
             let spawn_z = self.center.0.z
-                + ((angle.sin() * 32.0 * how_far) as i32)
-                + (rand::random::<i32>().rem_euclid(3)) * (how_far as i32);
-            let spawn_y = self.center.0.y;
-
-            if (spawn_y - self.center.0.y).abs() <= 96 {
-                let spawn_pos = BlockPos(Vector3::new(spawn_x, spawn_y, spawn_z));
+                + (angle.sin() * 32.0 * how_far).floor() as i32
+                + rand::random_range(0..3) * how_far.floor() as i32;
+            // Vanilla `getHeight(WORLD_SURFACE)` is the first block above the surface.
+            let spawn_y =
+                world.get_heightmap_height(ChunkHeightmapType::WorldSurface, spawn_x, spawn_z) + 1;
+            if (spawn_y - self.center.0.y).abs() > 96 {
+                continue;
+            }
+            let spawn_pos = BlockPos(Vector3::new(spawn_x, spawn_y, spawn_z));
+            if !chunks_loaded(
+                world,
+                spawn_x - 10,
+                spawn_z - 10,
+                spawn_x + 10,
+                spawn_z + 10,
+            ) {
+                continue;
+            }
+            let on_snow = world.get_block(&spawn_pos.down()) == &pumpkin_data::Block::SNOW
+                && world.get_block_state(&spawn_pos).is_air();
+            if on_snow || is_spawn_position_ok(world, &spawn_pos, &EntityType::RAVAGER) {
                 return Some(spawn_pos);
             }
         }
@@ -539,8 +634,23 @@ impl Raid {
         }
 
         if self.status == RaidStatus::Ongoing {
+            // Vanilla `Raid.tick`: a raid only runs while its centre is loaded.
+            let was_active = self.active;
+            self.active = chunks_loaded(
+                world,
+                self.center.0.x,
+                self.center.0.z,
+                self.center.0.x,
+                self.center.0.z,
+            );
             if world.level_info.load().difficulty == Difficulty::Peaceful {
                 self.stop(world);
+                return;
+            }
+            if was_active && !self.active {
+                self.remove_all_players(world);
+            }
+            if !self.active {
                 return;
             }
 
@@ -553,13 +663,20 @@ impl Raid {
             let raiders_alive = self.get_total_raiders_alive();
             if raiders_alive == 0 && self.has_more_waves() {
                 if self.raid_cooldown_ticks <= 0 {
-                    if self.groups_spawned > 0 {
+                    if self.raid_cooldown_ticks == 0 && self.groups_spawned > 0 {
                         self.raid_cooldown_ticks = 300;
                         self.bossbar.title = TextComponent::translate("event.minecraft.raid", []);
+                        return;
                     }
                 } else {
-                    if self.wave_spawn_pos.is_none() && self.raid_cooldown_ticks % 5 == 0 {
-                        self.wave_spawn_pos = self.find_random_spawn_pos(8);
+                    // PEX has no entity-ticking chunk level, so a loaded spot counts as ticking.
+                    let try_find = self
+                        .wave_spawn_pos
+                        .map_or(self.raid_cooldown_ticks % 5 == 0, |pos| {
+                            !chunks_loaded(world, pos.0.x, pos.0.z, pos.0.x, pos.0.z)
+                        });
+                    if try_find {
+                        self.wave_spawn_pos = self.find_random_spawn_pos(world, 8);
                     }
 
                     if self.raid_cooldown_ticks == 300 || self.raid_cooldown_ticks % 20 == 0 {
@@ -587,15 +704,27 @@ impl Raid {
                 self.update_bossbar(world);
             }
 
+            // Vanilla stops the raid when a wave finds nowhere to spawn after six tries.
+            let mut sound_played = false;
+            let mut failed_tries = 0;
             while self.should_spawn_group() {
-                let spawn_pos = self
+                if let Some(spawn_pos) = self
                     .wave_spawn_pos
-                    .or_else(|| self.find_random_spawn_pos(20))
-                    .unwrap_or(self.center);
-
-                self.started = true;
-                self.spawn_group(world, spawn_pos);
-                self.play_sound(world, spawn_pos);
+                    .or_else(|| self.find_random_spawn_pos(world, 20))
+                {
+                    self.started = true;
+                    self.spawn_group(world, spawn_pos);
+                    if !sound_played {
+                        self.play_sound(world, spawn_pos);
+                        sound_played = true;
+                    }
+                } else {
+                    failed_tries += 1;
+                }
+                if failed_tries > 5 {
+                    self.stop(world);
+                    break;
+                }
             }
 
             let raiders_alive = self.get_total_raiders_alive();
@@ -649,14 +778,66 @@ impl Raid {
     }
 }
 
-#[derive(Default)]
+/// A dimension's raids, vanilla's `Raids`, saved as its `data/minecraft/raids.dat`.
 pub struct Raids {
     pub raid_map: HashMap<i32, Raid>,
+    /// The last id handed out; vanilla starts at 1, so its first raid is 2.
     pub next_id: i32,
     pub tick_counter: u64,
 }
 
+impl Default for Raids {
+    fn default() -> Self {
+        Self {
+            raid_map: HashMap::new(),
+            next_id: 1,
+            tick_counter: 0,
+        }
+    }
+}
+
 impl Raids {
+    /// The `data` compound of vanilla's `raids.dat` (`Raids.CODEC`).
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut nbt = NbtCompound::new();
+        let mut raids: Vec<&Raid> = self.raid_map.values().collect();
+        raids.sort_unstable_by_key(|raid| raid.id);
+        // `optionalFieldOf("raids", List.of())` leaves out an empty list.
+        if !raids.is_empty() {
+            nbt.put_list(
+                "raids",
+                raids
+                    .into_iter()
+                    .map(|raid| NbtTag::Compound(raid.to_nbt()))
+                    .collect(),
+            );
+        }
+        nbt.put_int("next_id", self.next_id);
+        nbt.put_int("tick", self.tick_counter as i32);
+        nbt
+    }
+
+    /// Reads the `data` compound of vanilla's `raids.dat`.
+    #[must_use]
+    pub fn from_nbt(nbt: &NbtCompound) -> Self {
+        let mut raids = Self {
+            next_id: nbt.get_int("next_id").unwrap_or(1),
+            tick_counter: nbt.get_int("tick").unwrap_or(0).max(0) as u64,
+            ..Self::default()
+        };
+        for tag in nbt.get_list("raids").unwrap_or_default() {
+            if let NbtTag::Compound(raid) = tag
+                && let Some(raid) = Raid::from_nbt(raid)
+            {
+                raids.raid_map.insert(raid.id, raid);
+            } else {
+                tracing::warn!("Skipping a malformed raid: {tag:?}");
+            }
+        }
+        raids
+    }
+
     #[must_use]
     pub fn get(&self, raid_id: i32) -> Option<&Raid> {
         self.raid_map.get(&raid_id)
@@ -747,5 +928,105 @@ impl Raids {
                 raid.remove_all_players(world);
             }
         }
+    }
+}
+
+/// Vanilla `Level.hasChunksAt`: whether every chunk the block box touches is loaded.
+fn chunks_loaded(world: &World, min_x: i32, min_z: i32, max_x: i32, max_z: i32) -> bool {
+    (min_x >> 4..=max_x >> 4).all(|chunk_x| {
+        (min_z >> 4..=max_z >> 4).all(|chunk_z| {
+            world
+                .level
+                .loaded_chunks
+                .contains_key(&Vector2::new(chunk_x, chunk_z))
+        })
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vanilla_data(bytes: &[u8]) -> NbtCompound {
+        let root =
+            pumpkin_nbt::nbt_compress::read_gzip_compound_tag(std::io::Cursor::new(bytes)).unwrap();
+        root.get_compound("data").unwrap().clone()
+    }
+
+    /// The testdata files are the overworld and nether `raids.dat` vanilla 26.3 saved in the
+    /// world round trip fixture, right after a Raid Omen started a raid (id 2).
+    #[test]
+    fn vanilla_raids_load_and_save_unchanged() {
+        let data = vanilla_data(include_bytes!("testdata/raids_overworld_vanilla_26_3.dat"));
+        let raids = Raids::from_nbt(&data);
+        let raid = raids.get(2).unwrap();
+        assert_eq!(raid.center, BlockPos::new(104, 200, 4));
+        assert_eq!((raid.num_groups, raid.raid_omen_level), (5, 1));
+        assert_eq!(raid.status, RaidStatus::Ongoing);
+        assert_eq!(raids.to_nbt(), data);
+
+        let empty = vanilla_data(include_bytes!("testdata/raids_nether_vanilla_26_3.dat"));
+        assert_eq!(Raids::from_nbt(&empty).to_nbt(), empty);
+    }
+
+    #[test]
+    fn a_raid_part_way_through_keeps_its_wave_omen_and_heroes() {
+        let mut raid = Raid::new(7, BlockPos::new(1, 64, -3), Difficulty::Hard);
+        raid.started = true;
+        raid.groups_spawned = 3;
+        raid.raid_omen_level = 4;
+        raid.ticks_active = 5_000;
+        raid.status = RaidStatus::Victory;
+        raid.heroes_of_the_village.insert(Uuid::from_u128(42));
+        let back = Raid::from_nbt(&raid.to_nbt()).unwrap();
+        assert_eq!(back.to_nbt(), raid.to_nbt());
+        assert_eq!((back.groups_spawned, back.raid_omen_level), (3, 4));
+        assert_eq!(back.num_groups, Raid::get_num_groups(Difficulty::Hard));
+        assert!(back.heroes_of_the_village.contains(&Uuid::from_u128(42)));
+    }
+
+    fn load_empty_chunks(world: &World, center: BlockPos, radius: i32) {
+        let (cx, cz) = (center.0.x >> 4, center.0.z >> 4);
+        for x in cx - radius..=cx + radius {
+            for z in cz - radius..=cz + radius {
+                world.level.loaded_chunks.insert(
+                    Vector2::new(x, z),
+                    pumpkin_world::chunk::ChunkData::empty_sync(x, z),
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_raid_waits_while_its_centre_is_not_loaded() {
+        let world = crate::world::test_world();
+        let mut raid = Raid::new(2, BlockPos::new(104, 200, 4), Difficulty::Normal);
+        for _ in 0..400 {
+            raid.tick(&world);
+        }
+        assert_eq!(raid.status, RaidStatus::Ongoing);
+        assert!(!raid.active);
+        assert_eq!((raid.ticks_active, raid.raid_cooldown_ticks), (0, 300));
+    }
+
+    /// The world round trip fixture's raid: its centre is in the air, so its first wave finds
+    /// no surface spot within 96 blocks and vanilla stops the raid when the cooldown runs out.
+    #[tokio::test]
+    async fn a_raid_stops_when_its_wave_has_nowhere_to_spawn() {
+        let world = crate::world::test_world();
+        let center = BlockPos::new(104, 200, 4);
+        load_empty_chunks(&world, center, 4);
+        let mut raid = Raid::new(2, center, Difficulty::Normal);
+        for _ in 0..299 {
+            raid.tick(&world);
+        }
+        assert_eq!(raid.status, RaidStatus::Ongoing);
+        assert!(raid.active);
+        assert_eq!((raid.ticks_active, raid.raid_cooldown_ticks), (299, 1));
+
+        raid.tick(&world);
+        assert_eq!(raid.status, RaidStatus::Stopped);
+        assert_eq!(raid.groups_spawned, 0);
+        assert!(!raid.started);
     }
 }

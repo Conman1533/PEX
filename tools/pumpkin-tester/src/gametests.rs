@@ -33,8 +33,10 @@ const MOB_TEST_GRID_SPACING: i32 = 56;
 /// Mob tests fill the cells around the creeper test, in units of `MOB_TEST_GRID_SPACING`, the
 /// nearest first. The creeper comes from a structure, so it has no persistence and despawns when
 /// the nearest mock player is more than 128 blocks away (`Mob.checkDespawn`); these cells keep
-/// every mock player within that. More cells need the creeper made persistent or moved.
-const MOB_TEST_CELLS: [(i32, i32); 8] = [
+/// every mock player within that: the outer cells are 112 blocks out along one axis or lean back
+/// towards the creeper, so the player spots near each cell's origin stay under 126 blocks. More
+/// cells need the creeper made persistent or moved.
+const MOB_TEST_CELLS: [(i32, i32); 17] = [
     (0, -1),
     (-1, 0),
     (1, 0),
@@ -43,6 +45,15 @@ const MOB_TEST_CELLS: [(i32, i32); 8] = [
     (1, -1),
     (-1, 1),
     (1, 1),
+    (0, -2),
+    (-2, 0),
+    (2, 0),
+    (0, 2),
+    (-1, -2),
+    (-2, -1),
+    (1, -2),
+    (-2, 1),
+    (-1, 2),
 ];
 /// The suite always gets at least this many ticks, plus a margin over the longest test.
 const MIN_GAMETEST_TICKS: usize = 500;

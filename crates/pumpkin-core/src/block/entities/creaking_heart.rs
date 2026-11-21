@@ -589,6 +589,20 @@ mod tests {
     use pumpkin_util::math::vector2::Vector2;
     use pumpkin_world::chunk::ChunkData;
 
+    /// Ticks the heart until `done` holds, up to four update intervals.
+    fn tick_heart_until(
+        heart: &CreakingHeartBlockEntity,
+        world: &Arc<World>,
+        done: impl Fn(&CreakingHeartBlockEntity) -> bool,
+    ) {
+        for _ in 0..4 * (UPDATE_TICKS + UPDATE_TICKS_VARIANCE + 2) {
+            if done(heart) {
+                return;
+            }
+            heart.tick(world);
+        }
+    }
+
     #[tokio::test]
     async fn creaking_heart_spawns_protector_at_night_spreads_resin_on_hurt_and_despawns_at_dawn() {
         let world = test_world();
@@ -647,9 +661,10 @@ mod tests {
 
         // 2. Nighttime: heart wakes up and spawns its Creaking protector
         world.set_time_of_day(18000);
-        for _ in 0..25 {
-            heart_be.tick(&world);
-        }
+        // The heart updates every 22 to 26 ticks, so wait for the update instead of a fixed count.
+        tick_heart_until(&heart_be, &world, |be| be.creaking_uuid.load().is_some());
+        // The comparator signal is computed at the start of a tick, before that tick's spawn.
+        heart_be.tick(&world);
         let state_night =
             CreakingHeartLikeProperties::from_state_id(world.get_block_state(&heart_pos).id);
         assert_eq!(state_night.creaking_heart_state, CreakingHeartState::Awake);
@@ -680,9 +695,7 @@ mod tests {
 
         // 4. Dawn: heart goes Dormant and despawns the Creaking when no player is looking
         world.set_time_of_day(6000);
-        for _ in 0..25 {
-            heart_be.tick(&world);
-        }
+        tick_heart_until(&heart_be, &world, |be| be.creaking_uuid.load().is_none());
         let state_dawn =
             CreakingHeartLikeProperties::from_state_id(world.get_block_state(&heart_pos).id);
         assert_eq!(state_dawn.creaking_heart_state, CreakingHeartState::Dormant);

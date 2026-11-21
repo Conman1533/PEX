@@ -7,6 +7,7 @@ use crate::data::player_server::ServerPlayerData;
 use crate::entity::NBTStorage;
 use crate::item::registry::ItemRegistry;
 use crate::net::authentication::fetch_mojang_public_keys;
+use crate::net::bedrock::oidc_keys::OidcKeys;
 use crate::net::{
     ClientPlatform, DisconnectReason, EncryptionError, GameProfile, PlayerConfig, offline_uuid,
 };
@@ -33,12 +34,15 @@ use pumpkin_world::generation::generator::GeneratorInit;
 use pumpkin_world::world::WorldPortalExt;
 use tracing::{debug, error, info, warn};
 
+use crate::entity::player::DATA_VERSION;
 use pumpkin_protocol::java::client::login::CEncryptionRequest;
 use pumpkin_protocol::java::client::play::{CChangeDifficulty, CTabList};
 use pumpkin_protocol::{ClientPacket, java::client::config::CPluginMessage};
 use pumpkin_util::Difficulty;
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world_info::anvil::{AnvilLevelInfo, LEVEL_DAT_FILE_NAME};
+use pumpkin_world::world_info::data_files::{read_data_file, write_data_file};
+use pumpkin_world::world_info::session_lock::SessionLock;
 use pumpkin_world::world_info::{LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter};
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
@@ -56,6 +60,7 @@ use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
 
 pub mod builtin_game_tests;
+pub mod command_storage;
 mod connection_cache;
 pub(crate) mod debug_profiler;
 pub mod enchantment;
@@ -90,8 +95,9 @@ pub struct Server {
 
     /// Handles cryptographic keys for secure communication.
     key_store: OnceCell<Arc<KeyStore>>,
-    /// Bedrock OIDC provider keys, fetched on startup for 1.26.10+ token validation.
-    pub bedrock_oidc_keys: Arc<OnceCell<(String, pumpkin_auth::jwt::Jwks)>>,
+    /// Bedrock OIDC provider keys for 1.26.10+ token validation, fetched on startup when Bedrock
+    /// authentication is on.
+    pub bedrock_oidc_keys: Arc<OidcKeys>,
     /// Cached Bedrock server private key (process-lifetime). Generated on first Bedrock login and reused.
     /// Manages server status information.
     listing: std::sync::Mutex<CachedStatus>,
@@ -113,7 +119,6 @@ pub struct Server {
     pub datapack_manager: Arc<crate::data::datapack::DatapackManager>,
     pub enchantment_manager: Arc<enchantment::EnchantmentManager>,
     /// Assigns unique IDs to maps.
-    map_id: AtomicI32,
     /// Mojang's public keys, used for chat session signing
     /// Pulled from Mojang API on startup
     pub mojang_public_keys: ArcSwap<Vec<RsaPublicKey>>,
@@ -162,7 +167,39 @@ pub struct Server {
     // world stuff which maybe should be put into a struct
     pub level_info: Arc<ArcSwap<LevelData>>,
     world_info_writer: Arc<dyn WorldInfoWriter>,
+    /// Held from start until `shutdown` has saved the worlds.
+    session_lock: std::sync::Mutex<Option<SessionLock>>,
+    /// Players joined and not yet saved after leaving, by profile id (see [`PlayerSession`]).
+    player_sessions: std::sync::Mutex<rustc_hash::FxHashMap<uuid::Uuid, u32>>,
 }
+
+/// A player's time on the server, from joining until its data is saved after it leaves. A login
+/// with the same profile waits for it to end, like vanilla's `WAITING_FOR_DUPE_DISCONNECT`.
+pub struct PlayerSession {
+    server: Arc<Server>,
+    id: uuid::Uuid,
+}
+
+impl Drop for PlayerSession {
+    fn drop(&mut self) {
+        let mut sessions = self
+            .server
+            .player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(count) = sessions.get_mut(&self.id) {
+            *count -= 1;
+            if *count == 0 {
+                sessions.remove(&self.id);
+            }
+        }
+    }
+}
+
+const CUSTOM_BOSS_EVENTS: &str = "custom_boss_events.dat";
+const RANDOM_SEQUENCES: &str = "random_sequences.dat";
+const STOPWATCHES: &str = "stopwatches.dat";
+const SCHEDULED_EVENTS: &str = "scheduled_events.dat";
 
 impl Server {
     #[expect(clippy::too_many_lines)]
@@ -185,6 +222,7 @@ impl Server {
         );
 
         let world_path = basic_config.get_world_path();
+        let session_lock = SessionLock::create(&world_path)?;
 
         let block_registry = super::block::registry::default_registry();
 
@@ -283,6 +321,9 @@ impl Server {
 
         memory::spawn_trimmer();
         let metrics = metrics::Metrics::new(&advanced_config.metrics);
+        let bedrock_oidc_keys = Arc::new(OidcKeys::new(
+            &advanced_config.networking.bedrock.authentication,
+        ));
         let server = Self {
             basic_config,
             advanced_config,
@@ -294,24 +335,33 @@ impl Server {
             recipe_manager: Arc::new(recipe::RecipeManager::new()),
             datapack_manager: Arc::new(crate::data::datapack::DatapackManager::new()),
             enchantment_manager: Arc::new(enchantment::EnchantmentManager::new()),
-            map_id: level_info.load().map_id.into(),
             worlds: ArcSwap::from_pointee(vec![]),
             dimensions,
             command_dispatcher,
             block_registry: block_registry.clone(),
             item_registry: super::item::items::default_registry(),
             key_store: OnceCell::new(),
-            bedrock_oidc_keys: Arc::new(OnceCell::new()),
+            bedrock_oidc_keys,
             listing,
             branding: CachedBranding::new(),
-            bossbars: std::sync::Mutex::new(CustomBossbars::new()),
-            map_manager: MapManager::new(),
+            bossbars: std::sync::Mutex::new(
+                read_data_file(&world_path, CUSTOM_BOSS_EVENTS)
+                    .map(|data| CustomBossbars::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
+            map_manager: MapManager::new(world_path.clone(), level_info.load().map_id),
             defaultgamemode,
             player_data_storage,
-            command_storage: std::sync::Mutex::new(std::collections::HashMap::new()),
-            stopwatches: std::sync::Mutex::new(crate::world::stopwatches::Stopwatches::new()),
+            command_storage: std::sync::Mutex::new(command_storage::load(&world_path)),
+            stopwatches: std::sync::Mutex::new(
+                read_data_file(&world_path, STOPWATCHES)
+                    .map(|data| crate::world::stopwatches::Stopwatches::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
             random_sequences: std::sync::Mutex::new(
-                crate::world::random_sequences::RandomSequences::new(),
+                read_data_file(&world_path, RANDOM_SEQUENCES)
+                    .map(|data| crate::world::random_sequences::RandomSequences::from_nbt(&data))
+                    .unwrap_or_default(),
             ),
             advancement_manager,
             white_list,
@@ -323,11 +373,17 @@ impl Server {
             debug_profiler: debug_profiler::DebugProfiler::new(),
             tasks: TaskTracker::new(),
             runtime: tokio::runtime::Handle::current(),
-            scheduled_functions: Arc::new(crate::server::scheduler::ScheduledFunctionQueue::new()),
+            scheduled_functions: Arc::new(
+                read_data_file(&world_path, SCHEDULED_EVENTS)
+                    .map(|data| crate::server::scheduler::ScheduledFunctionQueue::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
             server_guid: rand::random(),
             player_idle_timeout: AtomicI32::new(0),
             mojang_public_keys: ArcSwap::from_pointee(Vec::new()),
             world_info_writer: Arc::new(AnvilLevelInfo),
+            session_lock: std::sync::Mutex::new(Some(session_lock)),
+            player_sessions: std::sync::Mutex::new(rustc_hash::FxHashMap::default()),
             level_info,
             management_hub,
         };
@@ -359,36 +415,14 @@ impl Server {
             });
         }
 
-        if server.advanced_config.networking.bedrock.online_mode
-            && server
-                .advanced_config
-                .networking
-                .bedrock
-                .authentication
-                .enabled
-        {
-            let server_clone = server.clone();
+        let bedrock = &server.advanced_config.networking.bedrock;
+        if bedrock.enabled && bedrock.online_mode && bedrock.authentication.enabled {
+            let keys = server.bedrock_oidc_keys.clone();
             server.spawn_task(async move {
-                let auth = server_clone
-                    .advanced_config
-                    .networking
-                    .bedrock
-                    .authentication
-                    .clone();
-                let keys = match pumpkin_auth::jwt::fetch_oidc_jwks(
-                    auth.url.as_deref(),
-                    auth.connect_timeout,
-                    auth.read_timeout,
-                )
-                .await
-                {
-                    Ok(keys) => keys,
-                    Err(error) => {
-                        error!("Failed to fetch Bedrock OIDC keys: {error}");
-                        (String::new(), pumpkin_auth::jwt::Jwks { keys: Vec::new() })
-                    }
-                };
-                let _ = server_clone.bedrock_oidc_keys.set(keys);
+                tokio::select! {
+                    () = keys.fetch_until_ready() => {}
+                    () = crate::STOP_INTERRUPT.cancelled() => {}
+                }
             });
         }
 
@@ -626,6 +660,55 @@ impl Server {
         self.datapack_manager.is_feature_enabled(self, feature)
     }
 
+    /// Writes the server-wide saved data files vanilla keeps in the overworld's `data/minecraft/`.
+    fn save_server_saved_data(&self) {
+        let world_path = self.basic_config.get_world_path();
+        let files = [
+            (
+                CUSTOM_BOSS_EVENTS,
+                self.bossbars
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+            (
+                RANDOM_SEQUENCES,
+                self.random_sequences
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+            (
+                STOPWATCHES,
+                self.stopwatches
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+            (SCHEDULED_EVENTS, self.scheduled_functions.to_nbt()),
+        ];
+        for (name, data) in files {
+            if let Err(err) = write_data_file(&world_path, name, DATA_VERSION, data) {
+                error!("Failed to save {name}: {err}");
+            }
+        }
+        self.map_manager.save();
+        command_storage::save(
+            &world_path,
+            &self
+                .command_storage
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
+
+    /// The overworld's game time (`Time` in `level.dat`), which `/schedule` counts in.
+    #[must_use]
+    pub fn game_time(&self) -> i64 {
+        self.get_world_from_dimension(&Dimension::OVERWORLD)
+            .get_world_age()
+    }
+
     pub async fn save_all(&self) -> Result<(), String> {
         self.management_hub.broadcast_server_saving();
 
@@ -645,6 +728,7 @@ impl Server {
         for world in self.worlds.load().iter() {
             world.save().await;
         }
+        self.save_server_saved_data();
 
         self.management_hub.broadcast_server_saved();
 
@@ -770,6 +854,8 @@ impl Server {
             'after: {
                 player.screen_handler_sync_handler.store_player(player.clone());
                 world.add_player(&player).is_ok().then(|| {
+                    player.spawn_saved_ender_pearls(self);
+                    player.spawn_skin_fetch(self);
                     {
                         let mut user_cache = self
                             .data
@@ -847,6 +933,11 @@ impl Server {
         {
             error!("Failed to save level.dat: {err}");
         }
+        self.save_server_saved_data();
+        self.session_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         info!("Completed worlds");
     }
 
@@ -1077,6 +1168,51 @@ impl Server {
         None
     }
 
+    /// Starts the session of a player that just joined; it ends when the guard is dropped.
+    #[must_use]
+    pub fn begin_player_session(self: &Arc<Self>, id: uuid::Uuid) -> PlayerSession {
+        *self
+            .player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(id)
+            .or_default() += 1;
+        PlayerSession {
+            server: self.clone(),
+            id,
+        }
+    }
+
+    /// Whether a player with this profile is on the server or still being saved after leaving.
+    #[must_use]
+    pub fn has_player_session(&self, id: uuid::Uuid) -> bool {
+        self.player_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(&id)
+            || self.get_player_by_uuid(id).is_some()
+    }
+
+    /// Vanilla `PlayerList.disconnectAllPlayersWithProfile`: kicks every player with this
+    /// profile ("You logged in from another location"); true if one was on the server.
+    pub fn disconnect_players_with_profile(&self, id: uuid::Uuid) -> bool {
+        let message = TextComponent::translate_cross(
+            pumpkin_data::translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+            pumpkin_data::translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+            [],
+        );
+        let mut found = false;
+        for world in self.worlds.load().iter() {
+            for player in world.players.load().iter() {
+                if player.gameprofile.id == id {
+                    player.kick(DisconnectReason::LoggedInOtherLocation, &message);
+                    found = true;
+                }
+            }
+        }
+        found || self.has_player_session(id)
+    }
+
     /// Counts the total number of players across all worlds.
     ///
     /// This function iterates through each world and sums up the number of players currently connected to that world.
@@ -1122,13 +1258,7 @@ impl Server {
 
     /// Generates a new map id.
     pub fn next_map_id(&self) -> i32 {
-        let id = self.map_id.fetch_add(1, Ordering::SeqCst);
-        self.level_info.rcu(|level_info| {
-            let mut new_level_info = (**level_info).clone();
-            new_level_info.map_id = self.map_id.load(Ordering::SeqCst);
-            new_level_info
-        });
-        id
+        self.map_manager.next_id()
     }
 
     pub const fn get_branding(&self) -> CPluginMessage<'_> {
@@ -1273,10 +1403,9 @@ impl Server {
         self.plugin_manager.tick_loaders(self);
         report.plugin_loaders = t_phase.elapsed();
         let t_phase = Instant::now();
-        self.scheduled_functions.tick(
-            self,
-            self.tick_count.load(std::sync::atomic::Ordering::Relaxed) as u64,
-        );
+        // Vanilla runs these from `ServerLevel.tickTime`, after the game time moved on to the
+        // tick being run, so compare against the time the worlds are about to reach.
+        self.scheduled_functions.tick(self, self.game_time() + 1);
         report.scheduled_functions = t_phase.elapsed();
 
         let t_phase = Instant::now();

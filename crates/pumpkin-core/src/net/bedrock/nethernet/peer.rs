@@ -19,7 +19,7 @@ use webrtc::{
 
 use super::{
     ice_router::{proxy_answer, proxy_offer},
-    identity::{add_server_identity, authenticate_client_offer},
+    identity::{add_server_identity, authenticate_client_offer, offer_identity_kid},
     session::NetherNetSession,
     state::NetherNetState,
 };
@@ -59,25 +59,17 @@ async fn negotiate_inner(
     let (offer, client_public_key) = {
         let offer = offer.to_string();
         let require_identity = direct_ip && state.require_client_identity;
-        let oidc_verifier = if require_identity {
-            Some(
-                state
-                    .oidc_verifier
-                    .as_ref()
-                    .and_then(|cell| cell.get())
-                    .cloned()
-                    .ok_or_else(|| "Bedrock authentication keys are not ready".to_owned())?,
-            )
-        } else {
-            state
-                .oidc_verifier
-                .as_ref()
-                .and_then(|cell| cell.get())
-                .cloned()
+        let oidc_verifier = match (&state.oidc_verifier, offer_identity_kid(&offer)) {
+            (Some(keys), Some(kid)) => keys.for_kid(&kid).await,
+            (Some(keys), None) => keys.current(),
+            (None, _) => None,
         };
+        if require_identity && oidc_verifier.is_none() {
+            return Err("Bedrock authentication keys are not ready".to_owned());
+        }
         let (tx, rx) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
-            let res = authenticate_client_offer(&offer, require_identity, oidc_verifier.as_ref());
+            let res = authenticate_client_offer(&offer, require_identity, oidc_verifier.as_deref());
             let _ = tx.send(res);
         });
         rx.await.map_err(|_| "Task cancelled".to_string())?

@@ -10,9 +10,10 @@ use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
         active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
+        look_at_entity::LookAtEntityGoal, move_towards_restriction::MoveTowardsRestrictionGoal,
+        revenge::RevengeGoal, wander_around::WanderAroundGoal,
     },
-    mob::{Mob, MobEntity},
+    mob::{Mob, MobEntity, is_in_water_or_rain},
     util::RandomExt,
 };
 
@@ -46,8 +47,7 @@ impl BlazeEntity {
             let goal_selector = &mob_arc.entity.goals_selector;
             let target_selector = &mob_arc.entity.target_selector;
 
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-
+            // Vanilla `Blaze.registerGoals`: no swim goal, blazes avoid water instead.
             goal_selector.add_goal(
                 4,
                 Box::new(
@@ -57,13 +57,20 @@ impl BlazeEntity {
                 ),
             );
 
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(MoveTowardsRestrictionGoal::new(1.0)));
+            goal_selector.add_goal(
+                7,
+                Box::new(WanderAroundGoal::water_avoiding_with_probability(1.0, 0.0)),
+            );
             goal_selector.add_goal(
                 8,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
             goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
 
+            // Vanilla `HurtByTargetGoal(this).setAlertOthers()`: a hurt blaze calls nearby
+            // blazes onto its attacker.
+            target_selector.add_goal(1, Box::new(RevengeGoal::new(true).alerting_others()));
             target_selector.add_goal(
                 2,
                 ActiveTargetGoal::with_default(&mob_arc.entity, &EntityType::PLAYER, true),
@@ -114,7 +121,8 @@ impl Mob for BlazeEntity {
                 .store(Vector3::new(vel.x, vel.y * 0.6, vel.z));
         }
 
-        if base_entity.touching_water.load(Ordering::Relaxed) {
+        // Vanilla `isSensitiveToWater`: rain hurts too.
+        if is_in_water_or_rain(base_entity) {
             caller.damage(caller, 1.0, DamageType::DROWN);
         }
     }

@@ -272,6 +272,9 @@ pub struct World {
     tick_spawns: std::sync::Mutex<Vec<(u64, i32)>>,
     active_chunk_tracker: std::sync::Mutex<ActiveChunkTracker>,
     pub forced_chunks: std::sync::Mutex<FxHashSet<Vector2<i32>>>,
+    /// Vanilla `TicketType.ENDER_PEARL`: chunks a player's pearl keeps loaded, with the ticks
+    /// left before the ticket times out.
+    ender_pearl_tickets: std::sync::Mutex<FxHashMap<Vector2<i32>, u32>>,
     /// Block entities indexed by chunk, so ticking only visits the currently
     /// active chunks instead of scanning every loaded block entity each tick.
     pub block_entities: DashMap<Vector2<i32>, FxHashMap<BlockPos, Arc<dyn BlockEntity>>>,
@@ -282,6 +285,9 @@ pub struct World {
     pub custom_data: std::sync::Mutex<NbtCompound>,
     /// Persistent custom data for block entities at specific positions
     pub custom_block_entity_data: DashMap<BlockPos, NbtCompound>,
+    /// The keys PEX doesn't model from each live block entity's saved NBT, with the type they
+    /// were saved for, written back when the block entity is saved (D7-1).
+    kept_block_entity_nbt: DashMap<BlockPos, (&'static str, NbtCompound)>,
     /// Entity tracker responsible for tracking entity visibility and sending delta/status packets to watchers.
     pub entity_tracker: entity_tracker::EntityTracker,
     /// Java chunk data packets, shared by every player in this world.
@@ -393,6 +399,7 @@ impl World {
             })
             .unwrap_or_else(|| Worldborder::new(0.0, 0.0, 5.999_996_8E7, 0, 5, 300));
         let forced_chunks = saved_data::load_forced_chunks(&level.level_folder.dim_folder);
+        let raids = saved_data::load_raids(&level.level_folder.dim_folder);
         let scoreboard = scoreboard::shared_scoreboard(&level.level_folder.root_folder);
 
         let custom_data_path = level
@@ -442,7 +449,7 @@ impl World {
             unsent_block_changes: std::sync::Mutex::new(HashMap::new()),
             portal_poi: std::sync::Mutex::new(portal_poi),
             villager_poi: std::sync::Mutex::new(villager_poi::VillagerPoiStorage::default()),
-            raids: std::sync::Mutex::new(raid::Raids::default()),
+            raids: std::sync::Mutex::new(raids),
             dragon_fight,
             spawn_state: ArcSwap::new(Arc::new(SpawnState::empty())),
             active_chunks: RwLock::new(Arc::default()),
@@ -450,28 +457,40 @@ impl World {
             tick_spawns: std::sync::Mutex::new(Vec::new()),
             active_chunk_tracker: std::sync::Mutex::new(ActiveChunkTracker::default()),
             forced_chunks: std::sync::Mutex::new(forced_chunks),
+            ender_pearl_tickets: std::sync::Mutex::new(FxHashMap::default()),
             server,
             block_entities: DashMap::new(),
             pending_block_entity_migrations: crossbeam::queue::SegQueue::new(),
             invalid_ticking_block_entities: std::sync::Mutex::new(Vec::new()),
             custom_data: std::sync::Mutex::new(custom_data),
             custom_block_entity_data: DashMap::new(),
+            kept_block_entity_nbt: DashMap::new(),
             entity_tracker: entity_tracker::EntityTracker::new(),
             chunk_packets: Arc::default(),
         }
     }
 
     #[expect(clippy::too_many_lines)]
-    pub fn update_active_chunks(&self) {
+    pub fn update_active_chunks(self: &Arc<Self>) {
         let sim_dist = self.server.upgrade().map_or(10, |s| {
             s.advanced_config.networking.java.simulation_distance.get()
         }) as i32;
         let players = self.players.load();
-        let forced_chunks = self
+        let mut forced_chunks = self
             .forced_chunks
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
+        let mut pearl_tickets = self
+            .ender_pearl_tickets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        pearl_tickets.retain(|_, ticks| {
+            *ticks = ticks.saturating_sub(1);
+            *ticks > 0
+        });
+        forced_chunks.extend(pearl_tickets.keys().copied());
+        drop(pearl_tickets);
         let mut tracker = self
             .active_chunk_tracker
             .lock()
@@ -567,12 +586,23 @@ impl World {
         }
 
         self.update_chunk_forced(&unforced, &newly_forced);
+        self.update_forced_entity_chunks(&unforced, newly_forced);
 
         self.spawn_state.store(Arc::new(SpawnState::new(
             spawnable_chunks,
             &self.entities,
             self,
         )));
+    }
+
+    /// Vanilla `ServerPlayer.placeEnderPearlTicket`: keeps a player's pearl's chunk loaded for
+    /// the next 40 ticks.
+    pub fn place_ender_pearl_ticket(&self, chunk: Vector2<i32>) {
+        const ENDER_PEARL_TICKET_TICKS: u32 = 40;
+        self.ender_pearl_tickets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(chunk, ENDER_PEARL_TICKET_TICKS);
     }
 
     /// Vanilla `ServerChunkCache.updateChunkForced`: a forced chunk holds a ticket, so it loads
@@ -592,6 +622,96 @@ impl World {
         for &pos in newly_forced {
             chunk_loading.add_force_ticket(pos);
         }
+    }
+
+    /// Vanilla's force ticket makes a chunk entity-ticking, so its saved entities load without
+    /// a player nearby. The ticket counts as one watcher of the entity chunk, which keeps its
+    /// entities live until the chunk is unforced and nobody else watches it.
+    fn update_forced_entity_chunks(
+        self: &Arc<Self>,
+        unforced: &[Vector2<i32>],
+        newly_forced: Vec<Vector2<i32>>,
+    ) {
+        if !unforced.is_empty() {
+            let chunks_to_clean = self.level.mark_chunks_as_not_watched(unforced);
+            if !chunks_to_clean.is_empty() {
+                let world = self.clone();
+                self.level.spawn_task(async move {
+                    world.remove_entities_in_chunks(&chunks_to_clean).await;
+                    world.level.clean_entity_chunks(&chunks_to_clean);
+                });
+            }
+        }
+        if newly_forced.is_empty() {
+            return;
+        }
+        self.level.mark_chunks_as_newly_watched(&newly_forced);
+        let mut entity_receiver = self.level.receive_entity_chunks(newly_forced);
+        let world = self.clone();
+        self.level.spawn_task(async move {
+            while let Some((chunk, _)) = entity_receiver.recv().await {
+                let Some(chunk) = chunk.upgrade() else {
+                    continue;
+                };
+                if !world
+                    .level
+                    .is_chunk_watched(&Vector2::new(chunk.x, chunk.z))
+                {
+                    continue;
+                }
+                for entity in world.make_entity_chunk_live(&chunk) {
+                    world.add_entity_silent(entity);
+                }
+            }
+        });
+    }
+
+    /// The first watcher of a dormant entity chunk (fresh from disk, or unloaded but not yet
+    /// dropped from memory) takes its saved entities and builds them; empty when the chunk is
+    /// already live. The live entity list becomes the single source of truth, so the chunk's NBT
+    /// is taken (cleared) to avoid keeping a duplicate copy that would be re-appended on the next
+    /// unload and doubled on every reload.
+    fn make_entity_chunk_live(
+        self: &Arc<Self>,
+        chunk: &pumpkin_world::chunk::ChunkEntityData,
+    ) -> Vec<Arc<dyn EntityBase>> {
+        let entity_nbts = {
+            let mut data = chunk
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if chunk.live.swap(true, Relaxed) {
+                return Vec::new();
+            }
+            std::mem::take(&mut *data)
+        };
+        let mut entities = Vec::with_capacity(entity_nbts.len());
+        for entity_nbt in &entity_nbts {
+            let Some(id) = entity_nbt.get_string("id") else {
+                debug!("Entity has no ID");
+                continue;
+            };
+            let Some(entity_type) =
+                EntityType::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
+            else {
+                warn!("Entity has no valid Entity Type {id}");
+                continue;
+            };
+
+            // Keep the persisted UUID so the entity keeps its identity across reloads
+            // (matching vanilla); only fall back to a fresh one if it is missing/corrupt.
+            let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
+            // Pos is zero since it will be read from nbt.
+            let entity = from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), self, uuid);
+            entity.read_nbt_non_mut(entity_nbt);
+            entity.init_data_tracker();
+
+            // Clear velocity so the client does not replay the drop animation; residual
+            // velocity from the original drop is stale data.
+            entity.get_entity().velocity.store(Vector3::default());
+            entities.push(entity);
+        }
+        entities
     }
 
     pub fn get_lighting_config(&self) -> LightingEngineConfig {
@@ -689,6 +809,16 @@ impl World {
             .clone();
         if let Err(e) = saved_data::save_forced_chunks(folder, &forced) {
             error!("Failed to save forced chunks: {e}");
+        }
+        let saved = saved_data::save_raids(
+            folder,
+            &self
+                .raids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        if let Err(e) = saved {
+            error!("Failed to save raids: {e}");
         }
         // The scoreboard belongs to the save, so only the overworld writes it.
         if self.dimension.minecraft_name == Dimension::OVERWORLD.minecraft_name {
@@ -794,6 +924,11 @@ impl World {
             .map(|(position, block_entity)| {
                 let mut nbt = NbtCompound::new();
                 block_entity.write_internal(&mut nbt);
+                if let Some((_, (kind, kept))) = self.kept_block_entity_nbt.remove(&position)
+                    && kind == block_entity.resource_location()
+                {
+                    crate::block::entities::write_kept_block_entity_keys(&mut nbt, &kept);
+                }
                 if let Some((_, custom_data)) = self.custom_block_entity_data.remove(&position)
                     && !custom_data.is_empty()
                 {
@@ -808,6 +943,19 @@ impl World {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .extend(saved);
         chunk.mark_dirty(true);
+    }
+
+    /// Writes the keys PEX doesn't model that `block_entity` was loaded with (D7-1).
+    pub fn write_kept_block_entity_nbt(
+        &self,
+        block_entity: &dyn BlockEntity,
+        nbt: &mut NbtCompound,
+    ) {
+        if let Some(entry) = self.kept_block_entity_nbt.get(&block_entity.get_position())
+            && entry.0 == block_entity.resource_location()
+        {
+            crate::block::entities::write_kept_block_entity_keys(nbt, &entry.1);
+        }
     }
 
     /// Serializes the live block entities of a chunk back into that chunk's block
@@ -827,6 +975,7 @@ impl World {
         for block_entity in block_entities {
             let mut nbt = NbtCompound::new();
             block_entity.write_internal(&mut nbt);
+            self.write_kept_block_entity_nbt(block_entity.as_ref(), &mut nbt);
             if let Some(custom_data) = self
                 .custom_block_entity_data
                 .get(&block_entity.get_position())
@@ -1393,6 +1542,16 @@ impl World {
             Self::collect_java_recipients_by_version(java_recipients.into_iter());
         Self::broadcast_java_grouped(je_packet, recipients_by_version);
         Self::broadcast_bedrock_grouped(be_packet, bedrock_recipients.into_iter());
+    }
+
+    /// Sends a Bedrock packet to every Bedrock player in this world except those in `except`.
+    pub fn broadcast_bedrock_packet<B: BClientPacket>(&self, except: &[uuid::Uuid], packet: &B) {
+        let players = self.players.load();
+        let recipients = players.iter().filter_map(|p| match p.client.as_ref() {
+            ClientPlatform::Bedrock(client) if !except.contains(&p.gameprofile.id) => Some(client),
+            ClientPlatform::Bedrock(_) | ClientPlatform::Java(_) => None,
+        });
+        Self::broadcast_bedrock_grouped(packet, recipients);
     }
 
     /// Broadcasts the skin layers of a player, encoding the metadata for each Java client's own
@@ -3518,7 +3677,7 @@ impl World {
                         .map_or(-1, |gamemode| gamemode as i8),
                     false,
                     self.is_flat(),
-                    None,
+                    player.death_location_for_client(),
                     VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                     self.sea_level.into(),
                 ),
@@ -4201,13 +4360,7 @@ impl World {
 
     #[allow(clippy::too_many_lines)]
     pub async fn respawn_player(self: &Arc<Self>, player: &Arc<Player>, alive: bool) {
-        let last_pos = player.get_entity().last_pos.load();
-        let death_dimension = ResourceLocation::from(player.world().dimension.minecraft_name);
-        let death_location = BlockPos(Vector3::new(
-            last_pos.x.round() as i32,
-            last_pos.y.round() as i32,
-            last_pos.z.round() as i32,
-        ));
+        let death_location = player.death_location_for_client();
 
         let data_kept = u8::from(alive);
 
@@ -4436,7 +4589,7 @@ impl World {
                     player.gamemode.load() as i8,
                     false,
                     target_world.is_flat(),
-                    Some((death_dimension, death_location)),
+                    death_location,
                     VarInt(player.get_entity().portal_cooldown.load(Ordering::Relaxed) as i32),
                     target_world.sea_level.into(),
                 ),
@@ -4486,6 +4639,7 @@ impl World {
 
         if !keep_inventory && !alive {
             player.set_experience(0, 0.0, 0);
+            player.total_experience.store(0, Ordering::Relaxed);
             player.inventory.clear();
         }
 
@@ -4600,58 +4754,19 @@ impl World {
                     continue 'main;
                 }
 
-                // The first watcher of a dormant chunk (fresh from disk, or unloaded but
-                // not yet dropped from memory) consumes the serialized entities and makes
-                // them live. The live entity list becomes the single source of truth, so
-                // the chunk's NBT is taken (cleared) to avoid keeping a duplicate copy that
-                // would be re-appended on the next unload and doubled on every reload.
-                let entity_nbts = {
-                    let mut data = chunk
-                        .data
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    (!chunk.live.swap(true, Relaxed)).then(|| std::mem::take(&mut *data))
-                };
-                if let Some(entity_nbts) = entity_nbts {
-                    for entity_nbt in &entity_nbts {
-                        let Some(id) = entity_nbt.get_string("id") else {
-                            debug!("Entity has no ID");
-                            continue;
-                        };
-                        let Some(entity_type) =
-                            EntityType::from_name(id.strip_prefix("minecraft:").unwrap_or(id))
-                        else {
-                            warn!("Entity has no valid Entity Type {id}");
-                            continue;
-                        };
-
-                        // Keep the persisted UUID so the entity keeps its identity
-                        // across reloads (matching vanilla); only fall back to a
-                        // fresh one if it is missing/corrupt.
-                        let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
-                        // Pos is zero since it will be read from nbt.
-                        let entity =
-                            from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), &world, uuid);
-                        entity.read_nbt_non_mut(entity_nbt);
-                        entity.init_data_tracker();
-
-                        let base_entity = entity.get_entity();
-                        // Clear velocity so the client does not replay the drop
-                        // animation; residual velocity from the original drop is
-                        // stale data.
-                        base_entity.velocity.store(Vector3::default());
-
-                        // UUID-dedupes if another watcher already loaded this entity.
-                        // Tracker owns pairing (spawn packets + vehicle restore).
-                        world.add_entity_silent(entity.clone());
-                        player.try_restore_vehicle(&entity);
-                    }
-                } else {
+                let entities = world.make_entity_chunk_live(&chunk);
+                if entities.is_empty() {
                     // Already live for other watchers: pair this player now so
                     // spawn packets and vehicle restore do not wait on a tracker tick.
                     world
                         .entity_tracker
                         .update_player_chunks(&player, &world, &[position]);
+                }
+                for entity in entities {
+                    // UUID-dedupes if another watcher already loaded this entity.
+                    // Tracker owns pairing (spawn packets + vehicle restore).
+                    world.add_entity_silent(entity.clone());
+                    player.try_restore_vehicle(&entity);
                 }
             }
 
@@ -5435,7 +5550,12 @@ impl World {
 
         for chunk_pos in &chunks_set {
             self.save_block_entities(*chunk_pos);
-            self.block_entities.remove(chunk_pos);
+            if let Some((_, block_entities)) = self.block_entities.remove(chunk_pos) {
+                // The saved NBT holds the kept keys again, and reloading reads them from there.
+                for position in block_entities.keys() {
+                    self.kept_block_entity_nbt.remove(position);
+                }
+            }
         }
     }
 
@@ -6714,7 +6834,16 @@ impl World {
                 self.custom_block_entity_data
                     .insert(*block_pos, custom_data.clone());
             }
-            block_entity_from_nbt(&nbt)?
+            let block_entity = block_entity_from_nbt(&nbt)?;
+            let kept =
+                crate::block::entities::unmodeled_block_entity_keys(&nbt, block_entity.as_ref());
+            if kept.is_empty() {
+                self.kept_block_entity_nbt.remove(block_pos);
+            } else {
+                self.kept_block_entity_nbt
+                    .insert(*block_pos, (block_entity.resource_location(), kept));
+            }
+            block_entity
         } else {
             let state = self.get_block_state(block_pos);
             crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
@@ -6872,6 +7001,7 @@ impl World {
                 });
         if removed || removed_pending {
             self.custom_block_entity_data.remove(block_pos);
+            self.kept_block_entity_nbt.remove(block_pos);
             // Drop the chunk's map once its last block entity is gone.
             self.block_entities
                 .remove_if(&chunk_pos, |_, entities| entities.is_empty());
@@ -8168,6 +8298,75 @@ mod tests {
             .and_then(|entities| entities.get(&pos).cloned())
             .expect("shrieker block entity");
         assert!(entity.as_vibration_user().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_forced_chunk_loads_its_saved_entities_without_a_player() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicBool;
+
+        use pumpkin_nbt::tag::NbtTag;
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::chunk::ChunkEntityData;
+
+        let world = super::test_world();
+        let pos = Vector2::new(2, 3);
+        let uuid = Uuid::from_u128(7);
+        let mut pig = record(Some(uuid), "minecraft:pig");
+        pig.put(
+            "Pos",
+            NbtTag::List(vec![
+                NbtTag::Double(40.5),
+                NbtTag::Double(64.0),
+                NbtTag::Double(56.5),
+            ]),
+        );
+        world
+            .level
+            .insert_entity_chunk_for_test(Arc::new(ChunkEntityData {
+                x: pos.x,
+                z: pos.y,
+                data: std::sync::Mutex::new(vec![pig]),
+                live: AtomicBool::new(false),
+                dirty: AtomicBool::new(false),
+            }));
+        let has_pig = |world: &World| {
+            world
+                .entities
+                .load()
+                .iter()
+                .any(|entity| entity.get_entity().entity_uuid == uuid)
+        };
+
+        world
+            .forced_chunks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(pos);
+        world.update_active_chunks();
+        for _ in 0..200 {
+            if has_pig(&world) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(has_pig(&world), "the pig of the forced chunk never spawned");
+        assert!(world.level.is_chunk_watched(&pos));
+
+        world
+            .forced_chunks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&pos);
+        world.update_active_chunks();
+        for _ in 0..200 {
+            if !has_pig(&world) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(!has_pig(&world), "the unforced chunk kept its pig live");
+        assert!(!world.level.is_chunk_watched(&pos));
     }
 
     #[test]

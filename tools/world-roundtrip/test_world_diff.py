@@ -102,6 +102,20 @@ class WorldDiffTest(unittest.TestCase):
         self.assertEqual(diffs[0].path, "sections[{Y:12b}].block_states")
         self.assertTrue(diffs[0].a.startswith("4095 blocks differ, first at 0,192,0: minecraft:stone"), diffs[0].a)
 
+    def test_recipe_book_lists_compare_as_sets(self):
+        def player(recipes):
+            root = tempfile.mkdtemp(dir=self.tmp.name)
+            os.makedirs(os.path.join(root, "players", "data"))
+            book = Compound(recipes=List([String(r) for r in recipes]))
+            nbt.write_file(os.path.join(root, "players", "data", "p.dat"), Compound(recipeBook=book))
+            return root
+
+        self.assertEqual(self.diff(player(["a:x", "a:y"]), player(["a:y", "a:x"])), [])
+        diffs = self.diff(player(["a:x", "a:y"]), player(["a:y", "a:z"]))
+        self.assertEqual([(d.path, d.a, d.b) for d in diffs],
+                         [('recipeBook.recipes["a:x"]', '"a:x"', world_diff.MISSING),
+                          ('recipeBook.recipes["a:z"]', world_diff.MISSING, '"a:z"')])
+
     def test_last_played_is_ignored(self):
         kept, ignored = world_diff.diff_worlds(self.world(), self.world(last_played=2))
         self.assertEqual(kept, [])

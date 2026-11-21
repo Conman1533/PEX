@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `4f094ed19`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `5c72e204a`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 4 | 1 | 40 | |
+| G1 Mob AI | 45 | 11 | 1 | 33 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 0 | 15 | |
 | G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
-| G7 Worlds | 32 | 13 | 0 | 19 | |
+| G7 Worlds | 32 | 25 | 0 | 7 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 51 | 1 | 129 | 15 |
+| Total | 196 | 70 | 1 | 110 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -31,6 +31,20 @@ Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by th
 - `fix/systemic-mob-parity` (13 commits, 2026-11-14): spawn health in metadata, step, swim and ambient sounds, sound variants, mob sound volume and pitch, hurt sounds to other players, `/effect` on any living entity, melee pathing, fluid spreading. Goal 1.
 - `fix/wrong-mob-behaviours` (15 commits, 2026-11-16): warden roar, sniff and sonic boom, vex and evoker, dolphin treasure, sniffer, panda, camel, rabbit, parrot, armadillo, llama spit, axolotls, tamed wolf health, horse food, goat and copper golem panic. Goal 1.
 - `fix/worldgen-fluid-ticks`, `fix/ore-placement`, `fix/sculk-worldgen`, `fix/speleothem-worldgen` (2026-11-14 to 2026-11-15): world generation parity. No goal of this roadmap covers world generation; they are parity fixes outside it.
+
+Landed on `alpha` on 2026-11-21 as landing batch 5 (branch `land/g7-batch-5`, `e351adc78`), outside the pieces; it passed the world round trip, full CI and the whole tester on CT 117 and the Z420:
+
+- `fix/raid-persistence`: a raid whose wave has nowhere to spawn stops after vanilla's tries instead of staying alive (`raid.rs` follows vanilla `Raid.tick` and `findRandomSpawnPos`). A G7-18 follow-up; `isVillage` waits for G1-42.
+- `fix/forced-chunk-entities`: force-loaded chunks load their saved entities without a player nearby. The entity keys PEX drops that this shows are G7-24's known losses.
+- `fix/map-locked-dimension`: locked maps, and maps of another dimension, no longer update.
+- `fix/duplicate-login`: a second login with the same profile kicks the player already online with `multiplayer.disconnect.duplicate_login` and lets the new one in once the old one is saved, as vanilla `disconnectAllPlayersWithProfile` does (was "Invalid move player packet received" for the new client). Bot test `bot:duplicate_login_kicks_old_session`.
+- `fix/hunger-effect-rate`: Hunger adds 0.005 x (level) exhaustion every tick through the player, like vanilla, instead of 0.1 x (level) once a second; the leftover burst kept draining food after the effect ended and made `bot:eat_restores_food` flaky.
+- `fix/bedrock-combat`: Bedrock attackers use the Java attack rules and cooldown (Goal 8 work from the Bedrock thread, gated on Windows too).
+
+Landed on `alpha` on 2026-11-21 as landing batch 6 (branch `land/g7-batch-6`, `4f4734df2`), outside the pieces; it passed the world round trip, full CI and the whole tester on CT 117 and the Z420, and the Bedrock branches passed the Bedrock checks on Windows:
+
+- `test/bedrock-wire`, `fix/bedrock-oidc-keys`, `fix/bedrock-deploy-ports`, `perf/skin-fetch-off-join`: Bedrock wire checks, sign-in key handling, deploy ports, and the Java and Bedrock skin fetch moved off the join path (Goal 8 work from the Bedrock thread, tracked in `docs/BEDROCK-PARITY.md` on branch `docs/bedrock-parity`).
+- `fix/creaking-heart-test-flake`: the creaking heart unit test waits for the heart's update (every 22 to 26 ticks) instead of a fixed 25 ticks.
 
 What holds 2.0 back:
 
@@ -107,7 +121,7 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D6-6 | Does anything off the start-to-dragon path belong in Goal 6 (enchanting, brewing, anvils, trading, respawn anchors)? | Open | none (scope only) |
 | D7-1 | Should PEX keep NBT it doesn't model and write it back unchanged, or model each field? | Answered by the 2.0 loop (2026-11-20): pass through now, model fields as features need them, because the first round trip shows losses in dozens of chunk, block entity, item and entity keys that one generic mechanism stops at once, while fields PEX models still win | G7-06, G7-21, G7-23, G7-24, G7-25 |
 | D7-2 | What should PEX do with worlds saved before 5023 (it accepts 4435 and up)? | Open | G7-28 |
-| D7-3 | How much of a structure start should PEX save for chunks it generates? | Open | G7-07 |
+| D7-3 | How much of a structure start should PEX save for chunks it generates? | Answered by the 2.0 loop (2026-11-20): the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored | G7-07 |
 | D7-4 | Which `data/` files must round-trip for 2.0? | Answered by the 2.0 loop (2026-11-20): all, because the first round trip shows PEX already leaves every one of these files intact and vanilla reads them, so each piece only has to read and write its own file, and a subset would mean documented losses of players' maps, raids and boss bars | G7-15, G7-16, G7-17, G7-18, G7-19, G7-20 |
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Open | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
@@ -472,6 +486,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-animal-armadillo`
 - Needs decision: D1-1.
 - Done when: `pumpkin:armadillo_rolls_up_near_zombie` passes, plus unit tests for each new behaviour beside `hurt_by_remembers_the_attacker_until_it_is_gone`.
+- Status (2026-11-20): landed (branch `feat/brain-animal-armadillo`). New Brain behaviours `FollowTemptation`, `AnimalMakeLove` (sets the partner's `breed_target`, walk and look targets through the partner's own brain), `BabyFollowAdult`, `RandomLookAround` (vanilla's `directionFromRotation` on the sine table) and `SetEntityLookTarget`, plus `SetEntityLookTargetSometimes` by entity type, `RandomStroll.stroll` and `AnimalPanic` with its own panic causes. New sensors `food_temptations`, `frog_temptations`, `nautilus_temptations` (`TemptingSensor`), `nearest_adult`, `nearest_adult_any_type` (`AdultSensor`) and `armadillo_scare_detected` (a generic `MobSensor`, scan rate 5). The armadillo now runs vanilla `ArmadilloAi` (core, idle and panic activities, `ArmadilloBallUp`, `ArmadilloPanic`, the rolling-out step and the scared `MoveToTargetSink` override) instead of goals and the atomics that emulated the sensor and ball-up, so `danger_detected_recently` is a real memory saved in `Brain` NBT like vanilla (D1-1). Also fixed on the way: `isScaredBy` now tests boxes inflated 7/2/7 and skips spectators, `canStayRolledUp` checks lava, leashes and passengers, and `canFallInLove` is false while curled up. `EntityBase::is_panicking` was false for every mob; it now asks a new `Mob::mob_is_panicking` hook, which the armadillo answers from its brain (other Brain mobs like the allay can follow when they move). `pumpkin:armadillo_rolls_up_near_zombie` passes (curls up beside a zombie, unrolls about 5 s after it is killed) and the eight new unit tests sit beside `hurt_by_remembers_the_attacker_until_it_is_gone`. Play test for Neon: sprint up to an armadillo, expect it to curl up, peek now and then, and unroll a few seconds after you stop sprinting; hold a spider eye, expect it to follow you and stop about 2 blocks away.
 
 #### G1-05 Brain combat and door behaviours and zoglin
 - Scope: StartAttacking, StopAttackingIfTargetInvalid, SetWalkTargetFromAttackTargetIfTargetOutOfReach, MeleeAttack, EraseMemoryIf, SetWalkTargetAwayFrom, StopBeingAngryIfTargetDead, BecomePassiveIfMemoryPresent, CopyMemoryWithExpiry, InteractWithDoor; the zoglin on its Brain. Out: piglin and hoglin sensors.
@@ -479,9 +494,10 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-combat-zoglin`
 - Needs decision: D1-1.
 - Done when: `pumpkin:zoglin_attacks_any_nearby_mob` and unit `stop_attacking_if_target_invalid_forgets_a_dead_target` pass.
+- Status (2026-11-20): landed (branch `feat/brain-combat-zoglin`). New Brain behaviours `StartAttacking`, `StopAttackingIfTargetInvalid` (gives up after 200 unreachable ticks), `SetWalkTargetFromAttackTargetIfTargetOutOfReach` (vanilla `isWithinAttackRange`, bow 15 and crossbow 8 less the margin when the mob can shoot), `MeleeAttack` (shares the melee goal's hit path and hooks), `EraseMemoryIf`, `SetWalkTargetAwayFrom` (`pos` and `entity`, on a new `LandRandomPos.getPosAway` port), `StopBeingAngryIfTargetDead` (honours `forgiveDeadPlayers`), `BecomePassiveIfMemoryPresent`, `CopyMemoryWithExpiry` and `InteractWithDoor` (opens `#mob_interactable_doors` on the path's previous and next nodes, remembers them in `doors_to_close` and closes them behind it unless a same-type mob's own path goes through, read from that mob's brain only when it is free). New `Mob::can_use_non_melee_weapon` hook (vanilla `canUseNonMeleeWeapon`, false by default). The zoglin now runs vanilla's Brain (core, idle and fight activities) instead of goals: it targets the nearest visible attackable mob that is not a zoglin or creeper, not only players, attacks every 40 ticks (15 for babies), keeps a hurting attacker as its target for 10 seconds unless it is much further than the current one, plays the angry sound when a fight starts, and no longer swims, like vanilla. Also fixed on the way: ground navigation tested a waypoint by its round horizontal distance where vanilla `followThePath` tests each axis, so a mob wider than a block (zoglin, hoglin, ravager, iron golem) that spawned on a block corner never reached its first node and stood still. `pumpkin:zoglin_attacks_any_nearby_mob` passes (kills a cow in a closed pen) and so do `stop_attacking_if_target_invalid_forgets_a_dead_target` and four more unit tests beside it. Play test for Neon: spawn a zoglin near cows and a pig, expect it to chase and kill them one by one and then come for you; hit it from range while it chases a cow, expect it to switch to you.
 
 #### G1-06 Zombies
-- Scope: zombie, husk, zombie_villager, drowned, zombified_piglin, giant. Mob spear use (SpearUseGoal), MoveThroughVillageGoal, priorities and villager targeting in `ZombieEntityBase`, zombified piglin anger and alerting; remove the giant's goals. Out: drowned trident items and spear items.
+- Scope: zombie, husk, zombie_villager, drowned, zombified_piglin, giant. Mob spear use (SpearUseGoal, and the piglin's SpearApproach/SpearAttack/SpearRetreat from G1-30), MoveThroughVillageGoal, priorities and villager targeting in `ZombieEntityBase`, zombified piglin anger and alerting; remove the giant's goals. Out: drowned trident items and spear items.
 - Depends on: G1-01.
 - Branch: `fix/mobai-zombies`
 - Needs decision: none.
@@ -515,6 +531,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: none.
 - Done when: `pumpkin:enderman_angers_when_stared_at` and `pumpkin:shulker_shoots_bullet_at_survival_player` pass.
 - Needed by: G6-13 (endermen that hunt players and drop ender pearls).
+- Status (2026-11-20): landed (branch `fix/mobai-enderman-shulker`). Enderman: teleports now follow vanilla `randomTeleport` (clamped into the world border, walk down to the first `#entities_can_teleport_to` block, refuse `#enderman_does_not_teleport_to` there or in the body, no collision, no liquid, no water right below, not while riding), send entity event 46, world event 2018, the teleport game event and both sounds; projectiles never hurt an enderman that is not riding, even when all 64 teleports fail (before, it took the damage); in daylight, ten seconds after its last target change, an enderman under open sky drops its target and teleports away like vanilla; the stare check aims from the player's real eye height and uses collision shapes, so glass hides a stare as in vanilla; an enderman holding a block never despawns and drops that block on death (silk-touch loot, honours the mob drops game rule); teleport-towards aims at the target's real eyes. Shulker: fires every 20 to 110 ticks (was 20 to 60), looks at its target, stops in peaceful; peeks at vanilla's goal rate and length; teleports with vanilla's 5 tries and checks (world border, empty space, `#shulker_does_not_teleport_to`, not with NoAI) and sends the teleport game event and world event 2016 without the close sound; a closed shell turns away tridents too, not only arrows; an open shulker hit by a shulker bullet teleports and may leave a new shulker behind, less likely the more are near; and a shulker on a scoreboard team shoots monsters in front of its shell (`ShulkerDefenseAttackGoal`). The look-at-player goal looks horizontally like vanilla. The tester has four more mob test cells (12). `pumpkin:enderman_angers_when_stared_at` and `pumpkin:shulker_shoots_bullet_at_survival_player` pass. Play test for Neon: look at an enderman's head through glass, expect nothing; look with no glass, expect it to scream and come for you; shoot it with arrows, expect it to teleport every time and never lose health. In an End city, hit an open shulker with another shulker's bullet (stand behind it), expect it to teleport and sometimes leave a second shulker.
 
 #### G1-11 Cube mobs
 - Scope: slime and magma cube audit; sulfur cube rebuilt on its own vanilla goals with no attack. Out: splitting on death.
@@ -530,6 +547,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Needs decision: none.
 - Done when: `pumpkin:blaze_alerts_nearby_blazes_when_hit`, `pumpkin:ghast_shoots_fireball_at_survival_player` and `pumpkin:strider_walks_back_to_lava` pass.
 - Needed by: G6-11 (blazes that fight and drop blaze rods).
+- Status (2026-11-20): landed (branch `fix/mobai-nether`). Blaze: vanilla goal list (no extra swim goal; MoveTowardsRestriction and water-avoiding wander added), a hit blaze alerts the blazes around it (`HurtByTargetGoal.setAlertOthers`), it takes damage in rain as well as water, and a silent blaze shoots without the fireball sound. Ghast: vanilla `GhastMoveControl` (re-checks the flight path every 2 to 6 ticks and stops in front of blocks instead of pushing through them), random float goal with vanilla's distance checks and its fly-down when the spot is above the ground, targets only players within 4 blocks of height difference like vanilla, needs line of sight to shoot, sends the warning and shoot world events (1015, 1016, silent ghasts send none) and fires from vanilla's spot at the target's middle. Strider: StriderPathNavigation (lava counts as a stable destination), vanilla path maluses (water blocked, lava and fire free), StriderGoToLavaGoal walks back to lava with room above it, cold and shivering follows vanilla (warm blocks, lava, or riding a warm strider), it takes damage in rain, and it makes the retreat sound while panicking. `MoveToBlockGoal` now re-paths to `getMoveToTarget` like vanilla (only the strider aims anywhere but the block above). The tester has four more mob test cells (16). `pumpkin:blaze_alerts_nearby_blazes_when_hit`, `pumpkin:ghast_shoots_fireball_at_survival_player` and `pumpkin:strider_walks_back_to_lava` pass. Play test for Neon: in a fortress, hit one blaze with a group nearby, expect the whole group to come for you; stand behind a pillar from a ghast, expect no fireballs until it can see you again; lead a strider off a lava lake with a warped fungus on a stick held but not ridden, then let it go, expect it to walk back into the lava and turn from purple to red.
 
 #### G1-13 Raiders
 - Scope: pillager, vindicator, ravager, witch: AvoidEntity(Creaking), VindicatorBreakDoor, Johnny, ObtainRaidLeaderBanner, witch raider-heal and player targets, LongDistancePatrol. Out: raid waves.
@@ -652,6 +670,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-piglin-brute`
 - Needs decision: D1-1, D1-3 (#3630).
 - Done when: `pumpkin:piglin_brute_attacks_player_in_gold_armor` passes.
+- Status (2026-11-21): landed (branch `feat/brain-piglin-brute`, through `land/g7-batch-2`). The brute runs vanilla's `PiglinBruteAi` on the PEX Brain: core look/move sinks, door interaction and dropping a dead anger target; idle looks, strolls, `InteractWith` piglins and brutes, and the `StrollToPoi`/`StrollAroundPoi` pair around its `HOME` spawn point; fight with melee attack, the angry sound, and anger spread to nearby adult piglins when hit. New shared pieces: `SetLookAndInteract`, `InteractWith`, `StrollToPoi`/`StrollAroundPoi` and `PIGLIN_BRUTE_SPECIFIC_SENSOR` (nemesis = wither skeleton or wither, nearby adult piglins). Spawns with a golden axe. `get_living_entity_from_uuid_memory` now also finds players, so `ANGRY_AT` a player works for every brain mob. GameTest `pumpkin:piglin_brute_attacks_player_in_gold_armor` passes. Answered by the 2.0 loop (2026-11-21): `PIGLIN_SPECIFIC_SENSOR` moves to G1-30, because the piglin brain is its only user and a sensor with no reader can't be tested. Until G1-30, goal piglins take a hit brute's anger as a plain attack target. Play test for Neon: in a bastion, hit a brute while other piglins stand nearby; expect the brute to swing its axe at you even in full gold armour, and nearby piglins to turn on you.
 
 #### G1-30 Piglin
 - Scope: PiglinAi with admiring, bartering, hunting hoglins, spear and crossbow behaviours, Mount and Dismount; fold `piglin_ai.rs` into it. Out: barter loot table contents.
@@ -659,6 +678,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-piglin`
 - Needs decision: D1-1, D1-3 (#3630).
 - Done when: `pumpkin:piglin_barters_gold_ingot_for_loot` passes.
+- Status (2026-11-21): landed (branch `feat/brain-piglin`, through `land/g7-batch-3`). The piglin runs vanilla's `PiglinAi` on the PEX Brain with all seven activities: core (look/move sinks, doors, babies fleeing a nemesis, everyone fleeing a nearby zombified piglin, admiring a seen gold item, celebrating a kill, dropping a dead anger target), idle (watching a player who holds gold, attacking players not in gold, hunting hoglins, avoiding soul fire, babies riding baby hoglins), admire item, fight (melee, crossbow charge and shoot, backing off with a crossbow), celebrate (dancing after one in ten hoglin kills), avoid and ride. Bartering rolls the `piglin_bartering` loot table and still fires `PiglinBarterEvent`. New shared pieces: `PIGLIN_SPECIFIC_SENSOR` (vanilla's Manhattan-ordered repellent search), `abstract_piglin` (anger, retaliation and broadcasts, now also used by the brute), and the behaviours `CrossbowAttack`, `BackUpIfTooClose`, `Mount`, `DismountOrSkipMounting`, `GoToTargetLocation` and `StartCelebratingIfTargetDead`. `piglin_ai.rs` and the goal `GoToWantedItemGoal` are gone; the hand-made Brain NBT is replaced by the real brain's. Opening chests and breaking `guarded_by_piglins` blocks does not yet anger piglins (`PiglinAi.angerNearbyPiglins` exists, no callers). GameTest `pumpkin:piglin_barters_gold_ingot_for_loot` passes. Answered by the 2.0 loop (2026-11-21): the spear behaviours (`SpearApproach`, `SpearAttack`, `SpearRetreat`) move to G1-06 with the rest of mob spear use, because PEX's spear kinetic attack only works for players; until then a piglin with a golden spear fights in melee. Play test for Neon: in a bastion without gold armour, expect piglins to attack; with gold armour, drop a gold ingot and expect a piglin to pick it up, look at it for about six seconds and throw back a barter item; kill a hoglin near piglins and now and then see one dance.
 
 #### G1-31 Goat and long jump
 - Scope: GoatAi, PrepareRamNearestTarget, RamTarget, LongJumpToRandomPos, LongJumpMidJump. Out: goat horn items.
@@ -673,7 +693,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `feat/brain-camels`
 - Needs decision: D1-1.
 - Done when: `pumpkin:camel_follows_cactus` and `pumpkin:husk_rider_steers_camel_husk_to_target` pass.
-- Status (2026-11-19): partly built by `feat/water-mob-ai` (on `alpha` since 2026-11-05): the camel husk is a camel that eats rabbit feet and never breeds, and natural husk groups sometimes ride one (unit tests `camel_husk_is_a_camel_that_eats_rabbit_feet_and_never_breeds`, `a_natural_husk_group_sometimes_rides_a_camel_husk`). Camel AI and both named GameTests are still missing. `fix/wrong-mob-behaviours` (pushed 2026-11-16, not on `alpha`) adds vanilla camel speeds and random sitting.
+- Status (2026-11-20): landed (branch `feat/brain-camels`). The camel and camel husk now run vanilla `CamelAi` on the Brain instead of goals (D1-1): core activity with swim, `CamelPanic` (gets up at once, no panic while a mob steers it), look and walk sinks and both cooldowns; idle activity with look-at-player, breeding (`AnimalMakeLove`), tempting (speed 2.5, stops 3.5 blocks short, 2.5 for babies) or following an adult, random look around, and a random stroll, walk to the look target, `RandomSitting` or a pause. Strolls and following wait while the camel sits or changes pose. `CamelMoveControl` gets a sitting camel up when it is told to walk (not while leashed), `CamelLookControl` holds still while someone steers it, the navigation floats and walks over fences, and the head turns at most 30 degrees. A sitting adult camel has vanilla's lower box (1.43 blocks less), sitting down or getting up checks the other pose's box for blocks (`canCamelChangePose`), and pose changes send the entity action game event and the camel husk's own sit and stand sounds. The dash ends on landing and its cooldown counts down to the dash-ready sound. Camel husk: `isMobControlled` while a mob rides in front, and then it cannot be leashed. The G1-02 exception was already gone (camel husk got its own entity in `feat/water-mob-ai`). `pumpkin:camel_follows_cactus` and `pumpkin:husk_rider_steers_camel_husk_to_target` pass. Play test for Neon: hold a cactus near a camel, expect it to walk over and stop a few blocks away; watch an idle camel, expect it to sit down now and then and get up when you lead it on a leash or when it is hit; find a husk riding a camel husk in a desert at night, expect the pair to come for you.
 
 #### G1-33 Sniffer
 - Scope: SnifferAi in place of the `transition_to` state machine. Out: sniffer egg hatching.
@@ -2224,6 +2244,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/chunk-structure-starts
 - Needs decision: D7-3
 - Done when: in a world PEX generated, vanilla's `/locate structure minecraft:village_plains` and PEX's agree on an already generated village, and G7-04 logs no structure errors. G6-10 waits on this.
+- Status (2026-11-20): landed (branch `feat/chunk-structure-starts`). Chunks PEX generates save `structures` like `SerializableChunkData.packStructureData`: each start PEX can write in full (`id`, `ChunkX`, `ChunkZ`, `references`, `Children` with every jigsaw piece's `pool_element`, position, rotation, junctions and liquid settings, `generation/structure/save.rs`) and, for every structure, the start chunks reaching into the chunk. A chunk loaded from disk keeps the starts it was saved with, and PEX only adds the ones it is missing and merges references. D7-3 answered by the 2.0 loop: the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored. Lookups by position for spawn overrides stay with G6-10. The world round trip gained step 6: PEX makes a world with seed 20261120, locates the nearest plains village (-1504, -1360), generates the chunks around it and saves; the start chunk holds the village's start with its pieces, vanilla on that save locates the same village and logs no structure errors, and steps 1 to 3 still show nothing outside the known losses (`tools/world-roundtrip/reports/2026-11-20-g7-07.md`). Also fixed here: G7-06's known-loss edit had cut 167 unrelated lines (G7-15/16/23/24/25, light, game rules) from `known-losses.txt`; they are back. Without the merge, PEX finishing vanilla's proto-chunks beside the lab lost `structures.References."minecraft:mineshaft"` in 3 chunks, so PEX's own mineshaft references can miss some vanilla has; not looked into further.
 
 #### G7-08 Log unreadable chunks
 
@@ -2232,6 +2253,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/log-unreadable-chunks
 - Needs decision: none
 - Done when: a unit test with a corrupt chunk payload sees one error line naming the chunk.
+- Status (2026-11-21): landed (branch `fix/log-unreadable-chunks`). An unreadable chunk is logged with its region file, chunk position and error before PEX regenerates it, like `ChunkMap.reportChunkLoadFailure`. Unit test `chunk::io::file_manager::tests::unreadable_chunk_is_logged_with_its_region_and_position`. Built on the second lane; landed through merge branch `land/g7-batch-1` (`4e9f0f46b`), which passed full CI and the whole tester on the Z420.
 
 #### G7-09 Scheduled ticks longer than 255
 
@@ -2259,6 +2281,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/poi-vanilla-format
 - Needs decision: none
 - Done when: a unit test reads a POI region from G7-01's world with the right positions, and G7-04 shows vanilla reading PEX's POI unchanged.
+- Status (2026-11-21): landed (branch `fix/poi-vanilla-format`). POI regions use vanilla's format, and old PEX POI files still load. PEX writes them LZ4-compressed (its default), which vanilla reads; vanilla's own default is zlib. Unit test `poi::tests::vanilla_poi_region_reads_and_writes_back_unchanged` (exact NBT round trip of a vanilla fixture). Built on the second lane; landed through merge branch `land/g7-batch-1` (`4e9f0f46b`), which passed full CI and the whole tester on the Z420.
 
 #### G7-12 POIs rebuilt from blocks
 
@@ -2302,6 +2325,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/map-saved-data
 - Needs decision: D7-4
 - Done when: a fixture map shows its picture in PEX, and a map made in PEX shows in vanilla without reusing an existing id.
+- Status (2026-11-21): landed (branch `feat/map-saved-data`). Maps are read on first use from `data/minecraft/maps/<id>.dat` and written back when changed, keeping keys PEX doesn't model; loaded maps keep their picture. New ids come from `maps/last_id.dat`, and old PEX worlds continue from level.dat's `map_id`, which level.dat no longer writes (that known-loss line is closed). The live round trip vanilla to PEX to vanilla gave byte-identical map NBT. Unit tests `world::map::tests::{a_vanilla_map_loads_its_picture_and_saves_unchanged, new_ids_follow_last_id_and_are_saved_back, a_world_without_last_id_continues_from_the_old_level_dat_counter}`. Not run: a map drawn in PEX opened in vanilla. Play test for Neon: make and fill a map in PEX, stop, open the world in vanilla 26.3; expect the same picture and a new map to get the next id. Gap left for later: `MapData.update` ignores `locked` and the holder's dimension. Built on the second lane; landed through merge branch `land/g7-batch-2` (`18778c5ff`), which passed full CI and the whole tester on the Z420.
 
 #### G7-17 World border and forced chunks
 
@@ -2319,6 +2343,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/raids-saved-data
 - Needs decision: D7-4
 - Done when: a raid running at `stop` resumes with the same wave and omen level after a restart, in PEX and in vanilla.
+- Status (2026-11-21): landed (branch `feat/raids-saved-data`). Each dimension saves `data/minecraft/raids.dat` in vanilla's `Raids.CODEC` format (`next_id` starts at 1, so the first raid gets id 2 like vanilla), and a loaded raider rejoins its saved raid's wave and leader slot, or forgets the id if the raid is gone. Wave raiders now get their raid id when spawned, like vanilla's `joinRaid`, so they run the raid goals. The live vanilla to PEX raids.dat round trip passed. Unit tests `world::raid::tests::{vanilla_raids_load_and_save_unchanged, a_raid_part_way_through_keeps_its_wave_omen_and_heroes}` and `entity::mob::raider::tests::a_loaded_raider_rejoins_its_raid_or_forgets_a_missing_one`. Gap found, not fixed: PEX loads a chunk's entities only when a player watches it, while vanilla also loads them in force-loaded chunks. Play test for Neon: start a raid in a village, `stop` mid-wave, restart; expect the same wave, the boss bar back and the raiders still attacking. Built on the second lane; landed through merge branch `land/g7-batch-2` (`18778c5ff`), which passed full CI and the whole tester on the Z420.
 
 #### G7-19 Command storage and scheduled functions
 
@@ -2327,6 +2352,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/command-saved-data
 - Needs decision: D7-4
 - Done when: `/data modify storage` values and a pending `/schedule function` survive a restart and pass to vanilla and back.
+- Status (2026-11-21): landed (branch `feat/command-saved-data`). Command storage and scheduled function events are saved in vanilla's format; the live round trip passed. Behaviour changes: `/schedule` counts in overworld game time like vanilla, its function argument parses (`/schedule function test:hello 10t` failed before), duplicate events are dropped and events due on the same tick run in order. Unit tests in `server::scheduler::tests` and `server::command_storage::tests`. Built on the second lane; landed through merge branch `land/g7-batch-1` (`4e9f0f46b`), which passed full CI and the whole tester on the Z420.
 
 #### G7-20 Boss bars, random sequences and stopwatches
 
@@ -2335,6 +2361,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: feat/bossbar-sequences-saved-data
 - Needs decision: D7-4
 - Done when: a boss bar, a random sequence's next value and a stopwatch survive a restart and pass to vanilla and back.
+- Status (2026-11-21): landed (branch `feat/bossbar-sequences-saved-data`). Custom boss bars, random sequences and stopwatches are saved in vanilla's format; the live round trip PEX to vanilla to PEX passed. Known gap: new random sequences are seeded with `DefaultHasher`, not vanilla's md5, so a fresh sequence differs from vanilla's. Unit tests `random_sequences::tests::a_vanilla_sequence_continues_where_vanilla_left_it` and `custom_bossbar::tests::vanilla_boss_bars_load_and_save_unchanged`. Built on the second lane; landed through merge branch `land/g7-batch-1` (`4e9f0f46b`), which passed full CI and the whole tester on the Z420.
 
 #### G7-21 Player file keys
 
@@ -2343,6 +2370,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/player-data-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no diff in the fixture's player file outside the ignore list.
+- Status (2026-11-21): landed (branch `fix/player-data-keys`). Player files keep every vanilla key PEX doesn't model and write it back unchanged, without ever replacing what PEX wrote; `LastDeathLocation` is read and written as vanilla's global position; thrown ender pearls are saved in `ender_pearls` and come back thrown by their player, holding a 40-tick chunk ticket like vanilla. Also: effect amplifiers save as a byte, projectiles honour `NoGravity` and don't hit while at rest, respawn yaw and pitch, `XpTotal` and `XpSeed` are kept, equipment is no longer written twice, and PEX-only keys are gone from the file. The world round trip has a step 7 (a bot visits the fixture on vanilla and on PEX, then the player files are diffed); what still differs is listed in known-losses.txt under G7-22 (statistics), G7-23 (item components) and G7-24 (`TicksFrozen`, `CustomNameVisible`, the old `FallDistance`). Unit tests `entity::player::saved_keys::tests::{a_vanilla_player_file_keeps_the_keys_pex_does_not_model, a_saved_pearl_comes_back_thrown_by_its_player_and_is_saved_again, a_death_location_reads_and_writes_vanillas_global_pos, kept_keys_never_replace_what_pex_wrote}`. Play test for Neon: throw an ender pearl far away and log out before it lands, log back in; expect the pearl to keep flying and teleport you. Built on the second lane; landed through merge branch `land/g7-batch-3` (`c0b0b6076`), which passed full CI and the whole tester on the Z420.
 
 #### G7-22 Advancements and statistics in vanilla's files
 
@@ -2359,6 +2387,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/item-unknown-components
 - Needs decision: D7-1
 - Done when: unit tests round-trip a stack with an unknown component and one with a malformed known component, and G7-03 shows no item loss in fixture containers.
+- Status (2026-11-21): landed (branch `fix/item-unknown-components`). Item stacks keep every component PEX can't parse, or reads but fails to parse, and write it back in the form it was saved in; a component PEX never changed keeps its saved form; potion contents save like vanilla (a bare potion id when that is all there is). Unit tests `item_stack::tests::{an_unknown_component_is_kept_and_written_back, a_malformed_known_component_is_kept_and_written_back, an_unchanged_component_keeps_its_saved_form, potion_contents_save_like_vanilla, a_plain_stack_saves_no_components}`; the round trip's item component known losses are gone. Play test for Neon: put a written book, a named and enchanted sword and a potion in a chest on vanilla 26.3, open the world on PEX, take them out, then open it on vanilla again; expect all three unchanged. Built on the second lane; landed through merge branch `land/g7-batch-4` (`0811047e4`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-24 Entity NBT keys
 
@@ -2375,6 +2404,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/block-entity-nbt-keys
 - Needs decision: D7-1
 - Done when: G7-03 shows no block entity diff outside the ignore list, and G7-04 logs no `Skipping block entity with invalid type`.
+- Status (2026-11-21): landed (branch `fix/block-entity-nbt-keys`). Furnace and brewing stand times save as ints, decorated pots, trial spawners, sculk catalysts, command blocks and spawners save in vanilla's format, and every block entity key PEX doesn't model is kept and written back (`World.kept_block_entity_nbt`). What still differs in the round trip is `ticking` (the block entities keep running while each server is up). Unit tests `block::entities::test::a_vanilla_furnace_keeps_its_unmodelled_keys_and_times`, `decorated_pot::tests::sherds_save_as_vanilla_sides_and_read_back`, `mob_spawner::tests::a_spawner_without_potentials_saves_an_empty_list_like_vanilla` and `trial_spawner::tests::{a_default_trial_spawner_saves_no_config_or_state, a_changed_trial_spawner_saves_only_what_changed}`. Left over, listed as round-trip known losses: PEX starts the fixture's raid on its second load (G7-18; vanilla's raid stop lands in batch 5) and vanilla keeps the visit's ender pearl twice in a PEX save (G7-21 follow-up). Play test for Neon: on vanilla 26.3 light a furnace with half a stack of iron and fill a decorated pot with sherds, open the world on PEX for a minute, then on vanilla again; expect the furnace still smelting with its progress and the pot keeping its sherds. Built on the second lane; landed through merge branch `land/g7-batch-4` (`0811047e4`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-26 Anvil default for new configs
 
@@ -2391,6 +2421,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/convert-keeps-source
 - Needs decision: none
 - Done when: a unit test converts a folder and finds every source file byte for byte in the backup.
+- Status (2026-11-21): landed (branch `fix/convert-keeps-source`). Conversion moves the source files to `<folder>-backup-<secs>` instead of deleting them. Unit test `chunk::io::converter::tests::conversion_moves_every_source_file_to_a_backup`. Built on the second lane; landed through merge branch `land/g7-batch-1` (`4e9f0f46b`), which passed full CI and the whole tester on the Z420.
 
 #### G7-28 Worlds older than 5023
 
@@ -2415,6 +2446,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/world-session-lock
 - Needs decision: none
 - Done when: PEX refuses a world vanilla has open, and vanilla refuses one PEX has open.
+- Status (2026-11-21): landed (branch `fix/world-session-lock`, built on the second lane). PEX holds `session.lock` like `DirectoryLock` (an fcntl record lock, OFD on Linux, `LockFileEx` on Windows), refuses to start on a locked world with exit code 1, and releases the lock at the end of shutdown, after the saves. Checked both ways against vanilla 26.3: with vanilla running PEX refuses, with PEX running vanilla throws its LockException, and after PEX stops vanilla opens the world. Unit test `world_info::session_lock::tests::a_locked_world_is_refused_until_its_lock_is_dropped`. Play test for Neon (Windows, not run on Windows hardware yet): start PEX twice on one world, expect the second to exit with the session lock error.
 
 #### G7-31 Long-play round trip
 
@@ -2458,6 +2490,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
   - Start id, bounding box and references only. Enough for spawn overrides and `/locate`; what vanilla does with a start without pieces is unknown until G7-04 runs it.
   - Nothing: only vanilla's starts survive (G7-06), and PEX-generated chunks keep losing them.
   - Waits on it: G7-07, and through it G6-10.
+  - Answered by the 2.0 loop (2026-11-20): the full `StructureStart` with every piece, like vanilla, written per piece type and starting with jigsaw pieces (villages, outposts, bastions, ancient cities, trail ruins, trial chambers); a start with a piece type PEX can't write yet is left out as before, because vanilla's `/locate` and spawn rules skip a start without pieces (`StructureStart.isValid`), so a start with only its id and box would be read and then ignored.
 - D7-4: Which `data/` files must round-trip for 2.0? Options:
   - All: scoreboard, maps, world border, chunk tickets, raids, command storage, scheduled events, boss bars, random sequences, stopwatches. Six pieces.
   - A subset (for example maps, scoreboard, world border and chunk tickets), with the rest listed as known losses in the release notes.

@@ -1072,8 +1072,12 @@ impl PathNavigation {
                     return self.ground_target(entity);
                 }
 
-                let close_enough = horizontal_dist < f64::from(self.max_distance_to_waypoint)
-                    && dy.abs() < NODE_REACH_Y;
+                // Vanilla `PathNavigation.followThePath` tests each axis on its own, not the
+                // horizontal distance: a mob wider than a block stands 0.5 off the node centre on
+                // both axes while its entity position at the node is reached.
+                let margin = f64::from(self.max_distance_to_waypoint);
+                let close_enough =
+                    dx.abs() < margin && dz.abs() < margin && dy.abs() < NODE_REACH_Y;
 
                 let corner_cut =
                     path.get_next_node().is_some_and(|n| {
@@ -1098,6 +1102,8 @@ impl PathNavigation {
 
 pub struct GroundPathNavigation {
     pub inner: PathNavigation,
+    /// Vanilla `StriderPathNavigation`: a lava block is a stable destination too.
+    pub lava_is_stable: bool,
 }
 
 impl Default for GroundPathNavigation {
@@ -1111,6 +1117,7 @@ impl GroundPathNavigation {
     pub fn new() -> Self {
         Self {
             inner: PathNavigation::new(EvaluatorKind::Walk(WalkNodeEvaluator::default())),
+            lava_is_stable: false,
         }
     }
 }
@@ -1118,6 +1125,11 @@ impl GroundPathNavigation {
 impl PathNavigationTrait for GroundPathNavigation {
     fn set_progress(&mut self, goal: NavigatorGoal) {
         self.inner.set_progress(goal);
+    }
+
+    fn is_stable_destination(&self, world: &World, pos: &BlockPos) -> bool {
+        (self.lava_is_stable && world.get_block(pos).id == pumpkin_data::Block::LAVA.id)
+            || world.get_block_state(&pos.down()).is_solid_render()
     }
 
     fn set_speed(&mut self, speed: f64) {
@@ -2393,6 +2405,14 @@ impl Navigator {
     #[must_use]
     pub fn ground() -> Self {
         Self::new(GroundPathNavigation::new())
+    }
+
+    /// Vanilla `StriderPathNavigation`: ground navigation that also settles on lava.
+    #[must_use]
+    pub fn strider() -> Self {
+        let mut navigation = GroundPathNavigation::new();
+        navigation.lava_is_stable = true;
+        Self::new(navigation)
     }
 
     #[must_use]

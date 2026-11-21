@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc, Weak,
+    Arc,
     atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
@@ -10,16 +10,19 @@ use pumpkin_data::tracked_data;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::position::BlockPos;
 
+use pumpkin_data::damage::DamageType;
+use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::item::Item;
+use pumpkin_data::item_stack::ItemStack;
+
 use crate::entity::{
     Entity, EntityBase,
-    ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, open_door::OpenDoorGoal,
-        revenge::RevengeGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
-    },
-    mob::{Mob, MobEntity},
+    ai::brain::{Brain, memory::PackedMemories},
+    mob::{Mob, MobEntity, spawn::SpawnGroupData},
 };
 use crate::world::World;
+
+mod ai;
 
 pub struct PiglinBruteEntity {
     pub mob_entity: MobEntity,
@@ -31,53 +34,13 @@ impl PiglinBruteEntity {
     pub const CONVERSION_TIME: i32 = 300;
     pub const XP_REWARD: u32 = 20;
 
+    /// Vanilla `PiglinBrute`, on the Brain of `PiglinBruteAi` (`ai.rs`).
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
-        let piglin = Self {
-            mob_entity,
+        Arc::new(Self {
+            mob_entity: MobEntity::new(entity),
             immune_to_zombification: AtomicBool::new(false),
             time_in_overworld: AtomicI32::new(0),
-        };
-        let mob_arc = Arc::new(piglin);
-        let mob_weak: Weak<dyn Mob> = {
-            let mob_arc: Arc<dyn Mob> = mob_arc.clone();
-            Arc::downgrade(&mob_arc)
-        };
-
-        {
-            let goal_selector = &mob_arc.mob_entity.goals_selector;
-
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(OpenDoorGoal::new(true)));
-            goal_selector.add_goal(2, Box::new(MeleeAttackGoal::new(1.0, true)));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
-            goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak.clone(), &EntityType::PLAYER, 8.0),
-            );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
-
-            let target_selector = &mob_arc.mob_entity.target_selector;
-            target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
-            target_selector.add_goal(
-                2,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
-            );
-            target_selector.add_goal(
-                3,
-                ActiveTargetGoal::with_default(
-                    &mob_arc.mob_entity,
-                    &EntityType::WITHER_SKELETON,
-                    true,
-                ),
-            );
-            target_selector.add_goal(
-                3,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::WITHER, true),
-            );
-        };
-
-        mob_arc
+        })
     }
 
     #[must_use]
@@ -238,5 +201,42 @@ impl Mob for PiglinBruteEntity {
 
     fn get_base_experience_reward(&self) -> u32 {
         Self::XP_REWARD
+    }
+
+    fn make_brain(&self, packed: &PackedMemories) -> Brain {
+        ai::make_brain(self, packed)
+    }
+
+    /// Vanilla `PiglinBrute.customServerAiStep`.
+    fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        self.mob_entity.tick_brain(self);
+        ai::update_activity(self);
+    }
+
+    /// Vanilla `PiglinBrute.hurtServer`: `PiglinBruteAi.wasHurtBy` for a living attacker.
+    fn on_damage(&self, _damage_type: DamageType, source: Option<&dyn EntityBase>) {
+        if let Some(attacker) = source {
+            ai::was_hurt_by(self, attacker);
+        }
+    }
+
+    /// Vanilla `PiglinBrute.finalizeSpawn`: home is the spawn spot, and it holds a golden axe.
+    fn finalize_spawn(
+        &self,
+        world: &Arc<World>,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
+        ai::init_memories(self, world);
+        self.mob_entity
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .put(
+                &EquipmentSlot::MAIN_HAND,
+                ItemStack::new(1, &Item::GOLDEN_AXE),
+            );
+        self.mob_entity.finalize_spawn_base();
+        group_data
     }
 }

@@ -64,6 +64,18 @@ pub fn load_or_create_identity_key(path: &Path) -> std::io::Result<Arc<SigningKe
     }
 }
 
+/// The `kid` of the token in an offer's identity assertion, if it has one, so the right OIDC
+/// keys can be fetched before the offer is verified.
+pub(super) fn offer_identity_kid(offer: &str) -> Option<String> {
+    let identity = offer
+        .lines()
+        .find_map(|line| line.strip_prefix("a=identity:"))?;
+    let identity: Value =
+        serde_json::from_slice(&general_purpose::STANDARD.decode(identity).ok()?).ok()?;
+    let assertion: Value = serde_json::from_str(identity["assertion"].as_str()?).ok()?;
+    pumpkin_auth::jwt::token_kid(assertion["token"].as_str()?).ok()
+}
+
 fn verify_and_strip_identity(
     offer: &str,
     oidc_verifier: Option<&(String, Jwks)>,
@@ -337,6 +349,30 @@ mod tests {
             "v=0\r\nt=0 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n"
         );
         assert!(public_key.is_none());
+    }
+
+    #[test]
+    fn offer_identity_kid_reads_the_token_header() {
+        let key = SigningKey::from_slice(&[7; 48]).unwrap();
+        let sdp = "v=0\r\nt=0 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=fingerprint:sha-256 AA:BB\r\n";
+        let answer = add_server_identity(sdp, &key).unwrap();
+        // The server's own identity token has no kid.
+        assert_eq!(offer_identity_kid(&answer), None);
+        assert_eq!(offer_identity_kid(sdp), None);
+
+        let encoded = answer
+            .lines()
+            .find_map(|line| line.strip_prefix("a=identity:"))
+            .unwrap();
+        let mut identity: Value =
+            serde_json::from_slice(&general_purpose::STANDARD.decode(encoded).unwrap()).unwrap();
+        let header = general_purpose::URL_SAFE_NO_PAD.encode(r#"{"alg":"ES384","kid":"key-1"}"#);
+        identity["assertion"] = json!(json!({"token": format!("{header}.e30.sig")}).to_string());
+        let offer = answer.replace(
+            encoded,
+            &general_purpose::STANDARD.encode(serde_json::to_vec(&identity).unwrap()),
+        );
+        assert_eq!(offer_identity_kid(&offer).as_deref(), Some("key-1"));
     }
 
     #[test]

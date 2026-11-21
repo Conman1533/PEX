@@ -41,7 +41,7 @@ const WORLD_GEN_SETTINGS_TAG: &str = "WorldGenSettings";
 /// `level.dat` keys vanilla 26.1 moved to `world_border.dat`, `difficulty_settings`, `spawn` and
 /// `world_gen_settings.dat`. PEX reads them from older worlds and drops them when it saves, like
 /// vanilla, which reads 26.3 `level.dat` without them.
-const LEGACY_LEVEL_DAT_KEYS: [&str; 18] = [
+const LEGACY_LEVEL_DAT_KEYS: [&str; 19] = [
     "BorderCenterX",
     "BorderCenterZ",
     "BorderDamagePerBlock",
@@ -60,6 +60,8 @@ const LEGACY_LEVEL_DAT_KEYS: [&str; 18] = [
     "SpawnYaw",
     "SpawnPitch",
     WORLD_GEN_SETTINGS_TAG,
+    // Older PEX kept the next map id here; maps/last_id.dat holds it now.
+    "map_id",
 ];
 
 /// Keeps two saves from interleaving, which could make one read `level.dat` while the other has
@@ -366,7 +368,6 @@ fn level_data_to_nbt(info: &LevelData, data: &mut NbtCompound) {
 
     data.put_compound("Version", world_version_to_nbt(&info.world_version));
     data.put_int("version", info.level_version);
-    data.put_int("map_id", info.map_id);
 }
 
 fn stamp_current_version(level_data: &mut LevelData) {
@@ -1013,7 +1014,6 @@ mod test {
         original.hardcore = true;
         original.game_type = 2;
         original.day_time = 12_345;
-        original.map_id = 3;
 
         AnvilLevelInfo
             .write_world_info(&original, temp_dir.path())
@@ -1042,7 +1042,6 @@ mod test {
         for key in LEGACY_LEVEL_DAT_KEYS {
             assert!(!data.has(key), "{key}");
         }
-        assert_eq!(data.get_int("map_id"), Some(3));
         assert!(data.get_long("LastPlayed").is_some_and(|played| played > 0));
 
         let version = data.get_compound("Version").unwrap();

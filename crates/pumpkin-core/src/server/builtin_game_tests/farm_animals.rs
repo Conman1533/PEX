@@ -1,4 +1,5 @@
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
+use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 
 use super::build_stone_floor;
@@ -45,6 +46,124 @@ pub(super) async fn test_cow_follows_wheat_and_panics_when_hit(
         .then_wait_until(move |helper| async move {
             helper
                 .assert_entity_not_present_in_box("minecraft:cow", lane_min, lane_max)
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `ArmadilloAi`: the `armadillo_scare_detected` sensor sees an undead mob within 7 blocks
+/// across and 2 up, `ArmadilloBallUp` curls the armadillo up, and once the zombie is gone and
+/// `danger_detected_recently` runs out, it unrolls.
+pub(super) async fn test_armadillo_rolls_up_near_zombie(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_entity_at("minecraft:armadillo", Vector3::new(2.5, 1.0, 2.5))
+        .await?;
+    let area_min = BlockPos::new(0, 1, 0);
+    let area_max = BlockPos::new(8, 3, 4);
+    let state_is = move |helper: GameTestHelper, state: &'static str| async move {
+        helper
+            .assert_entity_nbt(
+                "minecraft:armadillo",
+                area_min,
+                area_max,
+                "state",
+                &NbtTag::String(state.into()),
+            )
+            .await
+    };
+    helper
+        .start_sequence()
+        .then_execute_after(10, move |helper| state_is(helper, "idle"))
+        .then_execute(|helper| async move {
+            helper
+                .execute_command(
+                    &BlockPos::new(6, 1, 2),
+                    "summon minecraft:zombie ~0.5 ~ ~0.5 {NoAI:1b,PersistenceRequired:1b}",
+                )
+                .await
+                .map(|_| ())
+        })
+        .then_wait_until(move |helper| state_is(helper, "scared"))
+        .then_execute(|helper| async move {
+            helper
+                .execute_command(
+                    &BlockPos::new(6, 1, 2),
+                    "kill @e[type=minecraft:zombie,limit=1,sort=nearest]",
+                )
+                .await
+                .map(|_| ())
+        })
+        .then_wait_until(move |helper| state_is(helper, "idle"))
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `CamelAi`: the idle activity's `FollowTemptation` (speed 2.5, `#camel_food`) walks a
+/// camel to a player holding cactus and stops it 3.5 blocks short.
+pub(super) async fn test_camel_follows_cactus(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 13, 5).await?;
+    helper
+        .spawn_mock_player_at("minecraft:cactus", Vector3::new(11.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:camel", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+
+    let near_player_min = BlockPos::new(6, 1, 0);
+    let near_player_max = BlockPos::new(12, 4, 4);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_present_in_box("minecraft:camel", near_player_min, near_player_max)
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `Mob.getNavigation`: a husk riding in front of a camel husk steers it, so the husk's
+/// own attack goal walks the camel husk to the survival player it targets. The camel husk's own
+/// brain still picks random strolls in between, as in vanilla, so the walk takes a while.
+pub(super) async fn test_husk_rider_steers_camel_husk_to_target(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 13, 5).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(11.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:camel_husk", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:husk", Vector3::new(1.5, 1.0, 0.5))
+        .await?;
+
+    let near_player_min = BlockPos::new(6, 1, 0);
+    let near_player_max = BlockPos::new(12, 4, 4);
+    helper
+        .start_sequence()
+        .then_execute_after(5, |helper| async move {
+            helper
+                .execute_command(
+                    &BlockPos::new(1, 1, 2),
+                    "ride @e[type=minecraft:husk,limit=1,sort=nearest] mount \
+                     @e[type=minecraft:camel_husk,limit=1,sort=nearest]",
+                )
+                .await
+                .map(|_| ())
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_present_in_box(
+                    "minecraft:camel_husk",
+                    near_player_min,
+                    near_player_max,
+                )
                 .await
         })
         .then_succeed();

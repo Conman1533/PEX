@@ -45,6 +45,19 @@ fn emit_region_read(at: SystemTime, path: &Path, chunks: usize, phases: [Duratio
     });
 }
 
+/// Logs a chunk that couldn't be read; the caller then generates it again, like vanilla's
+/// `ChunkMap.reportChunkLoadFailure`.
+fn report_load_failure<T: Send>(path: &Path, loaded: &LoadedData<T, ChunkReadingError>) {
+    if let LoadedData::Error((pos, err)) = loaded {
+        error!(
+            "Failed to load chunk {},{} from {}: {err}",
+            pos.x,
+            pos.y,
+            path.display()
+        );
+    }
+}
+
 pub(crate) trait PathFromLevelFolder {
     fn file_path(folder: &LevelFolder, file_name: &str) -> PathBuf;
 }
@@ -398,6 +411,7 @@ where
 {
     type Data = Arc<D>;
 
+    #[expect(clippy::too_many_lines)]
     async fn fetch_chunks<'a>(
         &'a self,
         folder: &'a LevelFolder,
@@ -420,6 +434,7 @@ where
                 let lock_elapsed = start.elapsed();
                 let mut disk_chunks = chunks;
                 for loaded in entry.read_pending(&mut disk_chunks).await {
+                    report_load_failure(&path, &loaded);
                     if stream.send(loaded).await.is_err() {
                         return;
                     }
@@ -492,6 +507,7 @@ where
                 });
 
                 while let Some(item) = rx.recv().await {
+                    report_load_failure(&path, &item);
                     if stream.send(item).await.is_err() {
                         return;
                     }
@@ -817,5 +833,58 @@ mod tests {
         manager.flush_all().await;
         let region = AnvilRegion::open(&path, Vector2::new(0, 0)).unwrap();
         assert!(region.read_chunk(1).unwrap().is_some());
+    }
+
+    #[derive(Clone, Default)]
+    struct LogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for LogBuffer {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn unreadable_chunk_is_logged_with_its_region_and_position() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let folder = folder(dir.path());
+        std::fs::create_dir(&folder.entities_folder).unwrap();
+        let path = folder.entities_folder.join("r.0.0.mca");
+        // Chunk 1,0 points at sector 2 and holds a record that claims zlib but isn't.
+        let payload = b"not zlib data";
+        let mut region = vec![0; 3 * 4096];
+        region[4..8].copy_from_slice(&[0, 0, 2, 1]);
+        region[8192..8196]
+            .copy_from_slice(&u32::try_from(payload.len() + 1).unwrap().to_be_bytes());
+        region[8196] = crate::chunk::format::anvil::Compression::ZLib as u8;
+        region[8197..8197 + payload.len()].copy_from_slice(payload);
+        std::fs::write(&path, region).unwrap();
+
+        let logs = LogBuffer::default();
+        let writer = logs.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let manager =
+            ChunkFileManager::<AnvilRegion, ChunkEntityData>::new(AnvilChunkConfig::default());
+        let (tx, mut rx) = mpsc::channel(1);
+        manager
+            .fetch_chunks(&folder, &[Vector2::new(1, 0)], tx)
+            .await;
+        assert!(matches!(rx.recv().await, Some(LoadedData::Error(_))));
+
+        let logs = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
+        let lines: Vec<_> = logs.lines().filter(|line| line.contains("ERROR")).collect();
+        assert_eq!(lines.len(), 1, "{logs}");
+        assert!(lines[0].contains("Failed to load chunk 1,0"), "{logs}");
+        assert!(lines[0].contains(&path.display().to_string()), "{logs}");
     }
 }

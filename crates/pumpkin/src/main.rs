@@ -113,7 +113,7 @@ async fn main() {
             world_dir.display(),
             target_format.name()
         );
-        match pumpkin_world::chunk::io::converter::convert_world(&world_dir, &target_config, true) {
+        match pumpkin_world::chunk::io::converter::convert_world(&world_dir, &target_config) {
             Ok(stats) => {
                 info!(
                     "Converted {} region(s) ({} chunk(s)) to {} format in {}ms",
@@ -122,6 +122,9 @@ async fn main() {
                     target_format.name(),
                     time.elapsed().as_millis()
                 );
+                for backup in &stats.backup_folders {
+                    info!("Moved the old region files to {}", backup.display());
+                }
                 exit(0);
             }
             Err(err) => {

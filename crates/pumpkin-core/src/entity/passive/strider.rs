@@ -7,17 +7,21 @@ use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_util::math::position::BlockPos;
 
+use crate::block::PathComputationType;
 use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
-        breed::BreedGoal, escape_danger::EscapeDangerGoal, follow_parent::FollowParentGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
+        Controls, Goal, breed::BreedGoal, escape_danger::EscapeDangerGoal,
+        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, move_to_block::MoveToBlockGoal, swim::SwimGoal,
         tempt::TemptGoal, wander_around::WanderAroundGoal,
     },
+    ai::pathfinder::{Navigator, node::PathType},
     item_steerable::{ItemBasedSteering, ItemSteerable},
-    mob::{Mob, MobEntity},
+    mob::{Mob, MobEntity, is_in_water_or_rain},
     passive::animal::Animal,
     player::Player,
 };
@@ -32,7 +36,16 @@ pub struct StriderEntity {
 
 impl StriderEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
+        let mut mob_entity = MobEntity::new(entity);
+        let navigator = mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *navigator = Navigator::strider();
+        navigator.set_pathfinding_malus(PathType::Water, -1.0);
+        navigator.set_pathfinding_malus(PathType::Lava, 0.0);
+        navigator.set_pathfinding_malus(PathType::DangerFire, 0.0);
+        navigator.set_pathfinding_malus(PathType::DamageFire, 0.0);
         let strider = Self {
             mob_entity,
             ageable_data: AgeableData::default(),
@@ -65,6 +78,7 @@ impl StriderEntity {
                     false,
                 )),
             );
+            goal_selector.add_goal(4, Box::new(StriderGoToLavaGoal::new()));
             goal_selector.add_goal(5, Box::new(FollowParentGoal::new(1.0)));
             goal_selector.add_goal(7, Box::new(WanderAroundGoal::with_interval(1.0, 60)));
             goal_selector.add_goal(
@@ -158,9 +172,62 @@ impl Mob for StriderEntity {
             .then_some(pumpkin_data::sound::Sound::EntityStriderAmbient)
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
+    /// Vanilla `Strider.tick`.
+    fn mob_tick(&self, caller: &dyn EntityBase) {
         if self.is_tempted() && rand::random_range(0..140) == 0 {
             self.make_sound(pumpkin_data::sound::Sound::EntityStriderHappy);
+        } else if self.is_panicking() && rand::random_range(0..60) == 0 {
+            self.make_sound(pumpkin_data::sound::Sound::EntityStriderRetreat);
+        }
+
+        let entity = &self.mob_entity.living_entity.entity;
+        if !self.mob_entity.is_no_ai() {
+            let world = entity.world.load();
+            let pos = entity.pos.load();
+            let warm = &tag::Block::MINECRAFT_STRIDER_WARM_BLOCKS;
+            let in_warm_blocks = world.get_block(&entity.block_pos.load()).has_tag(warm)
+                || world
+                    .get_block(&BlockPos::floored(pos.x, pos.y - 0.2, pos.z))
+                    .has_tag(warm)
+                || entity.touching_lava.load(Ordering::SeqCst);
+            let on_warm_strider = entity
+                .vehicle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_ref()
+                .is_some_and(|vehicle| {
+                    vehicle
+                        .cast_any()
+                        .downcast_ref::<Self>()
+                        .is_some_and(|strider| !strider.is_suffocating())
+                });
+            let suffocating = !in_warm_blocks && !on_warm_strider;
+            if suffocating != self.is_suffocating() {
+                self.set_suffocating(suffocating);
+            }
+        }
+
+        // Vanilla `isSensitiveToWater`.
+        if entity.is_alive() && is_in_water_or_rain(entity) {
+            caller.damage(caller, 1.0, pumpkin_data::damage::DamageType::DROWN);
+        }
+    }
+
+    /// Vanilla `Strider.getWalkTargetValue`: lava is worth walking to, and a strider in lava never
+    /// strolls out of it.
+    fn get_walk_target_value(&self, pos: &BlockPos) -> f32 {
+        let entity = &self.mob_entity.living_entity.entity;
+        if entity
+            .world
+            .load()
+            .get_fluid(pos)
+            .has_tag(&tag::Fluid::MINECRAFT_LAVA)
+        {
+            10.0
+        } else if entity.touching_lava.load(Ordering::SeqCst) {
+            f32::NEG_INFINITY
+        } else {
+            0.0
         }
     }
 
@@ -262,5 +329,64 @@ impl ItemSteerable for StriderEntity {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+/// Vanilla `Strider.StriderGoToLavaGoal`: out of lava, walk to lava within 8 blocks that has
+/// room above it.
+struct StriderGoToLavaGoal {
+    inner: MoveToBlockGoal,
+}
+
+impl StriderGoToLavaGoal {
+    fn new() -> Self {
+        let inner = MoveToBlockGoal::new(
+            1.0,
+            8,
+            2,
+            Box::new(|world, pos| {
+                world.get_block(&pos).id == pumpkin_data::Block::LAVA.id && {
+                    let (block, state) = world.get_block_and_state(&pos.up());
+                    world
+                        .block_registry
+                        .is_pathfindable(block, state, PathComputationType::Land)
+                }
+            }),
+        )
+        .targeting_the_block_itself()
+        .with_recalculate_interval(20);
+        Self { inner }
+    }
+}
+
+impl Goal for StriderGoToLavaGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        !mob.get_entity().touching_lava.load(Ordering::SeqCst) && self.inner.can_start(mob)
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        let world = mob.get_entity().world.load();
+        !mob.get_entity().touching_lava.load(Ordering::SeqCst)
+            && (self.inner.is_valid_target)(&world, self.inner.target_pos)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        self.inner.start(mob);
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        self.inner.tick(mob);
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.inner.stop(mob);
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        true
+    }
+
+    fn controls(&self) -> Controls {
+        self.inner.controls()
     }
 }

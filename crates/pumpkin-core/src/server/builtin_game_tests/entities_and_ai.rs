@@ -1,5 +1,5 @@
 use pumpkin_data::Block;
-use pumpkin_gametest::{GameTestHelper, GameTestResult};
+use pumpkin_gametest::{GameTestError, GameTestHelper, GameTestResult};
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
@@ -152,6 +152,334 @@ pub(super) async fn test_zombie_targets_survival_mock_player(
                     floor_min,
                     floor_max,
                     Some("minecraft:player"),
+                )
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `Zoglin.findNearestValidAttackTarget`: a zoglin attacks any mob it can see, not only
+/// players. The pen's walls are three blocks high so the zoglin's throw keeps the cow inside.
+pub(super) async fn test_zoglin_attacks_any_nearby_mob(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..4 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 2),
+            "summon minecraft:cow ~0.5 ~ ~0.5 {NoAI:1b,PersistenceRequired:1b}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 1, 2),
+            "summon minecraft:zoglin ~0.5 ~ ~0.5 {IsBaby:0b,PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper.assert_entity_not_present("minecraft:cow").await
+    })?;
+    Ok(())
+}
+
+/// Its own name, so the `tp` below moves no other test's mock player.
+const ENDERMAN_STARER: &str = "ender-starer";
+
+/// Vanilla `EndermanLookForPlayerGoal`: a survival player looking at an enderman's eyes with
+/// nothing solid in between becomes its target.
+pub(super) async fn test_enderman_angers_when_stared_at(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            if x == 0 || x == 8 || z == 0 || z == 4 {
+                for y in 1..3 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, y, z), &Block::STONE)
+                        .await?;
+                }
+            }
+        }
+    }
+    helper
+        .spawn_named_mock_player_at(
+            ENDERMAN_STARER,
+            GameMode::Survival,
+            "minecraft:stick",
+            Vector3::new(1.5, 1.0, 2.5),
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 2),
+            "summon minecraft:enderman ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+
+    let pen_min = BlockPos::new(0, 1, 0);
+    let pen_max = BlockPos::new(9, 4, 5);
+    helper.succeed_when(move |helper| async move {
+        // Aim from the player's eyes at the enderman's, wherever it has wandered.
+        helper
+            .execute_command(
+                &BlockPos::new(1, 1, 2),
+                "execute anchored eyes run tp @a[name=ender-starer] ~ ~ ~ facing entity @e[type=minecraft:enderman,limit=1,sort=nearest] eyes",
+            )
+            .await?;
+        helper
+            .assert_entity_target("minecraft:enderman", pen_min, pen_max, Some("minecraft:player"))
+            .await
+    })?;
+    Ok(())
+}
+
+/// Vanilla `ShulkerNearestAttackGoal` + `ShulkerAttackGoal`: a shulker targets a survival player
+/// within its follow range and fires a bullet at them.
+pub(super) async fn test_shulker_shoots_bullet_at_survival_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(7, 1, 2),
+            "summon minecraft:shulker ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper
+            .assert_entity_present("minecraft:shulker_bullet")
+            .await
+    })?;
+    Ok(())
+}
+
+/// Vanilla `Blaze.registerGoals`: `HurtByTargetGoal(this).setAlertOthers()`. One blaze hurt by an
+/// iron golem sends the other blaze after the golem too; blazes never pick golems themselves.
+pub(super) async fn test_blaze_alerts_nearby_blazes_when_hit(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for (x, z) in [(2, 1), (2, 3)] {
+        helper
+            .execute_command(
+                &BlockPos::new(x, 1, z),
+                "summon minecraft:blaze ~ ~ ~ {PersistenceRequired:1b}",
+            )
+            .await?;
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(6, 1, 2),
+            "summon minecraft:iron_golem ~ ~ ~ {NoAI:1b,PersistenceRequired:1b}",
+        )
+        .await?;
+
+    let pen_min = BlockPos::new(0, 0, 0);
+    let pen_max = BlockPos::new(9, 6, 5);
+    // Summoned mobs join the world on the next tick, so the hit waits a moment.
+    helper
+        .start_sequence()
+        .then_execute_after(5, |helper| async move {
+            helper
+                .execute_command(
+                    &BlockPos::new(2, 1, 1),
+                    "damage @e[type=minecraft:blaze,limit=1,sort=nearest] 1 minecraft:mob_attack by @e[type=minecraft:iron_golem,limit=1,sort=nearest]",
+                )
+                .await
+                .map(|_| ())
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_target(
+                    "minecraft:blaze",
+                    pen_min,
+                    pen_max,
+                    Some("minecraft:iron_golem"),
+                )
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `GhastShootFireballGoal`: a ghast that sees a survival player level with it charges
+/// for 20 ticks and fires a large fireball at them.
+pub(super) async fn test_ghast_shoots_fireball_at_survival_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 11, 5).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(9, 1, 2),
+            "summon minecraft:ghast ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper.assert_entity_present("minecraft:fireball").await
+    })?;
+    Ok(())
+}
+
+/// Vanilla `StriderGoToLavaGoal`: a strider out of lava walks back to lava within 8 blocks.
+/// The ground is two layers of stone with a lava pool sunk into the top one.
+pub(super) async fn test_strider_walks_back_to_lava(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    for x in 0..9 {
+        for z in 0..5 {
+            let pool = (6..8).contains(&x) && (1..4).contains(&z);
+            let block = if pool { &Block::LAVA } else { &Block::STONE };
+            helper
+                .set_block_default(&BlockPos::new(x, 1, z), block)
+                .await?;
+        }
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(1, 2, 2),
+            "summon minecraft:strider ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper.succeed_when(|helper| async move {
+        helper
+            .assert_entity_present_in_box(
+                "minecraft:strider",
+                BlockPos::new(6, 1, 1),
+                BlockPos::new(8, 3, 4),
+            )
+            .await
+    })?;
+    Ok(())
+}
+
+/// A survival mock player of its own, so the armor commands touch nobody in other tests.
+const GOLD_WEARER: &str = "gold-wearer";
+
+/// Vanilla `PiglinBruteAi`: a brute's idle `StartAttacking` takes the nearest visible attackable
+/// player whatever armor it wears (unlike a piglin, which leaves gold wearers alone), and the
+/// fight activity's `MeleeAttack` hits it.
+pub(super) async fn test_piglin_brute_attacks_player_in_gold_armor(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_named_mock_player_at(
+            GOLD_WEARER,
+            GameMode::Survival,
+            "minecraft:stick",
+            Vector3::new(7.5, 1.0, 2.5),
+        )
+        .await?;
+    for (slot, item) in [
+        ("armor.head", "golden_helmet"),
+        ("armor.chest", "golden_chestplate"),
+        ("armor.legs", "golden_leggings"),
+        ("armor.feet", "golden_boots"),
+    ] {
+        helper
+            .execute_command(
+                &BlockPos::new(7, 1, 2),
+                &format!("item replace entity {GOLD_WEARER} {slot} with minecraft:{item}"),
+            )
+            .await?;
+    }
+    helper
+        .spawn_entity_at("minecraft:piglin_brute", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+
+    let area_min = BlockPos::new(0, 1, 0);
+    let area_max = BlockPos::new(8, 3, 4);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            let health = helper
+                .entity_nbt_values("minecraft:player", area_min, area_max, "Health")
+                .await?;
+            let hurt = health
+                .iter()
+                .flatten()
+                .any(|tag| matches!(tag, NbtTag::Float(value) if *value < 20.0));
+            helper.assert_true(
+                hurt,
+                format!("the piglin brute never hit the player in gold armor: {health:?}"),
+            )
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `PiglinAi`: a piglin walks to a gold ingot on the ground (`GoToWantedItem` in the
+/// admire activity), holds it in its off hand while it admires it, then barters it away. A piglin
+/// in the overworld turns zombified after 300 ticks, so the trade has to finish before that.
+pub(super) async fn test_piglin_barters_gold_ingot_for_loot(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_entity_at("minecraft:piglin", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_item_at("minecraft:gold_ingot", 1, Vector3::new(5.5, 1.1, 2.5))
+        .await?;
+
+    let area_min = BlockPos::new(0, 1, 0);
+    let area_max = BlockPos::new(8, 3, 4);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_is_holding(
+                    "minecraft:piglin",
+                    area_min,
+                    area_max,
+                    "minecraft:gold_ingot",
+                )
+                .await
+        })
+        .then_wait_until(move |helper| async move {
+            if helper
+                .assert_entity_is_holding(
+                    "minecraft:piglin",
+                    area_min,
+                    area_max,
+                    "minecraft:gold_ingot",
+                )
+                .await
+                .is_ok()
+            {
+                // Not `helper.fail`, which fails the test at once instead of waiting.
+                return Err(GameTestError::Assertion {
+                    tick: helper.tick(),
+                    position: None,
+                    message: "the piglin is still admiring the gold ingot".to_owned(),
+                });
+            }
+            helper
+                .assert_entity_present_in_box("minecraft:piglin", area_min, area_max)
+                .await?;
+            helper
+                .assert_item_entity_not_present(
+                    "minecraft:gold_ingot",
+                    &BlockPos::new(4, 1, 2),
+                    8.0,
                 )
                 .await
         })

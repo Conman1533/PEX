@@ -12,15 +12,25 @@ use pumpkin_world::world_info::{
 use rustc_hash::FxHashSet;
 
 use super::border::Worldborder;
+use super::raid::Raids;
 use crate::entity::player::DATA_VERSION;
 
 const WORLD_BORDER: &str = "world_border.dat";
 const CHUNK_TICKETS: &str = "chunk_tickets.dat";
+const RAIDS: &str = "raids.dat";
 const FORCED: &str = "minecraft:forced";
 /// Vanilla `ChunkMap.FORCED_TICKET_LEVEL`, the entity ticking level.
 const FORCED_TICKET_LEVEL: i32 = 31;
 
 #[must_use]
+pub fn load_raids(folder: &Path) -> Raids {
+    read_data_file(folder, RAIDS).map_or_else(Raids::default, |data| Raids::from_nbt(&data))
+}
+
+pub fn save_raids(folder: &Path, raids: &Raids) -> Result<(), WorldInfoError> {
+    write_data_file(folder, RAIDS, DATA_VERSION, raids.to_nbt())
+}
+
 pub fn load_world_border(folder: &Path) -> Option<Worldborder> {
     read_data_file(folder, WORLD_BORDER).map(|data| Worldborder::from_nbt(&data))
 }

@@ -32,6 +32,7 @@ use crate::bot::{HeadlessBot, MAX_POLL_TICKS};
 
 /// Real time between ticks, so packets reach the other side before the next tick.
 const TICK_PAUSE: Duration = Duration::from_millis(5);
+const LEAVE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Ticks the server gets to answer a ping. Generous, because a busy machine can take many ticks
 /// to read a packet; waiting longer only lets game time pass, like a lagging client.
 const MAX_SYNC_TICKS: usize = 1000;
@@ -110,9 +111,14 @@ impl<'a> StageContext<'a> {
         let Self { server, bot, .. } = self;
         let name = bot.name.clone();
         drop(bot);
-        for _ in 0..MAX_POLL_TICKS {
+        // The server removes a player in its own tasks, which take longer than MAX_POLL_TICKS
+        // ticks when the CT is busy, so also wait at least LEAVE_TIMEOUT.
+        let deadline = std::time::Instant::now() + LEAVE_TIMEOUT;
+        let mut ticks = 0;
+        while ticks < MAX_POLL_TICKS || std::time::Instant::now() < deadline {
             server.tick();
             tokio::time::sleep(TICK_PAUSE).await;
+            ticks += 1;
             if server.get_player_by_name(&name).is_none() {
                 return Ok(());
             }

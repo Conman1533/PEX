@@ -51,6 +51,7 @@ pub enum StepSound {
     Sound(pumpkin_data::sound::Sound, f32),
 }
 
+pub mod abstract_piglin;
 pub mod bat;
 pub mod blaze;
 pub mod breeze;
@@ -75,7 +76,6 @@ pub mod neutral;
 pub mod patrol;
 pub mod phantom;
 pub mod piglin;
-pub mod piglin_ai;
 pub mod piglin_brute;
 pub mod pillager;
 pub mod raider;
@@ -624,6 +624,39 @@ impl MobEntity {
         };
         self.process_brain_memory_clear();
         result
+    }
+
+    /// Like [`Self::with_brain`], but `None` instead of waiting while the brain is in use, such as
+    /// during the mob's own brain tick, whose callbacks read `BrainTick` instead.
+    pub fn try_with_brain<R>(
+        &self,
+        mob: &dyn Mob,
+        callback: impl FnOnce(&mut Brain) -> R,
+    ) -> Option<R> {
+        let result = {
+            let mut slot = match self.brain.try_lock() {
+                Ok(slot) => slot,
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+                Err(std::sync::TryLockError::WouldBlock) => return None,
+            };
+            let brain = slot.get_or_insert_with(|| mob.make_brain(&PackedMemories::empty()));
+            if self.take_brain_memory_clear_request() {
+                brain.clear_memories();
+            }
+            callback(brain)
+        };
+        self.process_brain_memory_clear();
+        Some(result)
+    }
+
+    /// Vanilla `Mob.stopInPlace`.
+    pub fn stop_in_place(&self) {
+        let living = &self.living_entity;
+        self.steered().navigator().stop();
+        // setXxa, setYya and setSpeed: travel would otherwise keep walking on the last input.
+        living.movement_input.store(Vector3::default());
+        living.jumping.store(false, Ordering::Relaxed);
+        living.entity.velocity.store(Vector3::default());
     }
 
     /// Installs an already built brain, such as one restored from saved memories.
@@ -1353,6 +1386,12 @@ pub trait Mob: EntityBase + Send + Sync {
         None
     }
 
+    /// Vanilla `PathfinderMob.isPanicking`; Brain mobs read their `is_panicking` memory.
+    fn mob_is_panicking(&self) -> bool {
+        self.get_path_aware_entity()
+            .is_some_and(PathAwareEntity::is_panicking)
+    }
+
     fn get_item_steerable(&self) -> Option<&dyn crate::entity::item_steerable::ItemSteerable> {
         None
     }
@@ -1415,6 +1454,20 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn wants_to_pick_up(&self, _stack: &ItemStack) -> bool {
         false
+    }
+
+    /// `wants_to_pick_up` for a brain sensor, which holds this mob's brain.
+    fn wants_to_pick_up_in_brain(
+        &self,
+        stack: &ItemStack,
+        _brain: &crate::entity::ai::brain::BrainState,
+    ) -> bool {
+        self.wants_to_pick_up(stack)
+    }
+
+    /// Vanilla `Entity.startRiding`, which `Piglin` overrides to climb a hoglin's stack.
+    fn start_riding(&self, vehicle: Arc<dyn EntityBase>) -> bool {
+        start_riding_default(self.get_mob_entity(), &vehicle)
     }
 
     fn can_pick_up_loot(&self, _brain: Option<&crate::entity::ai::brain::BrainState>) -> bool {
@@ -1504,6 +1557,12 @@ pub trait Mob: EntityBase + Send + Sync {
     /// hoglins and zoglins attack through `MeleeAttack.create(40)` (15 for babies).
     fn melee_attack_interval(&self) -> i32 {
         20
+    }
+
+    /// Vanilla `Mob.canUseNonMeleeWeapon`: whether the mob shoots with this item (bows for
+    /// skeletons, crossbows for piglins and pillagers), which keeps the Brain's `MeleeAttack` off.
+    fn can_use_non_melee_weapon(&self, _stack: &pumpkin_data::item_stack::ItemStack) -> bool {
+        false
     }
 
     /// Start of vanilla `doHurtTarget`, run whether or not the hit lands: attack events and
@@ -2258,8 +2317,7 @@ impl<T: Mob + Send + 'static> EntityBase for T {
     }
 
     fn is_panicking(&self) -> bool {
-        self.get_path_aware_entity()
-            .is_some_and(PathAwareEntity::is_panicking)
+        Mob::mob_is_panicking(self)
     }
 
     fn get_job_site_pos(&self) -> Option<pumpkin_util::math::position::BlockPos> {
@@ -2905,4 +2963,41 @@ mod lifecycle_tests {
         assert!(steers_itself);
         Ok(())
     }
+}
+
+/// Vanilla `Entity.isInWaterOrRain`: in water, or rained on at the feet or the top of the box.
+/// Mobs that are `isSensitiveToWater` take 1 drowning damage each tick this holds.
+#[must_use]
+pub fn is_in_water_or_rain(entity: &crate::entity::Entity) -> bool {
+    if entity
+        .touching_water
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return true;
+    }
+    let world = entity.world.load();
+    world.is_raining_at(&entity.block_pos.load())
+        || world.is_raining_at(&entity.bounding_box.load().max_block_pos())
+}
+
+/// Vanilla `Entity.startRiding` without force: not while riding, not itself, and only onto a
+/// vehicle with no passenger yet (`Entity.canAddPassenger`).
+pub fn start_riding_default(mob: &MobEntity, vehicle: &Arc<dyn EntityBase>) -> bool {
+    let entity = &mob.living_entity.entity;
+    let vehicle_entity = vehicle.get_entity();
+    if entity.has_vehicle()
+        || vehicle_entity.entity_id == entity.entity_id
+        || !vehicle_entity
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty()
+    {
+        return false;
+    }
+    let Some(passenger) = entity.world.load().get_entity_by_id(entity.entity_id) else {
+        return false;
+    };
+    vehicle_entity.add_passenger(vehicle.clone(), passenger);
+    entity.get_vehicle().is_some()
 }

@@ -250,14 +250,20 @@ impl Level {
         let target_format =
             crate::chunk::io::converter::RegionFormat::from_config(&level_config.chunk);
         for folder in [&level_folder.region_folder, &level_folder.entities_folder] {
-            match crate::chunk::io::converter::convert_folder(folder, &level_config.chunk, true) {
+            match crate::chunk::io::converter::convert_folder(folder, &level_config.chunk) {
                 Ok(stats) if stats.regions_converted > 0 => {
                     info!(
-                        "Converted {} region(s) ({} chunk(s)) in {} to {} format",
+                        "Converted {} region(s) ({} chunk(s)) in {} to {} format; the old files are in {}",
                         stats.regions_converted,
                         stats.chunks_converted,
                         folder.display(),
-                        target_format.name()
+                        target_format.name(),
+                        stats
+                            .backup_folders
+                            .iter()
+                            .map(|path| path.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     );
                 }
                 Ok(_) => {}
@@ -956,6 +962,13 @@ impl Level {
             )
         });
         Biome::from_id(id.flatten().unwrap_or(0)).unwrap_or(&Biome::THE_VOID)
+    }
+
+    /// Puts an entity chunk in memory as if it had been read from disk.
+    #[doc(hidden)]
+    pub fn insert_entity_chunk_for_test(&self, chunk: SyncEntityChunk) {
+        self.loaded_entity_chunks
+            .insert(Vector2::new(chunk.x, chunk.z), chunk);
     }
 
     pub fn get_entity_chunk_sync(&self, pos: &Vector2<i32>) -> Option<SyncEntityChunk> {

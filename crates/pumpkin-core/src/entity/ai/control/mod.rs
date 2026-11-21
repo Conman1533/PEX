@@ -30,6 +30,12 @@ pub trait MoveControlTrait: Control {
     fn has_wanted(&self) -> bool {
         false
     }
+
+    /// The spot a `MOVE_TO` operation heads for, where the control exposes it (vanilla
+    /// `getWantedX/Y/Z` while `hasWanted`).
+    fn wanted_position(&self) -> Option<Vector3<f64>> {
+        None
+    }
 }
 
 pub trait LookControlTrait: Control {

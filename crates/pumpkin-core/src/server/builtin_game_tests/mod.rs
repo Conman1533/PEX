@@ -257,7 +257,14 @@ const BUILTIN_TEST_IDS: &[&str] = &[
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
 /// tests, so a mob doesn't target or follow anything in the next test.
-const MOB_TEST_IDS: &[&str] = &["pumpkin:zombie_pathfinds_to_villager"];
+const MOB_TEST_IDS: &[&str] = &[
+    "pumpkin:zombie_pathfinds_to_villager",
+    "pumpkin:armadillo_rolls_up_near_zombie",
+    "pumpkin:zoglin_attacks_any_nearby_mob",
+    "pumpkin:blaze_alerts_nearby_blazes_when_hit",
+    "pumpkin:strider_walks_back_to_lava",
+    "pumpkin:piglin_barters_gold_ingot_for_loot",
+];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
 /// `MOB_TEST_IDS`, since mobs in other tests can see the player.
@@ -267,6 +274,12 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:zombie_targets_survival_mock_player",
     "pumpkin:nautilus_follows_tempting_player",
     "pumpkin:zombie_nautilus_charges_survival_player",
+    "pumpkin:enderman_angers_when_stared_at",
+    "pumpkin:shulker_shoots_bullet_at_survival_player",
+    "pumpkin:ghast_shoots_fireball_at_survival_player",
+    "pumpkin:camel_follows_cactus",
+    "pumpkin:husk_rider_steers_camel_husk_to_target",
+    "pumpkin:piglin_brute_attacks_player_in_gold_armor",
 ];
 
 #[must_use]
@@ -557,6 +570,83 @@ pub fn ensure_builtin_game_tests_registered() {
             140,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:piglin_brute_attacks_player_in_gold_armor",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_piglin_brute_attacks_player_in_gold_armor,
+        );
+        register_function_test(
+            "pumpkin:camel_follows_cactus",
+            "pumpkin:empty_13x5x5",
+            600,
+            0,
+            farm_animals::test_camel_follows_cactus,
+        );
+        register_function_test(
+            "pumpkin:husk_rider_steers_camel_husk_to_target",
+            "pumpkin:empty_13x5x5",
+            600,
+            0,
+            farm_animals::test_husk_rider_steers_camel_husk_to_target,
+        );
+        register_function_test(
+            "pumpkin:armadillo_rolls_up_near_zombie",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            farm_animals::test_armadillo_rolls_up_near_zombie,
+        );
+        register_function_test(
+            "pumpkin:blaze_alerts_nearby_blazes_when_hit",
+            "pumpkin:empty_9x6x5",
+            200,
+            0,
+            entities_and_ai::test_blaze_alerts_nearby_blazes_when_hit,
+        );
+        register_function_test(
+            "pumpkin:ghast_shoots_fireball_at_survival_player",
+            "pumpkin:empty_11x6x5",
+            200,
+            0,
+            entities_and_ai::test_ghast_shoots_fireball_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:strider_walks_back_to_lava",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            entities_and_ai::test_strider_walks_back_to_lava,
+        );
+        register_function_test(
+            "pumpkin:enderman_angers_when_stared_at",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_enderman_angers_when_stared_at,
+        );
+        register_function_test(
+            "pumpkin:shulker_shoots_bullet_at_survival_player",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_shulker_shoots_bullet_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:piglin_barters_gold_ingot_for_loot",
+            "pumpkin:empty_9x4x5",
+            280,
+            0,
+            entities_and_ai::test_piglin_barters_gold_ingot_for_loot,
+        );
+        register_function_test(
+            "pumpkin:zoglin_attacks_any_nearby_mob",
+            "pumpkin:empty_9x4x5",
+            300,
+            0,
+            entities_and_ai::test_zoglin_attacks_any_nearby_mob,
         );
         register_function_test(
             "pumpkin:quoted_non_ascii_player_name_in_commands",

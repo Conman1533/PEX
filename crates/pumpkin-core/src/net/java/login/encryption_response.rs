@@ -1,6 +1,9 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
+/// How long a login waits for the old session of its profile to leave (vanilla's login timeout).
+const DUPLICATE_LOGIN_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
 impl PendingConnection {
     async fn verify_encryption_token(
         &mut self,
@@ -87,21 +90,10 @@ impl PendingConnection {
             return Some(PacketHandlerResult::Stop);
         };
 
-        if let Some(online_player) = &server.get_player_by_uuid(profile.id) {
-            debug!(
-                "Player (IP '{}', username '{}') tried to log in with the same UUID ('{}') as an online player (username '{}')",
-                &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
-            );
-            self.kick(TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
-                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
-                [],
-            ))
-            .await;
-            return Some(PacketHandlerResult::Stop);
-        }
-
-        if let Some(online_player) = &server.get_player_by_name(&profile.name) {
+        if let Some(online_player) = server
+            .get_player_by_name(&profile.name)
+            .filter(|online_player| online_player.gameprofile.id != profile.id)
+        {
             debug!(
                 "A player (IP '{}', attempted username '{}') tried to log in with the same username as an online player (UUID '{}', username '{}')",
                 &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
@@ -153,6 +145,28 @@ impl PendingConnection {
         if pre_login_event.cancelled {
             self.kick(pre_login_event.kick_message).await;
             return Some(PacketHandlerResult::Stop);
+        }
+
+        // Vanilla `verifyLoginAndFinishConnectionSetup`: the player already on the server with
+        // this profile is the one kicked, and this login waits until it has left and been saved.
+        if server.disconnect_players_with_profile(profile.id) {
+            debug!(
+                "Player '{}' ({}) logged in again from {}: disconnecting the old session",
+                &profile.name, &profile.id, &self.address
+            );
+            let deadline = std::time::Instant::now() + DUPLICATE_LOGIN_WAIT;
+            while server.has_player_session(profile.id) {
+                if std::time::Instant::now() >= deadline {
+                    self.kick(TextComponent::translate_cross(
+                        translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+                        translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+                        [],
+                    ))
+                    .await;
+                    return Some(PacketHandlerResult::Stop);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
         }
 
         let props = profile.properties.load();

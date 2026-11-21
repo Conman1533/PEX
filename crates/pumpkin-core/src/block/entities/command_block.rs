@@ -48,16 +48,21 @@ impl CommandBlockEntity {
                 .to_string(),
         );
         nbt.put_bool("conditionMet", self.condition_met.load(Ordering::SeqCst));
-        nbt.put_string(
-            "LastOutput",
-            self.last_output
+        // Vanilla `BaseCommandBlock.save`: no output is left out, and only a block tracking its
+        // output saves it.
+        if self.track_output.load(Ordering::SeqCst) {
+            let last_output = self
+                .last_output
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .to_string(),
-        );
+                .to_string();
+            if !last_output.is_empty() {
+                nbt.put_string("LastOutput", last_output);
+            }
+        }
         nbt.put_bool("powered", self.powered.load(Ordering::SeqCst));
         nbt.put_bool("TrackOutput", self.track_output.load(Ordering::SeqCst));
-        nbt.put_bool("UpdateLastExecution", false);
+        // `UpdateLastExecution` and `LastExecution` aren't modelled; the saved ones are kept.
         nbt.put_int(
             "SuccessCount",
             self.success_count.load(Ordering::SeqCst).cast_signed(),
@@ -82,7 +87,7 @@ impl BlockEntity for CommandBlockEntity {
         let powered = AtomicBool::new(nbt.get_bool("powered").unwrap_or(false));
         let command = StdMutex::new(nbt.get_string("Command").unwrap_or("").to_string());
         let last_output = StdMutex::new(nbt.get_string("LastOutput").unwrap_or("").to_string());
-        let track_output = AtomicBool::new(nbt.get_bool("TrackOutput").unwrap_or(false));
+        let track_output = AtomicBool::new(nbt.get_bool("TrackOutput").unwrap_or(true));
         let success_count =
             AtomicU32::new(nbt.get_int("SuccessCount").unwrap_or(0).cast_unsigned());
 

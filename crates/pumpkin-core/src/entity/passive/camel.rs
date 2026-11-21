@@ -1,32 +1,34 @@
 use crate::entity::passive::horse::HORSE_AMBIENT_SOUND_INTERVAL;
 use crate::entity::passive::horse::can_parent;
 use std::sync::{
-    Arc, Weak,
-    atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
+    Arc,
+    atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU8, Ordering},
 };
 
-use pumpkin_data::entity::{EntityPose, EntityType};
+use pumpkin_data::entity::EntityPose;
 use pumpkin_data::item::Item;
 use pumpkin_data::item_stack::ItemStack;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
+use pumpkin_util::math::boundingbox::{BoundingBox, EntityDimensions};
 use pumpkin_util::math::vector3::Vector3;
-use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
     ageable::{AgeableData, AgeableMob},
-    ai::goal::{
-        Controls, Goal, GoalReach, breed::BreedGoal, escape_danger::EscapeDangerGoal,
-        follow_parent::FollowParentGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, swim::SwimGoal, tempt::TemptGoal, to_goal_ticks,
-        wander_around::WanderAroundGoal,
+    ai::brain::{Brain, memory::PackedMemories, memory::types},
+    ai::control::{
+        Control, LookControlTrait, MoveControlTrait,
+        look_control::LookControl,
+        move_control::{MoveControl, Operation},
     },
     mob::{Mob, MobEntity},
     passive::animal::Animal,
     player::Player,
 };
+
+mod ai;
 
 pub const FLAG_TAME: u8 = 2;
 pub const FLAG_SADDLE: u8 = 4;
@@ -37,14 +39,14 @@ pub const FLAG_STANDING: u8 = 32;
 /// Vanilla `Camel.isInPoseTransition`: sitting down takes 40 ticks, standing up 52.
 const SIT_DOWN_TICKS: i64 = 40;
 const STAND_UP_TICKS: i64 = 52;
-/// Vanilla `CamelAi.RandomSitting(20)`: the least time in one pose before switching.
-const MIN_POSE_TICKS: i64 = 20 * 20;
-/// How often the idle camel considers switching pose. Vanilla rolls it as one of four idle
-/// choices, each taking a few seconds.
-const SIT_CHOICE_INTERVAL: i32 = 240;
-
 /// Vanilla `Camel.DASH_COOLDOWN_TICKS`.
 const DASH_COOLDOWN_TICKS: i32 = 55;
+/// Vanilla `Camel.MAX_HEAD_Y_ROT`.
+const MAX_HEAD_Y_ROT: f32 = 30.0;
+/// Vanilla `Camel.SITTING_HEIGHT_DIFFERENCE`: a sitting adult is this much lower.
+const SITTING_HEIGHT_DIFFERENCE: f32 = 1.43;
+/// Vanilla `Camel.ADULT_SITTING_DIMENSIONS` eye height.
+const ADULT_SITTING_EYE_HEIGHT: f32 = 0.845;
 
 /// The camel and the camel husk (vanilla `CamelHusk extends Camel`).
 pub struct CamelEntity {
@@ -52,8 +54,8 @@ pub struct CamelEntity {
     pub ageable_data: AgeableData,
     pub flags: AtomicU8,
     pub dashing: AtomicBool,
-    /// Vanilla `dashCooldown`: ticks until the camel can dash again.
-    pub dash_cooldown: std::sync::atomic::AtomicI32,
+    /// Vanilla `Camel.dashCooldown`.
+    pub dash_cooldown: AtomicI32,
     /// Vanilla `LAST_POSE_CHANGE_TICK`: game time of the last pose change, negative while
     /// sitting.
     pub last_pose_tick: AtomicI64,
@@ -70,53 +72,35 @@ impl CamelEntity {
         Self::with_kind(entity, true)
     }
 
+    /// Vanilla `Camel` constructor: the Brain of `CamelAi` (`ai.rs`) instead of goals, its own
+    /// move and look controls, and a navigation that floats and walks over fences.
     fn with_kind(entity: Entity, husk: bool) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
-        let camel = Self {
+        let mut mob_entity = MobEntity::new(entity);
+        *mob_entity
+            .move_control
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Box::new(CamelMoveControl(MoveControl::default()));
+        *mob_entity
+            .look_control
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Box::new(CamelLookControl(LookControl::default()));
+        let navigator = mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        navigator.set_can_float(true);
+        navigator.set_can_walk_over_fences(true);
+        Arc::new(Self {
             mob_entity,
             ageable_data: AgeableData::default(),
             flags: AtomicU8::new(0),
             dashing: AtomicBool::new(false),
-            dash_cooldown: std::sync::atomic::AtomicI32::new(0),
+            dash_cooldown: AtomicI32::new(0),
             last_pose_tick: AtomicI64::new(0),
             husk,
-        };
-        let mob_arc = Arc::new(camel);
-        let mob_weak: Weak<dyn Mob> = {
-            let mob_arc: Arc<dyn Mob> = mob_arc.clone();
-            Arc::downgrade(&mob_arc)
-        };
-
-        {
-            let goal_selector = &mob_arc.mob_entity.goals_selector;
-
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            // Vanilla `CamelAi` speed multipliers: panic 4, tempted 2.5, following 2.5, idle 2.
-            goal_selector.add_goal(1, EscapeDangerGoal::new(4.0).lasting());
-            if !husk {
-                goal_selector.add_goal(2, BreedGoal::new(1.0));
-            }
-            goal_selector.add_goal(
-                3,
-                Box::new(TemptGoal::new(
-                    2.5,
-                    |mob, stack| mob.as_animal().is_some_and(|camel| camel.is_food(stack)),
-                    false,
-                )),
-            );
-            if !husk {
-                goal_selector.add_goal(4, Box::new(FollowParentGoal::new(2.5)));
-            }
-            goal_selector.add_goal(6, Box::new(WanderAroundGoal::new(2.0)));
-            goal_selector.add_goal(6, Box::new(CamelRandomSitGoal));
-            goal_selector.add_goal(
-                7,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
-            );
-            goal_selector.add_goal(8, Box::new(RandomLookAroundGoal::default()));
-        };
-
-        mob_arc
+        })
     }
 
     #[must_use]
@@ -149,8 +133,17 @@ impl CamelEntity {
         self.dashing.load(Ordering::Relaxed)
     }
 
+    /// Vanilla `setDashing`, with the server side of `onSyncedDataUpdated`: a change of the dash
+    /// flag starts the dash cooldown if none is running.
     pub fn set_dashing(&self, dashing: bool) {
-        self.dashing.store(dashing, Ordering::Relaxed);
+        if self.dashing.swap(dashing, Ordering::Relaxed) != dashing {
+            let _ = self.dash_cooldown.compare_exchange(
+                0,
+                DASH_COOLDOWN_TICKS,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
+        }
         let entity = self.get_entity();
         entity.set_synced_data(pumpkin_data::tracked_data::camel::DASH, dashing);
     }
@@ -195,72 +188,171 @@ impl CamelEntity {
 
     pub fn sit_down(&self) {
         if !self.is_camel_sitting() {
-            self.mob_entity
-                .living_entity
-                .make_sound(Sound::EntityCamelSit);
-            self.get_entity().set_pose(EntityPose::Sitting);
+            self.mob_entity.living_entity.make_sound(if self.husk {
+                Sound::EntityCamelHuskSit
+            } else {
+                Sound::EntityCamelSit
+            });
+            self.set_camel_pose(EntityPose::Sitting);
+            self.emit_entity_action();
             self.set_last_pose_tick(-self.game_time());
         }
     }
 
     pub fn stand_up(&self) {
         if self.is_camel_sitting() {
-            self.mob_entity
-                .living_entity
-                .make_sound(Sound::EntityCamelStand);
-            self.get_entity().set_pose(EntityPose::Standing);
+            self.mob_entity.living_entity.make_sound(if self.husk {
+                Sound::EntityCamelHuskStand
+            } else {
+                Sound::EntityCamelStand
+            });
+            self.set_camel_pose(EntityPose::Standing);
+            self.emit_entity_action();
             self.set_last_pose_tick(self.game_time());
         }
     }
 
     /// Vanilla `Camel.standUpInstantly`: skips the getting-up animation.
     pub fn stand_up_instantly(&self) {
-        self.get_entity().set_pose(EntityPose::Standing);
+        self.set_camel_pose(EntityPose::Standing);
+        self.emit_entity_action();
         self.set_last_pose_tick((self.game_time() - STAND_UP_TICKS - 1).max(0));
     }
-}
 
-/// Vanilla `CamelAi.RandomSitting`: now and then a camel that has held its pose long enough sits
-/// down or gets up.
-struct CamelRandomSitGoal;
-
-impl Goal for CamelRandomSitGoal {
-    fn tick_reach(&self, _mob: &dyn Mob, _running: bool) -> Option<GoalReach> {
-        Some(GoalReach::default())
+    /// Vanilla `gameEvent(GameEvent.ENTITY_ACTION)`.
+    fn emit_entity_action(&self) {
+        let entity = self.get_entity();
+        entity.world.load().emit_game_event_with_context(
+            "entity_action",
+            entity.pos.load(),
+            &crate::world::game_event::GameEventContext {
+                source_entity: Some(self),
+            },
+        );
     }
 
-    fn can_start(&mut self, mob: &dyn Mob) -> bool {
-        let Some(camel) = mob.cast_any().downcast_ref::<CamelEntity>() else {
-            return false;
-        };
-        let entity = mob.get_entity();
-        mob.get_random()
-            .random_range(0..to_goal_ticks(SIT_CHOICE_INTERVAL))
-            == 0
-            && !entity.is_in_water()
-            && camel.pose_time() >= MIN_POSE_TICKS
-            && !entity.is_leashed()
-            && entity.on_ground.load(Ordering::Relaxed)
-            && !entity.has_passengers()
-    }
-
-    fn should_continue(&mut self, _mob: &dyn Mob) -> bool {
-        false
-    }
-
-    fn start(&mut self, mob: &dyn Mob) {
-        let Some(camel) = mob.cast_any().downcast_ref::<CamelEntity>() else {
-            return;
-        };
-        if camel.is_camel_sitting() {
-            camel.stand_up();
-        } else if !mob.is_panicking() {
-            camel.sit_down();
+    /// Vanilla `Camel.getDefaultDimensions`: an adult sitting camel is 1.43 blocks lower. Babies
+    /// keep their box, since this server does not scale babies.
+    fn camel_dimensions(&self, pose: EntityPose) -> EntityDimensions {
+        let entity = self.get_entity();
+        let standing = Entity::type_dimensions(entity.entity_type);
+        if pose == EntityPose::Sitting && !self.is_baby() {
+            EntityDimensions::new(
+                standing.width,
+                standing.height - SITTING_HEIGHT_DIFFERENCE,
+                ADULT_SITTING_EYE_HEIGHT,
+            )
+        } else {
+            standing
         }
     }
 
-    fn controls(&self) -> Controls {
-        Controls::MOVE
+    /// Vanilla `setPose` followed by `refreshDimensions` with the camel's sitting box.
+    fn set_camel_pose(&self, pose: EntityPose) {
+        let entity = self.get_entity();
+        entity.set_pose_keep_dimensions(pose);
+        let dimensions = self.camel_dimensions(pose);
+        let pos = entity.pos.load();
+        entity
+            .bounding_box
+            .store(BoundingBox::new_from_pos(pos.x, pos.y, pos.z, &dimensions));
+        entity.entity_dimension.store(dimensions);
+    }
+
+    /// Vanilla `Camel.canCamelChangePose`: the box of the other pose is free of blocks.
+    #[must_use]
+    pub fn can_camel_change_pose(&self) -> bool {
+        let entity = self.get_entity();
+        let target = if self.is_camel_sitting() {
+            EntityPose::Standing
+        } else {
+            EntityPose::Sitting
+        };
+        let pos = entity.pos.load();
+        let bounding_box =
+            BoundingBox::new_from_pos(pos.x, pos.y, pos.z, &self.camel_dimensions(target));
+        entity.world.load().is_space_empty(bounding_box)
+    }
+
+    /// Vanilla `AbstractHorse.isMobControlled` (false) and `CamelHusk.isMobControlled`: a camel
+    /// husk is steered by the mob riding in front.
+    #[must_use]
+    pub fn is_mob_controlled(&self) -> bool {
+        self.husk
+            && self
+                .get_entity()
+                .passengers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .first()
+                .is_some_and(|passenger| passenger.get_mob().is_some())
+    }
+}
+
+/// Vanilla `Camel.CamelMoveControl`: a sitting camel told to walk gets up first, unless leashed.
+struct CamelMoveControl(MoveControl);
+
+impl Control for CamelMoveControl {}
+
+impl MoveControlTrait for CamelMoveControl {
+    fn tick(&mut self, mob: &dyn Mob) {
+        if self.0.operation == Operation::MoveTo
+            && !mob.get_entity().is_leashed()
+            && let Some(camel) = mob.cast_any().downcast_ref::<CamelEntity>()
+            && camel.is_camel_sitting()
+            && !camel.is_in_pose_transition()
+            && camel.can_camel_change_pose()
+        {
+            camel.stand_up();
+        }
+        self.0.tick(mob);
+    }
+
+    fn set_wanted_position(&mut self, x: f64, y: f64, z: f64, speed_modifier: f64) {
+        self.0.set_wanted_position(x, y, z, speed_modifier);
+    }
+
+    fn strafe(&mut self, forward: f32, right: f32) {
+        self.0.strafe(forward, right);
+    }
+
+    fn has_wanted(&self) -> bool {
+        self.0.has_wanted()
+    }
+
+    fn wanted_position(&self) -> Option<Vector3<f64>> {
+        MoveControlTrait::wanted_position(&self.0)
+    }
+}
+
+/// Vanilla `Camel.CamelLookControl`: no head turning while someone steers it.
+struct CamelLookControl(LookControl);
+
+impl Control for CamelLookControl {}
+
+impl LookControlTrait for CamelLookControl {
+    fn tick(&mut self, mob: &dyn Mob) {
+        if mob.mob_controlling_passenger().is_none() {
+            LookControlTrait::tick(&mut self.0, mob);
+        }
+    }
+
+    fn look_at_with_range(
+        &mut self,
+        x: f64,
+        y: f64,
+        z: f64,
+        max_yaw_change: f32,
+        max_pitch_change: f32,
+    ) {
+        LookControlTrait::look_at_with_range(
+            &mut self.0,
+            x,
+            y,
+            z,
+            max_yaw_change,
+            max_pitch_change,
+        );
     }
 }
 
@@ -310,7 +402,7 @@ impl Animal for CamelEntity {
 }
 
 impl Mob for CamelEntity {
-    fn mob_controlling_passenger(&self) -> Option<std::sync::Arc<dyn crate::entity::EntityBase>> {
+    fn mob_controlling_passenger(&self) -> Option<Arc<dyn EntityBase>> {
         crate::entity::mob::saddled_player_controller(self.get_entity(), self.is_saddled()).or_else(
             || {
                 crate::entity::mob::mob_rider_controller(
@@ -321,47 +413,25 @@ impl Mob for CamelEntity {
         )
     }
 
-    fn travel(&self, _caller: &dyn crate::entity::EntityBase) -> bool {
+    fn travel(&self, _caller: &dyn EntityBase) -> bool {
         crate::entity::mob::player_steers(self)
     }
 
-    /// Vanilla `Camel.canJump`: not while sitting or getting up.
+    /// Vanilla `Camel.canJump`: not while sitting or getting up, or before the last dash's
+    /// cooldown is over.
     fn can_rider_jump(&self) -> bool {
         self.is_saddled()
             && !self.refuse_to_move()
             && self.dash_cooldown.load(Ordering::Relaxed) <= 0
     }
 
-    /// Vanilla `Camel.handleStartJump` with its `executeRidersJump` bookkeeping: the dash sound,
-    /// the dash flag others see, and the cooldown.
+    /// Vanilla `Camel.handleStartJump`: the dash sound, and the dash flag others see, which
+    /// starts the cooldown.
     fn handle_start_jump(&self, _power: i32) {
         self.mob_entity
             .living_entity
             .make_sound(Sound::EntityCamelDash);
-        self.dash_cooldown
-            .store(DASH_COOLDOWN_TICKS, Ordering::Relaxed);
         self.set_dashing(true);
-    }
-
-    /// Vanilla `Camel.tick`: the cooldown runs down, with a sound when the camel can dash
-    /// again, and the dash ends once it is back on the ground.
-    fn mob_tick(&self, _caller: &dyn crate::entity::EntityBase) {
-        let cooldown = self.dash_cooldown.load(Ordering::Relaxed);
-        if cooldown > 0 {
-            self.dash_cooldown.store(cooldown - 1, Ordering::Relaxed);
-            if cooldown == 1 {
-                self.mob_entity
-                    .living_entity
-                    .make_sound(Sound::EntityCamelDashReady);
-            }
-        }
-        let entity = self.get_entity();
-        if self.is_dashing()
-            && cooldown < DASH_COOLDOWN_TICKS - 5
-            && (entity.on_ground.load(Ordering::Relaxed) || entity.is_in_water())
-        {
-            self.set_dashing(false);
-        }
     }
 
     fn get_sound_volume(&self) -> f32 {
@@ -402,6 +472,57 @@ impl Mob for CamelEntity {
         self.husk
     }
 
+    /// Vanilla `CamelHusk.canBeLeashed`.
+    fn can_be_leashed(&self) -> bool {
+        !self.is_mob_controlled()
+    }
+
+    fn get_max_head_rotation(&self) -> f32 {
+        MAX_HEAD_Y_ROT
+    }
+
+    fn make_brain(&self, packed: &PackedMemories) -> Brain {
+        ai::make_brain(self, packed)
+    }
+
+    /// Vanilla `PathfinderMob.isPanicking`: the brain's `is_panicking` memory.
+    fn mob_is_panicking(&self) -> bool {
+        self.mob_entity
+            .try_with_brain(self, |brain| {
+                brain.has_memory_value(types::IS_PANICKING.id())
+            })
+            .unwrap_or(false)
+    }
+
+    /// Vanilla `Camel.tick`: the dash ends on landing and its cooldown counts down.
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let entity = self.get_entity();
+        if self.is_dashing()
+            && self.dash_cooldown.load(Ordering::Relaxed) < 50
+            && (entity.on_ground.load(Ordering::Relaxed)
+                || entity.is_in_water()
+                || entity.touching_lava.load(Ordering::Relaxed)
+                || entity.has_vehicle())
+        {
+            self.set_dashing(false);
+        }
+        let cooldown = self.dash_cooldown.load(Ordering::Relaxed);
+        if cooldown > 0 {
+            self.dash_cooldown.store(cooldown - 1, Ordering::Relaxed);
+            if cooldown == 1 {
+                entity.world.load().play_sound(
+                    if self.husk {
+                        Sound::EntityCamelHuskDashReady
+                    } else {
+                        Sound::EntityCamelDashReady
+                    },
+                    SoundCategory::Neutral,
+                    &entity.block_pos.load().to_f64(),
+                );
+            }
+        }
+    }
+
     fn spawn_as_baby(&self) -> bool {
         !self.husk && {
             self.set_baby(true);
@@ -435,17 +556,20 @@ impl Mob for CamelEntity {
         }
         if let Some(pose_tick) = nbt.get_long("LastPoseTick") {
             if pose_tick < 0 {
-                self.get_entity().set_pose(EntityPose::Sitting);
+                self.set_camel_pose(EntityPose::Sitting);
             }
             self.set_last_pose_tick(pose_tick);
         }
     }
 
-    /// Vanilla `Camel.customServerAiStep` and `travel`: a sitting camel, or one sitting down or
-    /// getting up, stays put; water or panic gets it up at once.
+    /// Vanilla `Camel.customServerAiStep` (the brain, then `CamelAi.updateActivity`), the water
+    /// check of `Camel.tick`, and `travel`: a sitting camel, or one sitting down or getting up,
+    /// stays put.
     fn custom_server_ai_step(&self, _caller: &dyn EntityBase) {
+        self.mob_entity.tick_brain(self);
+        ai::update_activity(self);
         let entity = self.get_entity();
-        if self.is_camel_sitting() && (entity.is_in_water() || self.is_panicking()) {
+        if self.is_camel_sitting() && entity.is_in_water() {
             self.stand_up_instantly();
         }
         if self.refuse_to_move() && entity.on_ground.load(Ordering::Relaxed) {

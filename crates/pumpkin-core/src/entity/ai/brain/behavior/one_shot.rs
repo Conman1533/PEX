@@ -49,6 +49,11 @@ impl OneShot {
     fn fire(&mut self, tick: &mut BrainTick<'_>) -> bool {
         tick.state.check_all(&self.conditions) && (self.trigger)(tick)
     }
+
+    /// This behaviour as one of a `trigger_gate`'s triggers (vanilla `OneShot` as a `Trigger`).
+    pub fn into_trigger(mut self) -> Trigger {
+        Box::new(move |tick| self.fire(tick))
+    }
 }
 
 impl BehaviorControl for OneShot {

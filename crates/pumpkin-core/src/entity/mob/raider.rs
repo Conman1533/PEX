@@ -126,8 +126,27 @@ pub trait Raider: PatrollingMonster {
         if let Some(can_join) = nbt.get_bool("CanJoinRaid") {
             data.can_join_raid.store(can_join, Ordering::Relaxed);
         }
+        // Vanilla `Raider.readAdditionalSaveData`: a raider loaded with a raid id joins that raid's
+        // wave again, or forgets the id when the raid is gone.
         if let Some(raid_id) = nbt.get_int("RaidId") {
-            data.raid_id.store(Some(raid_id));
+            let entity = &self.get_mob_entity().living_entity.entity;
+            let world = entity.world.load();
+            let mut raids = world
+                .raids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let raid = raids.get_mut(raid_id);
+            data.raid_id.store(raid.is_some().then_some(raid_id));
+            if let Some(raid) = raid {
+                let wave = data.wave.load(Ordering::Relaxed);
+                raid.group_raider_map
+                    .entry(wave)
+                    .or_default()
+                    .insert(entity.entity_uuid);
+                if self.is_patrol_leader() {
+                    raid.group_to_leader_map.insert(wave, entity.entity_uuid);
+                }
+            }
         }
     }
 }
@@ -376,3 +395,49 @@ impl Goal for RaiderMoveThroughVillageGoal {
 }
 
 pub use crate::entity::ai::goal::pathfind_to_raid::PathfindToRaidGoal;
+
+#[cfg(test)]
+mod tests {
+    use pumpkin_util::difficulty::Difficulty;
+    use pumpkin_util::math::position::BlockPos;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::entity::r#type::from_type;
+    use crate::world::raid::Raid;
+
+    /// Vanilla `Raider.readAdditionalSaveData`: a raider loaded with `RaidId` joins that raid's
+    /// wave again, and one whose raid is gone forgets the id.
+    #[tokio::test]
+    async fn a_loaded_raider_rejoins_its_raid_or_forgets_a_missing_one() {
+        let world = crate::world::test_world();
+        world
+            .raids
+            .lock()
+            .unwrap()
+            .raid_map
+            .insert(2, Raid::new(2, BlockPos::new(0, 64, 0), Difficulty::Normal));
+        for (raid_id, joins) in [(2, true), (9, false)] {
+            let uuid = Uuid::new_v4();
+            let entity = from_type(
+                &EntityType::PILLAGER,
+                Vector3::new(0.5, 64.0, 0.5),
+                &world,
+                uuid,
+            );
+            let mut nbt = NbtCompound::new();
+            nbt.put_int("Wave", 3);
+            nbt.put_int("RaidId", raid_id);
+            entity.read_nbt_non_mut(&nbt);
+
+            let raider = entity.get_mob().unwrap().as_raider().unwrap();
+            assert_eq!(
+                raider.get_raider_data().raid_id.load(),
+                joins.then_some(raid_id)
+            );
+            let raids = world.raids.lock().unwrap();
+            let wave = raids.get(2).unwrap().group_raider_map.get(&3);
+            assert_eq!(wave.is_some_and(|wave| wave.contains(&uuid)), joins);
+        }
+    }
+}
