@@ -272,7 +272,6 @@ dimensions/minecraft/*/region/*.mca Status ticking; first run: step 1: 28 change
 level.dat Data.Time ticking; first run: step 1: 1 changed
 
 # Step 7, the fixture bot visit (G7-21): what is left in the player file belongs to other pieces.
-players/data/*.dat Statistics G7-22; PEX keeps its statistics in the player file: step 7: 1 added
 players/data/*.dat Inventory* G7-23; item components PEX drops or rewrites: step 7
 players/data/*.dat EnderItems* G7-23; item components PEX drops or rewrites: step 7
 players/data/*.dat TicksFrozen G7-24; Entity::write_nbt writes it when 0: step 7: 1 added
