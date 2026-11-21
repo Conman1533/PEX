@@ -628,10 +628,24 @@ impl TrackedEntity {
                 .map(|p| VarInt(p.get_entity().entity_id))
                 .collect();
             let packet = CSetPassengers::new(VarInt(self.entity_id), &passenger_ids);
-            if let ClientPlatform::Java(client) = player.client.as_ref()
-                && let Ok(data) = client.serialize_packet(&packet)
-            {
-                client.try_enqueue_packet(data);
+            match player.client.as_ref() {
+                ClientPlatform::Java(client) => {
+                    if let Ok(data) = client.serialize_packet(&packet) {
+                        client.try_enqueue_packet(data);
+                    }
+                }
+                ClientPlatform::Bedrock(client) => {
+                    for (seat, passenger) in passengers.iter().enumerate() {
+                        let link = self.entity.get_entity().bedrock_ride_link(
+                            passenger.get_entity().entity_id,
+                            Some(seat),
+                            true,
+                        );
+                        if let Ok(data) = client.serialize_packet(&link) {
+                            client.try_enqueue_packet(data);
+                        }
+                    }
+                }
             }
         }
 
@@ -645,10 +659,27 @@ impl TrackedEntity {
                 .collect();
             let packet =
                 CSetPassengers::new(VarInt(vehicle.get_entity().entity_id), &passenger_ids);
-            if let ClientPlatform::Java(client) = player.client.as_ref()
-                && let Ok(data) = client.serialize_packet(&packet)
-            {
-                client.try_enqueue_packet(data);
+            match player.client.as_ref() {
+                ClientPlatform::Java(client) => {
+                    if let Ok(data) = client.serialize_packet(&packet) {
+                        client.try_enqueue_packet(data);
+                    }
+                }
+                ClientPlatform::Bedrock(client) => {
+                    let seat = vehicle_passengers
+                        .iter()
+                        .position(|p| p.get_entity().entity_id == self.entity_id);
+                    if let Some(seat) = seat {
+                        let link = vehicle.get_entity().bedrock_ride_link(
+                            self.entity_id,
+                            Some(seat),
+                            true,
+                        );
+                        if let Ok(data) = client.serialize_packet(&link) {
+                            client.try_enqueue_packet(data);
+                        }
+                    }
+                }
             }
         }
 
@@ -659,6 +690,30 @@ impl TrackedEntity {
             && let ClientPlatform::Java(client) = player.client.as_ref()
         {
             let packet = CSetEntityLink::new(self.entity_id, holder.get_entity().entity_id, true);
+            if let Ok(data) = client.serialize_packet(&packet) {
+                client.try_enqueue_packet(data);
+            }
+        }
+        // Bedrock draws the lead from `LEASH_HOLDER` actor data.
+        if let Ok(holder_guard) = self.entity.get_entity().leashed_to.try_lock()
+            && let Some(holder) = holder_guard.as_ref()
+            && let ClientPlatform::Bedrock(client) = player.client.as_ref()
+        {
+            use pumpkin_protocol::bedrock::client::set_actor_data::{
+                CSetActorData, MetadataValue, PropertySyncData, SyncedActorDataList,
+                entity_data_key,
+            };
+            let mut actor_data = SyncedActorDataList::new();
+            actor_data.set(
+                entity_data_key::LEASH_HOLDER,
+                MetadataValue::Int64(i64::from(holder.get_entity().entity_id)),
+            );
+            let packet = CSetActorData {
+                target_runtime_id: VarULong(self.entity_id as u64),
+                actor_data,
+                synced_properties: PropertySyncData::default(),
+                tick: VarULong(0),
+            };
             if let Ok(data) = client.serialize_packet(&packet) {
                 client.try_enqueue_packet(data);
             }

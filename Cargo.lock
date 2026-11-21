@@ -3456,22 +3456,29 @@ dependencies = [
 name = "pumpkin-tester"
 version = "0.2.1+26.3-26.60"
 dependencies = [
+ "async-trait",
+ "base64 0.23.1",
  "bytes",
+ "pumpkin-auth",
  "pumpkin-config",
  "pumpkin-core",
  "pumpkin-data",
  "pumpkin-gametest",
+ "pumpkin-inventory",
  "pumpkin-nbt",
  "pumpkin-protocol",
  "pumpkin-util",
  "pumpkin-world",
+ "rand 0.10.3",
  "rayon",
  "rustls",
  "serde_json",
  "tempfile",
  "tokio",
  "tokio-util",
+ "tracing-subscriber",
  "uuid",
+ "webrtc",
 ]
 
 [[package]]

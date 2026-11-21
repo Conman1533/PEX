@@ -57,10 +57,7 @@ use pumpkin_world::world::BlockFlags;
 
 use crate::{
     block::{BlockHitResult, registry::BlockActionResult},
-    entity::{
-        EntityBase,
-        player::{MINE_BLOCK_EXHAUSTION, Player},
-    },
+    entity::{EntityBase, player::Player},
     net::{DisconnectReason, bedrock::BedrockClient},
     plugin::player::{
         item_held::PlayerItemHeldEvent,
@@ -75,8 +72,6 @@ use crate::{
 };
 use pumpkin_data::BlockDirection;
 use tracing::{debug, info};
-
-const MIN_PREDICTED_BREAK_PROGRESS: f32 = 0.65;
 
 fn descriptor_to_stack(desc: &NetworkItemDescriptor) -> ItemStack {
     if desc.id.0 == 0 || desc.stack_size == 0 {

@@ -19,7 +19,8 @@ impl BedrockClient {
             return;
         }
         let entity = player.get_entity();
-        let on_ground = packet.input_data.get(InputData::VerticalCollision as usize)
+        let input_data = &packet.input_data;
+        let on_ground = input_data.get(InputData::VerticalCollision as usize)
             && packet.delta.y < 0.0
             && !entity.has_vehicle();
         entity.on_ground.store(on_ground, Ordering::Relaxed);
@@ -82,32 +83,47 @@ impl BedrockClient {
 
             if pos_changed {
                 chunker::update_position(player);
+                Self::apply_movement_effects(player, delta, on_ground);
                 player.check_location_enchantments(new_pos, on_ground);
                 player.progress_motion(delta);
             }
         }
 
+        if input_data.get(InputData::StartJumping as usize) && !entity.has_vehicle() {
+            player.jump();
+        }
+
+        // Fall distance builds up while falling and is applied on landing, as for Java players
+        // in `handle_position`.
+        let flying = player
+            .abilities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .flying;
+        if !flying && !entity.has_vehicle() {
+            player
+                .living_entity
+                .fall(player.as_ref(), new_pos.y - old_pos.y, on_ground);
+        }
+
         crate::entity::client_push::send_bedrock_client_push(player, packet.delta.to_f64());
 
-        let input_data = packet.input_data;
-
         if input_data.get(InputData::StartSprinting as usize) {
-            player.set_sprinting(true);
+            player.set_sprinting_from_bedrock(server, true);
         } else if input_data.get(InputData::StopSprinting as usize) {
-            player.set_sprinting(false);
+            player.set_sprinting_from_bedrock(server, false);
         }
 
         if input_data.get(InputData::StartSneaking as usize) {
-            entity.set_sneaking(true);
-            player.update_bedrock_shield_sneaking();
+            player.set_sneaking_from_bedrock(server, true);
         } else if input_data.get(InputData::StopSneaking as usize) {
-            entity.set_sneaking(false);
-            player.update_bedrock_shield_sneaking();
+            player.set_sneaking_from_bedrock(server, false);
         }
 
-        if input_data.get(InputData::StartCrawling as usize) {
-            entity.set_pose(EntityPose::Swimming);
-        } else if input_data.get(InputData::StopCrawling as usize) {
+        // The server decides the pose from the space around the player, as for Java players.
+        if input_data.get(InputData::StartCrawling as usize)
+            || input_data.get(InputData::StopCrawling as usize)
+        {
             player.update_player_pose();
         }
 
@@ -180,6 +196,12 @@ impl BedrockClient {
             }
         }
 
+        // Java clients send their held movement keys in `PlayerInput`; minecarts and other
+        // server-driven vehicles read them from here.
+        player
+            .last_input
+            .store(Self::java_input_bits(input_data), Ordering::Relaxed);
+
         if entity.has_vehicle() {
             let paddling_left = input_data.get(InputData::PaddlingLeft as usize);
             let paddling_right = input_data.get(InputData::PaddlingRight as usize);
@@ -190,6 +212,7 @@ impl BedrockClient {
                 .clone();
             if let Some(vehicle) = vehicle {
                 vehicle.set_paddle_state(paddling_left, paddling_right);
+                Self::steer_vehicle(player, &vehicle, &packet, new_pos.sub(&old_pos));
             }
         }
 
@@ -197,6 +220,113 @@ impl BedrockClient {
             for action in &block_actions {
                 self.handle_player_block_action(player, server, action);
             }
+        }
+    }
+
+    /// The Java `PlayerInput` bits for the keys a Bedrock client reports held.
+    fn java_input_bits(input_data: &pumpkin_protocol::codec::bitset::Bitset<66>) -> i8 {
+        use pumpkin_protocol::java::server::play::SPlayerInput;
+        let held = |flag: InputData| input_data.get(flag as usize);
+        let mut bits = 0;
+        for (flags, bit) in [
+            (
+                [InputData::Up, InputData::UpLeft, InputData::UpRight],
+                SPlayerInput::FORWARD,
+            ),
+            (
+                [InputData::Down, InputData::DownLeft, InputData::DownRight],
+                SPlayerInput::BACKWARD,
+            ),
+            (
+                [InputData::Left, InputData::UpLeft, InputData::DownLeft],
+                SPlayerInput::LEFT,
+            ),
+            (
+                [InputData::Right, InputData::UpRight, InputData::DownRight],
+                SPlayerInput::RIGHT,
+            ),
+        ] {
+            if flags.into_iter().any(held) {
+                bits |= bit;
+            }
+        }
+        for (flag, bit) in [
+            (InputData::Jumping, SPlayerInput::JUMP),
+            (InputData::Sneaking, SPlayerInput::SNEAK),
+            (InputData::Sprinting, SPlayerInput::SPRINT),
+        ] {
+            if held(flag) {
+                bits |= bit;
+            }
+        }
+        bits
+    }
+
+    /// A Bedrock driver moves its vehicle itself and says so with `ClientPredictedVehicle`, as a
+    /// Java driver does with `MoveVehicle`: the vehicle follows the rider's move and takes the
+    /// rotation the client predicted. Only the passenger in control moves it.
+    fn steer_vehicle(
+        player: &Arc<Player>,
+        vehicle: &Arc<dyn EntityBase>,
+        packet: &SPlayerAuthInput,
+        movement: pumpkin_util::math::vector3::Vector3<f64>,
+    ) {
+        let vehicle_entity = vehicle.get_entity();
+        let predicted = packet
+            .vehicle_unique_id
+            .as_ref()
+            .is_some_and(|id| id.0 == i64::from(vehicle_entity.entity_id));
+        // Mobs decide who steers them (a saddle, a carrot on a stick); other vehicles take the
+        // first passenger, as vanilla's boats and minecarts do.
+        let controller = vehicle.get_controlling_passenger().or_else(|| {
+            if vehicle.get_living_entity().is_some() {
+                return None;
+            }
+            vehicle_entity
+                .passengers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .first()
+                .cloned()
+        });
+        let in_control =
+            controller.is_some_and(|rider| rider.get_entity().entity_id == player.entity_id());
+        if !predicted || !in_control {
+            return;
+        }
+        if movement.length_squared() > 0.0 {
+            vehicle_entity.set_pos(vehicle_entity.pos.load().add(&movement));
+        }
+        if let Some(rotation) = packet.vehicle_rotation {
+            // Pitch, then yaw, as in `AddActor`.
+            vehicle_entity.set_rotation(rotation.y, rotation.x);
+        }
+    }
+
+    /// What a Java player's move does besides moving: statistics, game events (footstep
+    /// vibrations), ending an elytra flight on landing, and resetting the idle timer.
+    fn apply_movement_effects(
+        player: &Arc<Player>,
+        movement: pumpkin_util::math::vector3::Vector3<f64>,
+        on_ground: bool,
+    ) {
+        let entity = player.get_entity();
+        let cm = (movement.length() * 100.0) as i32;
+        if cm > 0 {
+            player.increment_stat(
+                pumpkin_data::statistic::StatisticCategory::Custom,
+                player.get_movement_statistic() as i32,
+                cm,
+            );
+        }
+        if movement.length_squared() < 64.0 {
+            entity.emit_movement_events(player.as_ref(), movement);
+        }
+        if on_ground && entity.is_fall_flying() {
+            entity.set_fall_flying(false);
+        }
+        if movement.length_squared() > 1.0E-5 {
+            player.update_last_action_time();
         }
     }
 }
