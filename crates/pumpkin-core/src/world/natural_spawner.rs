@@ -3,6 +3,7 @@ use crate::entity::EntityBase;
 use crate::entity::mob::spawn::finalize_spawn;
 use crate::entity::r#type::{check_spawn_rules, from_type};
 use crate::world::World;
+use crate::world::brightness::light_level_curve;
 use arc_swap::ArcSwap;
 use crossbeam::atomic::AtomicCell;
 use dashmap::DashMap;
@@ -10,12 +11,14 @@ use pumpkin_data::biome::Spawner;
 use pumpkin_data::chunk::Biome;
 use pumpkin_data::dimension::Dimension;
 use pumpkin_data::entity::{EntityType, MobCategory, SpawnLocation};
+use pumpkin_data::tag;
 use pumpkin_data::tag::Block::MINECRAFT_PREVENT_MOB_SPAWNING_INSIDE;
 use pumpkin_data::tag::Fluid::{MINECRAFT_LAVA, MINECRAFT_WATER};
 use pumpkin_data::tag::Taggable;
 use pumpkin_data::tag::WorldgenBiome::MINECRAFT_REDUCE_WATER_AMBIENT_SPAWNS;
 use pumpkin_data::{Block, BlockDirection, BlockState, SpawnFloorPredicate};
 use pumpkin_util::GameMode;
+use pumpkin_util::math::boundingbox::BoundingBox;
 use pumpkin_util::math::get_section_cord;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector2::Vector2;
@@ -24,7 +27,6 @@ use pumpkin_util::random::xoroshiro128::Xoroshiro;
 use pumpkin_util::random::{RandomImpl, get_seed};
 use pumpkin_world::chunk::{ChunkData, ChunkHeightmapType};
 use pumpkin_world::generation::proto_chunk::GenerationCache;
-use rand::seq::IndexedRandom;
 use rand::{RngExt, rng};
 use rayon::prelude::*;
 use std::fmt;
@@ -578,7 +580,7 @@ pub fn spawn_mobs_for_chunk_generation(
     chunk_z: i32,
 ) {
     let mob_settings = &biome.spawners;
-    let creatures = &mob_settings.creature;
+    let creatures = mob_settings.creature;
 
     if creatures.is_empty() || !world.level_info.load().game_rules.spawn_mobs {
         return;
@@ -588,7 +590,7 @@ pub fn spawn_mobs_for_chunk_generation(
     let zo = chunk_z << 4;
 
     while rand::random::<f32>() < biome.creature_spawn_probability {
-        let Some(spawner_data) = creatures.choose(&mut rand::rng()) else {
+        let Some(spawner_data) = pick_weighted(creatures) else {
             continue;
         };
 
@@ -599,7 +601,7 @@ pub fn spawn_mobs_for_chunk_generation(
             .strip_prefix("minecraft:")
             .unwrap_or(spawner_data.r#type);
         let Some(entity_type) = EntityType::from_name(name) else {
-            return;
+            continue;
         };
 
         let mut x = xo + rand::random_range(0..16);
@@ -627,12 +629,18 @@ pub fn spawn_mobs_for_chunk_generation(
                     let spawn_pos_f64 = Vector3::new(fx, f64::from(pos.0.y), fz);
                     let check_pos = BlockPos::new(fx.floor() as i32, pos.0.y, fz.floor() as i32);
 
-                    if world.is_space_empty(entity_type.get_spawn_bounding_box(
-                        fx,
-                        f64::from(pos.0.y),
-                        fz,
-                    )) && check_spawn_rules(entity_type, world, &check_pos, false)
+                    // The chunk isn't in the world yet, so these read the generation cache, like
+                    // vanilla's `WorldGenRegion`. A failure here retries the same column: vanilla
+                    // `continue`s past the step below.
+                    if !no_block_collision_in_cache(
+                        cache,
+                        &entity_type.get_spawn_bounding_box(fx, f64::from(pos.0.y), fz),
+                    ) || !check_generation_spawn_rules(entity_type, world, cache, &check_pos)
                     {
+                        continue;
+                    }
+
+                    if generation_walk_target_ok(entity_type, world, cache, &check_pos) {
                         let entity = from_type(entity_type, spawn_pos_f64, world, Uuid::new_v4());
                         entity
                             .get_entity()
@@ -659,6 +667,159 @@ pub fn spawn_mobs_for_chunk_generation(
             }
         }
     }
+}
+
+/// Vanilla `WeightedList.getRandom`: an entry chosen by weight, or none when the weights sum to 0.
+#[must_use]
+pub fn pick_weighted(spawners: &'static [Spawner]) -> Option<&'static Spawner> {
+    let total: u32 = spawners.iter().map(|spawner| spawner.weight).sum();
+    if total == 0 {
+        return None;
+    }
+    let mut roll = rng().random_range(0..total);
+    for spawner in spawners {
+        if roll < spawner.weight {
+            return Some(spawner);
+        }
+        roll -= spawner.weight;
+    }
+    None
+}
+
+fn generation_block(cache: &dyn GenerationCache, pos: &BlockPos) -> &'static Block {
+    Block::from_state_id(GenerationCache::get_block_state(cache, &pos.0))
+}
+
+/// Raw brightness in a chunk being generated. Vanilla `WorldGenRegion` has no sky darkening, so
+/// this is the larger of the sky and block light.
+fn generation_raw_brightness(cache: &dyn GenerationCache, pos: &BlockPos) -> u8 {
+    let Some(chunk) = cache.get_chunk(pos.0.x >> 4, pos.0.z >> 4) else {
+        return 0;
+    };
+    let Ok(dy) = usize::try_from(pos.0.y - i32::from(chunk.bottom_y())) else {
+        return 0;
+    };
+    let (x, y, z) = ((pos.0.x & 15) as usize, dy % 16, (pos.0.z & 15) as usize);
+    let section = dy / 16;
+    let sky = chunk
+        .light
+        .sky_light
+        .get(section)
+        .map_or(15, |light| light.get(x, y, z));
+    let block = chunk
+        .light
+        .block_light
+        .get(section)
+        .map_or(0, |light| light.get(x, y, z));
+    sky.max(block)
+}
+
+/// Vanilla `noCollision(aabb)` on a `WorldGenRegion`: block shapes only, as the region has no
+/// entities.
+fn no_block_collision_in_cache(cache: &dyn GenerationCache, bounding_box: &BoundingBox) -> bool {
+    BlockPos::iterate(bounding_box.min_block_pos(), bounding_box.max_block_pos()).all(|pos| {
+        let state = GenerationCache::get_block_state(cache, &pos.0).to_state();
+        !World::check_collision(bounding_box, pos, state, false, |_| ())
+    })
+}
+
+/// Vanilla `SpawnPlacements.checkSpawnRules` with `CHUNK_GENERATION` for the creatures a biome
+/// lists, read from the chunk being generated.
+fn check_generation_spawn_rules(
+    entity_type: &'static EntityType,
+    world: &World,
+    cache: &dyn GenerationCache,
+    pos: &BlockPos,
+) -> bool {
+    let id = entity_type.id;
+
+    if id == EntityType::STRIDER.id {
+        let top = world.min_y + world.dimension.height;
+        let mut check_pos = *pos;
+        while check_pos.0.y < top
+            && cache
+                .get_fluid_and_fluid_state(&check_pos.0)
+                .0
+                .has_tag(&MINECRAFT_LAVA)
+        {
+            check_pos = check_pos.up();
+        }
+        return generation_block(cache, &check_pos).is_air();
+    }
+
+    let below = generation_block(cache, &pos.down());
+    let bright = generation_raw_brightness(cache, pos) > 8;
+
+    if id == EntityType::TURTLE.id {
+        return pos.0.y < world.sea_level + 4
+            && below.has_tag(&tag::Block::MINECRAFT_SAND)
+            && bright;
+    }
+    if id == EntityType::POLAR_BEAR.id
+        && cache
+            .get_biome_for_terrain_gen(pos.0.x, pos.0.y, pos.0.z)
+            .has_tag(&tag::WorldgenBiome::MINECRAFT_POLAR_BEARS_SPAWN_ON_ALTERNATE_BLOCKS)
+    {
+        return bright && below.has_tag(&tag::Block::MINECRAFT_POLAR_BEARS_SPAWNABLE_ON_ALTERNATE);
+    }
+
+    let floor = if id == EntityType::ARMADILLO.id {
+        &tag::Block::MINECRAFT_ARMADILLO_SPAWNABLE_ON
+    } else if id == EntityType::CAMEL.id {
+        &tag::Block::MINECRAFT_CAMELS_SPAWNABLE_ON
+    } else if id == EntityType::FROG.id {
+        &tag::Block::MINECRAFT_FROGS_SPAWNABLE_ON
+    } else if id == EntityType::GOAT.id {
+        &tag::Block::MINECRAFT_GOATS_SPAWNABLE_ON
+    } else if id == EntityType::MOOSHROOM.id {
+        &tag::Block::MINECRAFT_MOOSHROOMS_SPAWNABLE_ON
+    } else if id == EntityType::PARROT.id {
+        &tag::Block::MINECRAFT_PARROTS_SPAWNABLE_ON
+    } else if id == EntityType::RABBIT.id {
+        &tag::Block::MINECRAFT_RABBITS_SPAWNABLE_ON
+    } else if id == EntityType::WOLF.id {
+        &tag::Block::MINECRAFT_WOLVES_SPAWNABLE_ON
+    } else if id == EntityType::FOX.id {
+        &tag::Block::MINECRAFT_FOXES_SPAWNABLE_ON
+    } else {
+        // Chicken, cow, donkey, horse, llama, panda, pig, sheep and polar bears elsewhere use
+        // `Animal.checkAnimalSpawnRules`.
+        &tag::Block::MINECRAFT_ANIMALS_SPAWNABLE_ON
+    };
+    below.has_tag(floor) && bright
+}
+
+/// Vanilla `Mob.checkSpawnRules`: the walk target value at the spawn is not negative. Animals
+/// score 10 on grass (mooshrooms on mycelium, turtles on sand or in water) and the light curve
+/// minus 0.5 elsewhere; a strider out of lava scores 0.
+fn generation_walk_target_ok(
+    entity_type: &'static EntityType,
+    world: &World,
+    cache: &dyn GenerationCache,
+    pos: &BlockPos,
+) -> bool {
+    let id = entity_type.id;
+    if id == EntityType::STRIDER.id {
+        return true;
+    }
+    let below = generation_block(cache, &pos.down());
+    let favourite = if id == EntityType::MOOSHROOM.id {
+        below == &Block::MYCELIUM
+    } else if id == EntityType::TURTLE.id {
+        cache
+            .get_fluid_and_fluid_state(&pos.0)
+            .0
+            .has_tag(&MINECRAFT_WATER)
+            || below.has_tag(&tag::Block::MINECRAFT_SAND)
+    } else {
+        below == &Block::GRASS_BLOCK
+    };
+    favourite
+        || light_level_curve(
+            generation_raw_brightness(cache, pos),
+            world.dimension.ambient_light,
+        ) - 0.5
+            >= 0.0
 }
 
 pub fn get_top_non_colliding_pos(
@@ -963,7 +1124,7 @@ pub fn get_random_spawn_mob_at(
     {
         None
     } else {
-        match category.id {
+        pick_weighted(match category.id {
             id if id == MobCategory::MONSTER.id => biome.spawners.monster,
             id if id == MobCategory::CREATURE.id => biome.spawners.creature,
             id if id == MobCategory::AMBIENT.id => biome.spawners.ambient,
@@ -975,8 +1136,7 @@ pub fn get_random_spawn_mob_at(
             id if id == MobCategory::WATER_AMBIENT.id => biome.spawners.water_ambient,
             id if id == MobCategory::MISC.id => biome.spawners.misc,
             _ => biome.spawners.misc,
-        }
-        .choose(&mut rng())
+        })
     }
 }
 
@@ -1163,6 +1323,47 @@ fn is_burning_block(block: &Block) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn weight_of(list: &[Spawner], name: &str) -> Option<u32> {
+        list.iter()
+            .find(|spawner| spawner.r#type == name)
+            .map(|spawner| spawner.weight)
+    }
+
+    #[test]
+    fn spawn_lists_keep_their_vanilla_weights() {
+        let plains = &Biome::PLAINS.spawners;
+        assert_eq!(weight_of(plains.monster, "minecraft:enderman"), Some(10));
+        assert_eq!(weight_of(plains.monster, "minecraft:zombie"), Some(90));
+        assert_eq!(weight_of(plains.monster, "minecraft:witch"), Some(5));
+        assert_eq!(weight_of(plains.creature, "minecraft:sheep"), Some(12));
+        assert_eq!(weight_of(plains.creature, "minecraft:cow"), Some(8));
+    }
+
+    #[test]
+    fn spawn_picks_follow_the_weights() {
+        let monsters = Biome::PLAINS.spawners.monster;
+        let total: u32 = monsters.iter().map(|spawner| spawner.weight).sum();
+        let picks = 200_000u32;
+        let endermen = (0..picks)
+            .filter(|_| {
+                pick_weighted(monsters)
+                    .is_some_and(|spawner| spawner.r#type == "minecraft:enderman")
+            })
+            .count();
+        let expected = 10.0 / f64::from(total);
+        let share = endermen as f64 / f64::from(picks);
+        assert!(
+            (share - expected).abs() < 0.005,
+            "endermen were {share:.4} of picks, vanilla weights give {expected:.4}"
+        );
+    }
+
+    #[test]
+    fn an_empty_or_weightless_list_picks_nothing() {
+        static NONE: [Spawner; 0] = [];
+        assert!(pick_weighted(&NONE).is_none());
+    }
 
     #[test]
     fn potential_change_is_finite_beyond_i32_range() {
