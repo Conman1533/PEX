@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `12839a028`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `7a7de1ddd`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -17,13 +17,13 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
-| G5 Redstone | 16 | 4 | 5 | 7 | |
-| G6 Survival | 31 | 15 | 0 | 14 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
-| G7 Worlds | 32 | 27 | 0 | 5 | |
+| G5 Redstone | 16 | 5 | 5 | 6 | |
+| G6 Survival | 31 | 16 | 1 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 201 | 81 | 6 | 98 | 16 |
+| Total | 201 | 84 | 7 | 94 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -53,6 +53,8 @@ Landing batch 8 (2026-11-21) also carried, outside the pieces: `fix/portal-exit-
 Landing batch 9 (2026-11-21) also carried, outside the pieces: `fix/bedrock-riding` (`df3af4ddf`) from the Bedrock thread (players steer saddled mounts and item-steered mobs on both editions; its later rider jumps follow in batch 10), the Bedrock OIDC key test's timing made robust on a busy machine, the attack cooldown bot test retrying a case whose punch the server handled a tick late, and the eat bot test printing the server player's food, saturation, exhaustion and item use each tick when the food level comes out wrong, to catch the Windows eat flake.
 
 Landing batch 10 (2026-11-21) also carried, outside the pieces: the Bedrock thread's `fix/bedrock-riding` up to BP2-09 (`194c88ad5`: rider jumps, a horse rearing and a camel dashing on both editions, plus strider, camel, happy ghast and minecart checks), `pumpkin:armadillo_rolls_up_near_zombie` walled in so the idle armadillo's strolls stay in the box the test checks, and the root cause of the Windows eat flake: an earlier test's chicken drops were picked up into hotbar slot 0 and eaten instead of the bread, so the bot tests now clear dropped items before they empty the bot's inventory and the eat test checks it holds bread. Flakes to watch from five extra Windows runs (each gate run passed): `armadillo_rolls_up_near_zombie` still scared at tick 901 once, `camel_follows_cactus` with the camel outside its box at tick 601 once, and one hang in `bedrock:mixed_play` after the Nether portal fills, before the respawn check, which needs a tick cap.
+
+Landing batch 11 (2026-11-21) also carried, outside the pieces: the Bedrock thread's `fix/bedrock-held-item-use` (BP2-10, `ebdca5db6`: a Bedrock client's release of a held food no longer cancels the meal before the server's eating timer finishes, and 23 Bedrock item-use bot checks), and `pumpkin:camel_follows_cactus` walled in like the armadillo test, sharing a `build_pen_wall` helper. The forceload GameTest was first listed as a mock-player test, which overflowed the tester's 18 mob test cells; it now sits with the plain tests, and the next real mob or mock-player GameTest needs the creeper test made persistent or more cells. `pumpkin:cow_follows_wheat_and_panics_when_hit` failed once on CT 117 (the cow still in its box at tick 141, last seen 2026-11-04) and passed on the rerun.
 
 What holds 2.0 back:
 
@@ -1732,6 +1734,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
 - Branch: fix/sticky-piston-retract
 - Needs decision: none
 - Done when: `pumpkin:redstone/sticky_piston_pulls_north`, `pumpkin:redstone/sticky_piston_spits_on_short_pulse` and `pumpkin:redstone/sticky_piston_pulls_moving_block` fail on alpha and pass on both.
+- Status (2026-11-21): landed (branch `fix/sticky-piston-retract`, second lane, with G5-08's branch merged in). Sticky pistons retract like vanilla `PistonBaseBlock.triggerEvent` and `checkIfExtend`: they pull their block back, drop it on a pulse too short to finish, and pull a block that is still moving. The GameTests `pumpkin:redstone/sticky_piston_pulls_north`, `sticky_piston_spits_on_short_pulse` and `sticky_piston_pulls_moving_block` fail on `alpha` and pass, and the other piston GameTests still pass. This is the sticky piston that lost its planks after a lever on and off in the agent harness, which now passes all 33 of its piston checks on `793bd7ee0` (every direction and the spit) against 32 on `alpha` `fee100da1`, where the north-facing pull lost its block. Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G5-08 Piston activation and push bounds
 
@@ -2160,7 +2163,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/execute-terminal-conditions
 - Needs decision: none
 - Done when: from the console on PEX and vanilla 26.3, `execute if block 0 -64 0 minecraft:bedrock`, `execute unless block 0 -64 0 minecraft:bedrock`, `execute if entity @e[type=minecraft:pig]` with two pigs and `execute if blocks` with a copy print the same lines; a unit test per condition kind beside `add_conditionals_accept_single_score_holders`.
-- Status (2026-11-21): added by the 2.0 loop after the agent harness found `execute ... if block <pos> <block>` with no `run` answers "Unknown or incomplete command" on `alpha` `7b3ae93e3`; vanilla answers "Test passed".
+- Status (2026-11-21): built, proof missing (branch `fix/execute-terminal-conditions`, second lane). All 22 non-score `if`/`unless` conditions can end the command and answer "Test passed" or vanilla's fail message, with the count for `entity` and `blocks`; unit test `every_condition_can_end_the_command` fails on `alpha` and passes. Missing: the side-by-side console run against vanilla, and `if blocks` compares block types instead of block states and skips block entities, which vanilla compares. Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G6-31 forceload add loads the chunks at once
 
@@ -2169,7 +2172,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/forceload-sync
 - Needs decision: none
 - Done when: from the console, `forceload add 400 400` then `setblock 400 100 400 minecraft:stone` in the next command succeeds every time on PEX, as on vanilla 26.3; a test that runs the two commands back to back 20 times.
-- Status (2026-11-21): added by the 2.0 loop after the agent harness, and a console check on the batch 9 binary, saw `fill` and `setblock` right after `forceload add` answer "That position is not loaded" for several tries on `alpha` `7b3ae93e3`.
+- Status (2026-11-21): landed (branch `fix/forceload-sync`, second lane). `forceload add` loads its chunks before it answers, so the next command finds them loaded. The GameTest `pumpkin:commands/forceload_add_loads_before_answering` fails on `alpha` and passes. Like vanilla it holds the command until the chunks exist, so ungenerated chunks hold it for their generation: 9 fresh Nether chunks took about 16 s on the ThinkPad (a G9 note: check whether that wait stalls the whole tick). Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 ### Proof
 
@@ -2520,6 +2523,7 @@ Neon answered three questions on 2026-10-29 for the earlier roadmap (`git -C /sr
 - Branch: fix/custom-data-per-dimension
 - Needs decision: D7-5
 - Done when: different data in the overworld and the Nether both survive a restart, and plugin data passes through vanilla as D7-5 says.
+- Status (2026-11-21): landed (branch `fix/custom-data-per-dimension`, second lane). Each dimension keeps its own `pumpkin_custom_data.nbt`, and the Overworld takes over the old file at the world root. It also fixed a bug on `alpha`: the file was written as named NBT but read back unnamed, so plugin world data never survived a restart. Unit tests `each_dimension_keeps_its_own_plugin_data` and `the_overworld_takes_over_the_old_root_file`; the `persistent_data` module doc says that vanilla drops this data, as D7-5 chose. Landed through merge branch `land/g7-batch-11` (`7a7de1ddd`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G7-30 Take session.lock
 
