@@ -14,6 +14,7 @@ use pumpkin_auth::p384::{
     pkcs8::EncodePublicKey,
 };
 use pumpkin_core::net::bedrock::level_chunk::CLevelChunk;
+use pumpkin_data::item_stack::ItemStack;
 use pumpkin_protocol::{
     RawPacket,
     bedrock::{
@@ -35,6 +36,7 @@ use pumpkin_protocol::{
             update_attributes::CUpdateAttributes,
             update_block::CUpdateBlock,
         },
+        network_item::NetworkItemDescriptor,
         packet_decoder::BedrockBatchDecoder,
         packet_encoder::BedrockBatchEncoder,
         server::{
@@ -86,6 +88,8 @@ pub const LINK_RIDER: u8 = 1;
 pub const LINK_PASSENGER: u8 = 2;
 /// `Interact`, and its `StopRiding` action.
 const INTERACT_ID: i32 = 33;
+/// `InventoryTransaction`.
+const INVENTORY_TRANSACTION_ID: i32 = 30;
 const INTERACT_STOP_RIDING: u8 = 3;
 /// `TextPacketType::Chat`.
 const TEXT_TYPE_CHAT: u8 = 1;
@@ -679,6 +683,55 @@ impl BedrockBot {
             .find(|(_, link_rider, _)| *link_rider == rider)
             .filter(|(_, _, link_type)| *link_type != LINK_REMOVE)
             .map(|(ridden, _, link_type)| (*ridden, *link_type))
+    }
+
+    /// Clicks `face` of `block` with hotbar slot `slot`, as a real client's `UseItem` inventory
+    /// transaction: `in_hand` is the item the client says it holds, and `actions` are its
+    /// predicted inventory changes as (slot, old, new).
+    pub async fn use_item_on_block(
+        &self,
+        block: BlockPos,
+        face: u8,
+        slot: i32,
+        in_hand: &ItemStack,
+        actions: &[(u32, ItemStack, ItemStack)],
+    ) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            // No legacy request, no legacy slots, transaction type `UseItem`.
+            VarInt(0).write(payload)?;
+            false.write(payload)?;
+            VarUInt(2).write(payload)?;
+            VarUInt(actions.len() as u32).write(payload)?;
+            for (slot, old, new) in actions {
+                // From a container: the player inventory, window 0, no source flags.
+                VarUInt(0).write(payload)?;
+                true.write(payload)?;
+                0i8.write(payload)?;
+                false.write(payload)?;
+                VarUInt(*slot).write(payload)?;
+                NetworkItemDescriptor::from(old).write(payload)?;
+                NetworkItemDescriptor::from(new).write(payload)?;
+            }
+            // Click block, triggered by player input.
+            VarInt(0).write(payload)?;
+            1u8.write(payload)?;
+            block.write(payload)?;
+            face.write(payload)?;
+            VarInt(slot).write(payload)?;
+            // Main hand.
+            0u8.write(payload)?;
+            NetworkItemDescriptor::from(in_hand).write(payload)?;
+            self.position.write(payload)?;
+            // Where on the face it clicked, then the clicked block's runtime id (unused), a
+            // successful client prediction and no cooldown.
+            Vector3::new(0.5f32, 1.0, 0.5).write(payload)?;
+            VarUInt(0).write(payload)?;
+            1u8.write(payload)?;
+            0u8.write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(INVENTORY_TRANSACTION_ID, &payload).await
     }
 
     /// Asks to get off the vehicle, as the dismount button does.

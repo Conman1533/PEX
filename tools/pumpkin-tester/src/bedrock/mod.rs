@@ -14,7 +14,12 @@ use pumpkin_core::{
     net::bedrock::BedrockClient,
     server::Server,
 };
-use pumpkin_data::entity::{EntityPose, EntityType};
+use pumpkin_data::{
+    Block,
+    entity::{EntityPose, EntityType},
+    item::Item,
+    item_stack::ItemStack,
+};
 use pumpkin_protocol::{
     bedrock::{
         client::set_actor_data::{entity_data_flag, entity_data_key},
@@ -528,6 +533,7 @@ async fn run_mixed_play(
     // Before `run_block_checks`, which puts both players in creative.
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_survival_break_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_place_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -1532,6 +1538,204 @@ async fn run_no_break_checks(
             },
         );
     }
+    Ok(())
+}
+
+/// Survival placing from Bedrock, with the packets a real client sends: the client's own guess
+/// at its inventory comes along, and the server must go by its inventory instead.
+async fn run_place_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    run_console(server, &format!("op {BEDROCK_NAME}"));
+    run_console(server, &format!("gamemode survival {BEDROCK_NAME}"));
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    run_console(server, &format!("give {BEDROCK_NAME} dirt 10"));
+
+    // A stone two blocks beside the Bedrock bot, away from the Java bot, to place on top of, and
+    // one out of reach.
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java.position.x > f64::from(bedrock.position.x) {
+        -1.0
+    } else {
+        1.0
+    };
+    let beside = |blocks: f64| {
+        BlockPos::floored(
+            f64::from(bedrock.position.x) + side * blocks,
+            feet,
+            f64::from(bedrock.position.z),
+        )
+    };
+    let (support, far_support) = (beside(2.0), beside(9.0));
+    let (placed, far_placed) = (support.up(), far_support.up());
+    let setblock = |pos: BlockPos, block: &str| {
+        run_console(
+            server,
+            &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+        );
+    };
+    for pos in [support, far_support] {
+        setblock(pos, "stone");
+    }
+    for pos in [placed, far_placed] {
+        setblock(pos, "air");
+    }
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let held = || bedrock_player.inventory().held_item();
+    if held().item.id != Item::DIRT.id || held().item_count != 10 {
+        return Err("the Bedrock bot is not holding the 10 dirt it was given".to_string());
+    }
+
+    // The client predicts 10 dirt going to 9; the server takes its own one, not a second.
+    let dirt = |count| ItemStack::new(count, &Item::DIRT);
+    bedrock
+        .use_item_on_block(support, 1, 0, &dirt(10), &[(0, dirt(10), dirt(9))])
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    checks.record(
+        "bedrock places a block and loses one item",
+        if world.get_block(&placed).id != Block::DIRT.id {
+            Err("no dirt was placed".to_string())
+        } else if held().item_count == 9 {
+            Ok(())
+        } else {
+            Err(format!("{} dirt left of 10", held().item_count))
+        },
+    );
+    checks.record(
+        "java sees bedrock place a block",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a block update for the placed dirt on the Java bot",
+            |_, java| {
+                java.is_some_and(|java| {
+                    java.block_updates
+                        .iter()
+                        .any(|(pos, state)| *pos == placed && *state != 0)
+                })
+            },
+        )
+        .await,
+    );
+
+    let spots = PlaceSpots {
+        support,
+        placed,
+        far_support,
+        far_placed,
+    };
+    run_refused_place_checks(server, bedrock, java, checks, &spots).await
+}
+
+/// Where `run_place_checks` places: on top of `support` within reach, and on top of
+/// `far_support` out of reach.
+#[derive(Clone, Copy)]
+struct PlaceSpots {
+    support: BlockPos,
+    placed: BlockPos,
+    far_support: BlockPos,
+    far_placed: BlockPos,
+}
+
+/// Places the server must refuse: out of reach, and with a stack the client only claims.
+async fn run_refused_place_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    spots: &PlaceSpots,
+) -> Result<(), String> {
+    let PlaceSpots {
+        support,
+        placed,
+        far_support,
+        far_placed,
+    } = *spots;
+    let bedrock_player = server
+        .server
+        .get_player_by_name(BEDROCK_NAME)
+        .ok_or("the Bedrock bot is not on the server")?;
+    let world = bedrock_player.world();
+    let held = || bedrock_player.inventory().held_item();
+    let dirt = |count| ItemStack::new(count, &Item::DIRT);
+    let setblock = |pos: BlockPos, block: &str| {
+        run_console(
+            server,
+            &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+        );
+    };
+
+    // Out of reach: nothing is placed, and the client's predicted block is taken back.
+    let seen = bedrock.block_updates.len();
+    bedrock
+        .use_item_on_block(far_support, 1, 0, &dirt(9), &[(0, dirt(9), dirt(8))])
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let taken_back = bedrock.block_updates[seen..]
+        .iter()
+        .any(|(pos, _)| *pos == far_placed);
+    checks.record(
+        "a bedrock place out of reach is undone",
+        if !world.get_block_state(&far_placed).is_air() {
+            Err("a block was placed out of reach".to_string())
+        } else if !taken_back {
+            Err("the Bedrock bot was not sent the block back".to_string())
+        } else if held().item_count != 9 {
+            Err(format!("{} dirt left of 9", held().item_count))
+        } else {
+            Ok(())
+        },
+    );
+
+    // A client claiming a stack it doesn't have gets nothing.
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    setblock(placed, "air");
+    tick(server, bedrock, Some(&mut *java)).await?;
+    let diamonds = ItemStack::new(64, &Item::DIAMOND_BLOCK);
+    bedrock
+        .use_item_on_block(
+            support,
+            1,
+            0,
+            &diamonds,
+            &[(0, ItemStack::EMPTY.clone(), diamonds.clone())],
+        )
+        .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    checks.record(
+        "bedrock can't place an item it doesn't hold",
+        if !world.get_block_state(&placed).is_air() {
+            Err("the claimed block was placed".to_string())
+        } else if !held().is_empty() {
+            Err("the claimed stack ended up in the inventory".to_string())
+        } else {
+            Ok(())
+        },
+    );
+
+    run_console(server, &format!("clear {BEDROCK_NAME}"));
+    for pos in [support, far_support, placed, far_placed] {
+        setblock(pos, "air");
+    }
+    tick(server, bedrock, Some(&mut *java)).await?;
     Ok(())
 }
 
