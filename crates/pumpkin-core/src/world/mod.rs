@@ -2432,6 +2432,37 @@ impl World {
         }
     }
 
+    /// Runs a scheduled block tick, like vanilla `ServerLevel.tickBlock`: only while the block it
+    /// was scheduled for is still at its position.
+    fn run_block_tick(self: &Arc<Self>, tick: &pumpkin_world::tick::OrderedTick<&'static Block>) {
+        let pos = tick.position;
+        let block = self.get_block(&pos);
+        if block.id != tick.value.id {
+            return;
+        }
+        if let Some(pumpkin_block) = self.block_registry.get_pumpkin_block(block.id) {
+            pumpkin_block.on_scheduled_tick(OnScheduledTickArgs {
+                world: self,
+                block,
+                position: &pos,
+            });
+        }
+    }
+
+    /// Runs a scheduled fluid tick, like vanilla `ServerLevel.tickFluid`: only while the fluid it
+    /// was scheduled for is still at its position. PEX reads every fluid as its flowing form
+    /// ([`Self::get_fluid`]), so source and flowing count as the same fluid.
+    fn run_fluid_tick(self: &Arc<Self>, tick: &pumpkin_world::tick::OrderedTick<&'static Fluid>) {
+        let pos = tick.position;
+        let fluid = self.get_fluid(&pos);
+        if fluid.to_flowing().id != tick.value.to_flowing().id {
+            return;
+        }
+        if let Some(pumpkin_fluid) = self.block_registry.get_pumpkin_fluid(fluid.id) {
+            pumpkin_fluid.on_scheduled_tick(self, fluid, &pos);
+        }
+    }
+
     #[expect(clippy::too_many_lines)]
     pub fn tick_chunks(self: &Arc<Self>, server: &Arc<Server>) {
         const BATCH_SIZE: usize = 32;
@@ -2456,15 +2487,7 @@ impl World {
                 let _guard = block_handle.enter();
                 let world = world.clone();
                 for scheduled_tick in batch {
-                    let pos = scheduled_tick.position;
-                    let block = world.get_block(&pos);
-                    if let Some(pumpkin_block) = world.block_registry.get_pumpkin_block(block.id) {
-                        pumpkin_block.on_scheduled_tick(OnScheduledTickArgs {
-                            world: &world,
-                            block,
-                            position: &pos,
-                        });
-                    }
+                    world.run_block_tick(scheduled_tick);
                 }
             });
 
@@ -2478,11 +2501,7 @@ impl World {
                 let _guard = fluid_handle.enter();
                 let world = world.clone();
                 for scheduled_tick in batch {
-                    let pos = scheduled_tick.position;
-                    let fluid = world.get_fluid(&pos);
-                    if let Some(pumpkin_fluid) = world.block_registry.get_pumpkin_fluid(fluid.id) {
-                        pumpkin_fluid.on_scheduled_tick(&world, fluid, &pos);
-                    }
+                    world.run_fluid_tick(scheduled_tick);
                 }
             });
 
@@ -8215,6 +8234,27 @@ pub(crate) fn test_world() -> Arc<World> {
     ))
 }
 
+/// [`test_world`] with PEX's block and fluid behaviours registered.
+#[cfg(test)]
+pub(crate) fn test_world_with_blocks() -> Arc<World> {
+    let path = tempfile::tempdir().expect("temp dir").keep();
+    let level = pumpkin_world::dimension::into_level(
+        Dimension::OVERWORLD,
+        &pumpkin_config::world::LevelConfig::default(),
+        path,
+        0,
+    );
+    Arc::new(World::load(
+        level,
+        Arc::new(ArcSwap::from_pointee(LevelData::default(
+            pumpkin_util::world_seed::Seed(0),
+        ))),
+        Dimension::OVERWORLD,
+        crate::block::registry::default_registry(),
+        Weak::new(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use pumpkin_data::{
@@ -8229,6 +8269,67 @@ mod tests {
     use super::{
         World, bedrock_block_breaking_rate, bedrock_chest_block_actor, merge_entity_records,
     };
+
+    fn world_with_chunk() -> std::sync::Arc<World> {
+        let world = super::test_world_with_blocks();
+        world.level.loaded_chunks.insert(
+            pumpkin_util::math::vector2::Vector2::new(0, 0),
+            pumpkin_world::chunk::ChunkData::empty_sync(0, 0),
+        );
+        world
+    }
+
+    /// G5-02: a tick scheduled for a lamp doesn't run for the observer that replaced it, like
+    /// vanilla `ServerLevel.tickBlock`. The observer's own tick still pulses it.
+    #[tokio::test]
+    async fn a_block_tick_skips_a_replaced_block() {
+        use pumpkin_data::block_properties::ObserverLikeProperties;
+        use pumpkin_world::tick::OrderedTick;
+        use pumpkin_world::world::BlockFlags;
+
+        let world = world_with_chunk();
+        let pos = BlockPos::new(4, 64, 4);
+        world.set_block_state(&pos, Block::OBSERVER.default_state.id, BlockFlags::empty());
+        let powered =
+            || ObserverLikeProperties::from_state_id(world.get_block_state(&pos).id).powered;
+
+        world.run_block_tick(&OrderedTick::new(pos, &Block::REDSTONE_LAMP));
+        assert!(!powered(), "the lamp's tick pulsed the observer");
+
+        world.run_block_tick(&OrderedTick::new(pos, &Block::OBSERVER));
+        assert!(powered(), "the observer's own tick runs");
+    }
+
+    /// G5-02: a tick scheduled for water doesn't run for lava now in its place
+    /// (`ServerLevel.tickFluid`). Lava's own tick spreads it.
+    #[tokio::test]
+    async fn a_fluid_tick_skips_a_replaced_fluid() {
+        use pumpkin_data::BlockDirection;
+        use pumpkin_world::tick::OrderedTick;
+        use pumpkin_world::world::BlockFlags;
+
+        let world = world_with_chunk();
+        let pos = BlockPos::new(4, 64, 4);
+        world.set_block_state(&pos, Block::LAVA.default_state.id, BlockFlags::empty());
+        let spread = || {
+            [
+                BlockDirection::Down,
+                BlockDirection::North,
+                BlockDirection::South,
+                BlockDirection::West,
+                BlockDirection::East,
+            ]
+            .into_iter()
+            .filter(|direction| world.get_block(&pos.offset(direction.to_offset())) == &Block::LAVA)
+            .count()
+        };
+
+        world.run_fluid_tick(&OrderedTick::new(pos, &Fluid::WATER));
+        assert_eq!(spread(), 0, "the water tick ran for the lava");
+
+        world.run_fluid_tick(&OrderedTick::new(pos, &Fluid::LAVA));
+        assert!(spread() > 0, "the lava's own tick spreads it");
+    }
 
     fn record(uuid: Option<Uuid>, id: &str) -> NbtCompound {
         let mut nbt = NbtCompound::new();
