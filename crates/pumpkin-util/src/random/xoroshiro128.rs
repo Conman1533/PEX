@@ -67,6 +67,18 @@ impl Xoroshiro {
         }
     }
 
+    /// A generator that continues from saved state words.
+    #[must_use]
+    pub const fn from_state(lo: u64, hi: u64) -> Self {
+        Self::new(lo, hi)
+    }
+
+    /// The two state words, low first, as vanilla's `Xoroshiro128PlusPlus.CODEC` saves them.
+    #[must_use]
+    pub const fn state(&self) -> (u64, u64) {
+        (self.lo, self.hi)
+    }
+
     /// Mixes a 64-bit seed into two 64-bit state words.
     ///
     /// This uses the golden ratio constants to produce two distinct

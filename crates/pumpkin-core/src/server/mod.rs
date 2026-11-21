@@ -33,12 +33,14 @@ use pumpkin_world::generation::generator::GeneratorInit;
 use pumpkin_world::world::WorldPortalExt;
 use tracing::{debug, error, info, warn};
 
+use crate::entity::player::DATA_VERSION;
 use pumpkin_protocol::java::client::login::CEncryptionRequest;
 use pumpkin_protocol::java::client::play::{CChangeDifficulty, CTabList};
 use pumpkin_protocol::{ClientPacket, java::client::config::CPluginMessage};
 use pumpkin_util::Difficulty;
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world_info::anvil::{AnvilLevelInfo, LEVEL_DAT_FILE_NAME};
+use pumpkin_world::world_info::data_files::{read_data_file, write_data_file};
 use pumpkin_world::world_info::{LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter};
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
@@ -163,6 +165,10 @@ pub struct Server {
     pub level_info: Arc<ArcSwap<LevelData>>,
     world_info_writer: Arc<dyn WorldInfoWriter>,
 }
+
+const CUSTOM_BOSS_EVENTS: &str = "custom_boss_events.dat";
+const RANDOM_SEQUENCES: &str = "random_sequences.dat";
+const STOPWATCHES: &str = "stopwatches.dat";
 
 impl Server {
     #[expect(clippy::too_many_lines)]
@@ -304,14 +310,24 @@ impl Server {
             bedrock_oidc_keys: Arc::new(OnceCell::new()),
             listing,
             branding: CachedBranding::new(),
-            bossbars: std::sync::Mutex::new(CustomBossbars::new()),
+            bossbars: std::sync::Mutex::new(
+                read_data_file(&world_path, CUSTOM_BOSS_EVENTS)
+                    .map(|data| CustomBossbars::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
             map_manager: MapManager::new(),
             defaultgamemode,
             player_data_storage,
             command_storage: std::sync::Mutex::new(std::collections::HashMap::new()),
-            stopwatches: std::sync::Mutex::new(crate::world::stopwatches::Stopwatches::new()),
+            stopwatches: std::sync::Mutex::new(
+                read_data_file(&world_path, STOPWATCHES)
+                    .map(|data| crate::world::stopwatches::Stopwatches::from_nbt(&data))
+                    .unwrap_or_default(),
+            ),
             random_sequences: std::sync::Mutex::new(
-                crate::world::random_sequences::RandomSequences::new(),
+                read_data_file(&world_path, RANDOM_SEQUENCES)
+                    .map(|data| crate::world::random_sequences::RandomSequences::from_nbt(&data))
+                    .unwrap_or_default(),
             ),
             advancement_manager,
             white_list,
@@ -626,6 +642,39 @@ impl Server {
         self.datapack_manager.is_feature_enabled(self, feature)
     }
 
+    /// Writes the server-wide saved data files vanilla keeps in the overworld's `data/minecraft/`.
+    fn save_server_saved_data(&self) {
+        let world_path = self.basic_config.get_world_path();
+        let files = [
+            (
+                CUSTOM_BOSS_EVENTS,
+                self.bossbars
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+            (
+                RANDOM_SEQUENCES,
+                self.random_sequences
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+            (
+                STOPWATCHES,
+                self.stopwatches
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .to_nbt(),
+            ),
+        ];
+        for (name, data) in files {
+            if let Err(err) = write_data_file(&world_path, name, DATA_VERSION, data) {
+                error!("Failed to save {name}: {err}");
+            }
+        }
+    }
+
     pub async fn save_all(&self) -> Result<(), String> {
         self.management_hub.broadcast_server_saving();
 
@@ -645,6 +694,7 @@ impl Server {
         for world in self.worlds.load().iter() {
             world.save().await;
         }
+        self.save_server_saved_data();
 
         self.management_hub.broadcast_server_saved();
 
@@ -847,6 +897,7 @@ impl Server {
         {
             error!("Failed to save level.dat: {err}");
         }
+        self.save_server_saved_data();
         info!("Completed worlds");
     }
 
