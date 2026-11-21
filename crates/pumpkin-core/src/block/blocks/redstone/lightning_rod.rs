@@ -8,7 +8,7 @@ use crate::block::{
 use crate::world::World;
 use pumpkin_data::block_properties::LightningRodLikeProperties;
 use pumpkin_data::fluid::Fluid;
-use pumpkin_data::{BlockState, BlockStateId, FacingExt};
+use pumpkin_data::{Block, BlockState, BlockStateId, FacingExt};
 use pumpkin_macros::pumpkin_block_from_tag;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_world::tick::TickPriority;
@@ -25,18 +25,24 @@ impl LightningRodBlock {
             props.powered = true;
             world.set_block_state(pos, props.to_state_id(block), BlockFlags::NOTIFY_ALL);
 
-            Self::update_neighbors(world, pos, props);
+            Self::update_neighbors(world, pos, block, props);
 
             // In vanilla, it stays powered for 8 ticks (4 redstone ticks) before scheduled tick turns it off.
             world.schedule_block_tick(block, *pos, 8, TickPriority::Normal);
         }
     }
 
-    fn update_neighbors(world: &Arc<World>, pos: &BlockPos, props: LightningRodLikeProperties) {
-        world.update_neighbors(pos, None);
+    /// Vanilla `LightningRodBlock.updateNeighbours`: only the neighbours of the block it is
+    /// attached to (the rod's own come from the `setBlock`), with the rod as the source.
+    fn update_neighbors(
+        world: &Arc<World>,
+        pos: &BlockPos,
+        rod: &Block,
+        props: LightningRodLikeProperties,
+    ) {
         // The block it is attached to is in the opposite of the facing direction
         let attached_pos = pos.offset(props.facing.opposite().to_block_direction().to_offset());
-        world.update_neighbors(&attached_pos, None);
+        world.update_neighbors_at(&attached_pos, rod, None);
     }
 }
 
@@ -93,7 +99,7 @@ impl BlockBehaviour for LightningRodBlock {
                 props.to_state_id(args.block),
                 BlockFlags::NOTIFY_ALL,
             );
-            Self::update_neighbors(args.world, args.position, props);
+            Self::update_neighbors(args.world, args.position, args.block, props);
         }
     }
 
@@ -105,7 +111,7 @@ impl BlockBehaviour for LightningRodBlock {
         if !args.moved {
             let props = LightningRodLikeProperties::from_state_id(args.old_state_id);
             if props.powered {
-                Self::update_neighbors(args.world, args.position, props);
+                Self::update_neighbors(args.world, args.position, args.block, props);
             }
         }
     }

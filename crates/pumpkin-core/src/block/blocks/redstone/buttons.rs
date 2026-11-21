@@ -64,7 +64,7 @@ fn click_button(player: &Player, world: &Arc<World>, block_pos: &BlockPos) -> bo
         30
     };
     world.schedule_block_tick(block, *block_pos, delay, TickPriority::Normal);
-    ButtonBlock::update_neighbors(world, block_pos, button_props);
+    ButtonBlock::update_neighbors(world, block_pos, block, button_props);
     // The client predicts the press sound, so exclude the pressing player.
     world.play_block_sound_expect(
         player,
@@ -98,7 +98,7 @@ impl BlockBehaviour for ButtonBlock {
                 props.to_state_id(args.block),
                 BlockFlags::NOTIFY_ALL,
             );
-            Self::update_neighbors(args.world, args.position, props);
+            Self::update_neighbors(args.world, args.position, args.block, props);
             args.world.play_block_sound(
                 get_sound(args.block, false),
                 SoundCategory::Blocks,
@@ -129,7 +129,7 @@ impl BlockBehaviour for ButtonBlock {
         if !args.moved {
             let button_props = ButtonLikeProperties::from_state_id(args.old_state_id);
             if button_props.powered {
-                Self::update_neighbors(args.world, args.position, button_props);
+                Self::update_neighbors(args.world, args.position, args.block, button_props);
             }
         }
     }
@@ -194,15 +194,21 @@ impl ButtonBlock {
             30
         };
         world.schedule_block_tick(block, *block_pos, delay, TickPriority::Normal);
-        Self::update_neighbors(world, block_pos, button_props);
+        Self::update_neighbors(world, block_pos, block, button_props);
         world.play_block_sound(get_sound(block, true), SoundCategory::Blocks, *block_pos);
 
         true
     }
 
-    fn update_neighbors(world: &Arc<World>, block_pos: &BlockPos, props: ButtonLikeProperties) {
+    /// Vanilla `ButtonBlock.updateNeighbours`: the button is the source of both.
+    fn update_neighbors(
+        world: &Arc<World>,
+        block_pos: &BlockPos,
+        button: &Block,
+        props: ButtonLikeProperties,
+    ) {
         let direction = props.get_direction().opposite();
-        world.update_neighbors(block_pos, None);
-        world.update_neighbors(&block_pos.offset(direction.to_offset()), None);
+        world.update_neighbors_at(block_pos, button, None);
+        world.update_neighbors_at(&block_pos.offset(direction.to_offset()), button, None);
     }
 }

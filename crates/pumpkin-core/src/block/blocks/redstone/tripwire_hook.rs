@@ -311,8 +311,9 @@ impl TripwireHookBlock {
         direction: BlockDirection,
     ) {
         world.update_neighbor(&block_pos, block);
-        world.update_neighbors(
+        world.update_neighbors_at(
             &block_pos.offset(direction.opposite().to_offset()),
+            block,
             Some(direction),
         );
     }
