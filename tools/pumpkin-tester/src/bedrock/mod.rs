@@ -541,6 +541,7 @@ async fn run_mixed_play(
     run_chest_checks(server, bedrock, &mut java, &mut checks).await?;
     run_furnace_checks(server, bedrock, &mut java, &mut checks).await?;
     run_craft_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_combat_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
     run_command_checks(server, bedrock, &mut java, &mut checks).await?;
 
@@ -2219,6 +2220,160 @@ fn set_block(server: &BedrockTestServer, pos: BlockPos, block: &str) {
         server,
         &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
     );
+}
+
+/// Hits both ways between the editions, with Java's player-versus-player rules for Bedrock attackers: no hits
+/// from spectators, none on a creative player (`protect_creative`), none on oneself.
+async fn run_combat_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let player = |name: &str| {
+        server
+            .server
+            .get_player_by_name(name)
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    let (bedrock_player, java_player) = (player(BEDROCK_NAME)?, player(JAVA_NAME)?);
+    let java_runtime = bedrock
+        .player_runtime_id(JAVA_NAME)
+        .ok_or("the Bedrock bot has no runtime id for the Java player")?;
+    for name in [BEDROCK_NAME, JAVA_NAME] {
+        run_console(server, &format!("gamemode survival {name}"));
+        run_console(server, &format!("clear {name}"));
+    }
+    // Stand the Java bot within reach, beside the Bedrock bot.
+    let java_start = java.position;
+    let feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let side = if java_start.x > f64::from(bedrock.position.x) {
+        1.5
+    } else {
+        -1.5
+    };
+    java.move_to(
+        Vector3::new(
+            f64::from(bedrock.position.x) + side,
+            feet,
+            f64::from(bedrock.position.z),
+        ),
+        true,
+    )
+    .await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    let java_health = || java_player.living_entity.health.load();
+    // Each hit waits out the victim's hurt cooldown (10 ticks) first.
+    let settle = async |bedrock: &mut BedrockBot, java: &mut HeadlessBot| {
+        for _ in 0..12 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        Ok::<(), String>(())
+    };
+
+    let before = java_health();
+    bedrock.attack(java_runtime).await?;
+    settle(bedrock, java).await?;
+    checks.record(
+        "bedrock hits a java player",
+        if java_health() < before {
+            Ok(())
+        } else {
+            Err(format!("health stayed at {before}"))
+        },
+    );
+
+    let before = bedrock.health;
+    java.attack_entity(bedrock_player.entity_id()).await?;
+    checks.record(
+        "bedrock sees java hit it",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "a lower SetHealth on the Bedrock bot",
+            |bot, _| bot.health < before,
+        )
+        .await,
+    );
+    settle(bedrock, java).await?;
+
+    run_refused_hit_checks(server, bedrock, java, checks, java_runtime).await?;
+
+    for name in [BEDROCK_NAME, JAVA_NAME] {
+        run_console(server, &format!("effect give {name} instant_health 1 5"));
+    }
+    java.move_to(java_start, true).await?;
+    for _ in 0..3 {
+        tick(server, bedrock, Some(&mut *java)).await?;
+    }
+    Ok(())
+}
+
+/// Hits the server must refuse from Bedrock: as a spectator, on a creative player, on oneself.
+async fn run_refused_hit_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    java_runtime: u64,
+) -> Result<(), String> {
+    let player = |name: &str| {
+        server
+            .server
+            .get_player_by_name(name)
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    let (bedrock_player, java_player) = (player(BEDROCK_NAME)?, player(JAVA_NAME)?);
+    let bedrock_runtime = u64::try_from(bedrock_player.entity_id()).map_err(|e| e.to_string())?;
+    let java_health = || java_player.living_entity.health.load();
+    let bedrock_health = || bedrock_player.living_entity.health.load();
+    let settle = async |bedrock: &mut BedrockBot, java: &mut HeadlessBot| {
+        for _ in 0..12 {
+            tick(server, bedrock, Some(&mut *java)).await?;
+        }
+        Ok::<(), String>(())
+    };
+    for (mode, name) in [
+        ("spectator", "a spectator on bedrock can't hit"),
+        ("creative", "bedrock can't hit a creative player"),
+    ] {
+        let target = if mode == "spectator" {
+            BEDROCK_NAME
+        } else {
+            JAVA_NAME
+        };
+        run_console(server, &format!("gamemode {mode} {target}"));
+        settle(bedrock, java).await?;
+        let before = java_health();
+        bedrock.attack(java_runtime).await?;
+        settle(bedrock, java).await?;
+        checks.record(
+            name,
+            if java_health() < before {
+                Err(format!("health went from {before} to {}", java_health()))
+            } else {
+                Ok(())
+            },
+        );
+        run_console(server, &format!("gamemode survival {target}"));
+    }
+
+    let before = bedrock_health();
+    bedrock.attack(bedrock_runtime).await?;
+    settle(bedrock, java).await?;
+    checks.record(
+        "bedrock can't hit itself",
+        if bedrock_health() < before {
+            Err(format!("health went from {before} to {}", bedrock_health()))
+        } else {
+            Ok(())
+        },
+    );
+
+    Ok(())
 }
 
 /// One container block for `run_container_case`, and the names of its four checks.

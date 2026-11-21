@@ -752,6 +752,29 @@ impl BedrockBot {
             .await
     }
 
+    /// Hits the entity with this runtime id, as a real client's `UseItemOnEntity` attack
+    /// transaction with an empty hand.
+    pub async fn attack(&self, runtime_id: u64) -> Result<(), String> {
+        let mut payload = Vec::new();
+        let write = |payload: &mut Vec<u8>| -> std::io::Result<()> {
+            // No legacy request, no legacy slots, transaction type `UseItemOnEntity`, no actions.
+            VarInt(0).write(payload)?;
+            false.write(payload)?;
+            VarUInt(3).write(payload)?;
+            VarUInt(0).write(payload)?;
+            VarULong(runtime_id).write(payload)?;
+            // Attack, with hotbar slot 0 in the main hand.
+            VarInt(1).write(payload)?;
+            VarInt(0).write(payload)?;
+            0u8.write(payload)?;
+            NetworkItemDescriptor::from(&ItemStack::EMPTY.clone()).write(payload)?;
+            self.position.write(payload)?;
+            Vector3::new(0.0f32, 0.0, 0.0).write(payload)
+        };
+        write(&mut payload).map_err(|err| err.to_string())?;
+        self.send_raw(INVENTORY_TRANSACTION_ID, &payload).await
+    }
+
     /// Uses the item in hotbar slot `slot` without a block, as a real client's click-air
     /// `UseItem` transaction.
     pub async fn use_item_in_air(&self, slot: i32, in_hand: &ItemStack) -> Result<(), String> {
