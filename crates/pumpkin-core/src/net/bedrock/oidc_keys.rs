@@ -328,7 +328,14 @@ mod tests {
     async fn unknown_kid_refetches_once_per_interval() {
         let (old_key, new_key) = (signing_key(1), signing_key(2));
         let server = KeyServer::start(vec![jwk("old", &old_key)], false).await;
-        let keys = short_intervals(&server.config());
+        // The checks after each fetch must run within one refetch interval, so it is long enough
+        // for a loaded CI machine.
+        let keys = OidcKeys::with_intervals(
+            &server.config(),
+            Duration::from_millis(1500),
+            Duration::from_millis(50),
+            Duration::from_millis(200),
+        );
         keys.fetch_until_ready().await;
         assert!(verifies(
             keys.for_kid("old").await.as_ref(),
@@ -344,7 +351,7 @@ mod tests {
         ));
         assert_eq!(server.key_fetches.load(Ordering::SeqCst), 1);
 
-        tokio::time::sleep(Duration::from_millis(320)).await;
+        tokio::time::sleep(Duration::from_millis(1550)).await;
         assert!(verifies(
             keys.for_kid("new").await.as_ref(),
             &token("new", &new_key)
