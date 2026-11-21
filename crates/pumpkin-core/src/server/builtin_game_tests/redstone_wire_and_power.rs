@@ -1,8 +1,8 @@
 use pumpkin_data::{
     Block, BlockStateId,
     block_properties::{
-        EastRedstone, HorizontalFacing, NorthRedstone, RedstoneWireLikeProperties,
-        RepeaterLikeProperties, SouthRedstone, WestRedstone,
+        EastRedstone, HorizontalFacing, NorthRedstone, RedstoneOreLikeProperties,
+        RedstoneWireLikeProperties, RepeaterLikeProperties, SouthRedstone, WestRedstone,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -447,6 +447,70 @@ pub(super) async fn test_redstone_wire_strong_power_through_stone(
                 format!("Expected strong-powered stone block to energize wire to 15, got {out}"),
             )
         })
+        .then_succeed();
+    Ok(())
+}
+
+/// Roadmap G5-09: water washing a wire away runs vanilla `affectNeighborsAfterRemoval`. The wire
+/// on the floor powers a wire one step up on top of a lamp; that wire isn't next to the washed
+/// one, so only the corner updates tell it its power is gone, and the lamp under it goes off.
+pub(super) async fn test_wire_washed_away_unpowers_lamp(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let low = BlockPos::new(1, 1, 2);
+    let lamp = BlockPos::new(2, 1, 2);
+    let high = BlockPos::new(2, 2, 2);
+    let water = BlockPos::new(1, 1, 1);
+    // A pocket for the water: its source cell and the low wire's cell.
+    for wall in [(0, 1, 1), (1, 1, 0), (2, 1, 1), (0, 1, 2), (1, 1, 3)] {
+        helper
+            .set_block_default(&BlockPos::new(wall.0, wall.1, wall.2), &Block::STONE)
+            .await?;
+    }
+    helper
+        .set_block_default(&lamp, &Block::REDSTONE_LAMP)
+        .await?;
+    helper
+        .set_block_default(&high, &Block::REDSTONE_WIRE)
+        .await?;
+    helper
+        .set_block_default(&low, &Block::REDSTONE_WIRE)
+        .await?;
+    helper
+        .set_block_default(&BlockPos::new(1, 0, 2), &Block::REDSTONE_BLOCK)
+        .await?;
+
+    let mut lamp_props = RedstoneOreLikeProperties::default(&Block::REDSTONE_LAMP);
+    lamp_props.lit = true;
+    let lit_lamp = lamp_props.to_state_id(&Block::REDSTONE_LAMP);
+    lamp_props.lit = false;
+    let unlit_lamp = lamp_props.to_state_id(&Block::REDSTONE_LAMP);
+
+    let high_power = wire_power(&helper, &high).await;
+    helper.assert_true(
+        high_power == 14,
+        format!("Expected the step-up wire at power 14, got {high_power}"),
+    )?;
+    helper.assert_block_state(&lamp, lit_lamp).await?;
+
+    helper.set_block_default(&water, &Block::WATER).await?;
+
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper.assert_block_present(&low, &Block::WATER).await
+        })
+        .then_wait_until(move |helper| async move {
+            let power = wire_power(&helper, &high).await;
+            helper.assert_true(
+                power == 0,
+                format!("Expected the step-up wire unpowered, got {power}"),
+            )
+        })
+        .then_wait_until(
+            move |helper| async move { helper.assert_block_state(&lamp, unlit_lamp).await },
+        )
         .then_succeed();
     Ok(())
 }
