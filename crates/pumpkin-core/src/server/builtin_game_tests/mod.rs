@@ -254,7 +254,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:water_flow_breaks_redstone_torch",
     "pumpkin:sponge_absorbs_multi_block_water_pool",
     "pumpkin:sponge_does_not_absorb_lava",
-    // commands_and_entities_extended (15)
+    // commands_and_entities_extended (16)
     "pumpkin:impulse_command_block_setblock_on_power",
     "pumpkin:chain_command_block_three_stage_pipeline",
     "pumpkin:conditional_chain_command_block_skips_on_failure",
@@ -270,6 +270,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:commands/forceload_add_loads_before_answering",
     "pumpkin:commands/execute_if_blocks_compares_states",
     "pumpkin:commands/setblock_and_fill_parse_block_states",
+    "pumpkin:commands/data_modify_block_changes_block_entity",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -730,6 +731,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_setblock_and_fill_parse_block_states,
+        );
+        register_function_test(
+            "pumpkin:commands/data_modify_block_changes_block_entity",
+            "pumpkin:empty_5x4x5",
+            20,
+            0,
+            commands_and_entities_extended::test_data_modify_block_changes_block_entity,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",

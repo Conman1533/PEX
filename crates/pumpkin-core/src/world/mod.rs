@@ -7146,6 +7146,25 @@ impl World {
             .collect()
     }
 
+    /// Replaces the block entity at the position `nbt` names with one loaded from `nbt`, keeping
+    /// the keys PEX doesn't model (D7-1) as the new data gives them, so a key the data leaves out
+    /// is cleared. Returns `false` when `nbt` names no known block entity.
+    pub fn load_block_entity_from_nbt(&self, nbt: &NbtCompound) -> bool {
+        let Some(block_entity) = crate::block::entities::block_entity_from_nbt(nbt) else {
+            return false;
+        };
+        let block_pos = block_entity.get_position();
+        let kept = crate::block::entities::unmodeled_block_entity_keys(nbt, block_entity.as_ref());
+        if kept.is_empty() {
+            self.kept_block_entity_nbt.remove(&block_pos);
+        } else {
+            self.kept_block_entity_nbt
+                .insert(block_pos, (block_entity.resource_location(), kept));
+        }
+        self.add_block_entity(block_entity);
+        true
+    }
+
     pub fn add_block_entity(&self, block_entity: Arc<dyn BlockEntity>) {
         let block_pos = block_entity.get_position();
         let chunk_pos = block_pos.chunk_position();

@@ -615,3 +615,63 @@ pub(super) async fn test_unseen_names_get_vanilla_offline_uuids(
         .then_succeed();
     Ok(())
 }
+
+/// G6-33: `data modify`, `data merge` and `data remove` on a block change the block entity, like
+/// vanilla `BlockDataAccessor.setData`.
+pub(super) async fn test_data_modify_block_changes_block_entity(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(0, 1, 0);
+    let chest = BlockPos::new(2, 1, 2);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper.set_block_default(&chest, &Block::CHEST).await?;
+            helper
+                .execute_command(
+                    &origin,
+                    "item replace block ~2 ~ ~2 container.0 with minecraft:stone 3",
+                )
+                .await?;
+            helper
+                .execute_command(&origin, "data modify block ~2 ~ ~2 Items[0].count set value 5")
+                .await?;
+            helper.assert_true(
+                helper
+                    .execute_command(&origin, "execute if data block ~2 ~ ~2 Items[{count:5}]")
+                    .await
+                    .is_ok(),
+                "data modify should set the stack in slot 0 to 5",
+            )?;
+            helper
+                .execute_command(&origin, r#"data merge block ~2 ~ ~2 {CustomName:"Box"}"#)
+                .await?;
+            helper.assert_true(
+                helper
+                    .execute_command(&origin, "execute if data block ~2 ~ ~2 CustomName")
+                    .await
+                    .is_ok(),
+                "data merge should name the chest",
+            )?;
+            helper
+                .execute_command(&origin, "data remove block ~2 ~ ~2 CustomName")
+                .await?;
+            helper.assert_true(
+                helper
+                    .execute_command(&origin, "execute if data block ~2 ~ ~2 CustomName")
+                    .await
+                    .is_err(),
+                "data remove should take the name off again",
+            )?;
+            helper.assert_true(
+                helper
+                    .execute_command(&origin, "execute if data block ~2 ~ ~2 Items[{count:5}]")
+                    .await
+                    .is_ok(),
+                "the stack should still be in the chest",
+            )
+        })
+        .then_succeed();
+    Ok(())
+}

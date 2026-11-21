@@ -288,9 +288,18 @@ impl BlockDataAccessor {
 }
 
 impl DataAccessor for BlockDataAccessor {
+    /// Vanilla `BlockDataAccessor.setData` loads the new data into the block entity there, keeping
+    /// its id and position. The data is the whole compound, so keys left out are cleared.
     fn set_data(&self, tag: &NbtCompound) -> Result<(), CommandSyntaxError> {
-        if self.world.get_block_entity(&self.pos).is_some() {
-            self.world.add_block_entity_nbt(self.pos, tag);
+        let Some(block_entity) = self.world.get_block_entity(&self.pos) else {
+            return Err(ERROR_BLOCK_INVALID.create_without_context());
+        };
+        let mut nbt = tag.clone();
+        nbt.put_string("id", block_entity.resource_location().to_string());
+        nbt.put_int("x", self.pos.0.x);
+        nbt.put_int("y", self.pos.0.y);
+        nbt.put_int("z", self.pos.0.z);
+        if self.world.load_block_entity_from_nbt(&nbt) {
             Ok(())
         } else {
             Err(ERROR_BLOCK_INVALID.create_without_context())
