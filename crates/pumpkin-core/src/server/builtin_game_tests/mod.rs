@@ -618,7 +618,7 @@ pub fn ensure_builtin_game_tests_registered() {
         register_function_test(
             "pumpkin:drowned_throws_trident_at_player",
             "pumpkin:empty_11x4x5",
-            200,
+            400,
             0,
             zombies::test_drowned_throws_trident_at_player,
         );

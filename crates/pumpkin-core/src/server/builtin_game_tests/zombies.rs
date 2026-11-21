@@ -103,18 +103,23 @@ pub(super) async fn test_zombified_piglin_alerts_pack_when_hit(
 
 /// Vanilla `Drowned.DrownedTridentAttackGoal`: a drowned holding a trident throws it at a
 /// player within 10 blocks. The player stands in water, so `Drowned.okTarget` accepts them by
-/// day as well.
+/// day as well. The drowned starts in its own pool too: by day `DrownedGoToWaterGoal`
+/// (priority 1) would otherwise walk a dry drowned to the player's pool whenever one of its
+/// random probes hits that block, and restart the throw's 40-tick wait on arrival.
 pub(super) async fn test_drowned_throws_trident_at_player(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
     build_stone_floor(&helper, 11, 5).await?;
-    let pool = BlockPos::new(9, 1, 2);
-    for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+    for pool_x in [2, 9] {
+        for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            helper
+                .set_block_default(&BlockPos::new(pool_x + dx, 1, 2 + dz), &Block::STONE)
+                .await?;
+        }
         helper
-            .set_block_default(&BlockPos::new(9 + dx, 1, 2 + dz), &Block::STONE)
+            .set_block_default(&BlockPos::new(pool_x, 1, 2), &Block::WATER)
             .await?;
     }
-    helper.set_block_default(&pool, &Block::WATER).await?;
     helper
         .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(9.5, 1.0, 2.5))
         .await?;
