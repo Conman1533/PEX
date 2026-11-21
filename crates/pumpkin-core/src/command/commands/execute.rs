@@ -13,9 +13,7 @@
     clippy::struct_excessive_bools
 )]
 
-use crate::command::argument_builder::{
-    ArgumentBuilder, RequiredArgumentBuilder, argument, command, literal,
-};
+use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
 use crate::command::argument_types::block::BlockArgumentType;
 use crate::command::argument_types::coordinates::block_pos::BlockPosArgumentType;
 use crate::command::argument_types::coordinates::rotation::RotationArgumentType;
@@ -71,6 +69,11 @@ static ERROR_INVALID_DIMENSION: CommandErrorType<1> =
 const ERROR_CONDITIONAL_FAILED: CommandErrorType<0> = CommandErrorType::new(
     translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL,
     translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL,
+);
+
+const ERROR_CONDITIONAL_FAILED_COUNT: CommandErrorType<1> = CommandErrorType::new(
+    translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL_COUNT,
+    translation::java::COMMANDS_EXECUTE_CONDITIONAL_FAIL_COUNT,
 );
 
 static DIMENSION_REGISTRY: &Identifier = &Identifier::vanilla_static("dimension");
@@ -481,16 +484,112 @@ impl CommandExecutor for ConditionalExecutor {
     }
 }
 
-fn add_conditional(
-    builder: RequiredArgumentBuilder,
+fn add_conditional<B: ArgumentBuilder>(
+    builder: B,
     modifier: fn(&CommandContext) -> RedirectModifierResult,
-) -> RequiredArgumentBuilder {
+) -> B {
     builder
         .fork(
             Redirection::Root,
             RedirectModifier::Custom(Arc::new(modifier)),
         )
         .executes(ConditionalExecutor(modifier))
+}
+
+/// What a counted condition found: `None` when the condition is false, else how many entities,
+/// blocks or tags matched.
+type ConditionCount = fn(&CommandContext) -> Result<Option<usize>, CommandSyntaxError>;
+
+/// Vanilla `createNumericConditionalHandler` and `checkIfRegions`/`checkUnlessRegions`: a
+/// passing `if` reports the count and returns it, a failing `unless` reports it in the error.
+struct CountedConditionalExecutor {
+    expected: bool,
+    count: ConditionCount,
+}
+
+impl CommandExecutor for CountedConditionalExecutor {
+    fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
+        let count = (self.count)(context)?;
+        let (key, result) = match (self.expected, count) {
+            (true, Some(count)) => (
+                translation::java::COMMANDS_EXECUTE_CONDITIONAL_PASS_COUNT,
+                i32::try_from(count).unwrap_or(i32::MAX),
+            ),
+            (false, None) => (translation::java::COMMANDS_EXECUTE_CONDITIONAL_PASS, 1),
+            (true, None) => return Err(ERROR_CONDITIONAL_FAILED.create_without_context()),
+            (false, Some(count)) => {
+                return Err(ERROR_CONDITIONAL_FAILED_COUNT
+                    .create_without_context(TextComponent::text(count.to_string())));
+            }
+        };
+        let args: Vec<TextComponent> = if self.expected {
+            vec![TextComponent::text(result.to_string())]
+        } else {
+            Vec::new()
+        };
+        context
+            .source
+            .send_feedback(TextComponent::translate_cross(key, key, args), false);
+        Ok(result)
+    }
+}
+
+fn add_counted_conditional<B: ArgumentBuilder>(
+    builder: B,
+    expected: bool,
+    modifier: fn(&CommandContext) -> RedirectModifierResult,
+    count: ConditionCount,
+) -> B {
+    builder
+        .fork(
+            Redirection::Root,
+            RedirectModifier::Custom(Arc::new(modifier)),
+        )
+        .executes(CountedConditionalExecutor { expected, count })
+}
+
+/// The `if` and `unless` conditions as builder methods: each forks on to the rest of `execute`
+/// and, as the last node, reports whether the test passed.
+trait ConditionalBuilder: ArgumentBuilder {
+    fn conditional(self, modifier: fn(&CommandContext) -> RedirectModifierResult) -> Self {
+        add_conditional(self, modifier)
+    }
+
+    fn counted_conditional(
+        self,
+        expected: bool,
+        modifier: fn(&CommandContext) -> RedirectModifierResult,
+        count: ConditionCount,
+    ) -> Self {
+        add_counted_conditional(self, expected, modifier, count)
+    }
+}
+
+impl<B: ArgumentBuilder> ConditionalBuilder for B {}
+
+fn entity_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    let count = EntityArgumentType::get_optional_entities(context, "targets")?.len();
+    Ok((count > 0).then_some(count))
+}
+
+fn blocks_all_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    count_matching_blocks(context, false)
+}
+
+fn blocks_masked_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    count_matching_blocks(context, true)
+}
+
+fn data_block_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    count_matching_data(context, true, false).map(|count| (count > 0).then_some(count))
+}
+
+fn data_entity_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    count_matching_data(context, false, true).map(|count| (count > 0).then_some(count))
+}
+
+fn data_storage_count(context: &CommandContext) -> Result<Option<usize>, CommandSyntaxError> {
+    count_matching_data(context, false, false).map(|count| (count > 0).then_some(count))
 }
 
 fn execute_if_score_matches_modifier(
@@ -706,6 +805,15 @@ fn execute_unless_score_ge_modifier(
 }
 
 fn check_blocks_match(context: &CommandContext, masked: bool) -> Result<bool, CommandSyntaxError> {
+    Ok(count_matching_blocks(context, masked)?.is_some())
+}
+
+/// How many blocks the region comparison checked (air is skipped when `masked`), or `None` when
+/// the regions differ.
+fn count_matching_blocks(
+    context: &CommandContext,
+    masked: bool,
+) -> Result<Option<usize>, CommandSyntaxError> {
     let start = BlockPosArgumentType::get_block_pos(context, "start")?;
     let end = BlockPosArgumentType::get_block_pos(context, "end")?;
     let destination = BlockPosArgumentType::get_block_pos(context, "destination")?;
@@ -722,6 +830,7 @@ fn check_blocks_match(context: &CommandContext, masked: bool) -> Result<bool, Co
         let dy = destination.0.y - min_y;
         let dz = destination.0.z - min_z;
 
+        let mut count = 0;
         for y in min_y..=max_y {
             for z in min_z..=max_z {
                 for x in min_x..=max_x {
@@ -734,14 +843,15 @@ fn check_blocks_match(context: &CommandContext, masked: bool) -> Result<bool, Co
                         continue;
                     }
                     if src_block != dst_block {
-                        return Ok(false);
+                        return Ok(None);
                     }
+                    count += 1;
                 }
             }
         }
-        return Ok(true);
+        return Ok(Some(count));
     }
-    Ok(false)
+    Ok(None)
 }
 
 fn execute_if_blocks_all_modifier(
@@ -789,6 +899,15 @@ fn check_data_matches(
     is_block: bool,
     is_entity: bool,
 ) -> Result<bool, CommandSyntaxError> {
+    Ok(count_matching_data(context, is_block, is_entity)? > 0)
+}
+
+/// Vanilla `checkMatchingData`: how many tags the path finds.
+fn count_matching_data(
+    context: &CommandContext,
+    is_block: bool,
+    is_entity: bool,
+) -> Result<usize, CommandSyntaxError> {
     let path = context.get_argument::<NbtPath>("path")?;
     let tags = if is_block {
         let pos = BlockPosArgumentType::get_block_pos(context, "pos")?;
@@ -808,7 +927,7 @@ fn check_data_matches(
         let data = accessor.get_data()?;
         path.get(&NbtTag::Compound(data))?
     };
-    Ok(!tags.is_empty())
+    Ok(tags.len())
 }
 
 fn execute_if_data_block_modifier(
@@ -1235,42 +1354,31 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
         .then(
             literal("if")
                 .then(literal("entity").then(
-                    argument("targets", EntityArgumentType::Entities).redirect_with_modifier(
-                        Redirection::Root,
-                        RedirectModifier::Custom(Arc::new(execute_if_entity_modifier)),
+                    argument("targets", EntityArgumentType::Entities).counted_conditional(
+                        true,
+                        execute_if_entity_modifier,
+                        entity_count,
                     ),
                 ))
                 .then(
                     literal("block").then(argument("pos", BlockPosArgumentType).then(
-                        argument("block", BlockArgumentType).redirect_with_modifier(
-                            Redirection::Root,
-                            RedirectModifier::Custom(Arc::new(execute_if_block_modifier)),
-                        ),
+                        argument("block", BlockArgumentType).conditional(execute_if_block_modifier),
                     )),
                 )
                 .then(literal("loaded").then(
-                    argument("pos", BlockPosArgumentType).redirect_with_modifier(
-                        Redirection::Root,
-                        RedirectModifier::Custom(Arc::new(execute_if_loaded_modifier)),
-                    ),
+                    argument("pos", BlockPosArgumentType).conditional(execute_if_loaded_modifier),
                 ))
                 .then(
                     literal("dimension").then(
                         argument("dimension", ResourceKeyArgument(DIMENSION_REGISTRY))
-                            .redirect_with_modifier(
-                                Redirection::Root,
-                                RedirectModifier::Custom(Arc::new(execute_if_dimension_modifier)),
-                            ),
+                            .conditional(execute_if_dimension_modifier),
                     ),
                 )
                 .then(
                     literal("biome").then(
                         argument("pos", BlockPosArgumentType).then(
                             argument("biome", ResourceOrTagArgument(BIOME_REGISTRY.clone()))
-                                .redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(execute_if_biome_modifier)),
-                                ),
+                                .conditional(execute_if_biome_modifier),
                         ),
                     ),
                 )
@@ -1279,17 +1387,15 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                         argument("start", BlockPosArgumentType).then(
                             argument("end", BlockPosArgumentType).then(
                                 argument("destination", BlockPosArgumentType)
-                                    .then(literal("all").redirect_with_modifier(
-                                        Redirection::Root,
-                                        RedirectModifier::Custom(Arc::new(
-                                            execute_if_blocks_all_modifier,
-                                        )),
+                                    .then(literal("all").counted_conditional(
+                                        true,
+                                        execute_if_blocks_all_modifier,
+                                        blocks_all_count,
                                     ))
-                                    .then(literal("masked").redirect_with_modifier(
-                                        Redirection::Root,
-                                        RedirectModifier::Custom(Arc::new(
-                                            execute_if_blocks_masked_modifier,
-                                        )),
+                                    .then(literal("masked").counted_conditional(
+                                        true,
+                                        execute_if_blocks_masked_modifier,
+                                        blocks_masked_count,
                                     )),
                             ),
                         ),
@@ -1350,87 +1456,75 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                     literal("data")
                         .then(
                             literal("block").then(argument("pos", BlockPosArgumentType).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_if_data_block_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    true,
+                                    execute_if_data_block_modifier,
+                                    data_block_count,
                                 ),
                             )),
                         )
                         .then(literal("entity").then(
                             argument("target", EntityArgumentType::Entity).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_if_data_entity_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    true,
+                                    execute_if_data_entity_modifier,
+                                    data_entity_count,
                                 ),
                             ),
                         ))
                         .then(literal("storage").then(
                             argument("id", IdentifierArgumentType).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_if_data_storage_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    true,
+                                    execute_if_data_storage_modifier,
+                                    data_storage_count,
                                 ),
                             ),
                         )),
                 )
                 .then(
-                    literal("stopwatch").then(argument("id", IdentifierArgumentType).then(
-                        argument("range", FloatRangeArgumentType).redirect_with_modifier(
-                            Redirection::Root,
-                            RedirectModifier::Custom(Arc::new(execute_if_stopwatch_modifier)),
+                    literal("stopwatch").then(
+                        argument("id", IdentifierArgumentType).then(
+                            argument("range", FloatRangeArgumentType)
+                                .conditional(execute_if_stopwatch_modifier),
                         ),
-                    )),
+                    ),
                 ),
         )
         .then(
             literal("unless")
                 .then(literal("entity").then(
-                    argument("targets", EntityArgumentType::Entities).redirect_with_modifier(
-                        Redirection::Root,
-                        RedirectModifier::Custom(Arc::new(execute_unless_entity_modifier)),
+                    argument("targets", EntityArgumentType::Entities).counted_conditional(
+                        false,
+                        execute_unless_entity_modifier,
+                        entity_count,
                     ),
                 ))
                 .then(
-                    literal("block").then(argument("pos", BlockPosArgumentType).then(
-                        argument("block", BlockArgumentType).redirect_with_modifier(
-                            Redirection::Root,
-                            RedirectModifier::Custom(Arc::new(execute_unless_block_modifier)),
+                    literal("block").then(
+                        argument("pos", BlockPosArgumentType).then(
+                            argument("block", BlockArgumentType)
+                                .conditional(execute_unless_block_modifier),
                         ),
-                    )),
-                )
-                .then(literal("loaded").then(
-                    argument("pos", BlockPosArgumentType).redirect_with_modifier(
-                        Redirection::Root,
-                        RedirectModifier::Custom(Arc::new(execute_unless_loaded_modifier)),
                     ),
-                ))
+                )
+                .then(
+                    literal("loaded").then(
+                        argument("pos", BlockPosArgumentType)
+                            .conditional(execute_unless_loaded_modifier),
+                    ),
+                )
                 .then(
                     literal("dimension").then(
                         argument("dimension", ResourceKeyArgument(DIMENSION_REGISTRY))
-                            .redirect_with_modifier(
-                                Redirection::Root,
-                                RedirectModifier::Custom(Arc::new(
-                                    execute_unless_dimension_modifier,
-                                )),
-                            ),
+                            .conditional(execute_unless_dimension_modifier),
                     ),
                 )
                 .then(
                     literal("biome").then(
                         argument("pos", BlockPosArgumentType).then(
                             argument("biome", ResourceOrTagArgument(BIOME_REGISTRY.clone()))
-                                .redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_unless_biome_modifier,
-                                    )),
-                                ),
+                                .conditional(execute_unless_biome_modifier),
                         ),
                     ),
                 )
@@ -1439,17 +1533,15 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                         argument("start", BlockPosArgumentType).then(
                             argument("end", BlockPosArgumentType).then(
                                 argument("destination", BlockPosArgumentType)
-                                    .then(literal("all").redirect_with_modifier(
-                                        Redirection::Root,
-                                        RedirectModifier::Custom(Arc::new(
-                                            execute_unless_blocks_all_modifier,
-                                        )),
+                                    .then(literal("all").counted_conditional(
+                                        false,
+                                        execute_unless_blocks_all_modifier,
+                                        blocks_all_count,
                                     ))
-                                    .then(literal("masked").redirect_with_modifier(
-                                        Redirection::Root,
-                                        RedirectModifier::Custom(Arc::new(
-                                            execute_unless_blocks_masked_modifier,
-                                        )),
+                                    .then(literal("masked").counted_conditional(
+                                        false,
+                                        execute_unless_blocks_masked_modifier,
+                                        blocks_masked_count,
                                     )),
                             ),
                         ),
@@ -1510,42 +1602,39 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                     literal("data")
                         .then(
                             literal("block").then(argument("pos", BlockPosArgumentType).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_unless_data_block_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    false,
+                                    execute_unless_data_block_modifier,
+                                    data_block_count,
                                 ),
                             )),
                         )
                         .then(literal("entity").then(
                             argument("target", EntityArgumentType::Entity).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_unless_data_entity_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    false,
+                                    execute_unless_data_entity_modifier,
+                                    data_entity_count,
                                 ),
                             ),
                         ))
                         .then(literal("storage").then(
                             argument("id", IdentifierArgumentType).then(
-                                argument("path", NbtPathArgumentType).redirect_with_modifier(
-                                    Redirection::Root,
-                                    RedirectModifier::Custom(Arc::new(
-                                        execute_unless_data_storage_modifier,
-                                    )),
+                                argument("path", NbtPathArgumentType).counted_conditional(
+                                    false,
+                                    execute_unless_data_storage_modifier,
+                                    data_storage_count,
                                 ),
                             ),
                         )),
                 )
                 .then(
-                    literal("stopwatch").then(argument("id", IdentifierArgumentType).then(
-                        argument("range", FloatRangeArgumentType).redirect_with_modifier(
-                            Redirection::Root,
-                            RedirectModifier::Custom(Arc::new(execute_unless_stopwatch_modifier)),
+                    literal("stopwatch").then(
+                        argument("id", IdentifierArgumentType).then(
+                            argument("range", FloatRangeArgumentType)
+                                .conditional(execute_unless_stopwatch_modifier),
                         ),
-                    )),
+                    ),
                 ),
         );
 
@@ -1610,6 +1699,37 @@ mod tests {
                     get_score_value(&scoreboard, "#target", criterion).unwrap(),
                     Some(value)
                 );
+            }
+        }
+    }
+
+    /// G6-30: every condition can end the command, so `execute if ...` without `run` reports
+    /// whether the test passed instead of failing as incomplete.
+    #[test]
+    fn every_condition_can_end_the_command() {
+        let mut dispatcher = CommandDispatcher::new();
+        register(&mut dispatcher, &PermissionRegistry::default());
+        let source = Arc::new(CommandSource::dummy());
+        for condition in ["if", "unless"] {
+            for test in [
+                "entity @e",
+                "block ~ ~ ~ minecraft:stone",
+                "loaded ~ ~ ~",
+                "dimension minecraft:overworld",
+                "biome ~ ~ ~ minecraft:plains",
+                "blocks ~ ~ ~ ~1 ~1 ~1 ~5 ~ ~ all",
+                "blocks ~ ~ ~ ~1 ~1 ~1 ~5 ~ ~ masked",
+                "data block ~ ~ ~ Items",
+                "data entity @s Pos",
+                "data storage minecraft:test value",
+                "stopwatch minecraft:test 1..",
+                "score Fake test matches 1..",
+            ] {
+                let input = format!("execute {condition} {test}");
+                let result = dispatcher.parse_input(&input, &source);
+                assert!(result.errors.is_empty(), "{input}: {:?}", result.errors);
+                assert_eq!(result.reader.remaining_length(), 0, "{input}");
+                assert!(result.context.build(&input).command.is_some(), "{input}");
             }
         }
     }
