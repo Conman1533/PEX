@@ -678,3 +678,51 @@ pub(super) async fn test_data_modify_block_changes_block_entity(
         .then_succeed();
     Ok(())
 }
+
+/// G6-35: `spreadplayers` re-rolls unsafe spots like vanilla `spreadPositions` until it finds a
+/// safe one. The only safe spot in a pool of water is a stone pillar, and the pig lands on it
+/// every time.
+pub(super) async fn test_spreadplayers_lands_on_the_only_dry_block(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 8, 8).await?;
+    let pillar = BlockPos::new(4, 1, 4);
+    let max_height = helper.absolute_pos(&BlockPos::new(0, 3, 0)).0.y;
+    let spread = format!(
+        "spreadplayers ~ ~ 0 2 under {max_height} false @e[type=minecraft:pig,distance=..8]"
+    );
+    helper
+        .start_sequence()
+        .then_execute(move |helper| {
+            let spread = spread.clone();
+            async move {
+                for x in 1..8 {
+                    for z in 1..8 {
+                        helper
+                            .set_block_default(&BlockPos::new(x, 1, z), &Block::WATER)
+                            .await?;
+                    }
+                }
+                helper.set_block_default(&pillar, &Block::STONE).await?;
+                helper
+                    .execute_command(
+                        &pillar,
+                        "summon minecraft:pig ~-3 ~1 ~-3 {NoAI:1b,NoGravity:1b}",
+                    )
+                    .await?;
+                for _ in 0..3 {
+                    helper.execute_command(&pillar, &spread).await?;
+                    helper
+                        .assert_entity_present_in_box(
+                            "minecraft:pig",
+                            BlockPos::new(4, 2, 4),
+                            BlockPos::new(4, 3, 4),
+                        )
+                        .await?;
+                }
+                Ok(())
+            }
+        })
+        .then_succeed();
+    Ok(())
+}

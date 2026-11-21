@@ -296,6 +296,7 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:endermites_alert_each_other_when_hit",
     "pumpkin:persistent_endermite_never_expires",
     "pumpkin:priming_creeper_sets_off_sculk_sensor",
+    "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -861,6 +862,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_data_modify_block_changes_block_entity,
+        );
+        register_function_test(
+            "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
+            "pumpkin:empty_8x4x8",
+            20,
+            0,
+            commands_and_entities_extended::test_spreadplayers_lands_on_the_only_dry_block,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",
