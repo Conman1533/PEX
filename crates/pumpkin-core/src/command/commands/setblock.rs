@@ -66,6 +66,10 @@ impl CommandExecutor for SetBlockExecutor {
         let mode = self.0;
         let world = context.source.world();
         let pos = BlockPosArgumentType::get_loaded_block_pos(context, "pos")?;
+        // Vanilla places with `UPDATE_CLIENTS` only and updates the neighbours afterwards, the
+        // placed block being the source (`ServerLevel.updateNeighboursOnBlockSet`).
+        let place_flags = BlockFlags::NOTIFY_LISTENERS | BlockFlags::FORCE_STATE;
+        let mut old_state_id = world.get_block_state_id(&pos);
 
         let success = match mode {
             Mode::Destroy => {
@@ -74,29 +78,17 @@ impl CommandExecutor for SetBlockExecutor {
                     None,
                     BlockFlags::SKIP_DROPS | BlockFlags::NOTIFY_ALL | BlockFlags::FORCE_STATE,
                 );
-                world.set_block_state(
-                    &pos,
-                    block_state_id,
-                    BlockFlags::NOTIFY_ALL | BlockFlags::FORCE_STATE,
-                );
+                old_state_id = world.get_block_state_id(&pos);
+                world.set_block_state(&pos, block_state_id, place_flags);
                 true
             }
             Mode::Replace => {
-                world.set_block_state(
-                    &pos,
-                    block_state_id,
-                    BlockFlags::NOTIFY_ALL | BlockFlags::FORCE_STATE,
-                );
+                world.set_block_state(&pos, block_state_id, place_flags);
                 true
             }
             Mode::Keep => {
-                let old_state = world.get_block_state(&pos);
-                if old_state.is_air() {
-                    world.set_block_state(
-                        &pos,
-                        block_state_id,
-                        BlockFlags::NOTIFY_ALL | BlockFlags::FORCE_STATE,
-                    );
+                if old_state_id.to_state().is_air() {
+                    world.set_block_state(&pos, block_state_id, place_flags);
                     true
                 } else {
                     false
@@ -117,6 +109,9 @@ impl CommandExecutor for SetBlockExecutor {
         if success {
             if let Some(data) = &block.nbt {
                 load_block_entity_data(world, &pos, data);
+            }
+            if !matches!(mode, Mode::Strict) {
+                world.update_neighbours_on_block_set(&pos, old_state_id);
             }
             world.flush_block_updates();
             context.source.send_feedback(
