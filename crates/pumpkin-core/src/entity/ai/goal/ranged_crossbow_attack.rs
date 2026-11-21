@@ -66,7 +66,7 @@ impl RangedCrossbowAttackGoal {
         })
     }
 
-    fn shoot(mob: &dyn Mob, target: &Arc<dyn EntityBase>) {
+    pub(crate) fn shoot(mob: &dyn Mob, target: &Arc<dyn EntityBase>) {
         let entity = mob.get_entity();
         let world = entity.world.load();
         let world_full = entity.world.load_full();

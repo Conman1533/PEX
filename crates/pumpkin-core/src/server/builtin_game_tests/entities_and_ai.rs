@@ -1,5 +1,5 @@
 use pumpkin_data::Block;
-use pumpkin_gametest::{GameTestHelper, GameTestResult};
+use pumpkin_gametest::{GameTestError, GameTestHelper, GameTestResult};
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_util::GameMode;
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
@@ -421,6 +421,67 @@ pub(super) async fn test_piglin_brute_attacks_player_in_gold_armor(
                 hurt,
                 format!("the piglin brute never hit the player in gold armor: {health:?}"),
             )
+        })
+        .then_succeed();
+    Ok(())
+}
+
+/// Vanilla `PiglinAi`: a piglin walks to a gold ingot on the ground (`GoToWantedItem` in the
+/// admire activity), holds it in its off hand while it admires it, then barters it away. A piglin
+/// in the overworld turns zombified after 300 ticks, so the trade has to finish before that.
+pub(super) async fn test_piglin_barters_gold_ingot_for_loot(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 9, 5).await?;
+    helper
+        .spawn_entity_at("minecraft:piglin", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_item_at("minecraft:gold_ingot", 1, Vector3::new(5.5, 1.1, 2.5))
+        .await?;
+
+    let area_min = BlockPos::new(0, 1, 0);
+    let area_max = BlockPos::new(8, 3, 4);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_is_holding(
+                    "minecraft:piglin",
+                    area_min,
+                    area_max,
+                    "minecraft:gold_ingot",
+                )
+                .await
+        })
+        .then_wait_until(move |helper| async move {
+            if helper
+                .assert_entity_is_holding(
+                    "minecraft:piglin",
+                    area_min,
+                    area_max,
+                    "minecraft:gold_ingot",
+                )
+                .await
+                .is_ok()
+            {
+                // Not `helper.fail`, which fails the test at once instead of waiting.
+                return Err(GameTestError::Assertion {
+                    tick: helper.tick(),
+                    position: None,
+                    message: "the piglin is still admiring the gold ingot".to_owned(),
+                });
+            }
+            helper
+                .assert_entity_present_in_box("minecraft:piglin", area_min, area_max)
+                .await?;
+            helper
+                .assert_item_entity_not_present(
+                    "minecraft:gold_ingot",
+                    &BlockPos::new(4, 1, 2),
+                    8.0,
+                )
+                .await
         })
         .then_succeed();
     Ok(())

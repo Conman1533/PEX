@@ -47,7 +47,7 @@ impl Sensor for NearestItemSensor {
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .clone();
-                    tick.mob.wants_to_pick_up(&stack)
+                    tick.mob.wants_to_pick_up_in_brain(&stack, tick.state)
                 })
                 && position.squared_distance_to_vec(&candidate.get_entity().pos.load())
                     < MAX_DISTANCE_TO_WANTED_ITEM * MAX_DISTANCE_TO_WANTED_ITEM
