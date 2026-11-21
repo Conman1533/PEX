@@ -14,6 +14,23 @@ pub fn stroll(speed_modifier: f32) -> OneShot {
     stroll_with(speed_modifier, true)
 }
 
+/// Vanilla `RandomStroll.stroll(speedModifier, maxHorizontalDistance, maxVerticalDistance)`.
+#[must_use]
+pub fn stroll_range(speed_modifier: f32, max_xz_dist: i32, max_y_dist: i32) -> OneShot {
+    OneShot::new(
+        "RandomStroll",
+        vec![(types::WALK_TARGET.id(), MemoryStatus::ValueAbsent)],
+        move |tick| {
+            let target = land_random_pos::get_pos(tick.mob, max_xz_dist, max_y_dist);
+            tick.state.set_optional(
+                types::WALK_TARGET,
+                target.map(|pos| WalkTarget::from_vec(pos, speed_modifier, 0)),
+            );
+            true
+        },
+    )
+}
+
 /// Vanilla `RandomStroll.stroll(speedModifier, mayStrollFromWater)`.
 #[must_use]
 pub fn stroll_with(speed_modifier: f32, may_stroll_from_water: bool) -> OneShot {

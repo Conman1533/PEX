@@ -51,6 +51,7 @@ pub enum StepSound {
     Sound(pumpkin_data::sound::Sound, f32),
 }
 
+pub mod abstract_piglin;
 pub mod bat;
 pub mod blaze;
 pub mod breeze;
@@ -75,7 +76,6 @@ pub mod neutral;
 pub mod patrol;
 pub mod phantom;
 pub mod piglin;
-pub mod piglin_ai;
 pub mod piglin_brute;
 pub mod pillager;
 pub mod raider;
@@ -1452,6 +1452,20 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn wants_to_pick_up(&self, _stack: &ItemStack) -> bool {
         false
+    }
+
+    /// `wants_to_pick_up` for a brain sensor, which holds this mob's brain.
+    fn wants_to_pick_up_in_brain(
+        &self,
+        stack: &ItemStack,
+        _brain: &crate::entity::ai::brain::BrainState,
+    ) -> bool {
+        self.wants_to_pick_up(stack)
+    }
+
+    /// Vanilla `Entity.startRiding`, which `Piglin` overrides to climb a hoglin's stack.
+    fn start_riding(&self, vehicle: Arc<dyn EntityBase>) -> bool {
+        start_riding_default(self.get_mob_entity(), &vehicle)
     }
 
     fn can_pick_up_loot(&self, _brain: Option<&crate::entity::ai::brain::BrainState>) -> bool {
@@ -2892,4 +2906,26 @@ pub fn is_in_water_or_rain(entity: &crate::entity::Entity) -> bool {
     let world = entity.world.load();
     world.is_raining_at(&entity.block_pos.load())
         || world.is_raining_at(&entity.bounding_box.load().max_block_pos())
+}
+
+/// Vanilla `Entity.startRiding` without force: not while riding, not itself, and only onto a
+/// vehicle with no passenger yet (`Entity.canAddPassenger`).
+pub fn start_riding_default(mob: &MobEntity, vehicle: &Arc<dyn EntityBase>) -> bool {
+    let entity = &mob.living_entity.entity;
+    let vehicle_entity = vehicle.get_entity();
+    if entity.has_vehicle()
+        || vehicle_entity.entity_id == entity.entity_id
+        || !vehicle_entity
+            .passengers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty()
+    {
+        return false;
+    }
+    let Some(passenger) = entity.world.load().get_entity_by_id(entity.entity_id) else {
+        return false;
+    };
+    vehicle_entity.add_passenger(vehicle.clone(), passenger);
+    entity.get_vehicle().is_some()
 }

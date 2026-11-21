@@ -22,7 +22,6 @@ pub mod follow_flock_leader;
 pub mod follow_mob;
 pub mod follow_owner;
 pub mod follow_parent;
-pub mod go_to_wanted_item;
 pub mod goal_selector;
 pub mod interact;
 pub mod leap_at_target;
