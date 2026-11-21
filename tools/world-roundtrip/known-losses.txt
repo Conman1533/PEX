@@ -39,56 +39,8 @@ data/minecraft/scoreboard.dat data.Teams[*].MemberNameSuffix G7-15; first run: s
 data/minecraft/scoreboard.dat data.Teams[*].NameTagVisibility G7-15; first run: step 1: 1 added
 data/minecraft/scoreboard.dat data.Teams[*].SeeFriendlyInvisibles G7-15; first run: step 1: 1 added
 
-# G7-23: item components
-dimensions/minecraft/*/region/*.mca block_entities[*].Book.components."minecraft:writable_book_content".pages[*].raw G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components G7-23; first run: step 1: 24 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:bundle_contents"[*].components G7-23; first run: step 1: 2 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container"[*] G7-23; first run: step 1: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container"[*].item.components G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".allowed_entities G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".can_be_sheared G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".damage_on_hurt G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".dispensable G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".equip_on_interact G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".equip_sound G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".shearing_sound G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:equippable".swappable G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".colors G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".fade_colors G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".has_trail G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:firework_explosion".has_twinkle G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".explosions[*].colors G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".explosions[*].fade_colors G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:fireworks".flight_duration G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:item_name" G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:lodestone_tracker".tracked G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations".+ G7-23; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations".fixture G7-23; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:pot_decorations" G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].ambient G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].amplifier G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".custom_effects[*].show_particles G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".potion G7-23; first run: step 1: 2 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:tool".can_destroy_blocks_in_creative G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:tool".damage_per_block G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:weapon".disable_blocking_for_seconds G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:weapon".item_damage_per_attack G7-23; first run: step 1: 1 added
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:writable_book_content".pages[*].raw G7-23; first run: step 1: 2 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".generation G7-23; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw.bold G7-23; first run: step 1: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".pages[*].raw.text G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content".title.raw G7-23; first run: step 1: 1 changed
-dimensions/minecraft/*/region/*.mca block_entities[*].item.components G7-23; first run: step 1: 2 added
 # Visible since G7-05, when vanilla stopped reading the lab's sections as air and kept its block
 # entities.
-dimensions/minecraft/*/region/*.mca block_entities[*].Book.components G7-23; 2026-11-20 G7-05 run: step 2: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Book.components.* G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:container" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:map_decorations" G7-23; 2026-11-20 G7-05 run: steps 2 and 3: 2 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:writable_book_content" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
-dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:written_book_content" G7-23; 2026-11-20 G7-05 run: step 3: 1 lost
 
 # G7-24: entity keys (D7-1), or values that changed while the entity ticked
 dimensions/minecraft/*/entities/*.mca - ticking: an entity chunk appears or goes (a campfire popped its beef in step 3 of the 2026-11-20 G7-05 run)
@@ -126,6 +78,7 @@ dimensions/minecraft/*/entities/*.mca Entities[*].next_weather_age G7-24; first 
 dimensions/minecraft/*/region/*.mca block_entities[*] G7-25; first run: step 1: 2 lost
 dimensions/minecraft/*/region/*.mca block_entities[*].Age G7-25; first run: step 1: 1 changed
 dimensions/minecraft/*/region/*.mca block_entities[*].BrewTime G7-25; first run: step 1: 1 changed
+dimensions/minecraft/*/region/*.mca block_entities[*].Items[*].components."minecraft:potion_contents".potion G7-25; PEX finishes the fixture stand's brew (water to awkward), vanilla leaves it; 2026-11-21 G7-23 run: step 1: 1 changed
 dimensions/minecraft/*/region/*.mca block_entities[*].CookingTimes G7-25; first run: step 1: 1 changed
 dimensions/minecraft/*/region/*.mca block_entities[*].CustomName G7-25; first run: step 1: 2 lost
 dimensions/minecraft/*/region/*.mca block_entities[*].Fuel G7-25; first run: step 1: 1 changed
