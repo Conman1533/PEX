@@ -95,6 +95,18 @@ impl BlockBehaviour for ComparatorBlock {
         );
     }
 
+    /// Vanilla `DiodeBlock.onPlace`: a mode or power change tells the block in front, so a
+    /// `POWERED` flip tells it twice with `update`'s own call.
+    fn state_changed(&self, args: PlacedArgs<'_>) {
+        RedstoneGateBlock::update_target(
+            self,
+            args.world,
+            *args.position,
+            args.state_id,
+            args.block,
+        );
+    }
+
     fn player_placed(&self, args: PlayerPlacedArgs<'_>) {
         RedstoneGateBlock::player_placed(self, args);
     }
