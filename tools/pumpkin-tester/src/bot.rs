@@ -37,7 +37,7 @@ use pumpkin_protocol::{
             play::{
                 Action, ActionType, SAttack, SChatCommand, SChatMessage, SChunkBatch, SClickSlot,
                 SClientCommand, SCloseContainer, SConfirmTeleport, SInteract, SKeepAlive,
-                SPickItemFromEntity, SPlayPingRequest, SPlayerAction, SPlayerCommand,
+                SPickItemFromEntity, SPlayPingRequest, SPlayerAction, SPlayerCommand, SPlayerInput,
                 SPlayerLoaded, SPlayerPosition, SPlayerPositionRotation, SPlayerRotation,
                 SSetHeldItem, SSpectateEntity, SSwingArm, SUseItem, SUseItemOn, SlotActionType,
                 Status,
@@ -88,7 +88,23 @@ pub struct TrackedEntity {
     /// The `minecraft:entity_type` registry id.
     pub entity_type: i32,
     pub position: Vector3<f64>,
+    /// The shared flags byte (on fire, sneaking, sprinting, swimming and so on), from the last
+    /// `SetEntityData` that carried it.
+    pub flags: u8,
+    /// The `EntityPose` id, from the last `SetEntityData` that carried it.
+    pub pose: i32,
 }
+
+/// `Entity.DATA_SHARED_FLAGS_ID` and `Entity.DATA_POSE`, and the data types the bot can skip
+/// over to reach them.
+const DATA_SHARED_FLAGS: u8 = 0;
+const DATA_POSE: u8 = 6;
+const DATA_TYPE_BYTE: i32 = 0;
+const DATA_TYPE_INT: i32 = 1;
+const DATA_TYPE_FLOAT: i32 = 3;
+const DATA_TYPE_BOOLEAN: i32 = 8;
+const DATA_TYPE_POSE: i32 = 20;
+const DATA_END: u8 = 0xFF;
 
 type PacketResult = Result<RawPacket, String>;
 
@@ -502,6 +518,41 @@ impl HeadlessBot {
         Ok(())
     }
 
+    /// Takes the shared flags and the pose from a `SetEntityData`. Stops at the first value of a
+    /// type it can't skip; the entity tracker sends the flags and pose before any of those.
+    fn read_entity_data(
+        &mut self,
+        entity_id: i32,
+        payload: &mut &[u8],
+    ) -> Result<(), ReadingError> {
+        loop {
+            let index = payload.get_u8()?;
+            if index == DATA_END {
+                return Ok(());
+            }
+            let value = match payload.get_var_int()?.0 {
+                DATA_TYPE_BYTE => i32::from(payload.get_u8()?),
+                DATA_TYPE_INT | DATA_TYPE_POSE => payload.get_var_int()?.0,
+                DATA_TYPE_FLOAT => {
+                    payload.get_f32_be()?;
+                    continue;
+                }
+                DATA_TYPE_BOOLEAN => {
+                    payload.get_bool()?;
+                    continue;
+                }
+                _ => return Ok(()),
+            };
+            if let Some(entity) = self.entities.get_mut(&entity_id) {
+                match index {
+                    DATA_SHARED_FLAGS => entity.flags = value as u8,
+                    DATA_POSE => entity.pose = value,
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn handle_entity_packet(&mut self, id: i32, payload: &mut &[u8]) -> Result<(), ReadingError> {
         if is_counted_entity_packet(id) {
             let mut peek = *payload;
@@ -525,6 +576,8 @@ impl HeadlessBot {
                 TrackedEntity {
                     entity_type: spawn.r#type.0,
                     position: spawn.position,
+                    flags: 0,
+                    pose: 0,
                 },
             );
         } else if id == CUpdateEntityPos::to_id(CURRENT_MC_VERSION)
@@ -538,6 +591,9 @@ impl HeadlessBot {
             if let Some(entity) = self.entities.get_mut(&entity_id) {
                 entity.position += delta;
             }
+        } else if id == CSetEntityMetadata::to_id(CURRENT_MC_VERSION) {
+            let entity_id = payload.get_var_int()?.0;
+            self.read_entity_data(entity_id, payload)?;
         } else if id == CEntityPositionSync::to_id(CURRENT_MC_VERSION) {
             let entity_id = payload.get_var_int()?.0;
             // Since 26.3 the position is a `PositionPath`; type 0 is `Linear`, a single position.
@@ -722,6 +778,11 @@ impl HeadlessBot {
             self.inventory.select(selected);
         }
         self.send_packet(&SSetHeldItem { slot }).await
+    }
+
+    /// Sends the movement keys held this tick, as `SPlayerInput` bits.
+    pub async fn send_input(&mut self, input: i8) -> Result<(), String> {
+        self.send_packet(&SPlayerInput { input }).await
     }
 
     pub async fn send_player_command(

@@ -9,7 +9,11 @@ use std::{
 };
 
 use pumpkin_core::{PumpkinServer, net::bedrock::BedrockClient, server::Server};
-use pumpkin_data::entity::EntityType;
+use pumpkin_data::entity::{EntityPose, EntityType};
+use pumpkin_protocol::{
+    bedrock::{client::set_actor_data::entity_data_flag, server::player_auth_input::InputData},
+    java::server::play::{Action as PlayerCommandAction, SPlayerInput},
+};
 use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 use tokio::{net::TcpListener, sync::Mutex};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -511,6 +515,7 @@ async fn run_mixed_play(
 
     run_chat_checks(server, bedrock, &mut java, &mut checks).await?;
     run_move_checks(server, bedrock, &mut java, &mut checks).await?;
+    run_pose_checks(server, bedrock, &mut java, &mut checks).await?;
     // Before `run_block_checks`, which puts both players in creative.
     run_fall_checks(server, bedrock, &mut java, &mut checks).await?;
     run_block_checks(server, bedrock, &mut java, &mut checks).await?;
@@ -629,6 +634,268 @@ async fn run_move_checks(
                         && (f64::from(player.position.z) - java_target.z).abs() < 0.6
                 })
             },
+        )
+        .await,
+    );
+    Ok(())
+}
+
+/// Java's shared entity flag bits for sneaking and sprinting.
+const JAVA_FLAG_SNEAKING: u8 = 1 << 1;
+const JAVA_FLAG_SPRINTING: u8 = 1 << 3;
+
+/// Sneaking, sprinting and crawling show up for players of the other edition.
+async fn run_pose_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+) -> Result<(), String> {
+    let entity_id_of = |name: &str| -> Result<i32, String> {
+        server
+            .server
+            .get_player_by_name(name)
+            .map(|player| player.entity_id())
+            .ok_or_else(|| format!("{name} is not on the server"))
+    };
+    let bedrock_id = entity_id_of(BEDROCK_NAME)?;
+    let java_id = entity_id_of(JAVA_NAME)?;
+    let java_runtime_id = bedrock
+        .player_runtime_id(JAVA_NAME)
+        .ok_or("the Bedrock bot has no AddPlayer for the Java bot")?;
+    let ids = PoseIds {
+        bedrock_entity: bedrock_id,
+        java_entity: java_id,
+        java_runtime: java_runtime_id,
+    };
+    let bedrock_feet = f64::from(bedrock.position.y) - f64::from(EntityType::PLAYER.eye_height);
+    let bedrock_block = BlockPos::floored(
+        f64::from(bedrock.position.x),
+        bedrock_feet + 0.5,
+        f64::from(bedrock.position.z),
+    );
+    let java_block = BlockPos::floored(java.position.x, java.position.y + 0.5, java.position.z);
+
+    // The bots spawn in a tree on the test seed. Clear the leaves around them so that they
+    // have room to stand.
+    for pos in [bedrock_block, java_block] {
+        let (x, y, z) = (pos.0.x, pos.0.y, pos.0.z);
+        run_console(
+            server,
+            &format!(
+                "fill {} {y} {} {} {} {} air",
+                x - 1,
+                z - 1,
+                x + 1,
+                y + 2,
+                z + 1
+            ),
+        );
+    }
+    tick(server, bedrock, Some(&mut *java)).await?;
+
+    run_bedrock_pose_checks(server, bedrock, java, checks, &ids).await?;
+    run_java_pose_checks(server, bedrock, java, checks, &ids).await?;
+    run_crawl_checks(
+        server,
+        bedrock,
+        java,
+        checks,
+        &ids,
+        [bedrock_block, java_block],
+    )
+    .await
+}
+
+/// The ids the pose checks look the players up by.
+struct PoseIds {
+    /// The Bedrock player's entity id on the server and the Java bot.
+    bedrock_entity: i32,
+    java_entity: i32,
+    /// The Java player's runtime id on the Bedrock bot.
+    java_runtime: u64,
+}
+
+/// The Bedrock player's shared flags and pose, as the Java bot last saw them.
+fn seen_by_java(java: Option<&HeadlessBot>, ids: &PoseIds) -> Option<(u8, i32)> {
+    java.and_then(|java| java.entities.get(&ids.bedrock_entity))
+        .map(|entity| (entity.flags, entity.pose))
+}
+
+/// Sends one `PlayerAuthInput` standing where the bot is, with these `InputData` flags.
+async fn send_bedrock_flags(bedrock: &mut BedrockBot, flags: &[InputData]) -> Result<(), String> {
+    let mut wire = vec![bot::INPUT_VERTICAL_COLLISION];
+    wire.extend(flags.iter().map(|flag| *flag as i32));
+    bedrock
+        .send_input_with_flags(bedrock.position, &wire, &[])
+        .await
+}
+
+/// A Bedrock player's sneaking and sprinting, as a Java player sees them.
+async fn run_bedrock_pose_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    ids: &PoseIds,
+) -> Result<(), String> {
+    let crouching = EntityPose::Crouching as i32;
+    let standing = EntityPose::Standing as i32;
+    send_bedrock_flags(bedrock, &[InputData::StartSneaking, InputData::Sneaking]).await?;
+    checks.record(
+        "java sees bedrock sneak",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the sneaking flag and crouching pose on the Bedrock player",
+            |_, java| {
+                seen_by_java(java, ids).is_some_and(|(flags, pose)| {
+                    flags & JAVA_FLAG_SNEAKING != 0 && pose == crouching
+                })
+            },
+        )
+        .await,
+    );
+    send_bedrock_flags(bedrock, &[InputData::StopSneaking]).await?;
+    checks.record(
+        "java sees bedrock stop sneaking",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the Bedrock player standing again",
+            |_, java| {
+                seen_by_java(java, ids).is_some_and(|(flags, pose)| {
+                    flags & JAVA_FLAG_SNEAKING == 0 && pose == standing
+                })
+            },
+        )
+        .await,
+    );
+    send_bedrock_flags(bedrock, &[InputData::StartSprinting, InputData::Sprinting]).await?;
+    checks.record(
+        "java sees bedrock sprint",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the sprinting flag on the Bedrock player",
+            |_, java| {
+                seen_by_java(java, ids).is_some_and(|(flags, _)| flags & JAVA_FLAG_SPRINTING != 0)
+            },
+        )
+        .await,
+    );
+    send_bedrock_flags(bedrock, &[InputData::StopSprinting]).await?;
+    tick(server, bedrock, Some(java)).await
+}
+
+/// A Java player's sneaking and sprinting, as a Bedrock player sees them.
+async fn run_java_pose_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    ids: &PoseIds,
+) -> Result<(), String> {
+    let java_runtime_id = ids.java_runtime;
+    java.send_input(SPlayerInput::SNEAK).await?;
+    checks.record(
+        "bedrock sees java sneak",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the SNEAKING actor flag on the Java player",
+            |bot, _| bot.actor_flag(java_runtime_id, entity_data_flag::SNEAKING),
+        )
+        .await,
+    );
+    java.send_input(0).await?;
+    checks.record(
+        "bedrock sees java stop sneaking",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the SNEAKING actor flag cleared on the Java player",
+            |bot, _| !bot.actor_flag(java_runtime_id, entity_data_flag::SNEAKING),
+        )
+        .await,
+    );
+    java.send_player_command(ids.java_entity, PlayerCommandAction::StartSprinting)
+        .await?;
+    checks.record(
+        "bedrock sees java sprint",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the SPRINTING actor flag on the Java player",
+            |bot, _| bot.actor_flag(java_runtime_id, entity_data_flag::SPRINTING),
+        )
+        .await,
+    );
+    java.send_player_command(ids.java_entity, PlayerCommandAction::StopSprinting)
+        .await?;
+    tick(server, bedrock, Some(java)).await
+}
+
+/// A block just above each player's head leaves room only to crawl. The server picks the pose
+/// from the space around the player, for both editions.
+async fn run_crawl_checks(
+    server: &BedrockTestServer,
+    bedrock: &mut BedrockBot,
+    java: &mut HeadlessBot,
+    checks: &mut Checks,
+    ids: &PoseIds,
+    [bedrock_block, java_block]: [BlockPos; 2],
+) -> Result<(), String> {
+    let swimming = EntityPose::Swimming as i32;
+    let java_runtime_id = ids.java_runtime;
+    let above_bedrock = bedrock_block.up();
+    let above_java = java_block.up();
+    let set_blocks = |block: &str| {
+        for pos in [above_bedrock, above_java] {
+            run_console(
+                server,
+                &format!("setblock {} {} {} {block}", pos.0.x, pos.0.y, pos.0.z),
+            );
+        }
+    };
+    set_blocks("stone");
+    checks.record(
+        "java sees bedrock crawl",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the swimming pose on the Bedrock player under a block",
+            |_, java| seen_by_java(java, ids).is_some_and(|(_, pose)| pose == swimming),
+        )
+        .await,
+    );
+    checks.record(
+        "bedrock sees java crawl",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the CRAWLING actor flag on the Java player under a block",
+            |bot, _| bot.actor_flag(java_runtime_id, entity_data_flag::CRAWLING),
+        )
+        .await,
+    );
+    set_blocks("air");
+    checks.record(
+        "bedrock sees java stop crawling",
+        tick_until(
+            server,
+            bedrock,
+            Some(&mut *java),
+            "the CRAWLING actor flag cleared once the block is gone",
+            |bot, _| !bot.actor_flag(java_runtime_id, entity_data_flag::CRAWLING),
         )
         .await,
     );

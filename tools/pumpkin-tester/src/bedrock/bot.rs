@@ -19,11 +19,19 @@ use pumpkin_protocol::{
     bedrock::{
         SubClient,
         client::{
-            add_actor::CAddActor, add_player::CAddPlayer, disconnect::CDisconnect,
-            move_player::CMovePlayer, network_settings::CNetworkSettings, play_status::CPlayStatus,
-            remove_actor::CRemoveActor, resource_pack_stack::CResourcePackStackPacket,
-            resource_packs_info::CResourcePacksInfo, set_health::CSetHealth,
-            start_game::CStartGame, update_attributes::CUpdateAttributes,
+            add_actor::CAddActor,
+            add_player::CAddPlayer,
+            disconnect::CDisconnect,
+            move_player::CMovePlayer,
+            network_settings::CNetworkSettings,
+            play_status::CPlayStatus,
+            remove_actor::CRemoveActor,
+            resource_pack_stack::CResourcePackStackPacket,
+            resource_packs_info::CResourcePacksInfo,
+            set_actor_data::{CSetActorData, entity_data_key},
+            set_health::CSetHealth,
+            start_game::CStartGame,
+            update_attributes::CUpdateAttributes,
             update_block::CUpdateBlock,
         },
         packet_decoder::BedrockBatchDecoder,
@@ -106,6 +114,8 @@ pub struct BedrockBot {
     pub actors: HashMap<i64, String>,
     /// Runtime ids of the actors in [`Self::actors`], to map `RemoveActor` back.
     actor_runtime_ids: HashMap<i64, u64>,
+    /// The two actor flag words (flags 0..63 and 64..127) from `SetActorData`, by runtime id.
+    pub actor_flags: HashMap<u64, [i64; 2]>,
     /// Every `Text` the server sent.
     pub texts: Vec<SeenText>,
     /// Every layer-0 `UpdateBlock`, as position and block network id.
@@ -200,6 +210,7 @@ impl BedrockBot {
             players: HashMap::new(),
             actors: HashMap::new(),
             actor_runtime_ids: HashMap::new(),
+            actor_flags: HashMap::new(),
             texts: Vec::new(),
             block_updates: Vec::new(),
             health: 20,
@@ -535,6 +546,7 @@ impl BedrockBot {
                     .0;
             }
             CUpdateAttributes::PACKET_ID => self.read_attributes(reader)?,
+            CSetActorData::PACKET_ID => self.read_actor_data(reader)?,
             CDisconnect::PACKET_ID => {
                 let _reason = VarInt::read(reader).map_err(|err| read_error("Disconnect", err))?;
                 let skip_message =
@@ -577,6 +589,63 @@ impl BedrockBot {
             }
         }
         Ok(())
+    }
+
+    /// Keeps the actor flag words from a `SetActorData`. Stops at a compound tag, the one type
+    /// it can't skip.
+    fn read_actor_data(&mut self, reader: &mut &[u8]) -> Result<(), String> {
+        let err = |err| read_error("SetActorData", err);
+        let runtime_id = VarULong::read(reader).map_err(err)?.0;
+        for _ in 0..VarUInt::read(reader).map_err(err)?.0 {
+            let key = VarUInt::read(reader).map_err(err)?.0;
+            let data_type = VarUInt::read(reader).map_err(err)?.0;
+            // The type again, as a one-byte selector.
+            u8::read(reader).map_err(err)?;
+            match data_type {
+                0 => drop(u8::read(reader).map_err(err)?),
+                1 => drop(i16::read(reader).map_err(err)?),
+                2 => drop(VarInt::read(reader).map_err(err)?),
+                3 => drop(f32::read(reader).map_err(err)?),
+                4 => drop(String::read(reader).map_err(err)?),
+                6 => {
+                    for _ in 0..3 {
+                        VarInt::read(reader).map_err(err)?;
+                    }
+                }
+                7 => {
+                    let value = VarLong::read(reader).map_err(err)?.0;
+                    let words = self.actor_flags.entry(runtime_id).or_default();
+                    if key == entity_data_key::FLAGS {
+                        words[0] = value;
+                    } else if key == entity_data_key::FLAGS_TWO {
+                        words[1] = value;
+                    }
+                }
+                8 => drop(Vector3::<f32>::read(reader).map_err(err)?),
+                _ => return Ok(()),
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the last `SetActorData` for `runtime_id` had actor flag `flag` set.
+    pub fn actor_flag(&self, runtime_id: u64, flag: u32) -> bool {
+        self.actor_flags.get(&runtime_id).is_some_and(|words| {
+            let (word, index) = if flag >= 64 {
+                (words[1], flag - 64)
+            } else {
+                (words[0], flag)
+            };
+            word & (1 << index) != 0
+        })
+    }
+
+    /// The runtime id of the player named `name`, once `AddPlayer` announced it.
+    pub fn player_runtime_id(&self, name: &str) -> Option<u64> {
+        self.players
+            .iter()
+            .find(|(_, player)| player.name == name)
+            .map(|(runtime_id, _)| *runtime_id)
     }
 
     fn handle_entity_packet(&mut self, id: i32, reader: &mut &[u8]) -> Result<(), String> {
