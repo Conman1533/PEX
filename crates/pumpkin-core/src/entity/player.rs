@@ -7643,10 +7643,7 @@ impl EntityBase for Player {
         if let Some(vehicle_uuid) = vehicle_uuid {
             write_root_vehicle(nbt, vehicle_uuid);
         }
-        self.stats
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .write_nbt(nbt);
+        // Statistics go in their own file, like vanilla's (`ServerPlayerData::save_stats`).
         self.write_saved_keys(nbt);
     }
 

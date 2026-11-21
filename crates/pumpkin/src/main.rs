@@ -30,6 +30,7 @@ use pumpkin_core::{
             migrate_offline_uuids,
             world::{migrate_world_uuids, migrate_world_uuids_of_new_players},
         },
+        vanilla_player_files::migrate_player_files,
     },
     stop_or_exit_server,
 };
@@ -37,6 +38,7 @@ use pumpkin_core::{PumpkinServer, stop_server};
 
 use pumpkin_config::{
     AdvancedConfiguration, LoadConfiguration, LoadMessage, OFFLINE_UUID_VERSION, PumpkinConfig,
+    VANILLA_PLAYER_FILES_VERSION,
 };
 use pumpkin_core::plugin::loader::PluginLoader;
 use pumpkin_util::text::{
@@ -197,6 +199,17 @@ async fn main() {
                 })
         {
             tracing::error!("Couldn't move offline players to vanilla UUIDs: {err}");
+            tracing::error!(
+                "Stopping before pumpkin.toml records the migration, so the next start tries again"
+            );
+            exit(1);
+        }
+        if pending.version() < VANILLA_PLAYER_FILES_VERSION
+            && let Err(err) = migrate_player_files(&exec_dir, &world_path, pending.version())
+        {
+            tracing::error!(
+                "Couldn't move player advancements and statistics to vanilla's files: {err}"
+            );
             tracing::error!(
                 "Stopping before pumpkin.toml records the migration, so the next start tries again"
             );

@@ -100,6 +100,12 @@ pub struct PumpkinConfig {
 /// instead of the ones PEX 1.x gave them. The server moves their files before it saves this version.
 pub const OFFLINE_UUID_VERSION: u32 = 2;
 
+/// The `config_version` from which player advancements and statistics use vanilla's files.
+///
+/// Advancements are written in vanilla's form and statistics are kept in `players/stats` instead
+/// of the player file. The server moves PEX 1.x's files before it saves this version.
+pub const VANILLA_PLAYER_FILES_VERSION: u32 = 4;
+
 /// Keys that changed nothing, which `config_version` 3 removes. Upstream dropped
 /// `write_in_place` from `AnvilChunkConfig`; nothing ever read the others.
 const DEAD_KEYS: &[&str] = &[
@@ -126,6 +132,10 @@ impl LoadConfiguration for PumpkinConfig {
         Migration {
             version: 3,
             step: Step::Config(remove_dead_keys),
+        },
+        Migration {
+            version: VANILLA_PLAYER_FILES_VERSION,
+            step: Step::ServerFiles,
         },
     ];
 

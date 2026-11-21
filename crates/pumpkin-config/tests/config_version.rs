@@ -256,7 +256,9 @@ fn inline_chunk_table_loses_write_in_place() {
     let _ = load_and_save(dir.path());
     let generated = read(dir.path(), "pumpkin.toml");
     let version_line = format!("{CONFIG_VERSION_KEY} = {latest}\n");
-    let earlier_line = format!("{CONFIG_VERSION_KEY} = {}\n", latest - 1);
+    // The dead key step is `config_version` 3.
+    let earlier = 2;
+    let earlier_line = format!("{CONFIG_VERSION_KEY} = {earlier}\n");
     let inline = replace_once(
         &replace_once(
             &replace_once(&generated, &version_line, &earlier_line),
@@ -273,8 +275,7 @@ fn inline_chunk_table_loses_write_in_place() {
         messages,
         [
             info(&format!(
-                "Saved a copy of pumpkin.toml as pumpkin.toml.v{}.bak before changing it",
-                latest - 1
+                "Saved a copy of pumpkin.toml as pumpkin.toml.v{earlier}.bak before changing it"
             )),
             info("pumpkin.toml: removed world.chunk.write_in_place, which had no effect"),
             info(&format!(

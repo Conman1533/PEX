@@ -6,13 +6,17 @@ use crossbeam::atomic::AtomicCell;
 use pumpkin_inventory::screen_handler::ScreenHandler;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::background_event;
+use pumpkin_world::chunk::io::write_file_atomically;
 use pumpkin_world::data::player_data::{PlayerDataError, PlayerDataStorage};
+use serde_json::Value;
 use std::sync::Arc;
 use std::{
-    path::PathBuf,
+    fs, io,
+    path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime},
 };
 use tracing::{debug, error};
+use uuid::Uuid;
 
 /// Helper for managing player data in the server context.
 ///
@@ -20,6 +24,8 @@ use tracing::{debug, error};
 /// convenience methods for player handling.
 pub struct ServerPlayerData {
     storage: Arc<PlayerDataStorage>,
+    /// Vanilla `LevelResource.PLAYER_STATS_DIR`, `players/stats` next to `players/data`.
+    stats_dir: PathBuf,
     save_interval: Duration,
     last_save: AtomicCell<Instant>,
 }
@@ -27,8 +33,13 @@ pub struct ServerPlayerData {
 impl ServerPlayerData {
     /// Creates a new `ServerPlayerData` with specified configuration.
     pub fn new(data_path: impl Into<PathBuf>, save_interval: Duration, enabled: bool) -> Self {
+        let data_path = data_path.into();
+        let stats_dir = data_path
+            .parent()
+            .map_or_else(|| PathBuf::from("stats"), |players| players.join("stats"));
         Self {
             storage: Arc::new(PlayerDataStorage::new(data_path, enabled)),
+            stats_dir,
             save_interval,
             last_save: AtomicCell::new(Instant::now()),
         }
@@ -59,7 +70,50 @@ impl ServerPlayerData {
         player.unload_ender_pearls();
 
         self.storage.save_player_data(&player.gameprofile.id, nbt)?;
-        Ok(())
+        self.save_stats(player)
+    }
+
+    /// Where vanilla keeps a player's statistics: `players/stats/<uuid>.json`.
+    #[must_use]
+    pub fn stats_path(&self, uuid: &Uuid) -> PathBuf {
+        self.stats_dir.join(format!("{uuid}.json"))
+    }
+
+    /// Saves the player's statistics in their own file, like vanilla `ServerStatsCounter.save`.
+    fn save_stats(&self, player: &Player) -> Result<(), PlayerDataError> {
+        if !self.storage.is_save_enabled() {
+            return Ok(());
+        }
+        write_stats(
+            &self.stats_path(&player.gameprofile.id),
+            &stats_json(player),
+        )
+    }
+
+    /// Loads the player's statistics from vanilla's file, like the vanilla `ServerStatsCounter`
+    /// constructor: a file that can't be read is logged and the player starts without it. A
+    /// player without the file keeps the statistics PEX 1.x saved in the player file.
+    pub fn load_stats(&self, player: &Player) {
+        if !self.storage.is_save_enabled() {
+            return;
+        }
+        let path = self.stats_path(&player.gameprofile.id);
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return,
+            Err(err) => {
+                error!("Couldn't read statistics file {}: {err}", path.display());
+                return;
+            }
+        };
+        match serde_json::from_slice::<Value>(&bytes) {
+            Ok(json) => player
+                .stats
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .read_vanilla_json(&json),
+            Err(err) => error!("Couldn't parse statistics file {}: {err}", path.display()),
+        }
     }
 
     /// Performs periodic maintenance tasks.
@@ -82,7 +136,8 @@ impl ServerPlayerData {
                 for player in world.players.load().iter() {
                     let mut nbt = NbtCompound::new();
                     player.write_nbt(&mut nbt);
-                    snapshots.push((player.gameprofile.id, nbt));
+                    let stats = (self.stats_path(&player.gameprofile.id), stats_json(player));
+                    snapshots.push((player.gameprofile.id, nbt, stats));
                 }
             }
 
@@ -102,9 +157,12 @@ impl ServerPlayerData {
             pumpkin_world::background_pool().spawn(move || {
                 let save_at = SystemTime::now();
                 let save_start = Instant::now();
-                for (uuid, nbt) in snapshots {
+                for (uuid, nbt, (stats_path, stats)) in snapshots {
                     if let Err(e) = storage.save_player_data(&uuid, nbt) {
                         error!("Failed to save player data for {uuid}: {e}");
+                    }
+                    if let Err(e) = write_stats(&stats_path, &stats) {
+                        error!("Failed to save statistics for {uuid}: {e}");
                     }
                 }
                 let save_elapsed = save_start.elapsed();
@@ -195,8 +253,23 @@ impl ServerPlayerData {
         player.write_nbt(&mut nbt);
 
         self.storage.save_player_data(&uuid, nbt)?;
-        Ok(())
+        self.save_stats(player)
     }
+}
+
+fn stats_json(player: &Player) -> Value {
+    player
+        .stats
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .to_vanilla_json()
+}
+
+/// Writes a statistics file the way vanilla's GSON pretty printer lays it out.
+pub(crate) fn write_stats(path: &Path, json: &Value) -> Result<(), PlayerDataError> {
+    let bytes = serde_json::to_vec_pretty(json).map_err(io::Error::other)?;
+    write_file_atomically(path, &bytes, false)?;
+    Ok(())
 }
 
 #[cfg(test)]
