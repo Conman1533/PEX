@@ -357,6 +357,32 @@ pub(super) async fn test_item_entities_different_types_do_not_merge(
 /// A name Brigadier doesn't read unquoted. Bedrock players can have names like it.
 const NON_ASCII_PLAYER_NAME: &str = "玩家一号";
 
+/// G6-31: `forceload add` loads its chunks before it answers, as vanilla does, so a `setblock`
+/// straight after it finds the position loaded.
+pub(super) async fn test_forceload_add_loads_before_answering(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(0, 1, 0);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, "forceload add ~3000 ~3000")
+                .await?;
+            let placed = helper
+                .execute_command(&origin, "setblock ~3000 ~ ~3000 minecraft:gold_block")
+                .await;
+            helper
+                .execute_command(&origin, "forceload remove ~3000 ~3000")
+                .await?;
+            placed?;
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}
+
 /// `give`, `tp` and `@a[name=...]` reach a player with such a name when it is quoted, as on
 /// vanilla (`EntitySelectorParser.parseNameOrUUID` and the `name` option read it with
 /// `readString`).
