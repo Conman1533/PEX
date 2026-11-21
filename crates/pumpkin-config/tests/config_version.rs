@@ -363,7 +363,7 @@ fn failed_write_leaves_the_file_and_no_new_backup() {
         assert_eq!(read(dir.path(), "pumpkin.toml"), original, "start {start}");
         let backups: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
-            .filter_map(|entry| entry.ok())
+            .filter_map(Result::ok)
             .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
             .collect();
         assert!(backups.is_empty(), "start {start}: {backups:?}");
