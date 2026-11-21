@@ -59,6 +59,9 @@ slotmap.workspace = true
 tempfile.workspace = true
 time.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
 

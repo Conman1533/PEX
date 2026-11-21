@@ -39,6 +39,7 @@ use pumpkin_protocol::{ClientPacket, java::client::config::CPluginMessage};
 use pumpkin_util::Difficulty;
 use pumpkin_util::text::TextComponent;
 use pumpkin_world::world_info::anvil::{AnvilLevelInfo, LEVEL_DAT_FILE_NAME};
+use pumpkin_world::world_info::session_lock::SessionLock;
 use pumpkin_world::world_info::{LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter};
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
@@ -162,6 +163,8 @@ pub struct Server {
     // world stuff which maybe should be put into a struct
     pub level_info: Arc<ArcSwap<LevelData>>,
     world_info_writer: Arc<dyn WorldInfoWriter>,
+    /// Held from start until `shutdown` has saved the worlds.
+    session_lock: std::sync::Mutex<Option<SessionLock>>,
 }
 
 impl Server {
@@ -185,6 +188,7 @@ impl Server {
         );
 
         let world_path = basic_config.get_world_path();
+        let session_lock = SessionLock::create(&world_path)?;
 
         let block_registry = super::block::registry::default_registry();
 
@@ -328,6 +332,7 @@ impl Server {
             player_idle_timeout: AtomicI32::new(0),
             mojang_public_keys: ArcSwap::from_pointee(Vec::new()),
             world_info_writer: Arc::new(AnvilLevelInfo),
+            session_lock: std::sync::Mutex::new(Some(session_lock)),
             level_info,
             management_hub,
         };
@@ -847,6 +852,10 @@ impl Server {
         {
             error!("Failed to save level.dat: {err}");
         }
+        self.session_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         info!("Completed worlds");
     }
 
