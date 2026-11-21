@@ -99,6 +99,12 @@ impl PlayerDetector {
     }
 }
 
+/// Removes each key of `nbt` that holds the same value as in `defaults`.
+fn omit_defaults(nbt: &mut NbtCompound, defaults: &NbtCompound) {
+    nbt.child_tags
+        .retain(|key, tag| defaults.child_tags.get(key) != Some(tag));
+}
+
 /// Spawn data configuration for an entity to spawn.
 #[derive(Clone, Debug)]
 pub struct SpawnData {
@@ -148,11 +154,12 @@ impl SpawnData {
     }
 
     pub fn write_nbt(&self, nbt: &mut NbtCompound) {
+        // Vanilla `SpawnData.CODEC`: `entity` is always there, even with no id in it.
+        let mut entity_compound = self.raw_entity_nbt.clone().unwrap_or_default();
         if let Some(entity_type) = self.entity_type {
-            let mut entity_compound = self.raw_entity_nbt.clone().unwrap_or_default();
             entity_compound.put_string("id", format!("minecraft:{}", entity_type.resource_name));
-            nbt.put_compound("entity", entity_compound);
         }
+        nbt.put_compound("entity", entity_compound);
         if let Some(rules) = &self.custom_spawn_rules {
             nbt.put_compound("custom_spawn_rules", rules.clone());
         }
@@ -444,7 +451,15 @@ impl TrialSpawnerConfig {
         cfg
     }
 
+    /// Vanilla `TrialSpawnerConfig.DIRECT_CODEC`: a field at its default is left out.
     pub fn write_nbt(&self, nbt: &mut NbtCompound) {
+        self.write_all_fields(nbt);
+        let mut defaults = NbtCompound::new();
+        Self::default().write_all_fields(&mut defaults);
+        omit_defaults(nbt, &defaults);
+    }
+
+    fn write_all_fields(&self, nbt: &mut NbtCompound) {
         nbt.put_int("spawn_range", self.spawn_range);
         nbt.put_float("total_mobs", self.total_mobs);
         nbt.put_float("simultaneous_mobs", self.simultaneous_mobs);
@@ -567,17 +582,30 @@ impl TrialSpawnerFullConfig {
         }
     }
 
+    /// Vanilla `TrialSpawner.FullConfig.MAP_CODEC`: a default config or value is left out, and
+    /// the cooldown is an int.
     pub fn write_nbt(&self, nbt: &mut NbtCompound) {
         let mut normal_cmp = NbtCompound::new();
         self.normal.write_nbt(&mut normal_cmp);
-        nbt.put_compound("normal_config", normal_cmp);
+        if !normal_cmp.is_empty() {
+            nbt.put_compound("normal_config", normal_cmp);
+        }
 
         let mut ominous_cmp = NbtCompound::new();
         self.ominous.write_nbt(&mut ominous_cmp);
-        nbt.put_compound("ominous_config", ominous_cmp);
+        if !ominous_cmp.is_empty() {
+            nbt.put_compound("ominous_config", ominous_cmp);
+        }
 
-        nbt.put_long("target_cooldown_length", self.target_cooldown_length);
-        nbt.put_int("required_player_range", self.required_player_range);
+        if self.target_cooldown_length != 36000 {
+            nbt.put_int(
+                "target_cooldown_length",
+                self.target_cooldown_length.clamp(0, i64::from(i32::MAX)) as i32,
+            );
+        }
+        if self.required_player_range != 14 {
+            nbt.put_int("required_player_range", self.required_player_range);
+        }
     }
 }
 
@@ -711,7 +739,15 @@ impl TrialSpawnerStateData {
         data
     }
 
+    /// Vanilla `TrialSpawnerStateData.Packed.MAP_CODEC`: a value at its default is left out.
     pub fn write_nbt(&self, nbt: &mut NbtCompound) {
+        self.write_all_fields(nbt);
+        let mut defaults = NbtCompound::new();
+        Self::default().write_all_fields(&mut defaults);
+        omit_defaults(nbt, &defaults);
+    }
+
+    fn write_all_fields(&self, nbt: &mut NbtCompound) {
         let write_uuid_list = |set: &FxHashSet<Uuid>| -> Vec<NbtTag> {
             set.iter()
                 .map(|u| {
@@ -1523,5 +1559,54 @@ mod tests {
         assert_eq!(loaded.config.target_cooldown_length, 36000);
         assert_eq!(loaded.config.required_player_range, 14);
         assert!(loaded.data.registered_players.contains(&test_uuid));
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+
+    #[test]
+    fn a_default_trial_spawner_saves_no_config_or_state() {
+        let mut nbt = NbtCompound::new();
+        TrialSpawner::default().store(&mut nbt);
+        assert!(nbt.is_empty(), "wrote {nbt:?}");
+    }
+
+    #[test]
+    fn a_changed_trial_spawner_saves_only_what_changed() {
+        let mut spawner = TrialSpawner::default();
+        spawner.config.required_player_range = 20;
+        spawner.config.target_cooldown_length = 100;
+        spawner.config.normal.spawn_range = 6;
+        spawner.data.total_mobs_spawned = 3;
+        let mut nbt = NbtCompound::new();
+        spawner.store(&mut nbt);
+
+        assert_eq!(nbt.get_int("required_player_range"), Some(20));
+        assert_eq!(nbt.get_int("target_cooldown_length"), Some(100));
+        assert_eq!(nbt.get_int("total_mobs_spawned"), Some(3));
+        let normal = nbt
+            .get_compound("normal_config")
+            .expect("the changed config");
+        assert_eq!(normal.child_tags.len(), 1);
+        assert_eq!(normal.get_int("spawn_range"), Some(6));
+        assert!(nbt.get_compound("ominous_config").is_none());
+        assert!(nbt.get("cooldown_ends_at").is_none());
+
+        let mut loaded = TrialSpawner::default();
+        loaded.load(&nbt);
+        assert_eq!(loaded.config.normal.spawn_range, 6);
+        assert_eq!(loaded.config.target_cooldown_length, 100);
+        assert_eq!(loaded.data.total_mobs_spawned, 3);
+    }
+
+    #[test]
+    fn spawn_data_keeps_an_entity_with_no_id() {
+        let mut saved = NbtCompound::new();
+        saved.put_compound("entity", NbtCompound::new());
+        let mut written = NbtCompound::new();
+        SpawnData::from_nbt(&saved).write_nbt(&mut written);
+        assert_eq!(written, saved);
     }
 }
