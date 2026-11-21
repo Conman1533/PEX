@@ -12,6 +12,8 @@ use crate::survival::StageContext;
 const BOT: &str = "ActionBot";
 /// Ticks the server gets to do what a command asked.
 const MAX_WAIT_TICKS: usize = 1000;
+/// Ticks the food level must hold before the bot eats.
+const FOOD_STEADY_TICKS: usize = 40;
 /// How far from the world spawn vanilla can respawn a player without a bed (`spawnRadius` 10,
 /// plus slack for the spawn search moving off unsafe ground).
 const MAX_SPAWN_DISTANCE: f64 = 32.0;
@@ -133,7 +135,27 @@ async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
             bot.inventory.count(&Item::BREAD) == 1
         })
         .await?;
-    let before = stage.bot.food;
+    // Hunger's last exhaustion can still take a point after the effect is cleared, and the
+    // food level the bot sees can trail the server's, so eat only once it has held still.
+    let mut before = stage.bot.food;
+    let mut steady = 0;
+    for _ in 0..MAX_WAIT_TICKS {
+        stage.tick().await?;
+        if stage.bot.food == before {
+            steady += 1;
+            if steady >= FOOD_STEADY_TICKS {
+                break;
+            }
+        } else {
+            before = stage.bot.food;
+            steady = 0;
+        }
+    }
+    if steady < FOOD_STEADY_TICKS {
+        return Err(format!(
+            "The food level kept changing after the hunger effect was cleared (now {before})"
+        ));
+    }
     stage.eat().await?;
     // Bread gives 5 food.
     if stage.bot.food != before + 5 {
