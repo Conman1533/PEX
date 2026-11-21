@@ -8,7 +8,7 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `206a50ada`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `e56f1d461`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
@@ -18,12 +18,12 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 34 | 18 | 1 | 13 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 35 | 20 | 0 | 13 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 204 | 90 | 7 | 91 | 16 |
+| Total | 205 | 92 | 6 | 91 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -59,6 +59,8 @@ Landing batch 11 (2026-11-21) also carried, outside the pieces: the Bedrock thre
 Landing batch 13 (2026-11-21, merge branch `land/g7-batch-13` `0028f6d80`, which passed the world round trip, full CI and the whole tester on CT 117 and the Z420) carried no pieces of its own: the emitter update source above, `test/more-mob-cells` (`2a2ea30b7`: the creeper test summons a persistent creeper and every mob-spawning GameTest runs in its own cell, 44 cells instead of 18, about 5% more tester time), which unblocks the G1 mob pieces, and `test/cow-panic-timing` (`a5b511454`): `pumpkin:cow_follows_wheat_and_panics_when_hit` hit the cow at tick 61 but gave up at tick 140, while a panic lasts 100 to 120 ticks, so it now allows 200.
 
 Landing batch 15 (2026-11-21, `206a50ada`) also carried the Bedrock thread's `fix/bedrock-tester-stall-watchdog` (`5f63ac981`): the portal exit search runs off the rayon pool (the Windows tester hang), the portal cooldown waits until the client has loaded, with a unit test (the `bedrock:mixed_play` flake), and the tester stops with a stall report after 120 s without progress. `pumpkin:creeper_should_run_from_cat` failed once on the Z420 (its test instance needs 3 passes of 3 attempts in 22 ticks each, as vanilla's flaky rules run it); `test/creeper-cat-budget` gives each attempt 60 ticks.
+
+Landing batch 16 (2026-11-21, `e56f1d461`) also carried `test/creeper-cat-budget` (`fff71f7f9`): each of `pumpkin:creeper_should_run_from_cat`'s 3 required attempts gets 60 ticks instead of 22.
 
 What holds 2.0 back:
 
@@ -2198,7 +2200,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/data-block-query-args
 - Needs decision: none
 - Done when: `data get block` and `data modify block` on a chest print the same lines on PEX and vanilla 26.3 in the side-by-side, apart from SNBT key order.
-- Status (2026-11-21): built, proof missing (branch `fix/data-block-query-args`, the 2.0 loop). Batch 15 carried the message part (`b62eeec08`): in the side-by-side on CT 117 against vanilla 26.3, `data get block` now prints `3, 201, 0 has the following block data: [...]` and `data modify block` prints `Modified block data of 3, 201, 0` like vanilla. The same run showed `data modify block 3 201 0 Items[0].count set value 5` leaving the count at 3 (vanilla 5) and `data remove` after `data merge` answering "Nothing changed"; the fix and the GameTest `pumpkin:commands/data_modify_block_changes_block_entity` follow on the same branch. Merge branch `land/g7-batch-15` (`206a50ada`) passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+- Status (2026-11-21): landed (branch `fix/data-block-query-args`, the 2.0 loop: the messages in batch 15, `b62eeec08`, the data in batch 16, `39fb03061`). `data get block` and `data modify block` name the position with three arguments like vanilla, and `data modify`, `data merge` and `data remove` on a block load the new data into the block entity through `World::load_block_entity_from_nbt`, which also keeps the keys PEX doesn't model (D7-1) as the new data gives them. The GameTest `pumpkin:commands/data_modify_block_changes_block_entity` fails on `alpha` and passes. Side-by-side console run on CT 117, PEX batch 16 against vanilla 26.3: `item replace`, `data get` (whole, path and scaled), `data modify`, `data merge`, `data remove` and `data get` on a block without an entity printed the same lines, apart from the key order inside the printed items. Landed through merge branch `land/g7-batch-16` (`e56f1d461`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
 
 #### G6-34 item replace answers with the 26.3 messages
 
@@ -2207,7 +2209,16 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/item-command-messages
 - Needs decision: none
 - Done when: `item replace block 3 201 0 container.0 with minecraft:stone 3` prints `Replaced 1 slot(s) at 3, 201, 0 with [Stone]` on PEX as on vanilla 26.3 (the CT 117 side-by-side), and `item replace entity` on one and two entities prints vanilla's lines.
-- Status (2026-11-21): built, proof missing (branch `fix/item-command-messages`, `d24192faa`, the 2.0 loop). Found in the G6-33 side-by-side: PEX printed `Replaced a slot at 3, 201, 0 with [Stone]`.
+- Status (2026-11-21): landed (branch `fix/item-command-messages`, `d24192faa`, the 2.0 loop). `item replace block` and `item replace entity` answer with 26.3's slot count messages. In the G6-33 side-by-side on batch 16, `item replace block ... container.0 with minecraft:stone 3` printed `Replaced 1 slot(s) at 3, 201, 0 with [Stone]`, one armor stand `Replaced 1 slot(s) on Armor Stand with [Diamond Helmet]` and two `Replaced slot(s) on 2 entities with [Iron Boots]`, as vanilla 26.3 does. Landed through merge branch `land/g7-batch-16` (`e56f1d461`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420.
+
+#### G6-35 spreadplayers finds the surface like vanilla
+
+- Scope: in: `/spreadplayers` (`core/command/commands/spreadplayers.rs`) finds each spot's standing height like vanilla `SpreadPlayersCommand.Position.getSpawnY` (scan down from the max height for two air blocks over a block, loading the chunk), judges it safe like `isSafe` (below the max height, not a liquid, in `#entities_can_teleport_to`), re-rolls unsafe spots inside the same 10000-iteration spread loop instead of 16 extra rounds, and prints the center like vanilla (`57.5`, not `57.50`). Out: other teleport commands.
+- Depends on: none
+- Branch: fix/spreadplayers-surface
+- Needs decision: none
+- Done when: on PEX and vanilla 26.3 (CT 117 side-by-side), `spreadplayers 57 0 12 60 false` on one pig lands it on the surface (vanilla y 106 on that seed) and not at the world bottom, five times in a row, and prints the same line; one entity spreads over an area that is mostly water, as on vanilla; a GameTest.
+- Status (2026-11-21): added by the 2.0 loop after a ThinkPad play-server report (`spreadplayers` refused one entity with \"too many entities for space\" on open land near 57 0). The CT 117 side-by-side on batch 16 put the pig at y -63 five times out of five where the spot's chunk was not loaded (the heightmap lookup falls back to the world bottom), where vanilla stood it at y 106, and printed `57.50, 0.50` where vanilla prints `57.5, 0.5`. PEX also gives up after 16 safety rounds, which fits the refusal on land with water nearby.
 
 ### Proof
 
