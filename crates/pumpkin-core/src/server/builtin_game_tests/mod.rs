@@ -278,6 +278,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:ghast_shoots_fireball_at_survival_player",
     "pumpkin:camel_follows_cactus",
     "pumpkin:husk_rider_steers_camel_husk_to_target",
+    "pumpkin:piglin_brute_attacks_player_in_gold_armor",
 ];
 
 #[must_use]
@@ -568,6 +569,13 @@ pub fn ensure_builtin_game_tests_registered() {
             140,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:piglin_brute_attacks_player_in_gold_armor",
+            "pumpkin:empty_9x4x5",
+            200,
+            0,
+            entities_and_ai::test_piglin_brute_attacks_player_in_gold_armor,
         );
         register_function_test(
             "pumpkin:camel_follows_cactus",
