@@ -165,6 +165,16 @@ pub struct MobEntity {
     pub natural_spawn: AtomicBool,
     mob_flags: AtomicU8,
 }
+pub static MOBPROBE_LIVE: [std::sync::atomic::AtomicI64; 256] = [const { std::sync::atomic::AtomicI64::new(0) }; 256];
+pub static MOBPROBE_CREATED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+impl Drop for MobEntity {
+    fn drop(&mut self) {
+        let id = usize::from(self.living_entity.entity.entity_type.id) % 256;
+        MOBPROBE_LIVE[id].fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 impl MobEntity {
     /// Vanilla `Mob.getNavigation`/`getMoveControl`: a rider steering a mob drives that mob.
     /// Only the mob's own AI step ticks its own navigator and move control directly.
@@ -269,6 +279,18 @@ impl MobEntity {
 
     #[must_use]
     pub fn new(entity: Entity) -> Self {
+        {
+            use std::sync::atomic::Ordering::Relaxed as R;
+            let id = usize::from(entity.entity_type.id) % 256;
+            MOBPROBE_LIVE[id].fetch_add(1, R);
+            let n = MOBPROBE_CREATED.fetch_add(1, R) + 1;
+            if n % 2000 == 0 {
+                let mut top: Vec<(usize, i64)> = (0..256).map(|i| (i, MOBPROBE_LIVE[i].load(R))).filter(|x| x.1 > 0).collect();
+                top.sort_by_key(|x| -x.1);
+                let names: Vec<String> = top.iter().take(6).map(|(i, c)| format!("{}={c}", pumpkin_data::entity::EntityType::from_raw(*i as u16).map_or("?", |t| t.resource_name))).collect();
+                tracing::info!("MOBPROBE created={n} live_total={} top={names:?}", top.iter().map(|x| x.1).sum::<i64>());
+            }
+        }
         Self {
             living_entity: LivingEntity::new(entity),
             goals_selector: GoalSelector::default(),
