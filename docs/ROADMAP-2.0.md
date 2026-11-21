@@ -18,12 +18,12 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G3 Config | 10 | 3 | 0 | 7 | |
 | G4 Offline UUIDs | 6 | 1 | 0 | 5 | |
 | G5 Redstone | 16 | 1 | 1 | 14 | |
-| G6 Survival | 26 | 14 | 0 | 11 | G6-26 dropped (no code) |
+| G6 Survival | 27 | 14 | 0 | 12 | G6-26 dropped (no code) |
 | G7 Worlds | 32 | 26 | 0 | 6 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 196 | 72 | 2 | 107 | 15 |
+| Total | 197 | 72 | 2 | 108 | 15 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -111,10 +111,10 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D4-1 | In offline mode, which UUID should `op`, `whitelist add`, `ban`, `pardon` and `fetchprofile` use for a name the server hasn't seen? | Open | G4-03 |
 | D4-2 | Should the player lists and `usercache.json` live in the server root like vanilla instead of `data/`? | Open | G4-06 |
 | D4-3 | Should plugins get the old-to-new UUID mapping through the plugin API? | Open | G4-04 |
-| D5-1 | How do scheduled block and fluid ticks and block entities run? | Open | G5-05, G5-15 |
-| D5-2 | Is the chained neighbour update limit configurable? | Open | G5-14 |
+| D5-1 | How do scheduled block and fluid ticks and block entities run? | Answered by the 2.0 loop (2026-11-21): serially, in vanilla order, because vanilla parity comes first and the region split risks rare non-vanilla order; G5-05 builds the stress world and measures the cost, and Goal 9 can win time back elsewhere. | G5-05, G5-15 |
+| D5-2 | Is the chained neighbour update limit configurable? | Answered by the 2.0 loop (2026-11-21): a key matching vanilla's `max-chained-neighbor-updates` (default 1000000, negative means unlimited), because a server that tunes it on vanilla should be able to on PEX; it takes the next free `config_version` when G5-14 lands. | G5-14 |
 | D5-3 | Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? | Answered: out, default redstone only for 2.0 (Q5.1) | none (scope only) |
-| D5-4 | What does the proof compare? | Partly (Q5.2): position-dependent behaviour not required. Open: pass or fail, or a per-tick trace | G5-16 |
+| D5-4 | What does the proof compare? | Answered by the 2.0 loop (2026-11-21): pass or fail and also a per-tick trace, because pass or fail misses order differences that a build doesn't race, and parity is what the proof is for; the vanilla recorder is a datapack function kept in `tools/dual-run/`. | G5-16 |
 | D6-1 | What may a stage set up with commands? | Answered: `give` and `locate` per stage; only G6-22 chains without `give` | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
 | D6-2 | Where do the stages that need the Nether, the End and the fixed seed run? | Answered: the shared tester server, fixed seed, both dimensions on (Q6.4) | G6-01 |
 | D6-3 | Which stages run in CI's `gametest` job? | Answered: short stages in CI, the long ones nightly and before releases | G6-06, G6-07, G6-08, G6-11, G6-13, G6-15, G6-20, G6-22 |
@@ -1799,10 +1799,12 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
   - In parallel over independent regions, serially inside each. Keeps most parallelism on spread-out worlds; needs a reach bound that holds for wire, rails, shape chains and pistons (the same open question as `BLOCK_UPDATE_REACH`), and a wrong bound gives rare non-vanilla order. Roughly two pieces instead of one.
   - Keep them parallel. No work; any build with more than 32 due ticks or 16 block entities in one tick can differ from vanilla and from run to run, and the proof has to leave large builds out.
   - Waits on it: G5-05, G5-15.
+  - Answered by the 2.0 loop (2026-11-21): serially, in vanilla order, because vanilla parity comes first and the region split risks rare non-vanilla order; G5-05 builds the stress world and measures the cost, and Goal 9 can win time back elsewhere.
 - D5-2: Is the chained neighbour update limit configurable? Options:
   - A key matching vanilla's `max-chained-neighbor-updates` (default 1000000, negative means unlimited). A new config key, which should land after Goal 3's versioning.
   - Vanilla's default as a constant. No config work; a server that changes it on vanilla can't on PEX.
   - Waits on it: G5-14.
+  - Answered by the 2.0 loop (2026-11-21): a key matching vanilla's `max-chained-neighbor-updates` (default 1000000, negative means unlimited), because a server that tunes it on vanilla should be able to on PEX; it takes the next free `config_version` when G5-14 lands.
 - D5-3: Is experimental redstone (`minecraft:redstone_experiments`) part of 2.0? The earlier roadmap recorded "default redstone only for 2.0" on 2026-10-29; this restates it so it carries over. Options:
   - Out. No pieces. A world with the pack enabled runs the default evaluator and differs from vanilla with the pack.
   - In. Port `ExperimentalRedstoneWireEvaluator`, `ExperimentalRedstoneUtils` and `Orientation`, which vanilla threads through every neighbour update (`CollectingNeighborUpdater.MultiNeighborUpdate.runNext`). At least three pieces, after G5-10.
@@ -1813,6 +1815,7 @@ Each fix piece starts by adding its dual-run structure and showing it fails on `
   - Also a per-tick trace: both servers record the block states of each test area every tick and the traces must match. Catches order and timing directly; needs a recorder on vanilla (a datapack function or a mod, outside the repo) and one tooling piece.
   - Waits on it: G5-16 and the Proof.
   - Partly answered 2026-10-31 (Neon accepted Q5.2): position-dependent behaviour isn't required for 2.0; contraptions that don't depend on position must give the same results. Still open: pass or fail only, or also a per-tick trace.
+  - Answered by the 2.0 loop (2026-11-21): pass or fail and also a per-tick trace, because pass or fail misses order differences that a build doesn't race, and parity is what the proof is for; the vanilla recorder is a datapack function kept in `tools/dual-run/`.
 
 ## Goal 6: Survival parity end to end
 
@@ -2098,6 +2101,15 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: a real client reads sky 14 under a stone placed 10 blocks above the ground, both right after placing it and after reconnecting, as on vanilla.
 - Result (2026-11-04): no code; G6-25 covers it. The readings behind this piece were wrong: the client player was in creative, not flying, and had fallen to y 47 before the setblock, so F3 read 0 there before and after. Measured again in spectator against a vanilla 26.3 server and the same client: vanilla reads 15 under the open sky, then 14 at y 185 right after a stone goes in at y 190 and 14 at y 170. The G6-25 build gives the same, and after reconnecting its server data reads 14 at y 189, 185 and 175 with 15 in the next column, on a chunk edge too. Vanilla sends light updates only to players for whom the chunk is on the edge of view (`ChunkHolder.broadcastChanges`, `getPlayers(pos, true)`); inside the view the client works out the shadow itself. PEX sends none at all, so a block changed in a chunk on the edge of a player's view may light wrongly there until the chunk is sent again; not measured, and not this piece.
+
+#### G6-27 Advancements are granted by their vanilla triggers
+
+- Scope: in: replace the inventory scans in `core/entity/player/advancement/trigger.rs` (for example `story/enchant_item` granted for holding any enchanted item, `nether/brew_potion` for holding a potion, `nether/create_beacon` and `create_full_beacon` for holding a beacon) with vanilla's criterion triggers fired where vanilla fires them (`enchanted_item` from the enchanting table, `brewed_potion` from taking a brewing stand's output, `construct_beacon` with the beacon's level, `inventory_changed` only for the advancements that use it). Out: the advancement file format (G7-22).
+- Depends on: none
+- Branch: fix/advancement-triggers
+- Needs decision: none
+- Done when: the round trip's bot visit no longer grants `minecraft:story/enchant_item` on PEX, and unit tests show each changed advancement is granted by its trigger and not by holding the item.
+- Status (2026-11-21): added by the 2.0 loop after the second lane saw the round trip's bot visit granted `story/enchant_item` on PEX without an enchanting table.
 
 ### Proof
 
