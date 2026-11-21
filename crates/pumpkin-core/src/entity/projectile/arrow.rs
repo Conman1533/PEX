@@ -55,7 +55,8 @@ pub struct ArrowEntity {
     pub owner_id: Option<i32>,
     pub item_stack: RwLock<ItemStack>,
     pub base_damage: AtomicU64,
-    pub pickup: ArrowPickup,
+    /// Vanilla `AbstractArrow.pickup`, as [`ArrowPickup::to_byte`]; saved as `pickup`.
+    pub pickup: AtomicU8,
     pub is_critical: AtomicBool,
     pub no_physics: AtomicBool,
     pub pierce_level: AtomicU8,
@@ -72,6 +73,11 @@ pub struct ArrowEntity {
 }
 
 impl ArrowEntity {
+    #[must_use]
+    pub fn pickup(&self) -> ArrowPickup {
+        ArrowPickup::from_byte(self.pickup.load(Ordering::Relaxed))
+    }
+
     const ARROW_BASE_DAMAGE: f64 = 2.0;
     const WATER_INERTIA: f64 = 0.6;
     const AIR_INERTIA: f64 = 0.99;
@@ -94,7 +100,7 @@ impl ArrowEntity {
             owner_id,
             item_stack: RwLock::new(item_stack.copy_with_count(1)),
             base_damage: AtomicU64::new(Self::ARROW_BASE_DAMAGE.to_bits()),
-            pickup,
+            pickup: AtomicU8::new(pickup.to_byte()),
             is_critical: AtomicBool::new(false),
             no_physics: AtomicBool::new(false),
             pierce_level: AtomicU8::new(0),
@@ -136,7 +142,7 @@ impl ArrowEntity {
             owner_id: Some(shooter.entity_id),
             item_stack: RwLock::new(item_stack.copy_with_count(1)),
             base_damage: AtomicU64::new(Self::ARROW_BASE_DAMAGE.to_bits()),
-            pickup,
+            pickup: AtomicU8::new(pickup.to_byte()),
             is_critical: AtomicBool::new(false),
             no_physics: AtomicBool::new(false),
             pierce_level: AtomicU8::new(0),
@@ -419,7 +425,7 @@ impl EntityBase for ArrowEntity {
             "PierceLevel",
             self.pierce_level.load(Ordering::Relaxed) as i8,
         );
-        nbt.put_byte("pickup", self.pickup.to_byte() as i8);
+        nbt.put_byte("pickup", self.pickup().to_byte() as i8);
     }
 
     fn read_custom_nbt(&self, nbt: &pumpkin_nbt::compound::NbtCompound) {
@@ -428,6 +434,9 @@ impl EntityBase for ArrowEntity {
                 .item_stack
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = item_stack;
+        }
+        if let Some(pickup) = nbt.get_byte("pickup") {
+            self.pickup.store(pickup as u8, Ordering::Relaxed);
         }
         if let Some(crit) = nbt.get_bool("crit") {
             self.is_critical.store(crit, Ordering::Relaxed);
@@ -1038,7 +1047,7 @@ impl EntityBase for ArrowEntity {
         }
 
         // Check pickup rules
-        match self.pickup {
+        match self.pickup() {
             ArrowPickup::Disallowed => return,
             ArrowPickup::CreativeOnly if !player.is_creative() => return,
             _ => {}

@@ -591,14 +591,6 @@ impl Mob for SnifferEntity {
         Some(self)
     }
 
-    fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        nbt.put_int("State", self.get_state().id());
-        nbt.put_int(
-            "DropSeedAtTick",
-            self.drop_seed_at_tick.load(Ordering::Relaxed),
-        );
-    }
-
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         if let Some(state_id) = nbt.get_int("State") {
             self.state.store(state_id, Ordering::Relaxed);

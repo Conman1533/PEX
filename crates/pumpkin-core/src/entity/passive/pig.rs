@@ -249,7 +249,7 @@ impl Mob for PigEntity {
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        nbt.put_bool("Saddle", self.is_saddled());
+        crate::entity::write_saddle_equipment(nbt, self.is_saddled());
         let variant = PigVariant::from_id(self.variant.load(Ordering::Relaxed)).unwrap_or_default();
         nbt.put_string("variant", format!("minecraft:{}", variant.to_name()));
         let sound_variant = PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
@@ -261,8 +261,8 @@ impl Mob for PigEntity {
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
-        if let Some(saddle) = nbt.get_byte("Saddle") {
-            self.set_saddled(saddle == 1);
+        if let Some(saddled) = crate::entity::saved_saddle(nbt) {
+            self.set_saddled(saddled);
         }
         if let Some(variant_str) = nbt.get_string("variant")
             && let Some(variant) = PigVariant::from_name(variant_str)

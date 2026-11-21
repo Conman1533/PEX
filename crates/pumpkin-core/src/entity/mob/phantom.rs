@@ -212,23 +212,31 @@ impl Mob for PhantomEntity {
             .circling_center
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        nbt.put_int("AX", center.0.x);
-        nbt.put_int("AY", center.0.y);
-        nbt.put_int("AZ", center.0.z);
-        nbt.put_int("Size", self.phantom_size.load(Ordering::Relaxed));
+        nbt.put(
+            "anchor_pos",
+            pumpkin_nbt::tag::NbtTag::IntArray(vec![center.0.x, center.0.y, center.0.z]),
+        );
+        nbt.put_int("size", self.phantom_size.load(Ordering::Relaxed));
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
-        if nbt.get_int("AX").is_some() {
-            let x = nbt.get_int("AX").unwrap_or(0);
-            let y = nbt.get_int("AY").unwrap_or(0);
-            let z = nbt.get_int("AZ").unwrap_or(0);
+        let anchor = match nbt.get_int_array("anchor_pos") {
+            Some(&[x, y, z]) => Some(BlockPos::new(x, y, z)),
+            _ => nbt.get_int("AX").map(|x| {
+                BlockPos::new(
+                    x,
+                    nbt.get_int("AY").unwrap_or(0),
+                    nbt.get_int("AZ").unwrap_or(0),
+                )
+            }),
+        };
+        if let Some(anchor) = anchor {
             *self
                 .circling_center
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = BlockPos::new(x, y, z);
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = anchor;
         }
-        if let Some(size) = nbt.get_int("Size") {
+        if let Some(size) = nbt.get_int("size").or_else(|| nbt.get_int("Size")) {
             self.phantom_size.store(size, Ordering::Relaxed);
             let entity = self.get_entity();
             entity.set_synced_data(tracked_data::phantom::ID_SIZE, size);

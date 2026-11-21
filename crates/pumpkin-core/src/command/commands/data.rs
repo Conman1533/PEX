@@ -230,6 +230,7 @@ impl DataAccessor for EntityDataAccessor {
             return Err(ERROR_ENTITY_INVALID.create_without_context());
         }
         self.entity.read_nbt_non_mut(tag);
+        crate::entity::Entity::keep_unmodelled_nbt(self.entity.as_ref(), tag);
         Ok(())
     }
 

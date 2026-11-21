@@ -48,6 +48,29 @@ impl WeatherState {
         self as i32
     }
 
+    /// Vanilla `WeatheringCopper.WeatherState.getSerializedName`.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unaffected => "unaffected",
+            Self::Exposed => "exposed",
+            Self::Weathered => "weathered",
+            Self::Oxidized => "oxidized",
+        }
+    }
+
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        [
+            Self::Unaffected,
+            Self::Exposed,
+            Self::Weathered,
+            Self::Oxidized,
+        ]
+        .into_iter()
+        .find(|state| state.name() == name)
+    }
+
     #[must_use]
     pub const fn next(self) -> Self {
         match self {
@@ -213,14 +236,19 @@ impl Mob for CopperGolemEntity {
             "next_weather_age",
             self.next_weathering_tick.load(Ordering::Relaxed),
         );
-        nbt.put_int("weather_state", self.get_weather_state().id());
+        nbt.put_string("weather_state", self.get_weather_state().name().to_string());
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         if let Some(next) = nbt.get_long("next_weather_age") {
             self.next_weathering_tick.store(next, Ordering::Relaxed);
         }
-        if let Some(state) = nbt.get_int("weather_state") {
+        if let Some(state) = nbt
+            .get_string("weather_state")
+            .and_then(WeatherState::from_name)
+        {
+            self.set_weather_state(state);
+        } else if let Some(state) = nbt.get_int("weather_state") {
             self.set_weather_state(WeatherState::from_id(state));
         }
     }

@@ -703,8 +703,10 @@ impl World {
             let uuid = entity_nbt.get_uuid("UUID").unwrap_or_else(Uuid::new_v4);
             // Pos is zero since it will be read from nbt.
             let entity = from_type(entity_type, Vector3::new(0.0, 0.0, 0.0), self, uuid);
+            entity.get_entity().loaded_from_save.store(true, Relaxed);
             entity.read_nbt_non_mut(entity_nbt);
             entity.init_data_tracker();
+            Entity::keep_unmodelled_nbt(entity.as_ref(), entity_nbt);
 
             // Clear velocity so the client does not replay the drop animation; residual
             // velocity from the original drop is stale data.
@@ -8338,6 +8340,81 @@ mod tests {
         }
         assert!(!has_pig(&world), "the unforced chunk kept its pig live");
         assert!(!world.level.is_chunk_watched(&pos));
+    }
+
+    fn load_saved_entity(world: &std::sync::Arc<World>, nbt: &NbtCompound) -> NbtCompound {
+        use pumpkin_world::chunk::ChunkEntityData;
+        use std::sync::atomic::AtomicBool;
+
+        let chunk = ChunkEntityData {
+            x: 0,
+            z: 0,
+            data: std::sync::Mutex::new(vec![nbt.clone()]),
+            live: AtomicBool::new(false),
+            dirty: AtomicBool::new(false),
+        };
+        let entities = world.make_entity_chunk_live(&chunk);
+        assert_eq!(entities.len(), 1);
+        let mut saved = NbtCompound::new();
+        entities[0].write_nbt(&mut saved);
+        saved
+    }
+
+    /// G7-24: a pig vanilla 26.3 saved keeps the keys PEX doesn't model, writes the base keys
+    /// the way vanilla does and keeps its saddle in the `saddle` equipment slot.
+    #[tokio::test]
+    async fn a_saved_entity_keeps_unmodelled_keys_and_saves_base_keys_like_vanilla() {
+        use pumpkin_nbt::tag::NbtTag;
+
+        let world = super::test_world();
+        let mut pig = record(Some(Uuid::from_u128(9)), "minecraft:pig");
+        pig.put(
+            "Pos",
+            NbtTag::List(vec![
+                NbtTag::Double(0.5),
+                NbtTag::Double(64.0),
+                NbtTag::Double(0.5),
+            ]),
+        );
+        pig.put_bool("Silent", true);
+        pig.put_bool("NoGravity", true);
+        pig.put_double("fall_distance", 2.5);
+        pig.put_int("fixture_unknown_key", 7);
+        let mut saddle = NbtCompound::new();
+        saddle.put_string("id", "minecraft:saddle".to_string());
+        saddle.put_int("count", 1);
+        let mut equipment = NbtCompound::new();
+        equipment.put_compound("saddle", saddle);
+        pig.put_compound("equipment", equipment);
+
+        let saved = load_saved_entity(&world, &pig);
+        assert_eq!(saved.get_bool("Silent"), Some(true));
+        assert_eq!(saved.get_bool("NoGravity"), Some(true));
+        assert_eq!(saved.get_double("fall_distance"), Some(2.5));
+        assert_eq!(saved.get_int("fixture_unknown_key"), Some(7));
+        assert!(
+            saved
+                .get_compound("equipment")
+                .is_some_and(|e| e.has("saddle"))
+        );
+        for key in ["Saddle", "FallDistance", "TicksFrozen", "CustomNameVisible"] {
+            assert!(
+                !saved.has(key),
+                "PEX wrote {key}, which vanilla leaves out here"
+            );
+        }
+        assert_eq!(saved.get_bool("CanPickUpLoot"), Some(false));
+        assert_eq!(saved.get_bool("PersistenceRequired"), Some(false));
+    }
+
+    /// Vanilla gives default equipment in `finalizeSpawn`, so a skeleton saved without a bow
+    /// loads without one.
+    #[tokio::test]
+    async fn a_saved_skeleton_without_a_bow_loads_without_one() {
+        let world = super::test_world();
+        let skeleton = record(Some(Uuid::from_u128(10)), "minecraft:skeleton");
+        let saved = load_saved_entity(&world, &skeleton);
+        assert!(!saved.has("equipment"), "{saved:?}");
     }
 
     #[test]

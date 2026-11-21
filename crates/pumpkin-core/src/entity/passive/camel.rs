@@ -513,14 +513,14 @@ impl Mob for CamelEntity {
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         self.write_ageable_nbt(nbt);
-        nbt.put_bool("Saddle", self.is_saddled());
+        crate::entity::write_saddle_equipment(nbt, self.is_saddled());
         nbt.put_long("LastPoseTick", self.last_pose_tick.load(Ordering::Relaxed));
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
         self.read_ageable_nbt(nbt);
-        if let Some(saddle) = nbt.get_bool("Saddle") {
-            self.set_saddled(saddle);
+        if let Some(saddled) = crate::entity::saved_saddle(nbt) {
+            self.set_saddled(saddled);
         }
         if let Some(pose_tick) = nbt.get_long("LastPoseTick") {
             if pose_tick < 0 {

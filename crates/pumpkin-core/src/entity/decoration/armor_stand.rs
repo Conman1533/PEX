@@ -41,13 +41,20 @@ impl Default for PackedRotation {
 
 impl From<PackedRotation> for NbtTag {
     fn from(val: PackedRotation) -> Self {
+        let default = PackedRotation::default();
         let mut compound = NbtCompound::new();
-        compound.put("Head", val.head);
-        compound.put("Body", val.body);
-        compound.put("LeftArm", val.left_arm);
-        compound.put("RightArm", val.right_arm);
-        compound.put("LeftLeg", val.left_leg);
-        compound.put("RightLeg", val.right_leg);
+        for (key, angle, default) in [
+            ("Head", val.head, default.head),
+            ("Body", val.body, default.body),
+            ("LeftArm", val.left_arm, default.left_arm),
+            ("RightArm", val.right_arm, default.right_arm),
+            ("LeftLeg", val.left_leg, default.left_leg),
+            ("RightLeg", val.right_leg, default.right_leg),
+        ] {
+            if angle != default {
+                compound.put(key, angle);
+            }
+        }
         Self::Compound(compound)
     }
 }
@@ -274,11 +281,7 @@ impl EntityBase for ArmorStandEntity {
             self.disabled_slots.store(disabled_slots, Ordering::Relaxed);
         }
 
-        if let Some(no_base_plate) = nbt.get_bool("NoBasePlate") {
-            if !no_base_plate {
-                flags |= ArmorStandFlags::HideBasePlate as u8;
-            }
-        } else {
+        if nbt.get_bool("NoBasePlate").unwrap_or(false) {
             flags |= ArmorStandFlags::HideBasePlate as u8;
         }
 

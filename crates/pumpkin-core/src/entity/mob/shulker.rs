@@ -420,7 +420,7 @@ impl Mob for ShulkerEntity {
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_byte("AttachFace", self.attach_face.load(Ordering::Relaxed) as i8);
-        nbt.put_byte("PeekAmount", self.peek_amount.load(Ordering::Relaxed) as i8);
+        nbt.put_byte("Peek", self.peek_amount.load(Ordering::Relaxed) as i8);
         nbt.put_byte("Color", self.color.load(Ordering::Relaxed) as i8);
     }
 
@@ -428,7 +428,7 @@ impl Mob for ShulkerEntity {
         if let Some(face) = nbt.get_byte("AttachFace") {
             self.attach_face.store(face as u8, Ordering::Relaxed);
         }
-        if let Some(peek) = nbt.get_byte("PeekAmount") {
+        if let Some(peek) = nbt.get_byte("Peek").or_else(|| nbt.get_byte("PeekAmount")) {
             self.peek_amount.store(peek as u8, Ordering::Relaxed);
         }
         if let Some(color) = nbt.get_byte("Color") {

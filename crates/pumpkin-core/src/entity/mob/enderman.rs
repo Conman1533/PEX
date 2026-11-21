@@ -490,13 +490,19 @@ impl Mob for EndermanEntity {
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         if let Some(block_state) = self.carried_block.load() {
-            nbt.put_int("carriedBlockState", block_state.as_u16() as i32);
+            nbt.put(
+                "carriedBlockState",
+                pumpkin_world::chunk::format::block_state_tag(block_state),
+            );
         }
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
-        if let Some(block_state) = nbt.get_int("carriedBlockState") {
-            self.set_carried_block(BlockStateId::new(block_state as u16));
+        if let Some(block_state) = nbt
+            .get("carriedBlockState")
+            .and_then(pumpkin_world::chunk::format::block_state_from_tag)
+        {
+            self.set_carried_block(BlockStateId::new(block_state.as_u16()));
         }
     }
 

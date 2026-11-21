@@ -177,7 +177,7 @@ impl EntityBase for FireballEntity {
 
     fn write_custom_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_double("acceleration_power", self.get_acceleration_power());
-        nbt.put_float("ExplosionPower", self.get_explosion_power());
+        nbt.put_byte("ExplosionPower", self.get_explosion_power() as i8);
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
@@ -187,7 +187,11 @@ impl EntityBase for FireballEntity {
         {
             self.set_acceleration_power(accel);
         }
-        if let Some(exp) = nbt.get_float("ExplosionPower") {
+        if let Some(exp) = nbt
+            .get_byte("ExplosionPower")
+            .map(f32::from)
+            .or_else(|| nbt.get_float("ExplosionPower"))
+        {
             self.set_explosion_power(exp);
         }
     }

@@ -143,11 +143,18 @@ impl EntityBase for CushionEntity {
     }
 
     fn write_custom_nbt(&self, nbt: &mut NbtCompound) {
-        nbt.put_byte("Color", self.color() as i8);
+        if let Some(color) = pumpkin_data::dye_color::DyeColor::by_id(self.color()) {
+            nbt.put_string("color", color.name().to_string());
+        }
     }
 
     fn read_custom_nbt(&self, nbt: &NbtCompound) {
-        if let Some(color) = nbt.get_byte("Color") {
+        if let Some(color) = nbt
+            .get_string("color")
+            .and_then(pumpkin_data::dye_color::DyeColor::by_name)
+        {
+            self.set_color(color.id());
+        } else if let Some(color) = nbt.get_byte("Color") {
             self.set_color(color as u8);
         }
     }
