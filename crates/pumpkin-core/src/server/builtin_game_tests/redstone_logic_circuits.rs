@@ -1,9 +1,9 @@
 use pumpkin_data::{
     Block, BlockStateId,
     block_properties::{
-        AttachFace, EastRedstone, FurnaceLikeProperties, HorizontalFacing, LeverLikeProperties,
-        NorthRedstone, RedstoneOreLikeProperties, RedstoneWireLikeProperties,
-        RepeaterLikeProperties, SouthRedstone, WestRedstone,
+        AttachFace, EastRedstone, Facing, FurnaceLikeProperties, HorizontalFacing,
+        LeverLikeProperties, NorthRedstone, RedstoneOreLikeProperties, RedstoneWireLikeProperties,
+        RepeaterLikeProperties, SouthRedstone, StickyPistonLikeProperties, WestRedstone,
     },
 };
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
@@ -630,5 +630,70 @@ pub(super) async fn test_redstone_repeater_locking_holds_on(
         format!("Expected locked-on repeater to power output wire to 15, got {p}"),
     )?;
     helper.succeed();
+    Ok(())
+}
+
+/// Roadmap G5-11: vanilla `DiodeBlock.onPlace` runs on every state change, so a repeater whose
+/// lock flips updates the block in front. Here that is a piston powered only through the block
+/// above it, which nothing else updates: it extends once the repeater locks.
+pub(super) async fn test_repeater_lock_updates_front(helper: GameTestHelper) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let repeater = BlockPos::new(2, 1, 2);
+    let lock = BlockPos::new(2, 1, 1);
+    let piston = BlockPos::new(3, 1, 2);
+    let head = BlockPos::new(4, 1, 2);
+
+    let mut piston_props = StickyPistonLikeProperties::default(&Block::PISTON);
+    piston_props.facing = Facing::East;
+    piston_props.extended = false;
+    helper
+        .set_block(&piston, piston_props.to_state_id(&Block::PISTON))
+        .await?;
+
+    // A powered repeater pointing into the side of the one under test, which is placed after it
+    // with its lock left off, so only a shape update from its side locks it.
+    helper
+        .set_block_default(&BlockPos::new(2, 1, 0), &Block::REDSTONE_BLOCK)
+        .await?;
+    let mut lock_props = RepeaterLikeProperties::default(&Block::REPEATER);
+    lock_props.facing = HorizontalFacing::North;
+    lock_props.powered = true;
+    helper
+        .set_block(&lock, lock_props.to_state_id(&Block::REPEATER))
+        .await?;
+    let mut props = RepeaterLikeProperties::default(&Block::REPEATER);
+    props.facing = HorizontalFacing::West;
+    props.locked = false;
+    helper
+        .set_block(&repeater, props.to_state_id(&Block::REPEATER))
+        .await?;
+
+    // Power next to the block above the piston, which doesn't update the piston itself.
+    helper
+        .set_block_default(&BlockPos::new(4, 2, 2), &Block::REDSTONE_BLOCK)
+        .await?;
+
+    helper
+        .start_sequence()
+        .then_idle(2)
+        .then_execute(move |helper| async move {
+            helper
+                .assert_block_not_present(&head, &Block::PISTON_HEAD)
+                .await?;
+            // A shape update from the repeater's side.
+            helper
+                .set_block_default(&BlockPos::new(2, 1, 3), &Block::STONE)
+                .await?;
+            let locked =
+                RepeaterLikeProperties::from_state_id(helper.block_state_id(&repeater).await)
+                    .locked;
+            helper.assert_true(locked, "Expected the repeater locked by the side repeater")
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_block_present(&head, &Block::PISTON_HEAD)
+                .await
+        })
+        .then_succeed();
     Ok(())
 }

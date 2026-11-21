@@ -279,7 +279,6 @@ impl BlockBehaviour for RedstoneTorchBlock {
             if !should_be_lit_now {
                 args.world
                     .set_block_state(args.position, set_lit(false), BlockFlags::NOTIFY_ALL);
-                update_neighbors(args.world, args.position, block);
                 if toggled_too_frequently(args.world, *args.position, Some(now)) {
                     args.world.sync_world_event(
                         WorldEvent::RedstoneTorchBurnout,
@@ -297,11 +296,16 @@ impl BlockBehaviour for RedstoneTorchBlock {
         } else if should_be_lit_now && !toggled_too_frequently(args.world, *args.position, None) {
             args.world
                 .set_block_state(args.position, set_lit(true), BlockFlags::NOTIFY_ALL);
-            update_neighbors(args.world, args.position, block);
         }
     }
 
     fn placed(&self, args: PlacedArgs<'_>) {
+        update_neighbors(args.world, args.position, args.block);
+    }
+
+    /// Vanilla `RedstoneTorchBlock.onPlace` runs on every state change, lighting and going out
+    /// included, inside the `setBlock`, before the torch's own neighbours hear of it.
+    fn state_changed(&self, args: PlacedArgs<'_>) {
         update_neighbors(args.world, args.position, args.block);
     }
 

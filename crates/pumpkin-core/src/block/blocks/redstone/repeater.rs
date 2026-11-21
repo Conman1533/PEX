@@ -50,21 +50,14 @@ impl BlockBehaviour for RepeaterBlock {
         let now_powered = props.powered;
         let should_be_powered = self.has_power(args.world, *args.position, state, block);
 
-        // Vanilla's `DiodeBlock.tick` just does `setBlock(..., 2)`, which still calls the neighbor
-        // in front. Pumpkin's `placed` only sets the block-type, so `update_target` below does it.
+        // Vanilla's `DiodeBlock.tick` just does `setBlock(..., 2)`; `state_changed` tells the
+        // block in front.
         if now_powered && !should_be_powered {
             props.powered = false;
             args.world.set_block_state(
                 args.position,
                 props.to_state_id(block),
                 BlockFlags::NOTIFY_LISTENERS,
-            );
-            RedstoneGateBlock::update_target(
-                self,
-                args.world,
-                *args.position,
-                props.to_state_id(block),
-                block,
             );
         } else if !now_powered {
             props.powered = true;
@@ -85,13 +78,6 @@ impl BlockBehaviour for RepeaterBlock {
                     TickPriority::VeryHigh,
                 );
             }
-            RedstoneGateBlock::update_target(
-                self,
-                args.world,
-                *args.position,
-                props.to_state_id(block),
-                block,
-            );
         }
     }
 
@@ -131,6 +117,11 @@ impl BlockBehaviour for RepeaterBlock {
             args.state_id,
             args.block,
         );
+    }
+
+    /// Vanilla `DiodeBlock.onPlace`: a delay, lock or power change tells the block in front.
+    fn state_changed(&self, args: PlacedArgs<'_>) {
+        self.placed(args);
     }
 
     fn get_state_for_neighbor_update(
