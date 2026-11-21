@@ -116,6 +116,11 @@ async fn attack_until_gone_kills_a_chicken(stage: &mut StageContext<'_>) -> Resu
     Ok(())
 }
 
+/// The food level of the bot's player on the server.
+fn server_food(stage: &StageContext<'_>) -> i32 {
+    i32::from(stage.player.hunger_manager.level.load())
+}
+
 async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
     empty_inventory(stage)?;
     stage.console(&format!("effect give {BOT} minecraft:hunger 60 100"))?;
@@ -135,19 +140,21 @@ async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
             bot.inventory.count(&Item::BREAD) == 1
         })
         .await?;
-    // Hunger's last exhaustion can still take a point after the effect is cleared, and the
-    // food level the bot sees can trail the server's, so eat only once it has held still.
-    let mut before = stage.bot.food;
+    // Hunger's last exhaustion can still take a point after the effect is cleared, and on a slow
+    // machine the food level the bot sees can trail the server's by many ticks, so the food
+    // level is read from the server's player and the bot eats once it has held still.
+    let mut before = server_food(stage);
     let mut steady = 0;
     for _ in 0..MAX_WAIT_TICKS {
         stage.tick().await?;
-        if stage.bot.food == before {
+        let now = server_food(stage);
+        if now == before {
             steady += 1;
             if steady >= FOOD_STEADY_TICKS {
                 break;
             }
         } else {
-            before = stage.bot.food;
+            before = now;
             steady = 0;
         }
     }
@@ -158,13 +165,18 @@ async fn eat_restores_food(stage: &mut StageContext<'_>) -> Result<(), String> {
     }
     stage.eat().await?;
     // Bread gives 5 food.
-    if stage.bot.food != before + 5 {
+    let after = server_food(stage);
+    if after != before + 5 {
         return Err(format!(
-            "Eating bread took the food level from {before} to {}, expected {}",
-            stage.bot.food,
+            "Eating bread took the food level from {before} to {after}, expected {}",
             before + 5
         ));
     }
+    stage
+        .tick_until("the bot to see the new food level", MAX_WAIT_TICKS, |bot| {
+            bot.food == after
+        })
+        .await?;
     stage
         .tick_until("the bread to be used up", MAX_WAIT_TICKS, |bot| {
             bot.inventory.count(&Item::BREAD) == 0

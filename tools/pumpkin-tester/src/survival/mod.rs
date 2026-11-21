@@ -337,15 +337,26 @@ impl<'a> StageContext<'a> {
     /// Eats the held food until the server raises the bot's food level. The bot can't be full.
     pub async fn eat(&mut self) -> Result<(), String> {
         self.sync().await?;
-        let before = self.bot.food;
+        let food = |stage: &Self| stage.player.hunger_manager.level.load();
+        let before = food(self);
         let sequence = self.bot.next_sequence();
         self.bot.use_item(sequence).await?;
-        self.tick_until(
-            &format!("the food level to rise above {before}"),
-            MAX_EAT_TICKS,
-            |bot| bot.food > before,
-        )
-        .await
+        // Once the ping is answered the server has the use packet, so the eat has started. The
+        // server player is read because the bot's view can trail it on a slow machine.
+        self.sync().await?;
+        for _ in 0..MAX_EAT_TICKS {
+            if food(self) > before {
+                return Ok(());
+            }
+            self.tick().await?;
+        }
+        if food(self) > before {
+            Ok(())
+        } else {
+            Err(format!(
+                "Waited {MAX_EAT_TICKS} ticks for the food level to rise above {before}"
+            ))
+        }
     }
 
     /// Draws the held bow fully at `target` and lets go. Returns the arrow's entity id.
