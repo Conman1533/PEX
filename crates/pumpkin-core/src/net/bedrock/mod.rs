@@ -141,6 +141,8 @@ pub struct BedrockClient {
     pub input_tick: AtomicU64,
     /// Separate from normal vitals caching so the first rejected use always gets corrected.
     last_food_rejection_tick: AtomicCell<Option<i32>>,
+    /// The tick of the last click on a block that fell through to the item's own use.
+    last_block_use_fallthrough_tick: AtomicCell<Option<i32>>,
     pub client_cache_supported: AtomicBool,
     pub blob_cache: std::sync::Mutex<HashMap<u64, Vec<u8>>>,
     pub streaming_packs: std::sync::Mutex<HashMap<String, BedrockStreamingPack>>,
@@ -185,6 +187,7 @@ impl BedrockClient {
             inventory_opened: AtomicBool::new(false),
             input_tick: AtomicU64::new(0),
             last_food_rejection_tick: AtomicCell::new(None),
+            last_block_use_fallthrough_tick: AtomicCell::new(None),
             client_cache_supported: AtomicBool::new(false),
             blob_cache: std::sync::Mutex::new(HashMap::new()),
             streaming_packs: std::sync::Mutex::new(HashMap::new()),

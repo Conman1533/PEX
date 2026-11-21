@@ -198,117 +198,20 @@ impl BedrockClient {
                 if data.action_type.0 == 0 {
                     self.use_item_on_block(player, &server, &world, &data, face);
                 } else if data.action_type.0 == 1 {
-                    // Click air / Use item
                     let hand = match data.hand {
                         HandSlot::Mainhand => Hand::Right,
                         HandSlot::Offhand => Hand::Left,
                     };
-                    let mut held = player.inventory().get_stack_in_hand(hand);
-                    if !held.is_empty() {
-                        player.increment_stat(
-                            pumpkin_data::statistic::StatisticCategory::Used,
-                            held.item.id as i32,
-                            1,
-                        );
+                    // A click on a block already ran the item's own use when the block passed;
+                    // a click-air right behind it for the same press must not run it again.
+                    let tick = player.tick_counter.load(Ordering::Relaxed);
+                    let just_used = self
+                        .last_block_use_fallthrough_tick
+                        .load()
+                        .is_some_and(|last| tick >= last && tick - last <= 1);
+                    if !just_used {
+                        self.use_item_in_air(player, &server, hand);
                     }
-
-                    let event = PlayerInteractEvent::new(
-                        player,
-                        InteractAction::RightClickAir,
-                        &pumpkin_data::Block::AIR,
-                        None,
-                    );
-
-                    let stack_for_use = held.clone();
-
-                    {
-                        let mut cooldown_active = false;
-                        if let Some(cooldown) = held.get_use_cooldown() {
-                            let group = cooldown
-                                .cooldown_group
-                                .clone()
-                                .unwrap_or_else(|| held.item.registry_key.to_string());
-                            if player.is_on_cooldown(&group) {
-                                cooldown_active = true;
-                            }
-                        }
-
-                        if !cooldown_active {
-                            // Bedrock can repeat click-air while using an item. Do not
-                            // restart its server-side use timer on these timed inputs.
-                            let already_using =
-                                player.living_entity.item_use_time.load(Ordering::Relaxed) > 0
-                                    && player
-                                        .living_entity
-                                        .item_in_use
-                                        .lock()
-                                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                        .as_ref()
-                                        .is_some_and(|item| {
-                                            item.are_items_and_components_equal(&held)
-                                        });
-                            if !already_using
-                                && held.get_data_component::<ConsumableImpl>().is_some()
-                            {
-                                if held
-                                    .get_data_component::<FoodImpl>()
-                                    .is_none_or(|food| player.can_eat(food.can_always_eat))
-                                {
-                                    player.living_entity.set_active_hand(
-                                        hand,
-                                        held.clone(),
-                                        held.get_max_use_time(),
-                                    );
-                                } else {
-                                    // Correct predicted eating when the server's food
-                                    // level is already full, even if it has not changed.
-                                    self.correct_rejected_food_use(player);
-                                }
-                            }
-                            if let Some(equippable) = held.get_data_component::<EquippableImpl>() {
-                                let should_change = {
-                                    let inventory = player.inventory();
-                                    let equipment_guard = inventory
-                                        .entity_equipment
-                                        .lock()
-                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                    let current_equipped = equipment_guard.get(equippable.slot);
-                                    !current_equipped.are_items_and_components_equal(&held)
-                                };
-                                if should_change {
-                                    player.enqueue_equipment_change(equippable.slot, &held);
-
-                                    let inventory = player.inventory();
-                                    let mut equipment_guard = inventory
-                                        .entity_equipment
-                                        .lock()
-                                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                                    let equip_item = equipment_guard
-                                        .equipment
-                                        .entry(equippable.slot.clone())
-                                        .or_insert_with(|| ItemStack::EMPTY.clone());
-                                    if equip_item.is_empty() {
-                                        *equip_item = held.clone();
-                                        held.decrement_unless_creative(player.gamemode.load(), 1);
-                                    } else {
-                                        let old_held = held.clone();
-                                        held = equip_item.clone();
-                                        *equip_item = old_held;
-                                    }
-                                    drop(equipment_guard);
-                                    player.inventory().set_stack_in_hand(hand, held.clone());
-                                }
-                            }
-                        }
-                    }
-
-                    send_cancellable_blocking! {{
-                        &server;
-                        event;
-                        'after: {
-                            server.item_registry.on_use(&stack_for_use, player, hand);
-                        }
-                    }}
                 }
             }
             TransactionData::UseItemOnEntity(data) => {
@@ -482,7 +385,13 @@ impl BedrockClient {
             HandSlot::Mainhand => Hand::Right,
             HandSlot::Offhand => Hand::Left,
         };
-        Self::use_item_on_block_inner(player, server, world, data, face, hand);
+        if !Self::use_item_on_block_inner(player, server, world, data, face, hand) {
+            // A Java client follows a click on a block that passes with a `UseItem`; a Bedrock
+            // client sends one transaction, so the server takes that step itself.
+            self.last_block_use_fallthrough_tick
+                .store(Some(player.tick_counter.load(Ordering::Relaxed)));
+            self.use_item_in_air(player, server, hand);
+        }
 
         let position = data.block_position;
         self.resend_block(world, position);
@@ -502,6 +411,7 @@ impl BedrockClient {
         );
     }
 
+    /// Returns whether the click was used up; when it wasn't, the item's own use comes next.
     fn use_item_on_block_inner(
         player: &Arc<Player>,
         server: &Arc<Server>,
@@ -509,10 +419,10 @@ impl BedrockClient {
         data: &UseItemTransactionData,
         face: BlockDirection,
         hand: Hand,
-    ) {
+    ) -> bool {
         let position = data.block_position;
         if !player.can_interact_with_block_at(&position, 1.0) {
-            return;
+            return true;
         }
         player.update_last_action_time();
         let inventory = player.inventory();
@@ -531,7 +441,7 @@ impl BedrockClient {
         );
         server.plugin_manager.fire_blocking(server, &mut event);
         if event.cancelled {
-            return;
+            return true;
         }
         if player.gamemode.load() == GameMode::Spectator {
             if let Some(factory) = server
@@ -540,7 +450,7 @@ impl BedrockClient {
             {
                 player.open_handled_screen(factory.as_ref(), Some(position));
             }
-            return;
+            return true;
         }
 
         let hit = BlockHitResult {
@@ -562,7 +472,7 @@ impl BedrockClient {
                 world,
             );
             if result.consumes_action() {
-                return;
+                return true;
             }
             if matches!(result, BlockActionResult::PassToDefaultBlockAction)
                 && server
@@ -570,11 +480,11 @@ impl BedrockClient {
                     .on_use(block, player, &position, &hit, server, world)
                     .consumes_action()
             {
-                return;
+                return true;
             }
         }
         if item.is_empty() {
-            return;
+            return true;
         }
 
         let before = item.clone();
@@ -587,10 +497,11 @@ impl BedrockClient {
             block,
             server,
         );
-        if should_try_block_placement(&item_result)
-            && let Some(placed_block) = pumpkin_data::Block::from_item_id(item.item.id)
-            && Self::place_block(player, server, world, placed_block, data, face, hand)
-        {
+        let placed = should_try_block_placement(&item_result)
+            && pumpkin_data::Block::from_item_id(item.item.id).is_some_and(|placed_block| {
+                Self::place_block(player, server, world, placed_block, data, face, hand)
+            });
+        if placed {
             // SolidBucketItem.useOn swaps in the empty bucket after placing the block.
             if item.item.id == pumpkin_data::item::Item::POWDER_SNOW_BUCKET.id {
                 item = crate::item::items::bucket::get_empty_success_item(item, player);
@@ -600,6 +511,7 @@ impl BedrockClient {
         }
 
         Self::store_hand_item(player, world, hand, &before, item);
+        placed || item_result.consumes_action()
     }
 
     /// Puts the used item back in the hand, with the break status and stat when it ran out.
@@ -669,5 +581,112 @@ impl BedrockClient {
             crate::world::vibration::GameEventContext::of(Some(player.clone()), Some(new_state)),
         );
         true
+    }
+
+    /// A use of the held item that isn't on a block (`UseItem` action 1), or a click on a block
+    /// that the block and the item's block use passed on: eating, drinking, equipping, throwing,
+    /// buckets. The Java `UseItem` path.
+    fn use_item_in_air(&self, player: &Arc<Player>, server: &Arc<Server>, hand: Hand) {
+        let mut held = player.inventory().get_stack_in_hand(hand);
+        if !held.is_empty() {
+            player.increment_stat(
+                pumpkin_data::statistic::StatisticCategory::Used,
+                held.item.id as i32,
+                1,
+            );
+        }
+
+        let event = PlayerInteractEvent::new(
+            player,
+            InteractAction::RightClickAir,
+            &pumpkin_data::Block::AIR,
+            None,
+        );
+
+        let stack_for_use = held.clone();
+
+        {
+            let mut cooldown_active = false;
+            if let Some(cooldown) = held.get_use_cooldown() {
+                let group = cooldown
+                    .cooldown_group
+                    .clone()
+                    .unwrap_or_else(|| held.item.registry_key.to_string());
+                if player.is_on_cooldown(&group) {
+                    cooldown_active = true;
+                }
+            }
+
+            if !cooldown_active {
+                // Bedrock can repeat click-air while using an item. Do not
+                // restart its server-side use timer on these timed inputs.
+                let already_using = player.living_entity.item_use_time.load(Ordering::Relaxed) > 0
+                    && player
+                        .living_entity
+                        .item_in_use
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .as_ref()
+                        .is_some_and(|item| item.are_items_and_components_equal(&held));
+                if !already_using && held.get_data_component::<ConsumableImpl>().is_some() {
+                    if held
+                        .get_data_component::<FoodImpl>()
+                        .is_none_or(|food| player.can_eat(food.can_always_eat))
+                    {
+                        player.living_entity.set_active_hand(
+                            hand,
+                            held.clone(),
+                            held.get_max_use_time(),
+                        );
+                    } else {
+                        // Correct predicted eating when the server's food
+                        // level is already full, even if it has not changed.
+                        self.correct_rejected_food_use(player);
+                    }
+                }
+                if let Some(equippable) = held.get_data_component::<EquippableImpl>() {
+                    let should_change = {
+                        let inventory = player.inventory();
+                        let equipment_guard = inventory
+                            .entity_equipment
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let current_equipped = equipment_guard.get(equippable.slot);
+                        !current_equipped.are_items_and_components_equal(&held)
+                    };
+                    if should_change {
+                        player.enqueue_equipment_change(equippable.slot, &held);
+
+                        let inventory = player.inventory();
+                        let mut equipment_guard = inventory
+                            .entity_equipment
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let equip_item = equipment_guard
+                            .equipment
+                            .entry(equippable.slot.clone())
+                            .or_insert_with(|| ItemStack::EMPTY.clone());
+                        if equip_item.is_empty() {
+                            *equip_item = held.clone();
+                            held.decrement_unless_creative(player.gamemode.load(), 1);
+                        } else {
+                            let old_held = held.clone();
+                            held = equip_item.clone();
+                            *equip_item = old_held;
+                        }
+                        drop(equipment_guard);
+                        player.inventory().set_stack_in_hand(hand, held.clone());
+                    }
+                }
+            }
+        }
+
+        send_cancellable_blocking! {{
+            server;
+            event;
+            'after: {
+                server.item_registry.on_use(&stack_for_use, player, hand);
+            }
+        }}
     }
 }
