@@ -276,6 +276,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:commands/setblock_and_fill_parse_block_states",
     "pumpkin:commands/data_modify_block_changes_block_entity",
     "pumpkin:commands/block_predicates_check_states_tags_and_nbt",
+    "pumpkin:commands/summon_with_nbt_gives_no_random_equipment",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -893,6 +894,13 @@ pub fn ensure_builtin_game_tests_registered() {
             40,
             0,
             commands_and_entities_extended::test_block_predicates_check_states_tags_and_nbt,
+        );
+        register_function_test(
+            "pumpkin:commands/summon_with_nbt_gives_no_random_equipment",
+            "pumpkin:empty_5x4x5",
+            20,
+            0,
+            commands_and_entities_extended::test_summon_with_nbt_gives_no_random_equipment,
         );
         register_function_test(
             "pumpkin:zombie_targets_survival_mock_player",

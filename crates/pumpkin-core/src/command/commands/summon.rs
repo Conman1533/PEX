@@ -85,8 +85,15 @@ impl CommandExecutor for SummonExecutor {
         }
 
         let name = entity.get_display_name();
-        // Vanilla only finalizes the spawn when no NBT argument was given.
-        if !self.has_nbt {
+        // Vanilla only finalizes the spawn when no NBT argument was given, and only
+        // `finalizeSpawn` hands out random equipment, so a mob summoned with NBT keeps just the
+        // equipment the NBT gives it.
+        if self.has_nbt {
+            entity
+                .get_entity()
+                .loaded_from_save
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        } else {
             finalize_spawn(&entity, world, None);
         }
         world.spawn_entity(entity);

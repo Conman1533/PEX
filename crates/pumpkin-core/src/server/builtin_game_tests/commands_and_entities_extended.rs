@@ -807,3 +807,48 @@ pub(super) async fn test_block_predicates_check_states_tags_and_nbt(
         .then_succeed();
     Ok(())
 }
+
+/// `summon` with NBT skips `finalizeSpawn` like vanilla, so the mob gets no random equipment: a
+/// drowned without equipment in its NBT never holds a trident or fishing rod (vanilla gives one to
+/// 1 in 10 drowned that finalize their spawn).
+pub(super) async fn test_summon_with_nbt_gives_no_random_equipment(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(2, 1, 2);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            for _ in 0..40 {
+                helper
+                    .execute_command(
+                        &origin,
+                        "summon minecraft:drowned ~ ~ ~ {NoAI:1b,PersistenceRequired:1b,Silent:1b}",
+                    )
+                    .await?;
+            }
+            let hands = helper
+                .entity_nbt_values(
+                    "minecraft:drowned",
+                    BlockPos::new(0, 0, 0),
+                    BlockPos::new(5, 4, 5),
+                    "equipment.mainhand",
+                )
+                .await?;
+            helper.assert_true(
+                hands.len() == 40,
+                format!("expected 40 drowned, found {}", hands.len()),
+            )?;
+            let armed = hands.iter().filter(|tags| !tags.is_empty()).count();
+            helper.assert_true(
+                armed == 0,
+                format!("{armed} of 40 drowned summoned with NBT got a random weapon"),
+            )?;
+            helper
+                .execute_command(&origin, "kill @e[type=minecraft:drowned,distance=..4]")
+                .await?;
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}

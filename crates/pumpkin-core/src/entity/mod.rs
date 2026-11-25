@@ -1109,7 +1109,8 @@ pub struct Entity {
     pub custom_data: std::sync::Mutex<NbtCompound>,
     /// The saved keys PEX doesn't write, from the NBT this entity was loaded from (D7-1).
     kept_nbt: std::sync::Mutex<Option<Box<NbtCompound>>>,
-    /// Loaded from a saved chunk, so spawn-time setup such as default equipment is skipped.
+    /// Loaded from a saved chunk or summoned with NBT, so spawn-time setup such as default
+    /// equipment is skipped.
     pub loaded_from_save: AtomicBool,
     /// The section this entity is filed under in its world's entity section storage.
     pub entity_section: std::sync::Mutex<Option<Vector3<i32>>>,
