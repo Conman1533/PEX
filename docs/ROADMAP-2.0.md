@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `e56f1d461`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `21d081fd5`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 12 | 1 | 32 | |
+| G1 Mob AI | 45 | 14 | 2 | 29 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 35 | 20 | 0 | 13 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 35 | 21 | 0 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 205 | 92 | 6 | 91 | 16 |
+| Total | 205 | 95 | 7 | 87 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -518,6 +518,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-zombies`
 - Needs decision: none.
 - Done when: `pumpkin:zombie_tramples_turtle_egg`, `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass.
+- Status (2026-11-25): built, proof missing (branch `fix/mobai-zombies`, `449c59d4c`, second lane). The zombie family runs vanilla's goal lists and priorities: `ZombieEntityBase` gets `MoveThroughVillageGoal`, `ZombieAttack` at 3 and vanilla's villager targeting; mobs use spears through a new `SpearUseGoal`; the zombified piglin angers and alerts its pack like vanilla; the giant has no goals, as in vanilla. GameTests `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass. Missing: `pumpkin:zombie_tramples_turtle_egg`, which needs mobs to step up a block (`fix/entity-step-up`, batch 18). Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G1-07 Skeletons
 - Scope: skeleton, stray, bogged, parched, wither_skeleton: weapon switching, tipped arrows per variant, target lists. Out: skeleton horse traps (G1-19).
@@ -525,6 +526,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-skeletons`
 - Needs decision: none.
 - Done when: `pumpkin:skeleton_switches_to_melee_without_bow`, `pumpkin:stray_arrow_applies_slowness`, `pumpkin:bogged_arrow_applies_poison`, `pumpkin:parched_arrow_applies_weakness` and `pumpkin:wither_skeleton_targets_piglin` pass.
+- Status (2026-11-25): landed (branch `fix/mobai-skeletons`, `ca58c492d`, second lane). Skeletons switch between bow and melee like vanilla `reassessWeaponGoal` (either hand), and the stray, bogged and parched shoot their variant arrows (slowness, poison, weakness); the wither skeleton targets piglins and brutes. GameTests `pumpkin:skeleton_switches_to_melee_without_bow`, `pumpkin:stray_arrow_applies_slowness`, `pumpkin:bogged_arrow_applies_poison`, `pumpkin:parched_arrow_applies_weakness` and `pumpkin:wither_skeleton_targets_piglin` pass. Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G1-08 Spiders
 - Scope: spider and cave_spider on `Navigator::wall_climber`, LeapAtTarget, AvoidEntity(Armadillo), SpiderAttack at 4, daylight check on SpiderTargetGoal. Out: jockeys.
@@ -539,6 +541,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-small-hostiles`
 - Needs decision: D1-3 (#4389).
 - Done when: `pumpkin:creeper_should_run_from_cat`, `pumpkin:silverfish_wakes_friends_from_infested_stone` and `pumpkin:endermite_climbs_out_of_powder_snow` pass.
+- Status (2026-11-25): landed (branch `fix/mobai-small-hostiles`, `9757bbe57`, second lane). The silverfish and endermite parts are hand-ported from upstream Pumpkin PR #4389 by Maurice Vogelsang (D1-3): endermite priorities and `HurtByTarget` with alerting, silverfish waking friends in infested stone, and the powder snow climb through the jump control; the creeper audit found it matching. GameTests `pumpkin:creeper_should_run_from_cat` (3 of 3), `pumpkin:silverfish_wakes_friends_from_infested_stone` and `pumpkin:endermite_climbs_out_of_powder_snow` pass. Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 #### G1-10 Enderman and shulker
 - Scope: enderman stare, teleport and block goals against vanilla; ShulkerDefenseAttackGoal and bullet attack. Out: shulker box drops.
@@ -2218,7 +2221,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/spreadplayers-surface
 - Needs decision: none
 - Done when: on PEX and vanilla 26.3 (CT 117 side-by-side), `spreadplayers 57 0 12 60 false` on one pig lands it on the surface (vanilla y 106 on that seed) and not at the world bottom, five times in a row, and prints the same line; one entity spreads over an area that is mostly water, as on vanilla; a GameTest.
-- Status (2026-11-21): added by the 2.0 loop after a ThinkPad play-server report (`spreadplayers` refused one entity with \"too many entities for space\" on open land near 57 0). The CT 117 side-by-side on batch 16 put the pig at y -63 five times out of five where the spot's chunk was not loaded (the heightmap lookup falls back to the world bottom), where vanilla stood it at y 106, and printed `57.50, 0.50` where vanilla prints `57.5, 0.5`. PEX also gives up after 16 safety rounds, which fits the refusal on land with water nearby.
+- Status (2026-11-25): landed (branch `fix/spreadplayers-surface`, `f38b6b2ac`, the 2.0 loop, with the test fix `1cd092ead`). Spots are scanned down from the max height after loading their chunk, judged with vanilla `isSafe`, and re-rolled inside the 10000-iteration spread loop; the center prints like vanilla. CT 117 side-by-side on batch 17 against vanilla 26.3: the pig landed on the pillar at 4.5 101 4.5 on both, and the ThinkPad repro `spreadplayers 57 0 0 4 false` now lands at y 117 (`alpha` put it at y -63). GameTest `pumpkin:commands/spreadplayers_lands_on_the_only_dry_block` passes. Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
 
 ### Proof
 
