@@ -542,12 +542,13 @@ impl EntitySelectorPredicate {
                     .scoreboard
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let entity_scores = scoreboard.get_scores().get(&actual_name);
+                // Vanilla `EntitySelectorOptions` `scores`: a holder without a score for
+                // the objective never matches.
                 for (objective, bounds) in scores_map {
-                    let score_val = entity_scores
-                        .and_then(|obj_map| obj_map.get(objective))
-                        .map_or(0, |score| score.value.0);
-                    if !bounds.matches(score_val) {
+                    let Some(score) = scoreboard.get_score(&actual_name, objective) else {
+                        return false;
+                    };
+                    if !bounds.matches(score.value.0) {
                         return false;
                     }
                 }
