@@ -314,6 +314,7 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:persistent_endermite_never_expires",
     "pumpkin:priming_creeper_sets_off_sculk_sensor",
     "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
+    "pumpkin:guardian_laser_kills_squid",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -342,6 +343,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:evoker_summons_vexes_at_survival_player",
     "pumpkin:illusioner_shoots_bow_at_survival_player",
     "pumpkin:vex_flies_through_wall_to_target",
+    "pumpkin:elder_guardian_gives_mining_fatigue",
 ];
 
 #[must_use]
@@ -1054,6 +1056,20 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             water_mobs::test_zombie_nautilus_charges_survival_player,
+        );
+        register_function_test(
+            "pumpkin:guardian_laser_kills_squid",
+            "pumpkin:empty_11x5x5",
+            1200,
+            0,
+            water_mobs::test_guardian_laser_kills_squid,
+        );
+        register_function_test(
+            "pumpkin:elder_guardian_gives_mining_fatigue",
+            "pumpkin:empty_11x5x5",
+            1500,
+            0,
+            water_mobs::test_elder_guardian_gives_mining_fatigue,
         );
 
         // redstone_wire_and_power (15)
