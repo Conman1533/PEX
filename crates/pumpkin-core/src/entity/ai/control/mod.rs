@@ -50,6 +50,12 @@ pub trait LookControlTrait: Control {
         max_pitch_change: f32,
     );
 
+    /// The spot a look still in progress turns to (vanilla `getWantedX/Y/Z` while
+    /// `isLookingAtTarget`), where the control exposes it.
+    fn looking_at(&self) -> Option<Vector3<f64>> {
+        None
+    }
+
     fn look_at(&mut self, mob: &dyn Mob, x: f64, y: f64, z: f64) {
         self.look_at_with_range(
             x,

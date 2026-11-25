@@ -3,6 +3,8 @@ use crate::entity::ai::util::{default_random_pos, land_random_pos};
 use crate::entity::{ai::pathfinder::NavigatorGoal, mob::Mob};
 use pumpkin_util::math::vector3::Vector3;
 use rand::RngExt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const DEFAULT_INTERVAL: i32 = 120;
 /// Vanilla `WaterAvoidingRandomStrollGoal.PROBABILITY`.
@@ -25,6 +27,8 @@ pub struct WanderAroundGoal {
     target: Option<Vector3<f64>>,
     interval: i32,
     force_trigger: bool,
+    /// A [`Self::trigger`] the mob can pull from outside the goal selector.
+    shared_trigger: Option<Arc<AtomicBool>>,
     position: Position,
 }
 
@@ -36,23 +40,25 @@ impl WanderAroundGoal {
 
     #[must_use]
     pub const fn with_interval(speed: f64, interval: i32) -> Self {
+        Self::with_position(speed, interval, Position::Default)
+    }
+
+    const fn with_position(speed: f64, interval: i32, position: Position) -> Self {
         Self {
             goal_control: Controls::MOVE,
             speed,
             target: None,
             interval,
             force_trigger: false,
-            position: Position::Default,
+            shared_trigger: None,
+            position,
         }
     }
 
     /// Vanilla's `RandomSwimmingGoal`: the same stroll, to random spots in water.
     #[must_use]
     pub const fn swimming(speed: f64, interval: i32) -> Self {
-        Self {
-            position: Position::Swimming,
-            ..Self::with_interval(speed, interval)
-        }
+        Self::with_position(speed, interval, Position::Swimming)
     }
 
     /// Vanilla's `WaterAvoidingRandomStrollGoal`: land spots only, except for a rare default stroll
@@ -64,15 +70,39 @@ impl WanderAroundGoal {
 
     #[must_use]
     pub const fn water_avoiding_with_probability(speed: f64, probability: f32) -> Self {
-        Self {
-            position: Position::WaterAvoiding { probability },
-            ..Self::new(speed)
-        }
+        Self::with_position(
+            speed,
+            DEFAULT_INTERVAL,
+            Position::WaterAvoiding { probability },
+        )
     }
 
     /// Run once on the next check, ignoring the interval.
     pub const fn trigger(&mut self) {
         self.force_trigger = true;
+    }
+
+    /// Vanilla `Goal.setFlags`, for mobs whose stroll also takes the look control.
+    #[must_use]
+    pub const fn with_controls(mut self, controls: Controls) -> Self {
+        self.goal_control = controls;
+        self
+    }
+
+    /// Storing `true` in `trigger` acts like [`Self::trigger`], for a mob that keeps no handle
+    /// on its goals (vanilla `Guardian.hurtServer` calls `randomStrollGoal.trigger()`).
+    #[must_use]
+    pub fn with_shared_trigger(mut self, trigger: Arc<AtomicBool>) -> Self {
+        self.shared_trigger = Some(trigger);
+        self
+    }
+
+    fn forced(&self) -> bool {
+        self.force_trigger
+            || self
+                .shared_trigger
+                .as_ref()
+                .is_some_and(|trigger| trigger.load(Ordering::Relaxed))
     }
 
     pub const fn set_interval(&mut self, interval: i32) {
@@ -112,7 +142,7 @@ impl Goal for WanderAroundGoal {
             return false;
         }
 
-        if !self.force_trigger {
+        if !self.forced() {
             // TODO: also bail out on a long no-action time, which needs the despawn bookkeeping.
             if mob
                 .get_random()
@@ -128,6 +158,9 @@ impl Goal for WanderAroundGoal {
             return false;
         }
         self.force_trigger = false;
+        if let Some(trigger) = &self.shared_trigger {
+            trigger.store(false, Ordering::Relaxed);
+        }
         true
     }
 
