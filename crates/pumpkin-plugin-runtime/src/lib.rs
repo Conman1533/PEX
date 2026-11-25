@@ -551,20 +551,33 @@ mod tests {
         assert!(rejected.to_string().contains("shutting down"));
     }
 
-    async fn shutdown_waits_for_joined_store_background_tasks(mode: StoreMode) {
+    /// Wasmtime counts only component model tasks as interesting
+    /// (`Accessor::poll_no_interesting_tasks`), not host tasks spawned with `Accessor::spawn`, so
+    /// such a task does not hold shutdown open: shutdown finishes and dropping the Store drops the
+    /// task. This used to assert that shutdown waited, which only held while shutdown was slower
+    /// than the test's yields.
+    async fn shutdown_drops_host_background_tasks(mode: StoreMode) {
+        struct DropFlag(Arc<AtomicBool>);
+        impl Drop for DropFlag {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
         let store = TestStore::new(test_store(mode), mode).await;
         let started = Arc::new(Notify::new());
-        let release = Arc::new(Notify::new());
+        let dropped = Arc::new(AtomicBool::new(false));
         let task_started = Arc::clone(&started);
-        let task_release = Arc::clone(&release);
+        let flag = DropFlag(Arc::clone(&dropped));
 
         // The guest call returns at once and leaves a task running in the Store's event loop.
         store
             .call_guest(move |scope| {
                 let accessor = scope.accessor().expect("concurrent store scope");
                 let spawned = accessor.spawn(async move |_accessor| {
+                    let _flag = flag;
                     task_started.notify_one();
-                    task_release.notified().await;
+                    std::future::pending::<()>().await;
                     Ok(())
                 });
                 Box::pin(async move {
@@ -575,23 +588,17 @@ mod tests {
             .await
             .expect("spawn background task");
         started.notified().await;
+        assert!(!dropped.load(Ordering::SeqCst));
 
-        let shutdown_store = store.clone();
-        let shutdown = tokio::spawn(async move {
-            shutdown_store
-                .shutdown(|_| Box::pin(async move { Ok(()) }))
-                .await
-        });
-        for _ in 0..16 {
-            tokio::task::yield_now().await;
-        }
-        assert!(!shutdown.is_finished());
-
-        release.notify_one();
-        shutdown
+        store
+            .shutdown(|_| Box::pin(async move { Ok(()) }))
             .await
-            .expect("shutdown task")
             .expect("shutdown result");
+        assert_eq!(store.state(), DriverState::Stopped);
+        assert!(
+            dropped.load(Ordering::SeqCst),
+            "dropping the Store drops its host tasks"
+        );
     }
 
     async fn explicit_discard_drains_accepted_work(mode: StoreMode) {
@@ -1427,7 +1434,7 @@ mod tests {
                 explicit_discard_drains_accepted_work(mode).await;
                 owner_drop_drains_accepted_work(mode).await;
             }
-            shutdown_waits_for_joined_store_background_tasks(StoreMode::Concurrent).await;
+            shutdown_drops_host_background_tasks(StoreMode::Concurrent).await;
             shutdown_reentry_scenario().await;
         })
         .await
