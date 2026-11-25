@@ -18,12 +18,12 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 44 | 21 | 0 | 21 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 45 | 21 | 0 | 22 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 215 | 95 | 7 | 97 | 16 |
+| Total | 216 | 95 | 7 | 98 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -2313,6 +2313,15 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: `team join red A B` and `team leave A B` with two offline names and with a selector print the same lines on PEX and vanilla 26.3 (CT 117 side-by-side); a GameTest.
 - Status (2026-11-25): filed by the 2.0 loop from the agent harness server.
+
+#### G6-45 fill updates light
+
+- Scope: in: `/fill` (`core/command/commands/fill.rs`) writes its blocks through `set_blocks_batch`, which skips the light engine, so filled blocks keep stale block and sky light (found by the second lane while proving G1-08). Run the light update for every changed position like vanilla `Level.setBlock` (`LevelChunk.setBlockState` -> `LightEngine.checkBlock`), keeping the batch write for speed. Out: `/clone` (same check afterwards).
+- Depends on: none
+- Branch: fix/fill-light
+- Needs decision: none
+- Done when: a GameTest fills a closed room with glowstone then air and reads block light 15 then 0 inside, and a filled stone roof over open ground drops sky light under it to vanilla's values.
+- Status (2026-11-25): filed by the 2.0 loop from the second lane's report.
 
 ### Proof
 
