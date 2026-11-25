@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use pumpkin_data::translation;
 use pumpkin_data::{Block, BlockStateId};
 use pumpkin_util::PermissionLvl;
@@ -88,6 +90,23 @@ fn fill_blocks(
     let target_state_id = target.state;
     let mut changed_positions = Vec::new();
 
+    // A filter with NBT is tested against the block entity, which can't be read under the
+    // chunk lock below, so the blocks it matches are found first.
+    let nbt_matches = filter.filter(|f| f.requires_nbt()).map(|f| {
+        let mut matches = HashSet::new();
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                for z in min_z..=max_z {
+                    let pos = BlockPos::new(x, y, z);
+                    if world.block_matches(&pos, f) {
+                        matches.insert(pos);
+                    }
+                }
+            }
+        }
+        matches
+    });
+
     let min_chunk_x = min_x >> 4;
     let max_chunk_x = max_x >> 4;
     let min_chunk_z = min_z >> 4;
@@ -143,7 +162,10 @@ fn fill_blocks(
                                     }
                                     _ => {
                                         if let Some(f) = filter
-                                            && !f.test(current_block)
+                                            && !nbt_matches.as_ref().map_or_else(
+                                                || f.test(current_state_id, || None),
+                                                |matches| matches.contains(&pos),
+                                            )
                                         {
                                             continue;
                                         }

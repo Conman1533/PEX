@@ -726,3 +726,84 @@ pub(super) async fn test_spreadplayers_lands_on_the_only_dry_block(
         .then_succeed();
     Ok(())
 }
+
+/// Roadmap G6-32: `execute if|unless block` and the filters of `fill` and `clone` take a
+/// vanilla `block_predicate`: a block or tag, properties checked against the state, and NBT
+/// matched partially against the block entity.
+pub(super) async fn test_block_predicates_check_states_tags_and_nbt(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(0, 1, 0);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, "setblock ~1 ~ ~ minecraft:piston[facing=east]")
+                .await?;
+            helper.set_block_default(&BlockPos::new(2, 1, 0), &Block::OAK_LOG).await?;
+            helper.set_block_default(&BlockPos::new(3, 1, 0), &Block::CHEST).await?;
+            helper
+                .execute_command(&origin, "setblock ~1 ~ ~2 minecraft:oak_stairs[facing=north]")
+                .await?;
+            helper
+                .execute_command(&origin, "setblock ~2 ~ ~2 minecraft:oak_stairs[facing=south]")
+                .await?;
+            Ok(())
+        })
+        .then_execute(move |helper| async move {
+            for (command, expected) in [
+                ("execute if block ~1 ~ ~ minecraft:piston[facing=north]", false),
+                ("execute if block ~1 ~ ~ minecraft:piston[facing=east]", true),
+                ("execute unless block ~1 ~ ~ minecraft:piston[facing=north]", true),
+                ("execute if block ~2 ~ ~ #minecraft:logs", true),
+                ("execute if block ~2 ~ ~ #minecraft:logs[axis=y]", true),
+                ("execute if block ~2 ~ ~ #minecraft:logs[axis=x]", false),
+                ("execute if block ~3 ~ ~ minecraft:chest{Items:[{Slot:0b}]}", false),
+            ] {
+                helper.assert_true(
+                    helper.execute_command(&origin, command).await.is_ok() == expected,
+                    format!("`{command}` should {}", if expected { "pass" } else { "fail" }),
+                )?;
+            }
+            helper
+                .execute_command(
+                    &origin,
+                    "item replace block ~3 ~ ~ container.0 with minecraft:stone 3",
+                )
+                .await?;
+            for (command, expected) in [
+                ("execute if block ~3 ~ ~ minecraft:chest{Items:[{Slot:0b}]}", true),
+                ("execute if block ~3 ~ ~ minecraft:chest{Items:[{Slot:1b}]}", false),
+            ] {
+                helper.assert_true(
+                    helper.execute_command(&origin, command).await.is_ok() == expected,
+                    format!("`{command}` should {}", if expected { "pass" } else { "fail" }),
+                )?;
+            }
+            helper.assert_true(
+                helper
+                    .execute_command(&origin, "execute if block ~1 ~ ~ minecraft:piston[color=red]")
+                    .await
+                    .is_err(),
+                "an unknown property of a block should not parse",
+            )?;
+            helper
+                .execute_command(
+                    &origin,
+                    "fill ~1 ~ ~2 ~2 ~ ~2 minecraft:stone replace minecraft:oak_stairs[facing=north]",
+                )
+                .await?;
+            Ok(())
+        })
+        .then_execute(|helper| async move {
+            helper
+                .assert_block_present(&BlockPos::new(1, 1, 2), &Block::STONE)
+                .await?;
+            helper
+                .assert_block_present(&BlockPos::new(2, 1, 2), &Block::OAK_STAIRS)
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}

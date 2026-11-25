@@ -111,7 +111,7 @@ fn state_with(block: &'static Block, chosen: &[(&'static str, &'static str)]) ->
 }
 
 /// Reads `[key=value,...]` like vanilla `BlockStateParser.readProperties`.
-fn read_properties(
+pub(crate) fn read_properties(
     reader: &mut StringReader,
     block: &'static Block,
     id: &str,

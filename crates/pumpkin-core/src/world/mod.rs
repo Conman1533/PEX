@@ -994,6 +994,32 @@ impl World {
         }
     }
 
+    /// The block entity at `position` saved like vanilla `BlockEntity.saveWithFullMetadata`:
+    /// its data with its id and position.
+    pub fn block_entity_full_nbt(&self, position: &BlockPos) -> Option<NbtCompound> {
+        let block_entity = self.get_block_entity(position)?;
+        let mut nbt = NbtCompound::new();
+        block_entity.write_internal(&mut nbt);
+        self.write_kept_block_entity_nbt(block_entity.as_ref(), &mut nbt);
+        nbt.put_string("id", block_entity.resource_location().to_string());
+        nbt.put_int("x", position.0.x);
+        nbt.put_int("y", position.0.y);
+        nbt.put_int("z", position.0.z);
+        Some(nbt)
+    }
+
+    /// A `block_predicate` argument tested against the block at `position`, like vanilla's
+    /// `BlockPredicateArgument` on a `BlockInWorld` that loads the block entity.
+    pub fn block_matches(
+        &self,
+        position: &BlockPos,
+        predicate: &pumpkin_command::argument_types::block_predicate::BlockPredicate,
+    ) -> bool {
+        predicate.test(self.get_block_state_id(position), || {
+            self.block_entity_full_nbt(position)
+        })
+    }
+
     /// Serializes the live block entities of a chunk back into that chunk's block
     /// entity data. The live map is the source of truth while a chunk is loaded -
     /// `get_block_entity` wakes an entity up from a copy of the chunk's saved NBT,
