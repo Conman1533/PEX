@@ -78,12 +78,13 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 1. Answer the open decisions that hold the most work. The table below has all of them.
    - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
    - D7-4 and D7-1: answered by the 2.0 loop on 2026-11-20.
-   - D5-1, D8-3 and the open part of D10-2 (2 pieces each).
+   - D5-1 and the open part of D10-2 (2 pieces each).
+   - D8-2, D8-3 and D8-4: answered by the 2.0 loop on 2026-11-25.
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
    - G3-01: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world. D3-1 is answered except its two-key sub-question.
    - G7-10: block entity changes are lost when their chunk unloads. D7-6 picked the existing flush branch.
-   - G8-02, then G8-03: alpha accepts only Bedrock protocol 2193, so current Bedrock clients most likely can't join.
+   - G8-02, then G8-03: done. Alpha accepted only Bedrock protocol 2193 before them and accepts 1.26.60, protocol 2225, since the 2026-11-05 merges.
    - G6-04: `fix/attack-packet-parity` is finished and only needs landing.
 3. Groundwork other goals build on. These can run in parallel.
    - G0-04, then G0-03: the benchmark baseline.
@@ -142,9 +143,9 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Answered by the 2.0 loop (2026-11-21): accept the loss and document it, because vanilla has no slot for chunk data and drops components it doesn't know, and changing the plugin storage API goes against D2-2. | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
 | D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
-| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Open | G8-21 |
-| D8-3 | Which client does the Bedrock test bot use? | Open | G8-11, G8-12 |
-| D8-4 | Which UUID should a Bedrock player get? | Open | G8-20 |
+| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Answered by the 2.0 loop (2026-11-25): (b) one version, upstream's Bedrock commits cherry-picked between merges | G8-21 |
+| D8-3 | Which client does the Bedrock test bot use? | Answered by the 2.0 loop (2026-11-25): (c) the Rust bot in `tools/pumpkin-tester` | G8-11, G8-12 |
+| D8-4 | Which UUID should a Bedrock player get? | Answered by the 2.0 loop (2026-11-25): (a) keep the XUID MD5, Goal 4's offline UUID when a token has neither `xid` nor `leguuid` | G8-20 |
 | D9-1 | What is the bar against Paper, and at which sizes? | Answered: less RAM than Paper, P95 within 10% at 10, 25 and 50 bots (Q9.2) | G9-12, G9-14 |
 | D9-2 | Where does the benchmark live? | Answered: move it to `tools/gameplay-bench` (Q9.3) | G9-11 |
 | D9-3 | Where are benchmark results published? | Answered by the 2.0 loop (2026-11-21): `docs/BENCHMARKS.md` in PEX, with the HTML reports and CSVs attached to the release they measure, because it needs no new infrastructure while Actions is down, and a release then points at its own numbers; Neon uploads the assets until Goal 10's release jobs run. | G9-14 |
@@ -2658,8 +2659,8 @@ Paths without a crate prefix are under `crates/pumpkin-core/src/`.
 
 Version and transport
 
-- Alpha targets Bedrock 1.26.51, protocol 2193: `CURRENT_BEDROCK_MC_VERSION` and `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`. `incompatible_protocol_status` (`net/bedrock/login/request_network_settings.rs`) answers any other protocol with `OutdatedClient` or `OutdatedServer` (test `accepts_only_the_current_bedrock_protocol`). `BedrockMinecraftVersion` (`crates/pumpkin-util/src/version.rs`) knows only `V_1_21` (671) and `V_1_26_51` (2193).
-- The current client is newer. Upstream master moved to 1.26.60, protocol 2225, in Pumpkin-MC/Pumpkin#4407 (merged 2026-10-29; upstream's `crates/pumpkin-world/src/lib.rs` now says 2225), and both client libraries under "Tests and tooling" target 2225. So a 1.26.60 client gets `OutdatedServer` from alpha. Not tried with a real client here.
+- Alpha targets Bedrock 1.26.60, protocol 2225, since G8-03 (`feat/bedrock-26-60`, on `alpha` since the 2026-11-05 merges): `CURRENT_BEDROCK_MC_VERSION` and `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`. `incompatible_protocol_status` (`net/bedrock/login/request_network_settings.rs`) answers any other protocol with `OutdatedClient` or `OutdatedServer` (test `accepts_only_the_current_bedrock_protocol`). `BedrockMinecraftVersion` (`crates/pumpkin-util/src/version.rs`) knows `V_1_21` (671), `V_1_26_51` (2193) and `V_1_26_60` (2225). Before G8-03, alpha accepted only 2193 (1.26.51), so 1.26.60 clients got `OutdatedServer`.
+- On 2026-11-25 upstream master says 1.26.63 with protocol 2225 (`crates/pumpkin-world/src/lib.rs`) and gophertunnel's `CurrentProtocol` is 2225, so current clients speak the protocol alpha accepts. Not yet tried with a real client here.
 - Packet layouts: 62 files in `crates/pumpkin-protocol/src/bedrock/` say "Last verified for v2169" (26.45, per the comment on Pumpkin-MC/Pumpkin#3340), none says 2193, and 31 have no marker (`git grep -c "Last verified for v" -- crates/pumpkin-protocol/src/bedrock`).
 - Transport is NetherNet only. `BedrockClient` (`net/bedrock/mod.rs`) wraps a `NetherNetSession`; RakNet was removed in `ffcf09ece` ("chore: remove bedrock raknet (#2811)"). `StatusResponder::receive` (`net/bedrock/status.rs`) still answers RakNet unconnected pings for the server list on UDP 19132 (IPv6 on the port plus one, `StatusResponder::bind`) and rejects RakNet connection requests with `CIncompatibleProtocolVersion` (`reject_legacy_raknet`).
 - Signaling is plain HTTP on TCP 19132: `NetherNetListener::bind` (`net/bedrock/nethernet/endpoint.rs`), axum routes `/v1/join` and `/v1/join/{network_id}`. There is no TLS (`git grep -n -i "rustls\|tls" crates/pumpkin-core/src/net/bedrock` finds only DTLS lines), so direct joins rely on trust on first use of `nethernet.identity_key`. WebRTC is the `webrtc` 0.21.1 crate (root `Cargo.toml`); LAN discovery is `NetherNetDiscovery` (`nethernet/discovery.rs`).
@@ -2939,16 +2940,19 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
   - (c) One version, ported by PEX itself. Cost: a protocol port per Bedrock release (#4407 was +788 -671 over 32 files) that duplicates upstream.
   - (d) The current and the previous protocol, as Pumpkin-MC/Pumpkin#3735 asks. Cost: `BClientPacket::write_packet` takes no version (`crates/pumpkin-protocol/src/lib.rs`), unlike Java's `serialize_packet_for_version`; `assets/bedrock/` holds one version's data; every packet test doubles. A goal of its own.
   - Waits on it: G8-21. G8-02 and G8-03 change shape only under (a).
+  - Answered by the 2.0 loop (2026-11-25): (b), one version, with upstream's Bedrock commits cherry-picked between merges, because that is how G8-02 and G8-03 already reached 1.26.60/2225, a new client release doesn't have to wait on a full upstream merge, and (d) is a goal of its own that doesn't fit D8-1's (c).
 - D8-3: Which client does the Bedrock test bot use? Options:
   - (a) gophertunnel (Go): at 2225 and has a `/v1/join` client in `df-mc/go-nethernet`. Cost: a Go toolchain in CT 117 and in CI; the bot lives outside the Rust workspace.
   - (b) PrismarineJS bedrock-protocol (Node): at 1.26.60 with NetherNet, but direct `/v1/join` joins appear only in a tool script, so they may need work. Cost: Node in CT 117 and in CI, plus that check.
   - (c) A Rust bot in `tools/pumpkin-tester`: runs in the existing `gametest` job next to `HeadlessBot`. Cost: the largest; readers for the clientbound packets it checks (3 of 62 exist), writers for the serverbound ones (9 of 30 exist) and a WebRTC client side with the `webrtc` crate. `AGENTS.md` warns against bots turning into side projects.
   - Waits on it: G8-11, G8-12.
+  - Answered by the 2.0 loop (2026-11-25): (c), the Rust bot in `tools/pumpkin-tester`, because it already landed as `test/bedrock-bot` `17fb7939b` and `test/bedrock-wire` `eb7d4cebb` and runs in the existing gametest job with no new toolchain.
 - D8-4: Which UUID should a Bedrock player get? Options:
   - (a) Keep the MD5 of `pocket-auth-1-xuid:<xid>`, and give tokens with neither `xid` nor `leguuid` Goal 4's offline UUID of the prefixed name. Cost: smallest, no migration; player files from Geyser and Floodgate servers still don't carry over.
   - (b) Floodgate's `new UUID(0, xuid)`, so files from a Geyser and Floodgate server carry over. Cost: every existing PEX Bedrock player file moves, through Goal 4's move.
   - (c) In offline mode ignore the unchecked `xid` and use Goal 4's offline UUID of the prefixed name for every Bedrock player; online, keep (a) or (b). Cost: with an empty `username_prefix`, a Bedrock player and a Java player of the same name share one UUID and one player file.
   - Waits on it: G8-20.
+  - Answered by the 2.0 loop (2026-11-25): (a), keep the MD5 of `pocket-auth-1-xuid:<xid>` and give tokens with neither `xid` nor `leguuid` Goal 4's offline UUID of the prefixed name, because it needs no player-file migration, D8-1 chose (c) rather than Geyser parity (and Neon skipped Bedrock skins on Java), and Floodgate UUIDs (b) can come after 2.0 with G8-19.
 
 ## Goal 9: Performance vs Paper
 
