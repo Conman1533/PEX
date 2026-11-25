@@ -10,20 +10,22 @@ use pumpkin_data::tracked_data;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_nbt::tag::NbtTag;
 
+use pumpkin_data::tag::{self, Taggable};
+
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
+        active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
         look_at_entity::LookAtEntityGoal, ranged_crossbow_attack::RangedCrossbowAttackGoal,
-        swim::SwimGoal, wander_around::WanderAroundGoal,
+        revenge::RevengeGoal, swim::SwimGoal, wander_around::WanderAroundGoal,
     },
     mob::{
         Mob, MobEntity,
         crossbow_attack_mob::CrossbowAttackMob,
-        patrol::{LongDistancePatrolGoal, PatrolData, PatrollingMonster},
+        patrol::{PatrolData, PatrollingMonster},
         raider::{
-            HoldGroundAttackGoal, ObtainRaidLeaderBannerGoal, PathfindToRaidGoal, Raider,
-            RaiderCelebrationGoal, RaiderData, RaiderMoveThroughVillageGoal,
+            HoldGroundAttackGoal, Raider, RaiderData, is_abstract_villager, raider_can_attack,
+            register_raider_goals,
         },
     },
 };
@@ -54,30 +56,48 @@ impl PillagerEntity {
 
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
+            let target_selector = &mob_arc.mob_entity.target_selector;
 
+            // Vanilla `Pillager.registerGoals`.
+            register_raider_goals(goal_selector);
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(1, Box::new(ObtainRaidLeaderBannerGoal));
+            goal_selector.add_goal(
+                1,
+                Box::new(AvoidEntityGoal::new(&EntityType::CREAKING, 8.0, 1.0, 1.2)),
+            );
             goal_selector.add_goal(2, Box::new(HoldGroundAttackGoal::new(10.0)));
             goal_selector.add_goal(3, Box::new(RangedCrossbowAttackGoal::new(1.0, 8.0)));
-            goal_selector.add_goal(4, Box::new(LongDistancePatrolGoal::new(0.7, 0.595)));
-            goal_selector.add_goal(4, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
-            goal_selector.add_goal(4, Box::new(PathfindToRaidGoal::default()));
-            goal_selector.add_goal(5, Box::new(RaiderCelebrationGoal));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(0.6)));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
+                9,
+                Box::new(LookAtEntityGoal::new(
+                    mob_weak,
+                    &EntityType::PLAYER,
+                    15.0,
+                    1.0,
+                    false,
+                )),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
 
-            let target_selector = &mob_arc.mob_entity.target_selector;
             target_selector.add_goal(
                 1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
+                Box::new(
+                    RevengeGoal::new(true)
+                        .ignoring(|entity_type| {
+                            entity_type.has_tag(&tag::EntityType::MINECRAFT_RAIDERS)
+                        })
+                        .alerting_others(),
+                ),
             );
             target_selector.add_goal(
                 2,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::VILLAGER, true),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
+            );
+            target_selector.add_goal(
+                3,
+                ActiveTargetGoal::predicated(&mob_arc.mob_entity, 10, false, |target, _| {
+                    is_abstract_villager(target.entity.entity_type)
+                }),
             );
             target_selector.add_goal(
                 3,
@@ -158,6 +178,10 @@ impl Mob for PillagerEntity {
 
     fn as_crossbow_attack_mob(&self) -> Option<&dyn CrossbowAttackMob> {
         Some(self)
+    }
+
+    fn can_attack(&self, target: &dyn EntityBase) -> bool {
+        raider_can_attack(self, target)
     }
 
     fn mob_init_data_tracker(&self) {

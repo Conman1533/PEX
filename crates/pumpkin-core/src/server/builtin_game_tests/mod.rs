@@ -21,6 +21,7 @@ mod note_and_comparators;
 mod pistons;
 mod pistons_extended;
 mod plants_and_support_blocks;
+mod raiders;
 mod rails;
 mod rails_and_fluids_extended;
 mod redstone_gates;
@@ -289,6 +290,9 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:magma_cube_targets_iron_golem",
     "pumpkin:sulfur_cube_picks_up_dropped_item",
     "pumpkin:slime_hurts_iron_golem_it_bumps_into",
+    "pumpkin:vindicator_named_johnny_attacks_any_mob",
+    "pumpkin:ravager_breaks_leaves_in_its_path",
+    "pumpkin:witch_heals_hurt_raider",
     "pumpkin:zombie_pathfinds_to_villager",
     "pumpkin:zombie_tramples_turtle_egg",
     "pumpkin:armadillo_rolls_up_near_zombie",
@@ -327,6 +331,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:drowned_throws_trident_at_player",
     "pumpkin:giant_ignores_survival_player",
     "pumpkin:slime_hops_toward_survival_player",
+    "pumpkin:pillager_shoots_crossbow_at_survival_player",
     "pumpkin:stray_arrow_applies_slowness",
     "pumpkin:bogged_arrow_applies_poison",
     "pumpkin:parched_arrow_applies_weakness",
@@ -699,6 +704,34 @@ pub fn ensure_builtin_game_tests_registered() {
             400,
             0,
             cube_mobs::test_slime_hurts_iron_golem_it_bumps_into,
+        );
+        register_function_test(
+            "pumpkin:pillager_shoots_crossbow_at_survival_player",
+            "pumpkin:empty_11x5x5",
+            1200,
+            0,
+            raiders::test_pillager_shoots_crossbow_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:vindicator_named_johnny_attacks_any_mob",
+            "pumpkin:empty_11x5x5",
+            400,
+            0,
+            raiders::test_vindicator_named_johnny_attacks_any_mob,
+        );
+        register_function_test(
+            "pumpkin:ravager_breaks_leaves_in_its_path",
+            "pumpkin:empty_11x6x5",
+            1200,
+            0,
+            raiders::test_ravager_breaks_leaves_in_its_path,
+        );
+        register_function_test(
+            "pumpkin:witch_heals_hurt_raider",
+            "pumpkin:empty_9x5x5",
+            1200,
+            0,
+            raiders::test_witch_heals_hurt_raider,
         );
         register_function_test(
             "pumpkin:skeleton_switches_to_melee_without_bow",

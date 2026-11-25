@@ -14,7 +14,7 @@ const CANNOT_TRACK: i32 = 2;
 pub struct TrackTargetGoal {
     goal_control: Controls,
     check_visibility: bool,
-    check_can_navigate: bool,
+    pub(crate) check_can_navigate: bool,
     can_navigate_flag: i32,
     check_can_navigate_cooldown: i32,
     time_without_visibility: i32,

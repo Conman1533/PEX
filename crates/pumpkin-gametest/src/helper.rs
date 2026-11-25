@@ -600,6 +600,18 @@ impl GameTestHelper {
         self.world.execute_command(pos, command).await
     }
 
+    /// Starts a raid centred on `relative` that spawns no waves; summon raiders with its id as
+    /// `RaidId` to put them in it. Stop it with [`Self::stop_raid`] before the test ends.
+    pub async fn start_raid_without_waves(&self, relative: &BlockPos) -> GameTestResult<i32> {
+        self.world
+            .start_raid_without_waves(&self.absolute_pos(relative))
+            .await
+    }
+
+    pub async fn stop_raid(&self, raid_id: i32) -> GameTestResult<()> {
+        self.world.stop_raid(raid_id).await
+    }
+
     pub fn assert_true(&self, condition: bool, message: impl Into<String>) -> GameTestResult<()> {
         if condition {
             return Ok(());

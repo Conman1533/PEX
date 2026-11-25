@@ -672,6 +672,35 @@ impl GameTestWorld for ServerGameTestWorld {
         Ok(self.test_block_entity(position)?.message())
     }
 
+    async fn start_raid_without_waves(&self, center: &BlockPos) -> GameTestResult<i32> {
+        self.ensure_chunk_loaded(center).await;
+        let mut raids = self
+            .world
+            .raids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        raids.next_id += 1;
+        let id = raids.next_id;
+        let mut raid =
+            crate::world::raid::Raid::new(id, *center, self.world.level_info.load().difficulty);
+        raid.num_groups = 0;
+        raids.raid_map.insert(id, raid);
+        Ok(id)
+    }
+
+    async fn stop_raid(&self, raid_id: i32) -> GameTestResult<()> {
+        let mut raids = self
+            .world
+            .raids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let raid = raids
+            .get_mut(raid_id)
+            .ok_or_else(|| GameTestError::World(format!("no raid with id {raid_id}")))?;
+        raid.stop(&self.world);
+        Ok(())
+    }
+
     async fn surface_height(&self, x: i32, z: i32) -> i32 {
         self.ensure_chunk_loaded(&BlockPos::new(x, 0, z)).await;
         self.world
