@@ -32,6 +32,7 @@ mod redstone_wire_and_power;
 mod scaffolding;
 mod skeletons;
 mod small_hostiles;
+mod spellcasters;
 mod spiders;
 mod target_and_projectiles;
 mod tripwire;
@@ -337,6 +338,9 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:parched_arrow_applies_weakness",
     "pumpkin:spider_climbs_wall_to_target",
     "pumpkin:cave_spider_stops_targeting_in_bright_light",
+    "pumpkin:evoker_summons_vexes_at_survival_player",
+    "pumpkin:illusioner_shoots_bow_at_survival_player",
+    "pumpkin:vex_flies_through_wall_to_target",
 ];
 
 #[must_use]
@@ -767,6 +771,27 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             skeletons::test_parched_arrow_applies_weakness,
+        );
+        register_function_test(
+            "pumpkin:evoker_summons_vexes_at_survival_player",
+            "pumpkin:empty_11x5x5",
+            400,
+            0,
+            spellcasters::test_evoker_summons_vexes_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:illusioner_shoots_bow_at_survival_player",
+            "pumpkin:empty_11x5x5",
+            1200,
+            0,
+            spellcasters::test_illusioner_shoots_bow_at_survival_player,
+        );
+        register_function_test(
+            "pumpkin:vex_flies_through_wall_to_target",
+            "pumpkin:empty_11x5x5",
+            2400,
+            0,
+            spellcasters::test_vex_flies_through_wall_to_target,
         );
         register_function_test(
             "pumpkin:wither_skeleton_targets_piglin",
