@@ -190,6 +190,7 @@ impl BowAttackGoal {
             || entity.entity_type == &EntityType::STRAY
             || entity.entity_type == &EntityType::WITHER_SKELETON
             || entity.entity_type == &EntityType::PARCHED
+            || entity.entity_type == &EntityType::ILLUSIONER
         {
             Sound::EntitySkeletonShoot
         } else {

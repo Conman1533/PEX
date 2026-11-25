@@ -140,6 +140,14 @@ impl ActiveTargetGoal {
         self
     }
 
+    /// Vanilla `TargetGoal.setUnseenMemoryTicks`: how long the target stays after the mob last
+    /// saw it.
+    #[must_use]
+    pub fn remembering_unseen(mut self: Box<Self>, ticks: i32) -> Box<Self> {
+        self.track_target_goal.max_time_without_visibility = ticks;
+        self
+    }
+
     #[must_use]
     pub fn with_default(
         mob: &MobEntity,

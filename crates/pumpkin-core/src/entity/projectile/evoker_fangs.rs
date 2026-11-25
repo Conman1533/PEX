@@ -19,9 +19,10 @@ pub struct EvokerFangsEntity {
 }
 
 impl EvokerFangsEntity {
+    /// `yaw` is in radians, like the vanilla `EvokerFangs` constructor.
     #[must_use]
     pub fn new(entity: Entity, warmup_ticks: u32, yaw: f32, owner_id: Option<i32>) -> Self {
-        entity.set_rotation(yaw, 0.0);
+        entity.set_rotation(yaw.to_degrees(), 0.0);
         Self {
             entity,
             warmup_delay_ticks: AtomicI32::new(warmup_ticks as i32),
