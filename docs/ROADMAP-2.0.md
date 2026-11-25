@@ -16,14 +16,14 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G1 Mob AI | 45 | 14 | 2 | 29 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
-| G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
+| G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 35 | 21 | 0 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 44 | 21 | 0 | 21 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 205 | 95 | 7 | 87 | 16 |
+| Total | 215 | 95 | 7 | 97 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -1586,6 +1586,15 @@ Format and place of the lists, outside the migration:
 - Needs decision: D4-2
 - Done when: a test with a vanilla 26.3 server's five files in a temp server root loads every entry (op level, whitelist, ban reason and expiry, cache), and a test with a PEX 1.2.0 `data/` directory keeps every entry (with `.bak` copies if D4-2 picks the move).
 
+#### G4-07 Offline logins without encryption run the duplicate login checks
+
+- Scope: in: with encryption off, `login_start.rs` calls `finish_login` directly, so the same-name check in `encryption_response.rs` never runs for those logins (reported by the agent harness thread). Run the same profile and name checks on both paths, matching vanilla `verifyLoginAndFinishConnectionSetup`. Out: online mode.
+- Depends on: none
+- Branch: fix/offline-duplicate-login
+- Needs decision: none
+- Done when: a bot test logs in twice with the same offline name, with encryption on and off, and the old session is replaced like vanilla 26.3 in both.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness thread's report (2026-11-21).
+
 ### Proof
 
 - Tests: `offline_uuid_matches_vanilla`, the migration tests in the table above, `upgrades_a_pex_1_2_0_server` (G4-01), `bot:offline_uuid_login` (G4-02), G4-03's GameTest and G4-05's tests all pass on one alpha commit, in CI (G0-01) or `/srv/pex/tools/local-ci.sh`.
@@ -2223,6 +2232,87 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: on PEX and vanilla 26.3 (CT 117 side-by-side), `spreadplayers 57 0 12 60 false` on one pig lands it on the surface (vanilla y 106 on that seed) and not at the world bottom, five times in a row, and prints the same line; one entity spreads over an area that is mostly water, as on vanilla; a GameTest.
 - Status (2026-11-25): landed (branch `fix/spreadplayers-surface`, `f38b6b2ac`, the 2.0 loop, with the test fix `1cd092ead`). Spots are scanned down from the max height after loading their chunk, judged with vanilla `isSafe`, and re-rolled inside the 10000-iteration spread loop; the center prints like vanilla. CT 117 side-by-side on batch 17 against vanilla 26.3: the pig landed on the pillar at 4.5 101 4.5 on both, and the ThinkPad repro `spreadplayers 57 0 0 4 false` now lands at y 117 (`alpha` put it at y -63). GameTest `pumpkin:commands/spreadplayers_lands_on_the_only_dry_block` passes. Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+
+#### G6-36 Natural spawning picks by weight and spawns animals at chunk generation
+
+- Scope: in: game data generation keeps the `weight` of each biome spawn entry; tick and chunk generation spawning pick with vanilla `WeightedList.getRandom`; chunk generation spawning (`NaturalSpawner.spawnMobsForChunkGeneration`) reads blocks, light (darkening 0) and collisions from the generating chunk instead of the live world, uses each type's `CHUNK_GENERATION` spawn rules and the Animal walk-target check; `Animal` brightness uses `getRawBrightness(pos, 0)`. Out: `isValidPositionForMob` on tick spawning (a G9 note).
+- Depends on: none
+- Branch: fix/natural-spawn-weights
+- Needs decision: none
+- Done when: a same-seed plains area (forceload -336 176 -177 335) on PEX and vanilla 26.3 holds cows, pigs, sheep and chickens in roughly vanilla numbers, and the share of endermen and witches among night spawns matches vanilla's weights; unit tests for the weighted pick.
+- Status (2026-11-25): built by the 2.0 loop after play reports (no cows, pigs, sheep or chickens near spawn on the ThinkPad world and the agent harness world; 99 endermen within 80 blocks). Codegen dropped the weights, so every biome entry was equally likely (plains enderman about 6 times and witch about 20 times too common), and chunk generation spawning checked rules against the live world, where the chunk is not loaded yet, so no animal ever spawned at generation. Side-by-side on the plains area: vanilla cow 13, pig 3, sheep 16, chicken 4, horse 9; PEX before 0 animals, after cow 9, pig 6, sheep 10, chicken 4, donkey 3. Unit tests in `natural_spawner`. In landing batch 18.
+
+#### G6-37 Fresh chunks drop items like vanilla
+
+- Scope: in: find why newly generated chunks drop far more item entities than vanilla (CT 117: about 520 in 40 s against vanilla's 28, mostly moss blocks in lush caves and oak saplings, 42 against 6), likely leaf decay of generated leaves or worldgen blocks placed without support, and fix it at the source. Out: item entity merging.
+- Depends on: none
+- Branch: fix/worldgen-item-drops
+- Needs decision: none
+- Done when: the same-seed area on PEX and vanilla 26.3 holds about as many item entities 40 s after generation, by item.
+- Status (2026-11-25): filed by the 2.0 loop (found during the spawn weight side-by-side on 2026-11-21).
+
+#### G6-38 Dead and peaceful-removed mobs leave the world
+
+- Scope: in: on the agent harness world, endermen stayed after the difficulty went to peaceful, and killed endermen stayed in the world at `Health:0` forever (and likely count toward the mob cap). Check the death path (`LivingEntity.tickDeath` removes after 20 ticks) and the peaceful removal of `notInPeaceful` mobs (`Mob.checkDespawn`) for endermen and every hostile. Out: other despawn rules.
+- Depends on: none
+- Branch: fix/dead-mobs-removed
+- Needs decision: none
+- Done when: on PEX, a killed enderman (by player, by `/damage`, and while holding a block) is gone after 20 ticks and `execute if entity @e[type=enderman,nbt={Health:0f}]` finds none; switching to peaceful removes every hostile like vanilla 26.3; a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21).
+
+#### G6-39 Entity selectors honour distance in execute if entity
+
+- Scope: in: the agent harness saw `execute if entity @e[distance=..N]` succeed when nothing was that close. `EntitySelector::predicate` does add a distance predicate, so first reproduce it against vanilla 26.3 from a player, from `execute positioned` and from the console (whose origin is the world spawn in vanilla too), then fix whatever differs. Out: other selector options.
+- Depends on: none
+- Branch: fix/selector-distance
+- Needs decision: none
+- Done when: the CT 117 side-by-side prints the same lines for `execute if entity @e[type=pig,distance=..N]` with a pig just inside and just outside N, from the console and `execute positioned ... run`; a GameTest if PEX differs.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21); not reproduced yet.
+
+#### G6-40 Mob arrows hurt like vanilla through armour
+
+- Scope: in: skeleton arrows did 5.8 to 6.9 damage to a player in full iron armour on Easy on the agent harness world, which looks too high (vanilla: base 2 plus difficulty, times arrow speed, Easy scaling `min(d / 2 + 1, d)`, then armour). Check arrow damage, the difficulty scaling for mob damage to players and armour reduction against vanilla. Out: enchantments.
+- Depends on: none
+- Branch: fix/mob-arrow-damage
+- Needs decision: none
+- Done when: a GameTest or bot test with a skeleton shooting a player in full iron armour on Easy, Normal and Hard gives damage inside vanilla 26.3's range for each.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21).
+
+#### G6-41 Monsters do not spawn on the surface in daylight
+
+- Scope: in: on the agent harness world, with time frozen at day 1029, hostile mobs turned up on the surface near the agent within minutes. The darkness check reads like vanilla `Monster.isDarkEnoughToSpawn`, so first log the spawn position, sky and block light of each natural hostile spawn on that world, then fix the check that lets them through (sky darkening with `advance_time` off, a stale light value, or spawns in caves that walk up). Out: spawner and structure spawns.
+- Depends on: none
+- Branch: fix/daylight-hostile-spawns
+- Needs decision: none
+- Done when: on a superflat PEX world held at noon, no zombie, skeleton, creeper or spider spawns naturally on the surface in 20 minutes, as on vanilla 26.3; a test for the spawn light check.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21); cause not found yet.
+
+#### G6-42 Player chat goes out as player chat
+
+- Scope: in: with `allow_chat_reports` off (the default), `net/java/play/chat_message.rs` sends each message as `PlayerChatMessage::system` with the raw chat type and an empty sender name, so clients and mods see it as system chat. Vanilla sends `ClientboundPlayerChatPacket` with the `minecraft:chat` type and the sender's name, unsigned when the profile has no chat key. Out: chat signing.
+- Depends on: none
+- Branch: fix/player-chat-type
+- Needs decision: none
+- Done when: a headless bot receives another player's chat as a player chat packet with the sender's UUID, chat type `minecraft:chat` and the sender's name, with chat reports on and off, as from vanilla 26.3.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness (agents' chat listeners saw player messages as system chat).
+
+#### G6-43 Summoned animals do not suffocate
+
+- Scope: in: on the agent harness world, animals made with `/summon` took suffocation damage. Reproduce it with the agent's commands against vanilla 26.3 (position rounding in `summon`, the spawn box, or `isInWall` testing the wrong box), then fix it. Out: natural spawning.
+- Depends on: none
+- Branch: fix/summon-suffocation
+- Needs decision: none
+- Done when: `summon cow` at a block position on open ground, by the console and by a player with `~ ~ ~`, leaves a cow that takes no damage for 200 ticks on PEX, as on vanilla 26.3; a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server; not reproduced yet.
+
+#### G6-44 team join and team leave take several members
+
+- Scope: in: `team join <team> [members]` and `team leave <members>` take vanilla's `ScoreHolderArgument.scoreHolders()` (several names, selectors and `*`, and names that are not online players) instead of one `EntityArgumentType::Entities`; `team join red A B` answers "Incorrect argument" on PEX. Out: other team subcommands.
+- Depends on: none
+- Branch: fix/team-members-argument
+- Needs decision: none
+- Done when: `team join red A B` and `team leave A B` with two offline names and with a selector print the same lines on PEX and vanilla 26.3 (CT 117 side-by-side); a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server.
 
 ### Proof
 
