@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     str::FromStr,
     sync::{LazyLock, Mutex},
 };
@@ -450,6 +450,25 @@ pub static TRANSLATIONS: LazyLock<Mutex<[HashMap<String, String>; Locale::COUNT]
         Mutex::new(array)
     });
 
+/// The keys a Bedrock client has its own text for, lowercased as the translation table stores
+/// them.
+static BEDROCK_KEYS: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    BEDROCK_EN_US_LANG
+        .lines()
+        .map(str::trim)
+        .filter(|line| !(line.is_empty() || line.starts_with('#') || line.starts_with('/')))
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, _)| key.trim().to_lowercase())
+        .collect()
+});
+
+/// Whether a Bedrock client can translate `key` (no namespace) itself, from
+/// `assets/en_us_bedrock.lang`. Java-only keys, such as advancement titles, are not there.
+#[must_use]
+pub fn bedrock_has_translation(key: &str) -> bool {
+    BEDROCK_KEYS.contains(&key.to_lowercase())
+}
+
 /// Supported locales for translations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Locale {
@@ -728,8 +747,8 @@ impl FromStr for Locale {
 #[cfg(test)]
 mod tests {
     use super::{
-        Locale, TRANSLATIONS, add_translation, add_translation_file, get_translation,
-        get_translation_text, reorder_substitutions,
+        Locale, TRANSLATIONS, add_translation, add_translation_file, bedrock_has_translation,
+        get_translation, get_translation_text, reorder_substitutions,
     };
     use crate::text::{TextComponent, TextComponentBase, TextContent, style::Style};
 
@@ -994,5 +1013,70 @@ mod tests {
             get_translation_text("entered (%.2f)", Locale::EnUs, vec![arg("x")]),
             "entered (%.2f)"
         );
+    }
+
+    fn java_translate(key: &'static str, with: Vec<TextComponentBase>) -> TextComponent {
+        TextComponent::from_content(TextContent::Translate {
+            translate: key.into(),
+            bedrock_translate: None,
+            with,
+        })
+    }
+
+    #[test]
+    fn bedrock_knows_only_its_own_keys() {
+        assert!(bedrock_has_translation("multiplayer.player.joined"));
+        assert!(bedrock_has_translation("chat.type.achievement"));
+        assert!(!bedrock_has_translation("advancements.adventure.sleep_in_bed.title"));
+    }
+
+    #[test]
+    fn bedrock_string_of_a_java_only_key_is_its_en_us_text() {
+        let title = java_translate("advancements.adventure.sleep_in_bed.title", vec![]);
+        assert_eq!(title.0.to_bedrock_string(), "Sweet Dreams");
+    }
+
+    #[test]
+    fn bedrock_string_fills_in_a_java_only_key() {
+        let message = java_translate(
+            "commands.give.success.single",
+            vec![arg("1"), arg("[Stone]"), arg("Steve")],
+        );
+        assert_eq!(message.0.to_bedrock_string(), "Gave 1 [Stone] to Steve");
+    }
+
+    #[test]
+    fn bedrock_string_keeps_keys_bedrock_translates() {
+        let joined = java_translate("multiplayer.player.joined", vec![arg("Steve")]);
+        assert_eq!(joined.0.to_bedrock_string(), "%multiplayer.player.joined");
+        let cross = TextComponent::from_content(TextContent::Translate {
+            translate: "advancements.adventure.sleep_in_bed.title".into(),
+            bedrock_translate: Some("chat.type.achievement".into()),
+            with: vec![],
+        });
+        assert_eq!(cross.0.to_bedrock_string(), "%chat.type.achievement");
+    }
+
+    #[test]
+    fn bedrock_string_renders_pumpkin_keys() {
+        add_translation("pumpkin", "test.bedrock_string", "Hello %s", Locale::EnUs);
+        let message = TextComponent::custom(
+            "pumpkin",
+            "test.bedrock_string",
+            Locale::EnUs,
+            [TextComponent::text("Steve")],
+        );
+        assert_eq!(message.0.to_bedrock_string(), "Hello Steve");
+    }
+
+    #[test]
+    fn bedrock_legacy_text_of_a_java_only_key_is_its_en_us_text() {
+        let title = java_translate("advancements.adventure.sleep_in_bed.title", vec![]);
+        assert_eq!(title.0.to_bedrock_legacy(Locale::EnUs), "Sweet Dreams");
+        let message = java_translate(
+            "commands.give.success.single",
+            vec![arg("1"), arg("[Stone]"), arg("Steve")],
+        );
+        assert_eq!(message.0.to_bedrock_legacy(Locale::EnUs), "Gave 1 [Stone] to Steve");
     }
 }

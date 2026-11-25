@@ -1,6 +1,7 @@
 use crate::text::color::{ARGBColor, hsv_to_rgb};
 use crate::translation::{
-    Locale, get_translation, get_translation_text, reorder_substitutions, translation_to_pretty,
+    Locale, bedrock_has_translation, get_translation, get_translation_text, reorder_substitutions,
+    translation_to_pretty,
 };
 use crate::version::JavaMinecraftVersion;
 use click::ClickEvent;
@@ -1030,7 +1031,9 @@ impl TextComponentBase {
     }
 
     /// Converts this component into a raw Bedrock string, specifically for translation parameters.
-    /// Translations are emitted as `%translation.key` so Bedrock evaluates them natively.
+    /// Keys a Bedrock client knows are emitted as `%translation.key` so Bedrock evaluates them
+    /// natively. A Java-only key, or one of Pumpkin's own, would reach the player as a raw
+    /// `%key`, so it is sent as its `en_us` text instead.
     #[must_use]
     pub fn to_bedrock_string(&self) -> String {
         let mut text = String::new();
@@ -1040,15 +1043,24 @@ impl TextComponentBase {
             TextContent::Translate {
                 translate,
                 bedrock_translate,
-                with: _,
-            } => {
-                let key = bedrock_translate.as_deref().unwrap_or(translate.as_ref());
-                let _ = write!(text, "%{key}");
-            }
+                with,
+            } => match bedrock_translate {
+                Some(key) => {
+                    let _ = write!(text, "%{key}");
+                }
+                None if bedrock_has_translation(translate) => {
+                    let _ = write!(text, "%{translate}");
+                }
+                None => text.push_str(&get_translation_text(
+                    format!("minecraft:{translate}"),
+                    Locale::EnUs,
+                    with.clone(),
+                )),
+            },
             TextContent::EntityNames { selector, .. } => text.push_str(selector),
             TextContent::Keybind { keybind } => text.push_str(keybind),
-            TextContent::Custom { key, .. } => {
-                let _ = write!(text, "%{key}");
+            TextContent::Custom { key, with, locale } => {
+                text.push_str(&get_translation_text(key.clone(), *locale, with.clone()));
             }
             TextContent::PlayerSprite { profile, .. } => {
                 if let Some(name) = profile.0.get_string("name") {
@@ -1107,8 +1119,13 @@ impl TextComponentBase {
                 bedrock_translate,
                 with,
             } => {
-                let key = bedrock_translate.as_ref().unwrap_or(translate);
-                text.push_str(&get_translation_text(key.to_string(), locale, with.clone()));
+                // Bare keys are Bedrock's own text; a Java-only key is only under `minecraft:`.
+                let key = match bedrock_translate {
+                    Some(key) => key.to_string(),
+                    None if bedrock_has_translation(translate) => translate.to_string(),
+                    None => format!("minecraft:{translate}"),
+                };
+                text.push_str(&get_translation_text(key, locale, with.clone()));
             }
             TextContent::EntityNames { selector, .. } => text.push_str(selector),
             TextContent::Keybind { keybind } => text.push_str(keybind),
