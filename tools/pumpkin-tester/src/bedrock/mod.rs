@@ -1136,6 +1136,13 @@ async fn summon_next_to_java(
     entity: &EntityType,
 ) -> Result<i32, String> {
     let at = java.position + Vector3::new(1.5, 0.0, 0.0);
+    // Chunk generation spawns animals, so a pig or cow of the world's own may already be in
+    // view: take the newly tracked one nearest the spot.
+    let seen_before: Vec<i32> = java
+        .entities_of_type(entity)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
     run_console(
         server,
         &format!(
@@ -1143,12 +1150,15 @@ async fn summon_next_to_java(
             entity.resource_name, at.x, at.y, at.z
         ),
     );
-    let type_id = i32::from(entity.id);
     let find = |java: &HeadlessBot| {
-        java.entities
-            .iter()
-            .find(|(_, seen)| seen.entity_type == type_id)
-            .map(|(id, _)| *id)
+        java.entities_of_type(entity)
+            .into_iter()
+            .filter(|(id, _)| !seen_before.contains(id))
+            .min_by(|(_, a), (_, b)| {
+                a.squared_distance_to_vec(&at)
+                    .total_cmp(&b.squared_distance_to_vec(&at))
+            })
+            .map(|(id, _)| id)
     };
     tick_until(
         server,
