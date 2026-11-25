@@ -5677,12 +5677,11 @@ impl Player {
         sender_name: &TextComponent,
         target_name: Option<&TextComponent>,
     ) {
-        self.try_send_client_packet(&CDisguisedChatMessage::new(
-            message,
-            (chat_type + 1).into(),
-            sender_name,
-            target_name,
-        ));
+        let je_packet =
+            CDisguisedChatMessage::new(message, (chat_type + 1).into(), sender_name, target_name);
+        let locale = Locale::from_str(&self.config.load().locale).unwrap_or(Locale::EnUs);
+        let line = chat_type_line(message, chat_type, sender_name, target_name);
+        self.try_enqueue_packet_editioned(&je_packet, &bedrock_system_text(&line, locale));
     }
 
     pub fn drop_item(&self, item_stack: ItemStack) {
@@ -5811,22 +5810,7 @@ impl Player {
     pub fn send_system_message_raw(&self, text: &TextComponent, overlay: bool) {
         let je_packet = CSystemChatMessage::new(text, overlay);
         let locale = Locale::from_str(&self.config.load().locale).unwrap_or(Locale::EnUs);
-        let be_packet = match &*text.0.content {
-            pumpkin_util::text::TextContent::Translate {
-                translate,
-                bedrock_translate,
-                with,
-            } => {
-                let key = bedrock_translate.as_deref().unwrap_or(translate.as_ref());
-                let parameters = with
-                    .iter()
-                    .map(pumpkin_util::text::TextComponentBase::to_bedrock_string)
-                    .collect();
-                SText::translation(key.to_string(), parameters)
-            }
-            _ => SText::system_message(text.0.to_bedrock_legacy(locale)),
-        };
-        self.try_enqueue_packet_editioned(&je_packet, &be_packet);
+        self.try_enqueue_packet_editioned(&je_packet, &bedrock_system_text(text, locale));
     }
 
     /// Vanilla `ServerPlayer.sendBuildLimitMessage(true, maxY)`.
@@ -8704,8 +8688,88 @@ impl InventoryPlayer for Player {
     }
 }
 
+/// A system line for a Bedrock client. A key Bedrock translates goes as a translation with its
+/// arguments; anything else, a Java-only key included, goes as rendered text.
+fn bedrock_system_text(text: &TextComponent, locale: Locale) -> SText<'static> {
+    if let pumpkin_util::text::TextContent::Translate {
+        translate,
+        bedrock_translate,
+        with,
+    } = &*text.0.content
+    {
+        let key: Option<&str> = bedrock_translate.as_deref().or_else(|| {
+            pumpkin_util::translation::bedrock_has_translation(translate)
+                .then_some(&**translate)
+        });
+        if let Some(key) = key {
+            let parameters = with
+                .iter()
+                .map(pumpkin_util::text::TextComponentBase::to_bedrock_string)
+                .collect();
+            return SText::translation(key.to_string(), parameters);
+        }
+    }
+    SText::system_message(text.0.to_bedrock_legacy(locale))
+}
+
+/// The line vanilla's chat type decoration makes of a message (`/msg`, `/teammsg` and the
+/// like), for clients that don't have Java's chat type registry.
+fn chat_type_line(
+    message: &TextComponent,
+    chat_type: u8,
+    sender_name: &TextComponent,
+    target_name: Option<&TextComponent>,
+) -> TextComponent {
+    use pumpkin_data::world::{
+        EMOTE_COMMAND, MSG_COMMAND_INCOMING, MSG_COMMAND_OUTGOING, SAY_COMMAND,
+        TEAM_MSG_COMMAND_INCOMING, TEAM_MSG_COMMAND_OUTGOING,
+    };
+
+    let target = target_name.unwrap_or(sender_name);
+    let (key, with) = match chat_type {
+        MSG_COMMAND_INCOMING => ("commands.message.display.incoming", vec![sender_name, message]),
+        MSG_COMMAND_OUTGOING => ("commands.message.display.outgoing", vec![target, message]),
+        TEAM_MSG_COMMAND_INCOMING => ("chat.type.team.text", vec![target, sender_name, message]),
+        TEAM_MSG_COMMAND_OUTGOING => ("chat.type.team.sent", vec![target, sender_name, message]),
+        EMOTE_COMMAND => ("chat.type.emote", vec![sender_name, message]),
+        SAY_COMMAND => ("chat.type.announcement", vec![sender_name, message]),
+        _ => ("chat.type.text", vec![sender_name, message]),
+    };
+    TextComponent::from_content(pumpkin_util::text::TextContent::Translate {
+        translate: key.into(),
+        bedrock_translate: None,
+        with: with.into_iter().map(|part| part.0.clone()).collect(),
+    })
+}
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn bedrock_msg_lines_follow_the_chat_type() {
+        use pumpkin_data::world::{MSG_COMMAND_OUTGOING, TEAM_MSG_COMMAND_INCOMING};
+        use pumpkin_util::text::TextComponent;
+        use pumpkin_util::translation::Locale;
+
+        let message = TextComponent::text("hi");
+        let sender = TextComponent::text("Alex");
+
+        // Bedrock has `commands.message.display.outgoing`: sent for the client to translate.
+        let target = TextComponent::text("Steve");
+        let outgoing =
+            super::chat_type_line(&message, MSG_COMMAND_OUTGOING, &sender, Some(&target));
+        let outgoing = super::bedrock_system_text(&outgoing, Locale::EnUs);
+        assert!(outgoing.needs_translation);
+        assert_eq!(outgoing.message, "commands.message.display.outgoing");
+        assert_eq!(outgoing.parameters, ["Steve", "hi"]);
+
+        // Bedrock has no team chat key: sent as Java's text.
+        let team = TextComponent::text("Red");
+        let team_line =
+            super::chat_type_line(&message, TEAM_MSG_COMMAND_INCOMING, &sender, Some(&team));
+        let team_line = super::bedrock_system_text(&team_line, Locale::EnUs);
+        assert!(!team_line.needs_translation);
+        assert_eq!(team_line.message, "Red <Alex> hi");
+    }
 
     #[test]
     fn attack_strength_delay_is_twenty_ticks_over_attack_speed() {

@@ -70,6 +70,29 @@ mod tests {
         }
     }
 
+    async fn bedrock_client() -> Arc<BedrockClient> {
+        Arc::new(BedrockClient::new(
+            crate::net::bedrock::nethernet::test_session().await,
+            SocketAddr::from(([127, 0, 0, 1], 19132)),
+            Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            PacketRateLimiter::from_config(&pumpkin_config::PacketLimiterConfig::default()),
+        ))
+    }
+
+    fn bedrock_player(
+        client: &Arc<BedrockClient>,
+        world: &Arc<crate::world::World>,
+        name: &str,
+    ) -> Arc<Player> {
+        Arc::new(Player::new(
+            Arc::new(ClientPlatform::Bedrock(client.clone())),
+            profile(name),
+            PlayerConfig::default(),
+            world,
+            GameMode::Survival,
+        ))
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bedrock_chat_broadcasts_with_chat_reports() {
         let folder = tempfile::tempdir().unwrap();
@@ -100,19 +123,8 @@ mod tests {
         let mut queue = java.take_outgoing_queue().expect("outgoing queue");
         crate::world::test_player_with_client(&world, Vector3::new(0.5, 64.0, 0.5), java);
 
-        let client = Arc::new(BedrockClient::new(
-            crate::net::bedrock::nethernet::test_session().await,
-            SocketAddr::from(([127, 0, 0, 1], 19132)),
-            Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            PacketRateLimiter::from_config(&pumpkin_config::PacketLimiterConfig::default()),
-        ));
-        let player = Arc::new(Player::new(
-            Arc::new(ClientPlatform::Bedrock(client.clone())),
-            profile("BedrockChatter"),
-            PlayerConfig::default(),
-            &world,
-            GameMode::Survival,
-        ));
+        let client = bedrock_client().await;
+        let player = bedrock_player(&client, &world, "BedrockChatter");
 
         client
             .handle_chat_message(
@@ -132,5 +144,33 @@ mod tests {
             ids.contains(&CSystemChatMessage::to_id(CURRENT_MC_VERSION)),
             "the Java player got no chat line, sent {ids:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn msg_reaches_a_bedrock_player() {
+        let world = crate::world::test_world();
+        let client = bedrock_client().await;
+        let player = bedrock_player(&client, &world, "BedrockTarget");
+
+        player.send_message(
+            &TextComponent::text("hi"),
+            pumpkin_data::world::MSG_COMMAND_INCOMING,
+            &TextComponent::text("Alex"),
+            Some(&TextComponent::text("BedrockTarget")),
+        );
+
+        let sent = client
+            .outgoing_packet_queue_recv
+            .lock()
+            .await
+            .as_mut()
+            .expect("outgoing queue")
+            .try_recv()
+            .expect("the /msg line");
+        let expected = SText::translation(
+            "commands.message.display.incoming".to_string(),
+            vec!["Alex".to_string(), "hi".to_string()],
+        );
+        assert_eq!(sent.data, client.serialize_packet(&expected).unwrap());
     }
 }
