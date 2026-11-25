@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `21d081fd5`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `28d20c48d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 14 | 2 | 29 | |
+| G1 Mob AI | 45 | 15 | 1 | 29 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
-| G4 Offline UUIDs | 6 | 2 | 0 | 4 | |
+| G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 35 | 21 | 0 | 12 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 45 | 23 | 0 | 20 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 205 | 95 | 7 | 87 | 16 |
+| Total | 216 | 98 | 6 | 96 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -78,12 +78,13 @@ On 2026-11-19: every piece in step 2 is on `alpha`. In step 3 only G0-01, G0-02,
 1. Answer the open decisions that hold the most work. The table below has all of them.
    - Neon's GitHub support ticket (D0-1): G0-01 waits on Actions running again, and through it the dual-run job in CI, the hosted Windows and ARM64 runs, and D10-5.
    - D7-4 and D7-1: answered by the 2.0 loop on 2026-11-20.
-   - D5-1, D8-3 and the open part of D10-2 (2 pieces each).
+   - D5-1 and the open part of D10-2 (2 pieces each).
+   - D8-2, D8-3 and D8-4: answered by the 2.0 loop on 2026-11-25.
 2. Fix what hurts running servers now. None of these waits on another piece.
    - G8-04: an out-of-range hotbar slot from a Bedrock client can panic the server (read from the code, not reproduced).
    - G3-01: one bad value in `pumpkin.toml` resets the whole config to defaults, which can start a new world. D3-1 is answered except its two-key sub-question.
    - G7-10: block entity changes are lost when their chunk unloads. D7-6 picked the existing flush branch.
-   - G8-02, then G8-03: alpha accepts only Bedrock protocol 2193, so current Bedrock clients most likely can't join.
+   - G8-02, then G8-03: done. Alpha accepted only Bedrock protocol 2193 before them and accepts 1.26.60, protocol 2225, since the 2026-11-05 merges.
    - G6-04: `fix/attack-packet-parity` is finished and only needs landing.
 3. Groundwork other goals build on. These can run in parallel.
    - G0-04, then G0-03: the benchmark baseline.
@@ -142,9 +143,9 @@ No answers were recorded after 2026-10-31 until the 2.0 loop's (rows marked "Ans
 | D7-5 | What happens to plugin data (`PumpkinCustomData`) when a world goes through vanilla? | Answered by the 2.0 loop (2026-11-21): accept the loss and document it, because vanilla has no slot for chunk data and drops components it doesn't know, and changing the plugin storage API goes against D2-2. | G7-29 |
 | D7-6 | How should block entity changes reach their chunk before it unloads (`/srv/pex/pr-drafts/ISSUE-block-entities-lost-on-unload.md`)? | Answered: flush before unload (`fix/flush-block-entities-before-unload`) | G7-10 |
 | D8-1 | What does "Bedrock polish" mean for 2.0? | Answered: (c) experimental with honest gaps (Q8.1). G8-13 to G8-19 and G8-22 after 2.0 | G8-13, G8-14, G8-15, G8-16, G8-17, G8-18, G8-19, G8-22 |
-| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Open | G8-21 |
-| D8-3 | Which client does the Bedrock test bot use? | Open | G8-11, G8-12 |
-| D8-4 | Which UUID should a Bedrock player get? | Open | G8-20 |
+| D8-2 | Which Bedrock versions does PEX support, and how does it keep up? | Answered by the 2.0 loop (2026-11-25): (b) one version, upstream's Bedrock commits cherry-picked between merges | G8-21 |
+| D8-3 | Which client does the Bedrock test bot use? | Answered by the 2.0 loop (2026-11-25): (c) the Rust bot in `tools/pumpkin-tester` | G8-11, G8-12 |
+| D8-4 | Which UUID should a Bedrock player get? | Answered by the 2.0 loop (2026-11-25): (a) keep the XUID MD5, Goal 4's offline UUID when a token has neither `xid` nor `leguuid` | G8-20 |
 | D9-1 | What is the bar against Paper, and at which sizes? | Answered: less RAM than Paper, P95 within 10% at 10, 25 and 50 bots (Q9.2) | G9-12, G9-14 |
 | D9-2 | Where does the benchmark live? | Answered: move it to `tools/gameplay-bench` (Q9.3) | G9-11 |
 | D9-3 | Where are benchmark results published? | Answered by the 2.0 loop (2026-11-21): `docs/BENCHMARKS.md` in PEX, with the HTML reports and CSVs attached to the release they measure, because it needs no new infrastructure while Actions is down, and a release then points at its own numbers; Neon uploads the assets until Goal 10's release jobs run. | G9-14 |
@@ -518,7 +519,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-zombies`
 - Needs decision: none.
 - Done when: `pumpkin:zombie_tramples_turtle_egg`, `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass.
-- Status (2026-11-25): built, proof missing (branch `fix/mobai-zombies`, `449c59d4c`, second lane). The zombie family runs vanilla's goal lists and priorities: `ZombieEntityBase` gets `MoveThroughVillageGoal`, `ZombieAttack` at 3 and vanilla's villager targeting; mobs use spears through a new `SpearUseGoal`; the zombified piglin angers and alerts its pack like vanilla; the giant has no goals, as in vanilla. GameTests `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass. Missing: `pumpkin:zombie_tramples_turtle_egg`, which needs mobs to step up a block (`fix/entity-step-up`, batch 18). Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+- Status (2026-11-25): landed (branch `fix/mobai-zombies`, `449c59d4c`, second lane, batch 17; proof completed in batch 18). `pumpkin:zombie_tramples_turtle_egg` passes now that mobs step up a block (`fix/entity-step-up`), alongside `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player`. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
 
 #### G1-07 Skeletons
 - Scope: skeleton, stray, bogged, parched, wither_skeleton: weapon switching, tipped arrows per variant, target lists. Out: skeleton horse traps (G1-19).
@@ -1585,6 +1586,15 @@ Format and place of the lists, outside the migration:
 - Needs decision: D4-2
 - Done when: a test with a vanilla 26.3 server's five files in a temp server root loads every entry (op level, whitelist, ban reason and expiry, cache), and a test with a PEX 1.2.0 `data/` directory keeps every entry (with `.bak` copies if D4-2 picks the move).
 
+#### G4-07 Offline logins without encryption run the duplicate login checks
+
+- Scope: in: with encryption off, `login_start.rs` calls `finish_login` directly, so the same-name check in `encryption_response.rs` never runs for those logins (reported by the agent harness thread). Run the same profile and name checks on both paths, matching vanilla `verifyLoginAndFinishConnectionSetup`. Out: online mode.
+- Depends on: none
+- Branch: fix/offline-duplicate-login
+- Needs decision: none
+- Done when: a bot test logs in twice with the same offline name, with encryption on and off, and the old session is replaced like vanilla 26.3 in both.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness thread's report (2026-11-21).
+
 ### Proof
 
 - Tests: `offline_uuid_matches_vanilla`, the migration tests in the table above, `upgrades_a_pex_1_2_0_server` (G4-01), `bot:offline_uuid_login` (G4-02), G4-03's GameTest and G4-05's tests all pass on one alpha commit, in CI (G0-01) or `/srv/pex/tools/local-ci.sh`.
@@ -2194,7 +2204,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/block-predicate-states
 - Needs decision: none
 - Done when: from the console on PEX and vanilla 26.3 (the CT 117 side-by-side, `/srv/pex/scratch/pb2/cons/cons2.sh <pex-binary> <commands>`), `execute if block 3 200 0 minecraft:piston[facing=north]` on an east-facing piston answers "Test failed", `execute if block` on an oak log with `#minecraft:logs` answers "Test passed", `execute if block` on a chest with `minecraft:chest{Items:[{Slot:0b}]}` passes only when slot 0 holds an item, and `fill ... replace minecraft:oak_stairs[facing=north]` replaces only those stairs; a GameTest.
-- Status (2026-11-21): added by the 2.0 loop after the G6-28 side-by-side on batch 14 (`4086dbc0e`): `execute if block 3 200 0 minecraft:piston[facing=north]` and `execute if block 6 200 1 minecraft:oak_stairs[facing=south]` answer "Test passed" for an east-facing piston and north-facing stairs, where vanilla answers "Test failed".
+- Status (2026-11-25): landed (branch `fix/block-predicate-states`, `e8e01c12b`). `execute if|unless block` takes a vanilla block predicate: tags, `[property=value]` and `{nbt}` are checked against the block state and block entity. GameTest `pumpkin:block_predicates_check_states_tags_and_nbt` passes. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
 
 #### G6-33 data block messages name the position like vanilla
 
@@ -2222,6 +2232,96 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Needs decision: none
 - Done when: on PEX and vanilla 26.3 (CT 117 side-by-side), `spreadplayers 57 0 12 60 false` on one pig lands it on the surface (vanilla y 106 on that seed) and not at the world bottom, five times in a row, and prints the same line; one entity spreads over an area that is mostly water, as on vanilla; a GameTest.
 - Status (2026-11-25): landed (branch `fix/spreadplayers-surface`, `f38b6b2ac`, the 2.0 loop, with the test fix `1cd092ead`). Spots are scanned down from the max height after loading their chunk, judged with vanilla `isSafe`, and re-rolled inside the 10000-iteration spread loop; the center prints like vanilla. CT 117 side-by-side on batch 17 against vanilla 26.3: the pig landed on the pillar at 4.5 101 4.5 on both, and the ThinkPad repro `spreadplayers 57 0 0 4 false` now lands at y 117 (`alpha` put it at y -63). GameTest `pumpkin:commands/spreadplayers_lands_on_the_only_dry_block` passes. Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+
+#### G6-36 Natural spawning picks by weight and spawns animals at chunk generation
+
+- Scope: in: game data generation keeps the `weight` of each biome spawn entry; tick and chunk generation spawning pick with vanilla `WeightedList.getRandom`; chunk generation spawning (`NaturalSpawner.spawnMobsForChunkGeneration`) reads blocks, light (darkening 0) and collisions from the generating chunk instead of the live world, uses each type's `CHUNK_GENERATION` spawn rules and the Animal walk-target check; `Animal` brightness uses `getRawBrightness(pos, 0)`. Out: `isValidPositionForMob` on tick spawning (a G9 note).
+- Depends on: none
+- Branch: fix/natural-spawn-weights
+- Needs decision: none
+- Done when: a same-seed plains area (forceload -336 176 -177 335) on PEX and vanilla 26.3 holds cows, pigs, sheep and chickens in roughly vanilla numbers, and the share of endermen and witches among night spawns matches vanilla's weights; unit tests for the weighted pick.
+- Status (2026-11-25): landed (branch `fix/natural-spawn-weights`, `849be4554`, the 2.0 loop). Codegen keeps the biome spawn weights and spawning picks with vanilla `WeightedList.getRandom`; chunk generation spawning reads the generating chunk and uses `CHUNK_GENERATION` rules, so passive animals appear on new worlds. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
+
+#### G6-37 Fresh chunks drop items like vanilla
+
+- Scope: in: find why newly generated chunks drop far more item entities than vanilla (CT 117: about 520 in 40 s against vanilla's 28, mostly moss blocks in lush caves and oak saplings, 42 against 6), likely leaf decay of generated leaves or worldgen blocks placed without support, and fix it at the source. Out: item entity merging.
+- Depends on: none
+- Branch: fix/worldgen-item-drops
+- Needs decision: none
+- Done when: the same-seed area on PEX and vanilla 26.3 holds about as many item entities 40 s after generation, by item.
+- Status (2026-11-25): filed by the 2.0 loop (found during the spawn weight side-by-side on 2026-11-21).
+
+#### G6-38 Dead and peaceful-removed mobs leave the world
+
+- Scope: in: on the agent harness world, endermen stayed after the difficulty went to peaceful, and killed endermen stayed in the world at `Health:0` forever (and likely count toward the mob cap). Check the death path (`LivingEntity.tickDeath` removes after 20 ticks) and the peaceful removal of `notInPeaceful` mobs (`Mob.checkDespawn`) for endermen and every hostile. Out: other despawn rules.
+- Depends on: none
+- Branch: fix/dead-mobs-removed
+- Needs decision: none
+- Done when: on PEX, a killed enderman (by player, by `/damage`, and while holding a block) is gone after 20 ticks and `execute if entity @e[type=enderman,nbt={Health:0f}]` finds none; switching to peaceful removes every hostile like vanilla 26.3; a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21).
+
+#### G6-39 Entity selectors honour distance in execute if entity
+
+- Scope: in: the agent harness saw `execute if entity @e[distance=..N]` succeed when nothing was that close. `EntitySelector::predicate` does add a distance predicate, so first reproduce it against vanilla 26.3 from a player, from `execute positioned` and from the console (whose origin is the world spawn in vanilla too), then fix whatever differs. Out: other selector options.
+- Depends on: none
+- Branch: fix/selector-distance
+- Needs decision: none
+- Done when: the CT 117 side-by-side prints the same lines for `execute if entity @e[type=pig,distance=..N]` with a pig just inside and just outside N, from the console and `execute positioned ... run`; a GameTest if PEX differs.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21); not reproduced yet.
+
+#### G6-40 Mob arrows hurt like vanilla through armour
+
+- Scope: in: skeleton arrows did 5.8 to 6.9 damage to a player in full iron armour on Easy on the agent harness world, which looks too high (vanilla: base 2 plus difficulty, times arrow speed, Easy scaling `min(d / 2 + 1, d)`, then armour). Check arrow damage, the difficulty scaling for mob damage to players and armour reduction against vanilla. Out: enchantments.
+- Depends on: none
+- Branch: fix/mob-arrow-damage
+- Needs decision: none
+- Done when: a GameTest or bot test with a skeleton shooting a player in full iron armour on Easy, Normal and Hard gives damage inside vanilla 26.3's range for each.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21).
+
+#### G6-41 Monsters do not spawn on the surface in daylight
+
+- Scope: in: on the agent harness world, with time frozen at day 1029, hostile mobs turned up on the surface near the agent within minutes. The darkness check reads like vanilla `Monster.isDarkEnoughToSpawn`, so first log the spawn position, sky and block light of each natural hostile spawn on that world, then fix the check that lets them through (sky darkening with `advance_time` off, a stale light value, or spawns in caves that walk up). Out: spawner and structure spawns.
+- Depends on: none
+- Branch: fix/daylight-hostile-spawns
+- Needs decision: none
+- Done when: on a superflat PEX world held at noon, no zombie, skeleton, creeper or spider spawns naturally on the surface in 20 minutes, as on vanilla 26.3; a test for the spawn light check.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server (2026-11-21); cause not found yet.
+
+#### G6-42 Player chat goes out as player chat
+
+- Scope: in: with `allow_chat_reports` off (the default), `net/java/play/chat_message.rs` sends each message as `PlayerChatMessage::system` with the raw chat type and an empty sender name, so clients and mods see it as system chat. Vanilla sends `ClientboundPlayerChatPacket` with the `minecraft:chat` type and the sender's name, unsigned when the profile has no chat key. Out: chat signing.
+- Depends on: none
+- Branch: fix/player-chat-type
+- Needs decision: none
+- Done when: a headless bot receives another player's chat as a player chat packet with the sender's UUID, chat type `minecraft:chat` and the sender's name, with chat reports on and off, as from vanilla 26.3.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness (agents' chat listeners saw player messages as system chat).
+
+#### G6-43 Summoned animals do not suffocate
+
+- Scope: in: on the agent harness world, animals made with `/summon` took suffocation damage. Reproduce it with the agent's commands against vanilla 26.3 (position rounding in `summon`, the spawn box, or `isInWall` testing the wrong box), then fix it. Out: natural spawning.
+- Depends on: none
+- Branch: fix/summon-suffocation
+- Needs decision: none
+- Done when: `summon cow` at a block position on open ground, by the console and by a player with `~ ~ ~`, leaves a cow that takes no damage for 200 ticks on PEX, as on vanilla 26.3; a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server; not reproduced yet.
+
+#### G6-44 team join and team leave take several members
+
+- Scope: in: `team join <team> [members]` and `team leave <members>` take vanilla's `ScoreHolderArgument.scoreHolders()` (several names, selectors and `*`, and names that are not online players) instead of one `EntityArgumentType::Entities`; `team join red A B` answers "Incorrect argument" on PEX. Out: other team subcommands.
+- Depends on: none
+- Branch: fix/team-members-argument
+- Needs decision: none
+- Done when: `team join red A B` and `team leave A B` with two offline names and with a selector print the same lines on PEX and vanilla 26.3 (CT 117 side-by-side); a GameTest.
+- Status (2026-11-25): filed by the 2.0 loop from the agent harness server.
+
+#### G6-45 fill updates light
+
+- Scope: in: `/fill` (`core/command/commands/fill.rs`) writes its blocks through `set_blocks_batch`, which skips the light engine, so filled blocks keep stale block and sky light (found by the second lane while proving G1-08). Run the light update for every changed position like vanilla `Level.setBlock` (`LevelChunk.setBlockState` -> `LightEngine.checkBlock`), keeping the batch write for speed. Out: `/clone` (same check afterwards).
+- Depends on: none
+- Branch: fix/fill-light
+- Needs decision: none
+- Done when: a GameTest fills a closed room with glowstone then air and reads block light 15 then 0 inside, and a filled stone roof over open ground drops sky light under it to vanilla's values.
+- Status (2026-11-25): filed by the 2.0 loop from the second lane's report.
 
 ### Proof
 
@@ -2658,8 +2758,8 @@ Paths without a crate prefix are under `crates/pumpkin-core/src/`.
 
 Version and transport
 
-- Alpha targets Bedrock 1.26.51, protocol 2193: `CURRENT_BEDROCK_MC_VERSION` and `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`. `incompatible_protocol_status` (`net/bedrock/login/request_network_settings.rs`) answers any other protocol with `OutdatedClient` or `OutdatedServer` (test `accepts_only_the_current_bedrock_protocol`). `BedrockMinecraftVersion` (`crates/pumpkin-util/src/version.rs`) knows only `V_1_21` (671) and `V_1_26_51` (2193).
-- The current client is newer. Upstream master moved to 1.26.60, protocol 2225, in Pumpkin-MC/Pumpkin#4407 (merged 2026-10-29; upstream's `crates/pumpkin-world/src/lib.rs` now says 2225), and both client libraries under "Tests and tooling" target 2225. So a 1.26.60 client gets `OutdatedServer` from alpha. Not tried with a real client here.
+- Alpha targets Bedrock 1.26.60, protocol 2225, since G8-03 (`feat/bedrock-26-60`, on `alpha` since the 2026-11-05 merges): `CURRENT_BEDROCK_MC_VERSION` and `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`. `incompatible_protocol_status` (`net/bedrock/login/request_network_settings.rs`) answers any other protocol with `OutdatedClient` or `OutdatedServer` (test `accepts_only_the_current_bedrock_protocol`). `BedrockMinecraftVersion` (`crates/pumpkin-util/src/version.rs`) knows `V_1_21` (671), `V_1_26_51` (2193) and `V_1_26_60` (2225). Before G8-03, alpha accepted only 2193 (1.26.51), so 1.26.60 clients got `OutdatedServer`.
+- On 2026-11-25 upstream master says 1.26.63 with protocol 2225 (`crates/pumpkin-world/src/lib.rs`) and gophertunnel's `CurrentProtocol` is 2225, so current clients speak the protocol alpha accepts. Not yet tried with a real client here.
 - Packet layouts: 62 files in `crates/pumpkin-protocol/src/bedrock/` say "Last verified for v2169" (26.45, per the comment on Pumpkin-MC/Pumpkin#3340), none says 2193, and 31 have no marker (`git grep -c "Last verified for v" -- crates/pumpkin-protocol/src/bedrock`).
 - Transport is NetherNet only. `BedrockClient` (`net/bedrock/mod.rs`) wraps a `NetherNetSession`; RakNet was removed in `ffcf09ece` ("chore: remove bedrock raknet (#2811)"). `StatusResponder::receive` (`net/bedrock/status.rs`) still answers RakNet unconnected pings for the server list on UDP 19132 (IPv6 on the port plus one, `StatusResponder::bind`) and rejects RakNet connection requests with `CIncompatibleProtocolVersion` (`reject_legacy_raknet`).
 - Signaling is plain HTTP on TCP 19132: `NetherNetListener::bind` (`net/bedrock/nethernet/endpoint.rs`), axum routes `/v1/join` and `/v1/join/{network_id}`. There is no TLS (`git grep -n -i "rustls\|tls" crates/pumpkin-core/src/net/bedrock` finds only DTLS lines), so direct joins rely on trust on first use of `nethernet.identity_key`. WebRTC is the `webrtc` 0.21.1 crate (root `Cargo.toml`); LAN discovery is `NetherNetDiscovery` (`nethernet/discovery.rs`).
@@ -2939,16 +3039,19 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
   - (c) One version, ported by PEX itself. Cost: a protocol port per Bedrock release (#4407 was +788 -671 over 32 files) that duplicates upstream.
   - (d) The current and the previous protocol, as Pumpkin-MC/Pumpkin#3735 asks. Cost: `BClientPacket::write_packet` takes no version (`crates/pumpkin-protocol/src/lib.rs`), unlike Java's `serialize_packet_for_version`; `assets/bedrock/` holds one version's data; every packet test doubles. A goal of its own.
   - Waits on it: G8-21. G8-02 and G8-03 change shape only under (a).
+  - Answered by the 2.0 loop (2026-11-25): (b), one version, with upstream's Bedrock commits cherry-picked between merges, because that is how G8-02 and G8-03 already reached 1.26.60/2225, a new client release doesn't have to wait on a full upstream merge, and (d) is a goal of its own that doesn't fit D8-1's (c).
 - D8-3: Which client does the Bedrock test bot use? Options:
   - (a) gophertunnel (Go): at 2225 and has a `/v1/join` client in `df-mc/go-nethernet`. Cost: a Go toolchain in CT 117 and in CI; the bot lives outside the Rust workspace.
   - (b) PrismarineJS bedrock-protocol (Node): at 1.26.60 with NetherNet, but direct `/v1/join` joins appear only in a tool script, so they may need work. Cost: Node in CT 117 and in CI, plus that check.
   - (c) A Rust bot in `tools/pumpkin-tester`: runs in the existing `gametest` job next to `HeadlessBot`. Cost: the largest; readers for the clientbound packets it checks (3 of 62 exist), writers for the serverbound ones (9 of 30 exist) and a WebRTC client side with the `webrtc` crate. `AGENTS.md` warns against bots turning into side projects.
   - Waits on it: G8-11, G8-12.
+  - Answered by the 2.0 loop (2026-11-25): (c), the Rust bot in `tools/pumpkin-tester`, because it already landed as `test/bedrock-bot` `17fb7939b` and `test/bedrock-wire` `eb7d4cebb` and runs in the existing gametest job with no new toolchain.
 - D8-4: Which UUID should a Bedrock player get? Options:
   - (a) Keep the MD5 of `pocket-auth-1-xuid:<xid>`, and give tokens with neither `xid` nor `leguuid` Goal 4's offline UUID of the prefixed name. Cost: smallest, no migration; player files from Geyser and Floodgate servers still don't carry over.
   - (b) Floodgate's `new UUID(0, xuid)`, so files from a Geyser and Floodgate server carry over. Cost: every existing PEX Bedrock player file moves, through Goal 4's move.
   - (c) In offline mode ignore the unchecked `xid` and use Goal 4's offline UUID of the prefixed name for every Bedrock player; online, keep (a) or (b). Cost: with an empty `username_prefix`, a Bedrock player and a Java player of the same name share one UUID and one player file.
   - Waits on it: G8-20.
+  - Answered by the 2.0 loop (2026-11-25): (a), keep the MD5 of `pocket-auth-1-xuid:<xid>` and give tokens with neither `xid` nor `leguuid` Goal 4's offline UUID of the prefixed name, because it needs no player-file migration, D8-1 chose (c) rather than Geyser parity (and Neon skipped Bedrock skins on Java), and Floodgate UUIDs (b) can come after 2.0 with G8-19.
 
 ## Goal 9: Performance vs Paper
 
