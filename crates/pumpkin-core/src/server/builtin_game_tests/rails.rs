@@ -254,3 +254,62 @@ pub(super) async fn test_lever_and_button_switch_rail_junctions(
         .then_succeed();
     Ok(())
 }
+
+/// Vanilla `ServerLevel.updateNeighboursOnBlockSet`: `/setblock` and `/fill` update the
+/// neighbours with the placed block as the source, so a redstone torch set beside a T-junction
+/// curves it north. A player placing the torch would not switch it: `Level.setBlock` gives the
+/// replaced block (air) as the source.
+pub(super) async fn test_setblock_torch_switches_rail_junction(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let rail = |shape| {
+        let mut props = RailLikeProperties::default(&Block::RAIL);
+        props.shape = shape;
+        props.to_state_id(&Block::RAIL)
+    };
+    let north_east = rail(RailShape::NorthEast);
+    let south_east = rail(RailShape::SouthEast);
+    let junction = BlockPos::new(2, 1, 1);
+    helper
+        .set_block(&BlockPos::new(2, 1, 0), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(2, 1, 2), rail(RailShape::NorthSouth))
+        .await?;
+    helper
+        .set_block(&BlockPos::new(3, 1, 1), rail(RailShape::EastWest))
+        .await?;
+    helper.set_block(&junction, south_east).await?;
+    helper.assert_block_state(&junction, south_east).await?;
+
+    let origin = BlockPos::new(0, 1, 0);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, "setblock ~1 ~ ~1 minecraft:redstone_torch")
+                .await?;
+            Ok(())
+        })
+        .then_execute(move |helper| async move {
+            helper.assert_block_state(&junction, north_east).await?;
+            helper
+                .execute_command(&origin, "setblock ~1 ~ ~1 minecraft:air")
+                .await?;
+            helper.set_block(&junction, south_east).await?;
+            Ok(())
+        })
+        .then_execute(move |helper| async move {
+            helper.assert_block_state(&junction, south_east).await?;
+            helper
+                .execute_command(&origin, "fill ~1 ~ ~1 ~1 ~ ~1 minecraft:redstone_torch")
+                .await?;
+            Ok(())
+        })
+        .then_execute(move |helper| async move {
+            helper.assert_block_state(&junction, north_east).await
+        })
+        .then_succeed();
+    Ok(())
+}

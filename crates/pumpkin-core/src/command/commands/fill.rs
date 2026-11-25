@@ -249,6 +249,13 @@ fn fill_blocks(
             }
         }
     }
+    // Vanilla `FillCommand`: neighbour updates for every placed block once all are in, the
+    // placed block being the source (`ServerLevel.updateNeighboursOnBlockSet`).
+    if !strict {
+        for &(pos, old_id, _) in &changed_positions {
+            world.update_neighbours_on_block_set(&pos, old_id);
+        }
+    }
     world.flush_block_updates();
 
     source.send_feedback(

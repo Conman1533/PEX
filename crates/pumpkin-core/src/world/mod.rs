@@ -6775,6 +6775,28 @@ impl World {
         }
     }
 
+    /// Vanilla `ServerLevel.updateNeighboursOnBlockSet`, run by `/setblock`, `/fill` and `/clone`
+    /// after a write without neighbour updates: the replaced block's removal side effects, then
+    /// a neighbour update whose source is the new block. `Level.setBlock` gives the old block
+    /// instead, so a torch a player places never switches a rail junction, but a set one does.
+    pub fn update_neighbours_on_block_set(
+        self: &Arc<Self>,
+        position: &BlockPos,
+        old_state_id: BlockStateId,
+    ) {
+        let state_id = self.get_block_state_id(position);
+        let new_block = Block::from_state_id(state_id);
+        let old_block = Block::from_state_id(old_state_id);
+        if old_block != new_block {
+            self.block_registry
+                .on_state_replaced(self, old_block, position, old_state_id, false);
+        }
+        self.update_neighbors_at(position, new_block, None);
+        if state_id.has_analog_output_signal() {
+            self.update_neighbour_for_output_signal(position, new_block);
+        }
+    }
+
     pub fn update_neighbour_for_output_signal(
         self: &Arc<Self>,
         pos: &BlockPos,
