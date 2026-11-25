@@ -748,6 +748,18 @@ pub struct ScoreboardObjective {
 }
 
 impl ScoreboardObjective {
+    /// Vanilla `Objective.getFormattedDisplayName`: the display name in square brackets, with
+    /// the objective name as hover text.
+    #[must_use]
+    pub fn formatted_display_name(&self) -> TextComponent {
+        self.display_name
+            .clone()
+            .hover_event(pumpkin_util::text::hover::HoverEvent::show_text(
+                TextComponent::text(self.name.clone()),
+            ))
+            .wrap_in_square_brackets()
+    }
+
     #[must_use]
     pub fn new(
         name: impl Into<String>,

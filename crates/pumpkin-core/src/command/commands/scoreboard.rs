@@ -85,19 +85,20 @@ impl CommandExecutor for ObjectivesAddExecutor {
 
         let new_objective = ScoreboardObjective::new(
             &objective_name_owned,
-            display_name_clone.clone(),
+            display_name_clone,
             RenderType::Integer,
             None,
             &criterion_owned,
         );
 
+        let formatted_display_name = new_objective.formatted_display_name();
         scoreboard.add_objective(&world, new_objective);
 
         context.source.send_feedback(
             TextComponent::translate_cross(
                 translation::java::COMMANDS_SCOREBOARD_OBJECTIVES_ADD_SUCCESS,
                 translation::java::COMMANDS_SCOREBOARD_OBJECTIVES_ADD_SUCCESS,
-                [display_name_clone],
+                [formatted_display_name],
             ),
             true,
         );
@@ -143,7 +144,7 @@ impl PlayersEnableExecutor {
             return Err(INVALID_ENABLE_ERROR.create_without_context());
         }
 
-        let objective_display_name = objective.display_name.clone();
+        let objective_display_name = objective.formatted_display_name();
         let mut enabled_holders = Vec::new();
         for holder in holders {
             let player_name = &holder.name;
@@ -212,8 +213,7 @@ impl CommandExecutor for ObjectivesRemoveExecutor {
 
         let display_name =
             ObjectiveArgumentType::objective_or_error(&scoreboard, &objective_name_owned)?
-                .display_name
-                .clone();
+                .formatted_display_name();
 
         scoreboard.remove_objective(&world, &objective_name_owned);
 
@@ -255,8 +255,7 @@ impl CommandExecutor for PlayersSetExecutor {
 
         let display_name =
             ObjectiveArgumentType::writable_objective_or_error(&scoreboard, &objective_name)?
-                .display_name
-                .clone();
+                .formatted_display_name();
         for holder in &holders {
             scoreboard.set_score_value(&world, holder.name.clone(), objective_name.clone(), value);
         }
@@ -329,7 +328,7 @@ impl PlayersGetExecutor {
                 [
                     holder.display_name,
                     TextComponent::text(value.to_string()),
-                    objective.display_name.clone(),
+                    objective.formatted_display_name(),
                 ],
             ),
         ))
@@ -359,8 +358,7 @@ impl CommandExecutor for PlayersAddRemoveExecutor {
 
         let display_name =
             ObjectiveArgumentType::writable_objective_or_error(&scoreboard, &objective_name)?
-                .display_name
-                .clone();
+                .formatted_display_name();
         let mut result: i32 = 0;
         for holder in &holders {
             result = result.wrapping_add(scoreboard.add_score(
@@ -429,8 +427,7 @@ impl CommandExecutor for PlayersResetExecutor {
             let objective_name = ObjectiveArgumentType::get(context, ARG_OBJECTIVE)?.to_string();
             let display_name =
                 ObjectiveArgumentType::objective_or_error(&scoreboard, &objective_name)?
-                    .display_name
-                    .clone();
+                    .formatted_display_name();
             for holder in &holders {
                 scoreboard.remove_score(&world, &holder.name, &objective_name);
             }
@@ -499,8 +496,7 @@ impl CommandExecutor for PlayersOperationExecutor {
 
         let display_name =
             ObjectiveArgumentType::writable_objective_or_error(&scoreboard, &objective_name)?
-                .display_name
-                .clone();
+                .formatted_display_name();
         ObjectiveArgumentType::objective_or_error(&scoreboard, &source_objective)?;
 
         let result = Self::apply(
@@ -800,7 +796,15 @@ mod tests {
         assert_eq!(
             feedback["with"],
             serde_json::json!([
-                {"text": "Named Pig"}, {"text": "7"}, {"text": "Test"}
+                {"text": "Named Pig"},
+                {"text": "7"},
+                {
+                    "translate": "chat.square_brackets",
+                    "with": [{
+                        "text": "Test",
+                        "hover_event": {"action": "show_text", "value": [{"text": "test"}]}
+                    }]
+                }
             ])
         );
 
