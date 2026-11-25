@@ -45,7 +45,7 @@ impl ResolvedScoreHolder {
         }
     }
 
-    fn entity(entity: &dyn EntityBase) -> Self {
+    pub(crate) fn entity(entity: &dyn EntityBase) -> Self {
         Self {
             name: entity.get_scoreboard_name(),
             display_name: entity.get_display_name(),

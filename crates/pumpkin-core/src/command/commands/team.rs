@@ -3,7 +3,7 @@ use crate::command::argument_builder::{
 };
 use crate::command::argument_types::core::bool::BoolArgumentType;
 use crate::command::argument_types::core::string::StringArgumentType;
-use crate::command::argument_types::entity::EntityArgumentType;
+use crate::command::argument_types::score_holder::{ResolvedScoreHolder, ScoreHolderArgumentType};
 use crate::command::argument_types::team::TeamArgumentType;
 use crate::command::argument_types::team_color::TeamColorArgumentType;
 use crate::command::context::command_context::CommandContext;
@@ -112,7 +112,7 @@ impl CommandExecutor for TeamAddExecutor {
 
         let new_team = Team {
             name: team_name_owned,
-            display_name: display_name_clone.clone(),
+            display_name: display_name_clone,
             options: 0,
             nametag_visibility: NameTagVisibility::Always,
             collision_rule: CollisionRule::Always,
@@ -122,13 +122,14 @@ impl CommandExecutor for TeamAddExecutor {
             players: vec![],
         };
 
+        let formatted_name = new_team.formatted_display_name();
         scoreboard.add_team(&world, new_team);
 
         context.source.send_feedback(
             TextComponent::translate_cross(
                 translation::java::COMMANDS_TEAM_ADD_SUCCESS,
                 translation::java::COMMANDS_TEAM_ADD_SUCCESS,
-                [display_name_clone],
+                [formatted_name],
             ),
             true,
         );
@@ -157,7 +158,7 @@ impl CommandExecutor for TeamRemoveExecutor {
             );
         };
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
 
         scoreboard.remove_team(&world, &team_name_owned);
 
@@ -194,7 +195,7 @@ impl CommandExecutor for TeamEmptyExecutor {
             );
         };
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         let players_to_remove = team.players.clone();
 
         if players_to_remove.is_empty() {
@@ -227,93 +228,63 @@ struct TeamJoinExecutor {
 
 impl CommandExecutor for TeamJoinExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
-        let team_name = TeamArgumentType::get(context, ARG_TEAM)?;
+        let team_name = TeamArgumentType::get(context, ARG_TEAM)?.to_string();
 
-        let entity_names = if self.has_members {
-            let targets = EntityArgumentType::get_optional_entities(context, ARG_MEMBERS)?;
-            if targets.is_empty() {
-                return Err(
-                    crate::command::argument_types::entity::NO_ENTITIES_ERROR_TYPE
-                        .create_without_context(),
-                );
-            }
-            targets
-                .into_iter()
-                .map(|e| e.get_scoreboard_name())
-                .collect::<Vec<_>>()
+        // Vanilla `TeamCommand.joinTeam`: the members are score holders (names, selectors or `*`),
+        // and without members the source itself joins, which needs an entity.
+        let members = if self.has_members {
+            ScoreHolderArgumentType::get_score_holders(context, ARG_MEMBERS)?
         } else {
-            let sender_name = context.source.name.clone();
-            vec![sender_name]
+            vec![ResolvedScoreHolder::entity(
+                context.source.entity_or_err()?.as_ref(),
+            )]
         };
 
         let world = context.world().clone();
-        let team_name_owned = team_name.to_string();
-        let count = entity_names.len();
-
         let mut scoreboard = world
             .scoreboard
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        let Some(team) = scoreboard.get_teams().get(&team_name_owned) else {
-            return Err(
-                TEAM_NOT_FOUND_ERROR.create_without_context(TextComponent::text(team_name_owned))
-            );
+        let Some(team) = scoreboard.get_teams().get(&team_name) else {
+            return Err(TEAM_NOT_FOUND_ERROR.create_without_context(TextComponent::text(team_name)));
         };
+        let team_display_name = team.formatted_display_name();
 
-        let team_display_name = team.display_name.clone();
-
-        for name in &entity_names {
-            scoreboard.add_player_to_team(&world, &team_name_owned, name.clone());
+        for member in &members {
+            scoreboard.add_player_to_team(&world, &team_name, member.name.clone());
         }
 
-        let msg = if count == 1 {
+        // Every member counts: vanilla `addPlayerToTeam` answers true even for a member already
+        // on the team.
+        let msg = if let [member] = members.as_slice() {
             TextComponent::translate_cross(
                 translation::java::COMMANDS_TEAM_JOIN_SUCCESS_SINGLE,
                 translation::java::COMMANDS_TEAM_JOIN_SUCCESS_SINGLE,
+                [member.display_name.clone(), team_display_name],
+            )
+        } else {
+            TextComponent::translate_cross(
+                translation::java::COMMANDS_TEAM_JOIN_SUCCESS_MULTIPLE,
+                translation::java::COMMANDS_TEAM_JOIN_SUCCESS_MULTIPLE,
                 [
-                    TextComponent::text(entity_names[0].clone()),
+                    TextComponent::text(members.len().to_string()),
                     team_display_name,
                 ],
             )
-        } else {
-            TextComponent::translate_cross(
-                translation::java::COMMANDS_TEAM_JOIN_SUCCESS_MULTIPLE,
-                translation::java::COMMANDS_TEAM_JOIN_SUCCESS_MULTIPLE,
-                [TextComponent::text(count.to_string()), team_display_name],
-            )
         };
 
         context.source.send_feedback(msg, true);
 
-        Ok(count as i32)
+        Ok(members.len() as i32)
     }
 }
 
-struct TeamLeaveExecutor {
-    has_members: bool,
-}
+struct TeamLeaveExecutor;
 
 impl CommandExecutor for TeamLeaveExecutor {
     fn execute(&self, context: &CommandContext) -> CommandExecutorResult {
-        let entity_names = if self.has_members {
-            let targets = EntityArgumentType::get_optional_entities(context, ARG_MEMBERS)?;
-            if targets.is_empty() {
-                return Err(
-                    crate::command::argument_types::entity::NO_ENTITIES_ERROR_TYPE
-                        .create_without_context(),
-                );
-            }
-            targets
-                .into_iter()
-                .map(|e| e.get_scoreboard_name())
-                .collect::<Vec<_>>()
-        } else {
-            let sender_name = context.source.name.clone();
-            vec![sender_name]
-        };
-
-        let count = entity_names.len() as i32;
+        let members = ScoreHolderArgumentType::get_score_holders(context, ARG_MEMBERS)?;
         let world = context.world().clone();
 
         let mut scoreboard = world
@@ -321,38 +292,37 @@ impl CommandExecutor for TeamLeaveExecutor {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        let mut removed_count = 0;
-        for name in &entity_names {
-            let mut found_team = None;
-            for team in scoreboard.get_teams().values() {
-                if team.players.contains(name) {
-                    found_team = Some(team.name.clone());
-                    break;
-                }
-            }
+        // Vanilla `TeamCommand.leaveTeam` counts only the members that were on a team.
+        let mut removed = Vec::new();
+        for member in &members {
+            let found_team = scoreboard
+                .get_teams()
+                .values()
+                .find(|team| team.players.contains(&member.name))
+                .map(|team| team.name.clone());
             if let Some(team_name) = found_team {
-                scoreboard.remove_player_from_team(&world, &team_name, name);
-                removed_count += 1;
+                scoreboard.remove_player_from_team(&world, &team_name, &member.name);
+                removed.push(member);
             }
         }
 
-        let msg = if entity_names.len() == 1 {
+        let msg = if let [member] = removed.as_slice() {
             TextComponent::translate_cross(
                 translation::java::COMMANDS_TEAM_LEAVE_SUCCESS_SINGLE,
                 translation::java::COMMANDS_TEAM_LEAVE_SUCCESS_SINGLE,
-                [TextComponent::text(entity_names[0].clone())],
+                [member.display_name.clone()],
             )
         } else {
             TextComponent::translate_cross(
                 translation::java::COMMANDS_TEAM_LEAVE_SUCCESS_MULTIPLE,
                 translation::java::COMMANDS_TEAM_LEAVE_SUCCESS_MULTIPLE,
-                [TextComponent::text(removed_count.to_string())],
+                [TextComponent::text(removed.len().to_string())],
             )
         };
 
         context.source.send_feedback(msg, true);
 
-        Ok(count)
+        Ok(removed.len() as i32)
     }
 }
 
@@ -387,7 +357,7 @@ impl CommandExecutor for TeamListExecutor {
                     TextComponent::translate_cross(
                         translation::java::COMMANDS_TEAM_LIST_MEMBERS_EMPTY,
                         translation::java::COMMANDS_TEAM_LIST_MEMBERS_EMPTY,
-                        [team.display_name.clone()],
+                        [team.formatted_display_name()],
                     ),
                     false,
                 );
@@ -405,7 +375,7 @@ impl CommandExecutor for TeamListExecutor {
                         translation::java::COMMANDS_TEAM_LIST_MEMBERS_SUCCESS,
                         translation::java::COMMANDS_TEAM_LIST_MEMBERS_SUCCESS,
                         [
-                            team.display_name.clone(),
+                            team.formatted_display_name(),
                             TextComponent::text(team.players.len().to_string()),
                             list_comp,
                         ],
@@ -430,7 +400,7 @@ impl CommandExecutor for TeamListExecutor {
                     if i > 0 {
                         list_comp = list_comp.add_child(TextComponent::text(", "));
                     }
-                    list_comp = list_comp.add_child(team.display_name.clone());
+                    list_comp = list_comp.add_child(team.formatted_display_name());
                 }
 
                 context.source.send_feedback(
@@ -474,7 +444,7 @@ impl CommandExecutor for TeamModifyColorResetExecutor {
         }
 
         team.color = NamedColor::White;
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -517,7 +487,7 @@ impl CommandExecutor for TeamModifyColorExecutor {
         }
 
         team.color = new_color;
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -562,7 +532,7 @@ impl CommandExecutor for TeamModifyDisplayNameExecutor {
         }
 
         team.display_name = new_display_name.clone();
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -603,7 +573,7 @@ impl CommandExecutor for TeamModifyPrefixExecutor {
         let mut team = team.clone();
         let new_prefix = TextComponent::text(new_prefix_owned);
         team.player_prefix = new_prefix.clone();
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -644,7 +614,7 @@ impl CommandExecutor for TeamModifySuffixExecutor {
         let mut team = team.clone();
         let new_suffix = TextComponent::text(new_suffix_owned);
         team.player_suffix = new_suffix.clone();
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -696,7 +666,7 @@ impl CommandExecutor for TeamModifyFriendlyFireExecutor {
             team.options &= !0x01;
         }
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         let key = if value {
@@ -750,7 +720,7 @@ impl CommandExecutor for TeamModifySeeFriendlyInvisiblesExecutor {
             team.options &= !0x02;
         }
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         let key = if value {
@@ -817,7 +787,7 @@ impl CommandExecutor for TeamModifyNametagVisibilityExecutor {
             NameTagVisibility::HideForOwnTeam => NameTagVisibility::HideForOwnTeam,
         };
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -858,7 +828,7 @@ impl CommandExecutor for TeamModifyDeathMessageVisibilityExecutor {
             );
         };
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
 
         context.source.send_feedback(
             TextComponent::translate_cross(
@@ -916,7 +886,7 @@ impl CommandExecutor for TeamModifyCollisionRuleExecutor {
             CollisionRule::PushOwnTeam => CollisionRule::PushOwnTeam,
         };
 
-        let team_display_name = team.display_name.clone();
+        let team_display_name = team.formatted_display_name();
         scoreboard.update_team(&world, team);
 
         context.source.send_feedback(
@@ -964,17 +934,15 @@ fn join_branch() -> LiteralArgumentBuilder {
         argument(ARG_TEAM, TeamArgumentType)
             .executes(TeamJoinExecutor { has_members: false })
             .then(
-                argument(ARG_MEMBERS, EntityArgumentType::Entities)
+                argument(ARG_MEMBERS, ScoreHolderArgumentType::Multiple)
                     .executes(TeamJoinExecutor { has_members: true }),
             ),
     )
 }
 
 fn leave_branch() -> LiteralArgumentBuilder {
-    literal("leave").then(
-        argument(ARG_MEMBERS, EntityArgumentType::Entities)
-            .executes(TeamLeaveExecutor { has_members: true }),
-    )
+    literal("leave")
+        .then(argument(ARG_MEMBERS, ScoreHolderArgumentType::Multiple).executes(TeamLeaveExecutor))
 }
 
 fn list_branch() -> LiteralArgumentBuilder {
