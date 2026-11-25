@@ -1,4 +1,6 @@
-use crate::block::entities::{BlockEntity, ChangeScope, block_entity_from_nbt};
+use crate::block::entities::{
+    BlockEntity, ChangeScope, block_entity_from_nbt, replacing_removes_block_entity,
+};
 use crate::server::metrics::WorldTickReport;
 use dashmap::DashMap;
 use pumpkin_data::chunk::Biome;
@@ -5709,9 +5711,13 @@ impl World {
         if !self.is_in_build_limit(*position) {
             return Block::AIR.default_state.id;
         }
-        let replaced_block_state_id = self
-            .write_block_state_if(position, block_state_id, |_| true)
-            .unwrap_or(Block::AIR.default_state.id);
+        // Nothing is written to a chunk that isn't loaded, and like vanilla `Level.setBlock` when
+        // nothing was set, nothing else happens either.
+        let Some(replaced_block_state_id) =
+            self.write_block_state_if(position, block_state_id, |_| true)
+        else {
+            return Block::AIR.default_state.id;
+        };
         self.on_block_state_set(position, replaced_block_state_id, block_state_id, flags)
     }
 
@@ -5801,13 +5807,12 @@ impl World {
         let is_new_block = old_block != new_block;
         let block_moved = flags.contains(BlockFlags::MOVED);
 
-        if is_new_block
-            && old_block.default_state.block_entity_type != u16::MAX
-            && old_block.default_state.block_entity_type
-                != new_block.default_state.block_entity_type
-            && let Some(entity) = self.get_block_entity(position)
-        {
-            if !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK) {
+        if replacing_removes_block_entity(old_block, new_block) {
+            // The chunk already holds the new block; the block entity belongs to the old one.
+            if !flags.contains(BlockFlags::SKIP_BLOCK_ENTITY_REPLACED_CALLBACK)
+                && let Some(entity) =
+                    self.get_block_entity_for_state(position, replaced_block_state_id.to_state())
+            {
                 entity.on_block_replaced(self, position);
             }
             self.remove_block_entity(position);
@@ -7038,6 +7043,17 @@ impl World {
     }
 
     pub fn get_block_entity(&self, block_pos: &BlockPos) -> Option<Arc<dyn BlockEntity>> {
+        self.get_block_entity_for_state(block_pos, self.get_block_state(block_pos))
+    }
+
+    /// `get_block_entity` for a block in `state`, which differs from the world's while the block is
+    /// being replaced. Saved data only becomes a live block entity when a block in `state` takes it
+    /// and is dropped otherwise, like vanilla `LevelChunk.promotePendingBlockEntity`.
+    fn get_block_entity_for_state(
+        &self,
+        block_pos: &BlockPos,
+        state: &BlockState,
+    ) -> Option<Arc<dyn BlockEntity>> {
         let chunk_pos = block_pos.chunk_position();
         if let Some(entity) = self
             .block_entities
@@ -7058,27 +7074,44 @@ impl World {
                     .cloned()
             })
             .flatten();
-        let entity = if let Some(nbt) = nbt {
-            if let Some(custom_data) = nbt
-                .get_compound("PumpkinCustomData")
-                .or_else(|| nbt.get_compound("BukkitValues"))
-            {
-                self.custom_block_entity_data
-                    .insert(*block_pos, custom_data.clone());
+        let promoted = match nbt {
+            Some(nbt) => {
+                let entity = block_entity_from_nbt(&nbt)?;
+                if entity.is_valid_block_state(state) {
+                    let kept =
+                        crate::block::entities::unmodeled_block_entity_keys(&nbt, entity.as_ref());
+                    if kept.is_empty() {
+                        self.kept_block_entity_nbt.remove(block_pos);
+                    } else {
+                        self.kept_block_entity_nbt
+                            .insert(*block_pos, (entity.resource_location(), kept));
+                    }
+                    if let Some(custom_data) = nbt
+                        .get_compound("PumpkinCustomData")
+                        .or_else(|| nbt.get_compound("BukkitValues"))
+                    {
+                        self.custom_block_entity_data
+                            .insert(*block_pos, custom_data.clone());
+                    }
+                    Some(entity)
+                } else {
+                    warn!(
+                        "Failed to create block entity {} for block minecraft:{} at position {}",
+                        entity.resource_location(),
+                        Block::from_state_id(state.id).name,
+                        block_pos
+                    );
+                    self.remove_block_entity(block_pos);
+                    None
+                }
             }
-            let block_entity = block_entity_from_nbt(&nbt)?;
-            let kept =
-                crate::block::entities::unmodeled_block_entity_keys(&nbt, block_entity.as_ref());
-            if kept.is_empty() {
-                self.kept_block_entity_nbt.remove(block_pos);
-            } else {
-                self.kept_block_entity_nbt
-                    .insert(*block_pos, (block_entity.resource_location(), kept));
+            None => None,
+        };
+        let entity = match promoted {
+            Some(entity) => entity,
+            None => {
+                crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
             }
-            block_entity
-        } else {
-            let state = self.get_block_state(block_pos);
-            crate::block::entities::create_block_entity(state.block_entity_type, *block_pos)?
         };
         self.block_entities
             .entry(chunk_pos)
@@ -9104,6 +9137,132 @@ mod tests {
             world.invalid_ticking_block_entities.lock().unwrap().len(),
             2
         );
+    }
+
+    /// Vanilla `LevelChunk.setBlockState` drops the block entity of a replaced block unless the
+    /// new block keeps it. Beds have no vanilla block entity type, so theirs was never dropped.
+    #[tokio::test]
+    async fn replacing_a_block_drops_its_block_entity_unless_the_new_block_keeps_it() {
+        use std::sync::Arc;
+
+        use pumpkin_util::math::vector2::Vector2;
+        use pumpkin_world::{chunk::ChunkData, world::BlockFlags};
+
+        use crate::block::entities::bed::BedBlockEntity;
+
+        let world = super::test_world();
+        world
+            .level
+            .loaded_chunks
+            .insert(Vector2::new(0, 0), ChunkData::empty_sync(0, 0));
+        let set = |position: &BlockPos, block: &Block| {
+            world.set_block_state(position, block.default_state.id, BlockFlags::empty());
+        };
+
+        let bed_pos = BlockPos::new(1, 64, 1);
+        set(&bed_pos, &Block::RED_BED);
+        world.add_block_entity(Arc::new(BedBlockEntity::new(bed_pos)));
+        set(&bed_pos, &Block::AIR);
+        assert!(world.get_block_entity(&bed_pos).is_none());
+
+        let chest_pos = BlockPos::new(2, 64, 1);
+        set(&chest_pos, &Block::COPPER_CHEST);
+        let chest = world.get_block_entity(&chest_pos).unwrap();
+        set(&chest_pos, &Block::EXPOSED_COPPER_CHEST);
+        assert!(
+            Arc::ptr_eq(&chest, &world.get_block_entity(&chest_pos).unwrap()),
+            "an oxidizing copper chest keeps its contents"
+        );
+
+        let banner_pos = BlockPos::new(3, 64, 1);
+        set(&banner_pos, &Block::WHITE_BANNER);
+        let banner = world.get_block_entity(&banner_pos).unwrap();
+        set(&banner_pos, &Block::RED_BANNER);
+        assert!(
+            !Arc::ptr_eq(&banner, &world.get_block_entity(&banner_pos).unwrap()),
+            "another banner doesn't take the old one's patterns"
+        );
+    }
+
+    /// Vanilla `LevelChunk.promotePendingBlockEntity` drops saved block entity data its block
+    /// doesn't take. Worldgen left sculk sensor data under sculk catalysts.
+    #[tokio::test]
+    async fn saved_block_entity_data_only_loads_on_a_block_that_takes_it() {
+        use pumpkin_data::{item::Item, item_stack::ItemStack};
+        use pumpkin_inventory::Inventory;
+        use pumpkin_util::math::{boundingbox::BoundingBox, vector2::Vector2};
+        use pumpkin_world::{chunk::ChunkData, world::BlockFlags};
+
+        use crate::block::entities::{BlockEntity, chest::ChestBlockEntity};
+
+        let world = super::test_world();
+        let chunk = ChunkData::empty_sync(0, 0);
+        let catalyst_pos = BlockPos::new(1, 64, 1);
+        chunk
+            .section
+            .set_block_absolute_y(1, 64, 1, Block::SCULK_CATALYST.default_state.id);
+        let air_pos = BlockPos::new(2, 64, 1);
+        let chest_pos = BlockPos::new(3, 64, 1);
+        chunk
+            .section
+            .set_block_absolute_y(3, 64, 1, Block::CHEST.default_state.id);
+        let saved = |id: &str, position: BlockPos| {
+            let mut nbt = NbtCompound::new();
+            nbt.put_string("id", id.to_string());
+            nbt.put_int("x", position.0.x);
+            nbt.put_int("y", position.0.y);
+            nbt.put_int("z", position.0.z);
+            nbt
+        };
+        let chest = ChestBlockEntity::new(chest_pos);
+        chest.set_stack(0, ItemStack::new(5, &Item::DIAMOND));
+        let mut chest_nbt = NbtCompound::new();
+        chest.write_internal(&mut chest_nbt);
+        let mut pending = chunk.pending_block_entities.lock().unwrap();
+        pending.insert(catalyst_pos, saved("minecraft:sculk_sensor", catalyst_pos));
+        pending.insert(air_pos, saved("minecraft:chest", air_pos));
+        pending.insert(chest_pos, chest_nbt);
+        drop(pending);
+        world
+            .level
+            .loaded_chunks
+            .insert(Vector2::new(0, 0), chunk.clone());
+
+        let catalyst = world.get_block_entity(&catalyst_pos).unwrap();
+        assert_eq!(catalyst.resource_location(), "minecraft:sculk_catalyst");
+        assert!(world.get_block_entity(&air_pos).is_none());
+
+        // Replacing a chest whose data is still saved checks that data against the chest.
+        world.set_block_state(
+            &chest_pos,
+            Block::STONE.default_state.id,
+            BlockFlags::empty(),
+        );
+        assert!(chunk.pending_block_entities.lock().unwrap().is_empty());
+        let near_chest = BoundingBox::from_block(&chest_pos).expand(1.0, 1.0, 1.0);
+        assert!(
+            !world.get_entities_at_box(&near_chest).is_empty(),
+            "the chest's contents are scattered"
+        );
+    }
+
+    /// Vanilla `Level.setBlock` has no side effects when nothing was set. A write to a chunk that
+    /// isn't loaded is dropped, so the block's placement callbacks must not run either.
+    #[tokio::test]
+    async fn a_block_set_in_an_unloaded_chunk_has_no_side_effects() {
+        use pumpkin_world::world::BlockFlags;
+
+        let folder = tempfile::tempdir().unwrap();
+        let world = crate::entity::ai::test_support::world(&folder);
+
+        world.set_block_state(
+            &BlockPos::new(1, 64, 1),
+            Block::RED_BED.default_state.id,
+            BlockFlags::NOTIFY_ALL,
+        );
+
+        // A bed's placed callback adds its block entities and its head.
+        assert!(world.block_entities.is_empty());
     }
 
     #[test]

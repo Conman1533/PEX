@@ -3,6 +3,8 @@ pub mod badlands;
 #[cfg(test)]
 pub mod biome_hashes;
 #[cfg(test)]
+pub mod block_entities;
+#[cfg(test)]
 pub mod dumps;
 #[cfg(test)]
 pub mod resume;

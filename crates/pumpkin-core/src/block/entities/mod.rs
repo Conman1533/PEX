@@ -1,6 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::tag::{Block as BlockTag, Tag, Taggable};
 use pumpkin_data::{Block, BlockState, block_properties::BLOCK_ENTITY_TYPES};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::position::BlockPos;
@@ -439,6 +440,22 @@ pub fn block_entity_from_nbt(nbt: &NbtCompound) -> Option<Arc<dyn BlockEntity>> 
 #[must_use]
 pub fn has_block_block_entity(block: &Block) -> bool {
     BLOCK_ENTITY_TYPES.contains(&block.name)
+}
+
+/// Whether replacing `old_block` with `new_block` removes its block entity.
+///
+/// Vanilla `LevelChunk.setBlockState`: a block replaced by another one loses its block entity,
+/// unless the new block keeps it (`shouldChangedStateKeepBlockEntity`: copper chests and copper
+/// golem statues while they oxidize or are waxed). Beds have no block entity type in vanilla, but
+/// PEX gives them one.
+#[must_use]
+pub fn replacing_removes_block_entity(old_block: &Block, new_block: &Block) -> bool {
+    let keeps = |tag: &'static Tag| old_block.has_tag(tag) && new_block.has_tag(tag);
+    old_block != new_block
+        && (old_block.default_state.block_entity_type != u16::MAX
+            || bed::BedBlockEntity::is_bed(old_block))
+        && !keeps(&BlockTag::MINECRAFT_COPPER_CHESTS)
+        && !keeps(&BlockTag::MINECRAFT_COPPER_GOLEM_STATUES)
 }
 
 #[must_use]
