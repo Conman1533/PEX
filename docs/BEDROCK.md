@@ -7,9 +7,36 @@ The marks in this page were read from the code on `alpha` and checked with the B
 ## Version and transport
 
 - Bedrock 1.26.60, protocol 2225 (`CURRENT_BEDROCK_MC_VERSION` and `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`). A client on any other protocol is refused with `OutdatedClient` or `OutdatedServer`. Hotfix clients that keep protocol 2225 can join.
-- New Bedrock releases come in by cherry-picking upstream Pumpkin's Bedrock commits between full upstream merges (D8-2).
 - Transport is NetherNet (WebRTC) only. RakNet is gone, its server-list ping included.
 - TCP 19132 carries plain HTTP signaling: `/v1/join` to connect and `/v1/ping` for the server list. UDP 19132 carries LAN discovery and the WebRTC traffic. Both come from `networking.bedrock.address`.
+
+## Supported versions
+
+PEX supports one Bedrock version at a time, the one in `CURRENT_BEDROCK_MC_PROTOCOL`, next to one Java version (`CURRENT_MC_VERSION`, 26.3). There is no multi-version support: when Bedrock moves to a new protocol, PEX moves with it and the old clients are refused.
+
+A new Bedrock protocol reaches PEX by cherry-picking upstream Pumpkin's Bedrock commits for it onto `alpha`, without waiting for the next full upstream merge. That is how 1.26.60 arrived (Pumpkin-MC/Pumpkin#4407 and #4427). The next full merge then meets the same changes again and keeps PEX's side. Porting a protocol ourselves is the fallback when upstream hasn't moved.
+
+Bedrock hotfix releases that keep the same protocol number join without any change (upstream lists 1.26.63, still on 2225).
+
+### Release step
+
+Before each PEX release, and when a new Bedrock client ships:
+
+1. Read `CURRENT_BEDROCK_MC_PROTOCOL` in `crates/pumpkin-world/src/lib.rs`.
+2. Compare it with upstream Pumpkin master's `CURRENT_BEDROCK_MC_PROTOCOL` in the same file:
+
+   ```
+   gh api 'repos/Pumpkin-MC/Pumpkin/contents/crates/pumpkin-world/src/lib.rs?ref=master' --jq .content | base64 -d | grep CURRENT_BEDROCK
+   ```
+
+3. Compare it with gophertunnel's `CurrentProtocol` in `minecraft/protocol/info.go`, which follows vanilla on its own:
+
+   ```
+   gh api repos/Sandertv/gophertunnel/contents/minecraft/protocol/info.go --jq .content | base64 -d | grep -E 'CurrentProtocol|CurrentVersion'
+   ```
+
+4. If all three match, nothing to do. If upstream is ahead, cherry-pick its Bedrock commits for the new protocol (look at `git log` on upstream `master` for `crates/pumpkin-core/src/net/bedrock` and `crates/pumpkin-protocol/src/bedrock`) and update the versions in `assets/bedrock/README.md`. If only gophertunnel is ahead, current clients can't join yet: say so in the release notes, and port the protocol if upstream stays behind.
+5. After any change, regenerate the coverage table (`tools/bedrock-coverage.py`, see Tests) and run the Bedrock bot.
 
 ## Running a server for Bedrock
 
