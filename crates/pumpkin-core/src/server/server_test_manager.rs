@@ -672,6 +672,14 @@ impl GameTestWorld for ServerGameTestWorld {
         Ok(self.test_block_entity(position)?.message())
     }
 
+    async fn light_levels(&self, position: &BlockPos) -> GameTestResult<(u8, u8)> {
+        self.ensure_chunk_loaded(position).await;
+        Ok((
+            self.world.get_block_light_level(position).unwrap_or(0),
+            self.world.get_sky_light_level(position),
+        ))
+    }
+
     async fn surface_height(&self, x: i32, z: i32) -> i32 {
         self.ensure_chunk_loaded(&BlockPos::new(x, 0, z)).await;
         self.world

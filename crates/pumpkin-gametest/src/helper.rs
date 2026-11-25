@@ -495,6 +495,12 @@ impl GameTestHelper {
         self.world.use_block(&position).await
     }
 
+    /// Block light and sky light at a position relative to the test.
+    pub async fn light_levels(&self, relative: &BlockPos) -> GameTestResult<(u8, u8)> {
+        let position = self.absolute_pos(relative);
+        self.world.light_levels(&position).await
+    }
+
     pub async fn random_tick(&self, relative: &BlockPos) -> GameTestResult<()> {
         let position = self.absolute_pos(relative);
         self.world.random_tick(&position).await

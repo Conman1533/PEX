@@ -8,6 +8,7 @@ use pumpkin_util::math::vector2::Vector2;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
 use pumpkin_util::text::TextComponent;
+use pumpkin_world::lighting::LightEngine;
 use pumpkin_world::world::BlockFlags;
 
 use crate::command::argument_builder::{
@@ -245,6 +246,28 @@ fn fill_blocks(
     let count = changed_positions.len() as i32;
     if count == 0 {
         return Err(ERROR_FAILED.create_without_context());
+    }
+
+    // Vanilla `Level.setBlock` runs `LightEngine.checkBlock` for every changed block. The batch
+    // write above skips the light engine, so check each position whose light properties changed,
+    // then propagate once.
+    let light_positions = changed_positions
+        .iter()
+        .filter(|&&(_, old_id, new_id)| {
+            LightEngine::has_different_light_properties(old_id.to_state(), new_id.to_state())
+        })
+        .map(|&(pos, _, _)| pos)
+        .collect::<Vec<_>>();
+    if !light_positions.is_empty() {
+        let level = &world.level;
+        for &pos in &light_positions {
+            level.light_engine.check_block_light_updates(level, pos);
+        }
+        level.light_engine.perform_block_light_updates(level);
+        for &pos in &light_positions {
+            level.light_engine.check_sky_light_updates(level, pos);
+        }
+        level.light_engine.perform_sky_light_updates(level);
     }
 
     // Queued before the callbacks so blocks they change, such as a golem clearing its
