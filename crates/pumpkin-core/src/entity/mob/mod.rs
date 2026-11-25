@@ -867,8 +867,10 @@ impl MobEntity {
             && Self::is_bright_enough_to_spawn(world, pos)
     }
 
+    /// Vanilla `Animal.isBrightEnoughToSpawn`: `getRawBrightness(pos, 0)`, so the time of day
+    /// doesn't count.
     pub fn is_bright_enough_to_spawn(world: &World, pos: &BlockPos) -> bool {
-        world.get_max_local_raw_brightness(pos) > 8
+        world.get_raw_brightness(pos, 0) > 8
     }
 
     pub fn check_surface_water_animal_spawn_rules(world: &World, pos: &BlockPos) -> bool {
