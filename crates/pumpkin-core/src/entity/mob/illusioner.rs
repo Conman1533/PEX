@@ -5,6 +5,7 @@ use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::potion::Effect;
 use pumpkin_data::sound::Sound;
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_data::tracked_data::illusioner::DATA_SPELL_CASTING_ID;
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::Difficulty;
@@ -12,18 +13,17 @@ use pumpkin_util::Difficulty;
 use crate::entity::{
     Entity, EntityBase,
     ai::goal::{
-        Controls, Goal, active_target::ActiveTargetGoal, bow_attack::BowAttackGoal,
-        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal, swim::SwimGoal,
-        to_goal_ticks, wander_around::WanderAroundGoal,
+        Controls, Goal, active_target::ActiveTargetGoal, avoid_entity::AvoidEntityGoal,
+        bow_attack::BowAttackGoal, look_at_entity::LookAtEntityGoal, revenge::RevengeGoal,
+        swim::SwimGoal, to_goal_ticks, wander_around::WanderAroundGoal,
     },
     mob::{
         Mob, MobEntity,
         equipment::RegionalDifficulty,
         evoker::IllagerSpell,
-        patrol::{LongDistancePatrolGoal, PatrolData, PatrollingMonster},
+        patrol::{PatrolData, PatrollingMonster},
         raider::{
-            HoldGroundAttackGoal, ObtainRaidLeaderBannerGoal, PathfindToRaidGoal, Raider,
-            RaiderCelebrationGoal, RaiderData, RaiderMoveThroughVillageGoal,
+            Raider, RaiderData, is_abstract_villager, raider_can_attack, register_raider_goals,
         },
     },
 };
@@ -56,6 +56,9 @@ impl IllusionerEntity {
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
+            register_raider_goals(goal_selector);
+
+            // Vanilla `Illusioner.registerGoals`.
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(
                 1,
@@ -63,11 +66,10 @@ impl IllusionerEntity {
                     illusioner: illusioner_weak.clone(),
                 }),
             );
-            goal_selector.add_goal(1, Box::new(ObtainRaidLeaderBannerGoal::default()));
-            goal_selector.add_goal(2, Box::new(HoldGroundAttackGoal::new(10.0)));
-            goal_selector.add_goal(4, Box::new(LongDistancePatrolGoal::new(0.7, 0.595)));
-            goal_selector.add_goal(4, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
-            goal_selector.add_goal(4, Box::new(PathfindToRaidGoal::default()));
+            goal_selector.add_goal(
+                3,
+                Box::new(AvoidEntityGoal::new(&EntityType::CREAKING, 8.0, 1.0, 1.2)),
+            );
             goal_selector.add_goal(
                 4,
                 Box::new(IllusionerUseSpellGoal::new(
@@ -75,7 +77,6 @@ impl IllusionerEntity {
                     IllusionerSpell::Mirror,
                 )),
             );
-            goal_selector.add_goal(5, Box::new(RaiderCelebrationGoal));
             goal_selector.add_goal(
                 5,
                 Box::new(IllusionerUseSpellGoal::new(
@@ -86,23 +87,43 @@ impl IllusionerEntity {
             goal_selector.add_goal(6, Box::new(BowAttackGoal::new(0.5, 20, 15.0)));
             goal_selector.add_goal(8, Box::new(WanderAroundGoal::new(0.6)));
             goal_selector.add_goal(
-                6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
+                9,
+                Box::new(LookAtEntityGoal::new(
+                    mob_weak,
+                    &EntityType::PLAYER,
+                    3.0,
+                    1.0,
+                    false,
+                )),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
 
             let target_selector = &mob_arc.mob_entity.target_selector;
             target_selector.add_goal(
                 1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
+                Box::new(
+                    RevengeGoal::new(true)
+                        .ignoring(|entity_type| {
+                            entity_type.has_tag(&tag::EntityType::MINECRAFT_RAIDERS)
+                        })
+                        .alerting_others(),
+                ),
             );
             target_selector.add_goal(
                 2,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::VILLAGER, true),
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true)
+                    .remembering_unseen(300),
             );
             target_selector.add_goal(
                 3,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::IRON_GOLEM, true),
+                ActiveTargetGoal::predicated(&mob_arc.mob_entity, 10, false, |target, _| {
+                    is_abstract_villager(target.entity.entity_type)
+                })
+                .remembering_unseen(300),
+            );
+            target_selector.add_goal(
+                3,
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::IRON_GOLEM, false)
+                    .remembering_unseen(300),
             );
         };
 
@@ -132,6 +153,11 @@ impl Mob for IllusionerEntity {
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
+    }
+
+    /// Vanilla `AbstractIllager.canAttack`: no baby villagers.
+    fn can_attack(&self, target: &dyn EntityBase) -> bool {
+        raider_can_attack(self, target)
     }
 
     /// Vanilla `SpellcasterIllager.customServerAiStep`.
@@ -201,7 +227,11 @@ impl Goal for IllusionerCastingSpellGoal {
                 .look_control
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .look_at_entity_with_range(&target, 30.0, 30.0);
+                .look_at_entity_with_range(
+                    &target,
+                    mob.get_max_head_rotation(),
+                    mob.get_max_look_pitch_change(),
+                );
         }
     }
 
@@ -373,7 +403,8 @@ impl Raider for IllusionerEntity {
         &self.raider_data
     }
 
+    /// Vanilla `Illusioner.getCelebrateSound`.
     fn get_celebrate_sound(&self) -> Sound {
-        Sound::EntityEvokerCelebrate
+        Sound::EntityIllusionerAmbient
     }
 }
