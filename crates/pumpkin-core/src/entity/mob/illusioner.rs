@@ -63,7 +63,7 @@ impl IllusionerEntity {
                     illusioner: illusioner_weak.clone(),
                 }),
             );
-            goal_selector.add_goal(1, Box::new(ObtainRaidLeaderBannerGoal));
+            goal_selector.add_goal(1, Box::new(ObtainRaidLeaderBannerGoal::default()));
             goal_selector.add_goal(2, Box::new(HoldGroundAttackGoal::new(10.0)));
             goal_selector.add_goal(4, Box::new(LongDistancePatrolGoal::new(0.7, 0.595)));
             goal_selector.add_goal(4, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));

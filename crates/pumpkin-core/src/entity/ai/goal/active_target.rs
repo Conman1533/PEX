@@ -128,6 +128,13 @@ impl ActiveTargetGoal {
     }
 
     /// Extra condition for starting and for continuing, e.g. an angry, unspent bee.
+    /// Vanilla's `mustReach`: only targets the mob can path to.
+    #[must_use]
+    pub fn navigable(mut self: Box<Self>) -> Box<Self> {
+        self.track_target_goal.check_can_navigate = true;
+        self
+    }
+
     #[must_use]
     pub fn gated_by(mut self: Box<Self>, gate: MobFilter) -> Box<Self> {
         self.gate = Some(gate);

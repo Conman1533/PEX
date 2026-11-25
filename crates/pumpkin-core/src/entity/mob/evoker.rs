@@ -91,7 +91,7 @@ impl EvokerEntity {
                 3,
                 Box::new(AvoidEntityGoal::new(&EntityType::CREAKING, 8.0, 0.6, 1.0)),
             );
-            goal_selector.add_goal(2, Box::new(ObtainRaidLeaderBannerGoal));
+            goal_selector.add_goal(2, Box::new(ObtainRaidLeaderBannerGoal::default()));
             goal_selector.add_goal(3, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
             goal_selector.add_goal(3, Box::new(PathfindToRaidGoal::default()));
             goal_selector.add_goal(4, Box::new(EvokerSummonSpellGoal::new(mob_weak.clone())));

@@ -1,24 +1,30 @@
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
+use pumpkin_data::attributes::Attributes;
 use pumpkin_data::entity::{EntityStatus, EntityType};
 use pumpkin_data::sound::{Sound, SoundCategory};
+use pumpkin_data::tag::{self, Taggable};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::bedrock::server::ActorEventID;
+use pumpkin_util::math::position::BlockPos;
+use pumpkin_world::world::BlockFlags;
 
 use crate::entity::{
     Entity, EntityBase,
-    ai::goal::{
-        active_target::ActiveTargetGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, swim::SwimGoal,
-        wander_around::WanderAroundGoal,
+    ai::{
+        goal::{
+            active_target::ActiveTargetGoal, look_at_entity::LookAtEntityGoal,
+            melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal,
+            wander_around::WanderAroundGoal,
+        },
+        pathfinder::node::PathType,
     },
     mob::{
         Mob, MobEntity,
-        patrol::{LongDistancePatrolGoal, PatrolData, PatrollingMonster},
+        patrol::{PatrolData, PatrollingMonster},
         raider::{
-            HoldGroundAttackGoal, PathfindToRaidGoal, Raider, RaiderCelebrationGoal, RaiderData,
-            RaiderMoveThroughVillageGoal,
+            Raider, RaiderData, is_abstract_villager, raider_can_attack, register_raider_goals,
         },
     },
 };
@@ -40,6 +46,13 @@ impl RavagerEntity {
             attack_tick: AtomicI32::new(0),
         };
         let mob_arc = Arc::new(ravager);
+        // Vanilla `Ravager`'s constructor: leaves are no obstacle, it breaks through them.
+        mob_arc
+            .mob_entity
+            .navigator
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .set_pathfinding_malus(PathType::Leaves, 0.0);
         let mob_weak: Weak<dyn Mob> = {
             let mob_arc: Arc<dyn Mob> = mob_arc.clone();
             Arc::downgrade(&mob_arc)
@@ -47,32 +60,40 @@ impl RavagerEntity {
 
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
+            let target_selector = &mob_arc.mob_entity.target_selector;
 
+            // Vanilla `Ravager.registerGoals`.
+            register_raider_goals(goal_selector);
             goal_selector.add_goal(0, Box::new(SwimGoal::default()));
-            goal_selector.add_goal(2, Box::new(HoldGroundAttackGoal::new(10.0)));
             goal_selector.add_goal(4, Box::new(MeleeAttackGoal::new(1.0, true)));
-            goal_selector.add_goal(4, Box::new(LongDistancePatrolGoal::new(0.7, 0.595)));
-            goal_selector.add_goal(4, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
-            goal_selector.add_goal(4, Box::new(PathfindToRaidGoal::default()));
-            goal_selector.add_goal(5, Box::new(RaiderCelebrationGoal));
-            goal_selector.add_goal(5, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(5, Box::new(WanderAroundGoal::water_avoiding(0.4)));
             goal_selector.add_goal(
                 6,
-                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
+                LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
-            goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
 
-            let target_selector = &mob_arc.mob_entity.target_selector;
-            target_selector.add_goal(
-                1,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
-            );
             target_selector.add_goal(
                 2,
-                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::VILLAGER, true),
+                Box::new(
+                    RevengeGoal::new(true)
+                        .ignoring(|entity_type| {
+                            entity_type.has_tag(&tag::EntityType::MINECRAFT_RAIDERS)
+                        })
+                        .alerting_others(),
+                ),
             );
             target_selector.add_goal(
                 3,
+                ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::PLAYER, true),
+            );
+            target_selector.add_goal(
+                4,
+                ActiveTargetGoal::predicated(&mob_arc.mob_entity, 10, true, |target, _| {
+                    is_abstract_villager(target.entity.entity_type)
+                }),
+            );
+            target_selector.add_goal(
+                4,
                 ActiveTargetGoal::with_default(&mob_arc.mob_entity, &EntityType::IRON_GOLEM, true),
             );
         };
@@ -103,11 +124,57 @@ impl Mob for RavagerEntity {
             || self.attack_tick.load(Ordering::Relaxed) > 0
     }
 
+    /// Vanilla `Ravager.aiStep`.
     fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let living = &self.mob_entity.living_entity;
+        if !living.is_alive() {
+            return;
+        }
+        let speed = if self.is_mob_immobile() {
+            0.0
+        } else {
+            let max_speed = if self.mob_entity.get_target().is_some() {
+                0.35
+            } else {
+                0.3
+            };
+            let base = living.get_attribute_base(&Attributes::MOVEMENT_SPEED);
+            pumpkin_util::math::lerp(0.1, base, max_speed)
+        };
+        living.set_attribute_base(&Attributes::MOVEMENT_SPEED, speed);
+
+        let entity = &living.entity;
+        let world = entity.world.load_full();
+        if entity.horizontal_collision.load(Ordering::Relaxed)
+            && world.level_info.load().game_rules.mob_griefing
+        {
+            let bb = entity.bounding_box.load().expand(0.2, 0.2, 0.2);
+            let mut destroyed = false;
+            for x in bb.min.x.floor() as i32..=bb.max.x.floor() as i32 {
+                for y in bb.min.y.floor() as i32..=bb.max.y.floor() as i32 {
+                    for z in bb.min.z.floor() as i32..=bb.max.z.floor() as i32 {
+                        let pos = BlockPos::new(x, y, z);
+                        if world.get_block(&pos).has_tag(&tag::Block::MINECRAFT_LEAVES) {
+                            destroyed |= world
+                                .break_block(&pos, None, BlockFlags::NOTIFY_ALL)
+                                .is_some();
+                        }
+                    }
+                }
+            }
+            if !destroyed && entity.on_ground.load(Ordering::Relaxed) {
+                living.jump();
+            }
+        }
+
         let tick = self.attack_tick.load(Ordering::Relaxed);
         if tick > 0 {
             self.attack_tick.store(tick - 1, Ordering::Relaxed);
         }
+    }
+
+    fn can_attack(&self, target: &dyn EntityBase) -> bool {
+        raider_can_attack(self, target)
     }
 
     fn before_melee_attack(&self, _target: &dyn EntityBase) {

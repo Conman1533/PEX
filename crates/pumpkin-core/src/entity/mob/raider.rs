@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use crossbeam::atomic::AtomicCell;
+use pumpkin_data::attributes::Attributes;
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::item::Item;
@@ -11,10 +14,17 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
 
+use crate::entity::EntityBase;
+use crate::entity::ai::brain::behavior::utils::is_baby;
+use crate::entity::ai::goal::goal_selector::GoalSelector;
+use crate::entity::ai::goal::open_door::OpenDoorGoal;
 use crate::entity::ai::goal::{Controls, Goal};
 use crate::entity::ai::pathfinder::NavigatorGoal;
+use crate::entity::ai::pathfinder::path::Path;
+use crate::entity::item::ItemEntity;
 use crate::entity::mob::Mob;
-use crate::entity::mob::patrol::{PatrolData, PatrollingMonster};
+use crate::entity::mob::patrol::{LongDistancePatrolGoal, PatrolData, PatrollingMonster};
+use crate::world::raid::Raid;
 
 #[must_use]
 pub fn create_ominous_banner() -> ItemStack {
@@ -33,9 +43,49 @@ pub fn create_ominous_banner() -> ItemStack {
     stack
 }
 
+/// Vanilla `ItemStack.matches(stack, Raid.getOminousBannerInstance(..))`.
 #[must_use]
-pub const fn is_ominous_banner(stack: &ItemStack) -> bool {
-    stack.item.id == Item::WHITE_BANNER.id
+pub fn is_ominous_banner(stack: &ItemStack) -> bool {
+    stack.item_count == 1 && stack.are_items_and_components_equal(&create_ominous_banner())
+}
+
+/// Vanilla `PatrollingMonster.registerGoals`, then `Raider.registerGoals`. Every raider registers
+/// these before its own goals, and the insertion order breaks priority ties.
+pub fn register_raider_goals(goal_selector: &GoalSelector) {
+    goal_selector.add_goal(4, Box::new(LongDistancePatrolGoal::new(0.7, 0.595)));
+    goal_selector.add_goal(1, Box::new(ObtainRaidLeaderBannerGoal::default()));
+    goal_selector.add_goal(3, Box::new(PathfindToRaidGoal::default()));
+    goal_selector.add_goal(4, Box::new(RaiderMoveThroughVillageGoal::new(1.05)));
+    goal_selector.add_goal(5, Box::new(RaiderCelebrationGoal));
+}
+
+/// Vanilla `AbstractVillager`: villagers and wandering traders.
+#[must_use]
+pub fn is_abstract_villager(entity_type: &EntityType) -> bool {
+    entity_type == &EntityType::VILLAGER || entity_type == &EntityType::WANDERING_TRADER
+}
+
+/// Vanilla `AbstractIllager.canAttack`, which the ravager's villager target predicate matches:
+/// raiders leave baby villagers alone.
+#[must_use]
+pub fn raider_can_attack(mob: &dyn Mob, target: &dyn EntityBase) -> bool {
+    let target_type = target.get_entity().entity_type;
+    if is_abstract_villager(target_type) && is_baby(target) {
+        return false;
+    }
+    // `Mob::can_attack`'s default.
+    target_type != &EntityType::GHAST && mob.get_mob_entity().living_entity.can_attack(target)
+}
+
+/// The raid the raider belongs to, while the world still has it.
+fn with_current_raid<R>(raider: &dyn Raider, f: impl FnOnce(&Raid) -> R) -> Option<R> {
+    let raid_id = raider.get_raider_data().raid_id.load()?;
+    let world = raider.get_mob_entity().living_entity.entity.world.load();
+    let raids = world
+        .raids
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    raids.get(raid_id).map(f)
 }
 
 pub struct RaiderData {
@@ -225,73 +275,231 @@ impl Goal for HoldGroundAttackGoal {
     }
 }
 
-/// Goal for raiders to pick up dropped ominous banners and become raid / patrol leaders.
-pub struct ObtainRaidLeaderBannerGoal;
+/// Vanilla `Raider.ObtainRaidLeaderBannerGoal`: a raider of a raid wave without a living leader
+/// walks to a reachable ominous banner and picks it up.
+#[derive(Default)]
+pub struct ObtainRaidLeaderBannerGoal {
+    /// Banner item entity ids and the game time until which they count as unreachable.
+    unreachable_banner_cache: HashMap<i32, i64>,
+    path_to_banner: Option<Path>,
+    pursued_banner: Option<Arc<dyn EntityBase>>,
+}
+
+impl ObtainRaidLeaderBannerGoal {
+    /// Vanilla `Raider.ALLOWED_ITEMS`.
+    fn is_allowed(item: &ItemEntity) -> bool {
+        item.get_pickup_delay() == 0
+            && item.get_entity().is_alive()
+            && is_ominous_banner(
+                &item
+                    .get_item_stack()
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+            )
+    }
+
+    fn cannot_pick_up_banner(raider: &dyn Raider) -> bool {
+        if !raider.has_active_raid() || !raider.can_be_leader() {
+            return true;
+        }
+        let head = raider
+            .get_mob_entity()
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&EquipmentSlot::HEAD);
+        if is_ominous_banner(&head) {
+            return true;
+        }
+        let wave = raider.get_wave();
+        let Some((over, leader)) = with_current_raid(raider, |raid| {
+            (raid.is_over(), raid.group_to_leader_map.get(&wave).copied())
+        }) else {
+            return true;
+        };
+        over || leader.is_some_and(|uuid| {
+            let world = raider.get_mob_entity().living_entity.entity.world.load();
+            world
+                .get_entity_by_uuid(uuid)
+                .is_some_and(|leader| leader.get_entity().is_alive())
+        })
+    }
+
+    /// Vanilla `Raider.pickUpItem` for the ominous banner.
+    fn pick_up_banner(raider: &dyn Raider, item_entity: &Arc<dyn EntityBase>) {
+        let Some(item) = item_entity.cast_any().downcast_ref::<ItemEntity>() else {
+            return;
+        };
+        let wave = raider.get_wave();
+        let has_leader =
+            with_current_raid(raider, |raid| raid.group_to_leader_map.contains_key(&wave))
+                .unwrap_or(true);
+        let stack = item
+            .get_item_stack()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if !raider.has_active_raid() || has_leader || !is_ominous_banner(&stack) {
+            return;
+        }
+        let mob_entity = raider.get_mob_entity();
+        mob_entity
+            .living_entity
+            .pickup(item.get_entity(), u32::from(stack.item_count));
+        mob_entity.set_item_slot(&EquipmentSlot::HEAD, stack);
+        item.get_entity().remove();
+        if let Some(raid_id) = raider.get_raider_data().raid_id.load() {
+            let world = mob_entity.living_entity.entity.world.load();
+            let mut raids = world
+                .raids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(raid) = raids.get_mut(raid_id) {
+                raid.group_to_leader_map
+                    .insert(wave, mob_entity.living_entity.entity.entity_uuid);
+            }
+        }
+        raider.set_patrol_leader(true);
+    }
+}
 
 impl Goal for ObtainRaidLeaderBannerGoal {
     fn can_start(&mut self, mob: &dyn Mob) -> bool {
         let Some(raider) = mob.as_raider() else {
             return false;
         };
-        if !raider.can_be_leader() || raider.is_patrol_leader() {
+        if Self::cannot_pick_up_banner(raider) {
             return false;
         }
-        // Check if dropped banner nearby
-        let entity = mob.get_entity();
+        let living = &mob.get_mob_entity().living_entity;
+        let entity = &living.entity;
         let world = entity.world.load();
-        let bb = entity.bounding_box.load().expand(16.0, 4.0, 16.0);
-        let nearby = world.get_entities_at_box(&bb);
+        let game_time = world
+            .level_time
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .query_gametime();
+        let follow_range = living.get_attribute_value(&Attributes::FOLLOW_RANGE);
+        let area = entity
+            .bounding_box
+            .load()
+            .expand(follow_range, 8.0, follow_range);
+        let mut cache = HashMap::new();
+        for candidate in world.get_entities_at_box(&area) {
+            let Some(item) = candidate.cast_any().downcast_ref::<ItemEntity>() else {
+                continue;
+            };
+            if !Self::is_allowed(item) {
+                continue;
+            }
+            let id = candidate.get_entity().entity_id;
+            let unreachable_until = self
+                .unreachable_banner_cache
+                .get(&id)
+                .copied()
+                .unwrap_or(i64::MIN);
+            if game_time < unreachable_until {
+                cache.insert(id, unreachable_until);
+                continue;
+            }
+            let path = mob.get_mob_entity().steered().navigator().create_path(
+                living,
+                candidate.get_entity().pos.load(),
+                1,
+            );
+            if let Some(path) = path.filter(Path::can_reach) {
+                self.path_to_banner = Some(path);
+                self.pursued_banner = Some(candidate);
+                return true;
+            }
+            cache.insert(id, game_time + 600);
+        }
+        self.unreachable_banner_cache = cache;
+        false
+    }
 
-        nearby
-            .iter()
-            .any(|e| *e.get_entity().entity_type == EntityType::ITEM)
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        let Some(raider) = mob.as_raider() else {
+            return false;
+        };
+        // Vanilla checks the path it handed to the navigator.
+        self.pursued_banner
+            .as_ref()
+            .is_some_and(|banner| !banner.get_entity().is_removed())
+            && !mob.get_mob_entity().steered().navigator().is_done()
+            && !Self::cannot_pick_up_banner(raider)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        let path = self.path_to_banner.take();
+        mob.get_mob_entity().steered().navigator().move_to_path(
+            path,
+            1.15,
+            &mob.get_mob_entity().living_entity,
+        );
+    }
+
+    fn stop(&mut self, _mob: &dyn Mob) {
+        self.path_to_banner = None;
+        self.pursued_banner = None;
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let (Some(raider), Some(banner)) = (mob.as_raider(), &self.pursued_banner) else {
+            return;
+        };
+        let distance = banner
+            .get_entity()
+            .pos
+            .load()
+            .squared_distance_to_vec(&mob.get_entity().pos.load());
+        if distance < 1.414 * 1.414 {
+            Self::pick_up_banner(raider, banner);
+        }
     }
 
     fn controls(&self) -> Controls {
         Controls::MOVE
     }
+}
+
+/// Vanilla `AbstractIllager.RaiderOpenDoorGoal`: opens doors only during a raid.
+pub struct RaiderOpenDoorGoal(OpenDoorGoal);
+
+impl Default for RaiderOpenDoorGoal {
+    fn default() -> Self {
+        Self(OpenDoorGoal::new(false))
+    }
+}
+
+impl Goal for RaiderOpenDoorGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        self.0.can_start(mob) && mob.as_raider().is_some_and(Raider::has_active_raid)
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        self.0.should_continue(mob)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        self.0.start(mob);
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.0.stop(mob);
+    }
 
     fn tick(&mut self, mob: &dyn Mob) {
-        let Some(raider) = mob.as_raider() else {
-            return;
-        };
-        if !raider.can_be_leader() || raider.is_patrol_leader() {
-            return;
-        }
+        self.0.tick(mob);
+    }
 
-        let entity = mob.get_entity();
-        let pos = entity.pos.load();
-        let world = entity.world.load();
-        let bb = entity.bounding_box.load().expand(16.0, 4.0, 16.0);
-        let nearby = world.get_entities_at_box(&bb);
+    fn should_run_every_tick(&self) -> bool {
+        self.0.should_run_every_tick()
+    }
 
-        for cand in nearby {
-            if *cand.get_entity().entity_type == EntityType::ITEM {
-                let cand_pos = cand.get_entity().pos.load();
-                let dist = pos.squared_distance_to_vec(&cand_pos);
-                if dist < 2.0 {
-                    raider.set_patrol_leader(true);
-                    let banner = create_ominous_banner();
-                    let living = &mob.get_mob_entity().living_entity;
-                    if let Ok(mut equipment) = living.entity_equipment.try_lock() {
-                        equipment.put(&EquipmentSlot::HEAD, banner.clone());
-                        drop(equipment);
-                        living.send_equipment_changes(&[(EquipmentSlot::HEAD, banner)]);
-                    }
-                    cand.get_entity().remove();
-                    break;
-                }
-                let steered = mob.get_mob_entity().steered();
-                let mut nav = steered.navigator();
-                nav.set_progress(NavigatorGoal {
-                    current_progress: pos,
-                    destination: cand_pos,
-                    speed: 1.15,
-                    reach_range: 1,
-                });
-                break;
-            }
-        }
+    fn controls(&self) -> Controls {
+        self.0.controls()
     }
 }
 

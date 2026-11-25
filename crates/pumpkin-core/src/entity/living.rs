@@ -2041,7 +2041,7 @@ impl LivingEntity {
         }
     }
 
-    fn jump(&self) {
+    pub(crate) fn jump(&self) {
         let jump = self.get_jump_velocity(1.0);
 
         if jump <= 1.0e-5 {
