@@ -8,22 +8,22 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `21d081fd5`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `28d20c48d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 14 | 2 | 29 | |
+| G1 Mob AI | 45 | 15 | 1 | 29 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 45 | 21 | 0 | 22 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 45 | 23 | 0 | 20 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 216 | 95 | 7 | 98 | 16 |
+| Total | 216 | 98 | 6 | 96 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -519,7 +519,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-zombies`
 - Needs decision: none.
 - Done when: `pumpkin:zombie_tramples_turtle_egg`, `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass.
-- Status (2026-11-25): built, proof missing (branch `fix/mobai-zombies`, `449c59d4c`, second lane). The zombie family runs vanilla's goal lists and priorities: `ZombieEntityBase` gets `MoveThroughVillageGoal`, `ZombieAttack` at 3 and vanilla's villager targeting; mobs use spears through a new `SpearUseGoal`; the zombified piglin angers and alerts its pack like vanilla; the giant has no goals, as in vanilla. GameTests `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player` pass. Missing: `pumpkin:zombie_tramples_turtle_egg`, which needs mobs to step up a block (`fix/entity-step-up`, batch 18). Landed through merge branch `land/g7-batch-17` (`21d081fd5`), which passed the world round trip, full CI and the whole tester on CT 117, the Z420 and the Windows box.
+- Status (2026-11-25): landed (branch `fix/mobai-zombies`, `449c59d4c`, second lane, batch 17; proof completed in batch 18). `pumpkin:zombie_tramples_turtle_egg` passes now that mobs step up a block (`fix/entity-step-up`), alongside `pumpkin:zombie_pathfinds_to_villager` (husk), `pumpkin:zombie_villager_chases_wandering_trader`, `pumpkin:zombified_piglin_alerts_pack_when_hit`, `pumpkin:drowned_throws_trident_at_player` and `pumpkin:giant_ignores_survival_player`. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
 
 #### G1-07 Skeletons
 - Scope: skeleton, stray, bogged, parched, wither_skeleton: weapon switching, tipped arrows per variant, target lists. Out: skeleton horse traps (G1-19).
@@ -2204,7 +2204,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/block-predicate-states
 - Needs decision: none
 - Done when: from the console on PEX and vanilla 26.3 (the CT 117 side-by-side, `/srv/pex/scratch/pb2/cons/cons2.sh <pex-binary> <commands>`), `execute if block 3 200 0 minecraft:piston[facing=north]` on an east-facing piston answers "Test failed", `execute if block` on an oak log with `#minecraft:logs` answers "Test passed", `execute if block` on a chest with `minecraft:chest{Items:[{Slot:0b}]}` passes only when slot 0 holds an item, and `fill ... replace minecraft:oak_stairs[facing=north]` replaces only those stairs; a GameTest.
-- Status (2026-11-21): added by the 2.0 loop after the G6-28 side-by-side on batch 14 (`4086dbc0e`): `execute if block 3 200 0 minecraft:piston[facing=north]` and `execute if block 6 200 1 minecraft:oak_stairs[facing=south]` answer "Test passed" for an east-facing piston and north-facing stairs, where vanilla answers "Test failed".
+- Status (2026-11-25): landed (branch `fix/block-predicate-states`, `e8e01c12b`). `execute if|unless block` takes a vanilla block predicate: tags, `[property=value]` and `{nbt}` are checked against the block state and block entity. GameTest `pumpkin:block_predicates_check_states_tags_and_nbt` passes. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
 
 #### G6-33 data block messages name the position like vanilla
 
@@ -2240,7 +2240,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/natural-spawn-weights
 - Needs decision: none
 - Done when: a same-seed plains area (forceload -336 176 -177 335) on PEX and vanilla 26.3 holds cows, pigs, sheep and chickens in roughly vanilla numbers, and the share of endermen and witches among night spawns matches vanilla's weights; unit tests for the weighted pick.
-- Status (2026-11-25): built by the 2.0 loop after play reports (no cows, pigs, sheep or chickens near spawn on the ThinkPad world and the agent harness world; 99 endermen within 80 blocks). Codegen dropped the weights, so every biome entry was equally likely (plains enderman about 6 times and witch about 20 times too common), and chunk generation spawning checked rules against the live world, where the chunk is not loaded yet, so no animal ever spawned at generation. Side-by-side on the plains area: vanilla cow 13, pig 3, sheep 16, chicken 4, horse 9; PEX before 0 animals, after cow 9, pig 6, sheep 10, chicken 4, donkey 3. Unit tests in `natural_spawner`. In landing batch 18.
+- Status (2026-11-25): landed (branch `fix/natural-spawn-weights`, `849be4554`, the 2.0 loop). Codegen keeps the biome spawn weights and spawning picks with vanilla `WeightedList.getRandom`; chunk generation spawning reads the generating chunk and uses `CHUNK_GENERATION` rules, so passive animals appear on new worlds. Landed through merge branch `land/g7-batch-18` (`28d20c48d`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420; the Windows box was offline. The batch also carries `fix/entity-step-up` (`041dece1e`, mobs step up a block like vanilla), `fix/setblock-update-source` (`b3aae7c47`, G5-12 follow-up), the summon fix `28d20c48d` (a mob summoned with NBT gets no random spawn equipment, as in vanilla), the tester fix `e18d057da` (bedrock checks take the newly summoned mob, not a natural one) and `c52d63ac0` (the drowned trident test starts the drowned in its own pool).
 
 #### G6-37 Fresh chunks drop items like vanilla
 
