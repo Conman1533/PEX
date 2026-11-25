@@ -1,6 +1,10 @@
 [files]
 extend-exclude = ["assets/", "crates/pumpkin-data/src/generated"]
 
+[default]
+# Commit hashes in docs, such as `151caf820`
+extend-ignore-re = ["`[0-9a-f]{7,40}`"]
+
 [default.extend-words]
 handled = "handled"
 received = "received"
