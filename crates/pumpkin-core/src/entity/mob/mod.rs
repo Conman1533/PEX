@@ -2092,6 +2092,24 @@ pub trait Mob: EntityBase + Send + Sync {
 
     fn mob_player_collision(&self, _player: &Arc<Player>) {}
 
+    /// Vanilla `Entity.push(Entity)` overrides: `entity` pushes this mob. Returns whether the mob
+    /// handled the push itself; otherwise the two are pushed apart as usual.
+    fn mob_push(&self, _entity: &dyn EntityBase) -> bool {
+        false
+    }
+
+    /// Vanilla `LivingEntity.jumpFromGround` overrides. Returns whether the mob jumped its own
+    /// way; otherwise the usual jump runs.
+    fn mob_jump_from_ground(&self) -> bool {
+        false
+    }
+
+    /// Vanilla `LivingEntity.jumpInLiquid(FluidTags.LAVA)` overrides. Returns whether the mob
+    /// rose its own way; otherwise it swims up as usual.
+    fn mob_jump_in_lava(&self) -> bool {
+        false
+    }
+
     fn mob_receives_player_touch(&self) -> bool {
         false
     }
@@ -2333,6 +2351,12 @@ impl<T: Mob + Send + 'static> EntityBase for T {
 
     fn on_player_collision(&self, player: &Arc<Player>) {
         self.mob_player_collision(player);
+    }
+
+    fn push(&self, entity: &dyn EntityBase) {
+        if !self.mob_push(entity) {
+            crate::entity::velocity::push_apart(self, entity);
+        }
     }
 
     fn receives_player_touch(&self) -> bool {

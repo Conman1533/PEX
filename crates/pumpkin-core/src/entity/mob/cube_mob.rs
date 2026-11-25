@@ -3,6 +3,7 @@ use std::sync::{Arc, PoisonError, Weak};
 
 use crossbeam::atomic::AtomicCell;
 use pumpkin_data::attributes::Attributes;
+use pumpkin_data::damage::DamageType;
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::sound::{Sound, SoundCategory};
@@ -16,9 +17,16 @@ use crate::entity::ai::control::{Control, MoveControlTrait, move_control::MoveCo
 use crate::entity::ai::goal::active_target::{ActiveTargetGoal, TargetCondition};
 use crate::entity::ai::goal::{Controls, Goal, to_goal_ticks};
 use crate::entity::custom_sound::CustomSound;
+use crate::entity::item::ItemEntity;
+use crate::entity::mob::equipment::RegionalDifficulty;
+use crate::entity::mob::spawn::SpawnGroupData;
 use crate::entity::mob::{Mob, MobEntity};
 use crate::entity::player::Player;
 use crate::entity::{Entity, EntityBase};
+use crate::world::World;
+use pumpkin_data::data_component_impl::EquipmentSlot;
+use pumpkin_data::item_stack::ItemStack;
+use pumpkin_data::tag::{self, Taggable};
 
 pub const MIN_SIZE: i32 = 1;
 pub const MAX_SIZE: i32 = 127;
@@ -62,19 +70,29 @@ pub struct CubeKind {
     pub size_attributes: &'static [SizeAttribute],
     pub jump_delay_multiplier: i32,
     pub contact_damage: ContactDamage,
+    /// `getAttackDamage`'s addition to the attack damage attribute.
+    pub attack_damage_bonus: f32,
+    /// `decreaseSquish`'s factor.
+    pub squish_decay: f32,
+    /// `jumpFromGround`'s addition to the jump power for each size.
+    pub jump_boost_per_size: f32,
+    /// `jumpInLiquid(LAVA)`'s upward speed, base and per size, for kinds that override it.
+    pub lava_jump: Option<(f32, f32)>,
+    /// Vanilla `SulfurCube`: picks up one swallowable item into its body slot.
+    pub swallows_items: bool,
     /// `getSplitCount`.
     pub split_count: fn() -> i32,
-    /// `setSpawnSize`.
-    pub spawn_size: fn() -> i32,
+    /// `setSpawnSize`, given the regional difficulty's special multiplier.
+    pub spawn_size: fn(f32) -> i32,
     /// `addBehaviourGoals` and `addTargetingGoals`.
     pub register_goals: fn(&MobEntity),
 }
 
-/// Vanilla `AbstractCubeMob.setSpawnSize`, without the difficulty multiplier.
+/// Vanilla `AbstractCubeMob.setSpawnSize`.
 #[must_use]
-pub fn random_spawn_size() -> i32 {
+pub fn random_spawn_size(special_multiplier: f32) -> i32 {
     let mut size_scale = rand::random_range(0..3);
-    if size_scale < 2 && rand::random_range(0.0..1.0) < 0.5 {
+    if size_scale < 2 && rand::random_range(0.0..1.0f32) < 0.5 * special_multiplier {
         size_scale += 1;
     }
     1 << size_scale
@@ -115,6 +133,11 @@ pub struct CubeMobEntity {
     /// The pending `MoveControl` request, consumed by the next move control tick.
     speed_modifier: AtomicCell<Option<f64>>,
     has_split: AtomicBool,
+    /// Vanilla `SulfurCube.pickupTimer`: ticks until it may swallow an item again.
+    pickup_timer: AtomicI32,
+    /// Whether the body slot held an item last tick, to react to changes like vanilla
+    /// `SulfurCube.collectEquipmentChanges`.
+    had_body_item: AtomicBool,
 }
 
 impl CubeMobEntity {
@@ -132,6 +155,8 @@ impl CubeMobEntity {
             o_squish: AtomicCell::new(0.0),
             speed_modifier: AtomicCell::new(None),
             has_split: AtomicBool::new(false),
+            pickup_timer: AtomicI32::new(0),
+            had_body_item: AtomicBool::new(false),
         });
         *cube
             .mob_entity
@@ -141,7 +166,8 @@ impl CubeMobEntity {
             cube: Arc::downgrade(&cube),
         });
         cube.register_goals();
-        cube.set_size((kind.spawn_size)(), true);
+        // Vanilla cubes start at size 1; `finalize_spawn` picks the spawn size.
+        cube.set_size(MIN_SIZE, true);
         cube
     }
 
@@ -223,6 +249,138 @@ impl CubeMobEntity {
             ContactDamage::Always => true,
         };
         allowed && !self.mob_entity.is_no_ai()
+    }
+
+    /// Vanilla `AbstractCubeMob.dealDamage`. Scoreboard friendly fire is not checked: PEX has no
+    /// team rules for mob damage yet.
+    fn deal_damage(&self, target: &dyn EntityBase) {
+        let living = &self.mob_entity.living_entity;
+        if !living.entity.is_alive()
+            || !self.mob_entity.is_in_attack_range(target)
+            || !Mob::has_line_of_sight(self, target.get_entity())
+        {
+            return;
+        }
+        let damage = living.get_attribute_value(&Attributes::ATTACK_DAMAGE) as f32
+            + self.kind.attack_damage_bonus;
+        if target.damage_with_context(
+            target,
+            damage,
+            DamageType::MOB_ATTACK,
+            None,
+            Some(self),
+            Some(self),
+        ) {
+            let pitch =
+                (rand::random_range(0.0..1.0f32) - rand::random_range(0.0..1.0f32)) * 0.2 + 1.0;
+            living.entity.world.load().play_sound_fine(
+                Sound::EntitySlimeAttack,
+                self.kind.sound_category,
+                &living.entity.pos.load(),
+                1.0,
+                pitch,
+            );
+        }
+    }
+
+    fn body_item(&self) -> ItemStack {
+        self.mob_entity
+            .living_entity
+            .entity_equipment
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&EquipmentSlot::BODY)
+    }
+
+    /// Vanilla `SulfurCube.hasBodyItem`.
+    pub fn has_body_item(&self) -> bool {
+        self.kind.swallows_items && !self.body_item().is_empty()
+    }
+
+    /// Vanilla `SulfurCube.isSwallowableItem`.
+    #[must_use]
+    pub fn is_swallowable_item(stack: &ItemStack) -> bool {
+        stack
+            .get_item()
+            .has_tag(&tag::Item::MINECRAFT_SULFUR_CUBE_SWALLOWABLE)
+    }
+
+    /// Vanilla `SulfurCube.canHoldItem`. Baby sulfur cubes are not implemented, so every sulfur
+    /// cube counts as an adult.
+    fn can_hold_item(&self, stack: &ItemStack) -> bool {
+        self.kind.swallows_items && self.body_item().is_empty() && Self::is_swallowable_item(stack)
+    }
+
+    /// The item pickup of vanilla `Mob.aiStep` with `SulfurCube.pickUpItem`.
+    fn pick_up_items(&self) {
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        let world = entity.world.load();
+        // Vanilla `SulfurCube.canPickUpLoot` is `!hasBodyItem()`.
+        if self.has_body_item()
+            || !entity.is_alive()
+            || living.dead.load(Ordering::Relaxed)
+            || !world.level_info.load().game_rules.mob_griefing
+        {
+            return;
+        }
+        let area = entity.bounding_box.load().expand(1.0, 0.0, 1.0);
+        for other in world.get_entities_at_box(&area) {
+            let Some(item) = other.cast_any().downcast_ref::<ItemEntity>() else {
+                continue;
+            };
+            if item.get_entity().is_removed() || item.get_pickup_delay() != 0 {
+                continue;
+            }
+            let stack = item
+                .get_item_stack()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            if stack.is_empty()
+                || !self.can_hold_item(&stack)
+                || self.pickup_timer.load(Ordering::Relaxed) > 0
+                || !living.pickup(item.get_entity(), 1)
+            {
+                continue;
+            }
+            let mut ground = item
+                .get_item_stack()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let swallowed = ground.split(1);
+            let empty = ground.is_empty();
+            drop(ground);
+            self.mob_entity
+                .set_item_slot(&EquipmentSlot::BODY, swallowed);
+            self.play_sound(Sound::EntitySulfurCubeAbsorb, Self::voice_pitch());
+            self.mob_entity.set_guaranteed_drop(&EquipmentSlot::BODY);
+            if empty {
+                item.get_entity().remove();
+            } else {
+                item.init_data_tracker();
+            }
+        }
+    }
+
+    /// Vanilla `LivingEntity.getVoicePitch` for an adult, as `Mob.playSound(sound)` uses it.
+    fn voice_pitch() -> f32 {
+        (rand::random_range(0.0..1.0f32) - rand::random_range(0.0..1.0f32)) * 0.2 + 1.0
+    }
+
+    /// Vanilla `SulfurCube.collectEquipmentChanges`: swallowing an item stops all goals, losing it
+    /// brings them back.
+    fn react_to_body_item(&self) {
+        let holding = self.has_body_item();
+        if self.had_body_item.swap(holding, Ordering::Relaxed) == holding {
+            return;
+        }
+        if holding {
+            self.mob_entity.goals_selector.clear(self);
+            self.mob_entity.set_speed(0.0);
+        } else {
+            self.register_goals();
+        }
     }
 
     fn get_jump_delay(&self) -> i32 {
@@ -339,6 +497,9 @@ impl Mob for CubeMobEntity {
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_int("Size", self.get_size() - 1);
         nbt.put_bool("wasOnGround", self.was_on_ground.load(Ordering::Relaxed));
+        if self.kind.swallows_items {
+            nbt.put_int("pickup_timer", self.pickup_timer.load(Ordering::Relaxed));
+        }
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
@@ -348,6 +509,10 @@ impl Mob for CubeMobEntity {
             nbt.get_bool("wasOnGround").unwrap_or(false),
             Ordering::Relaxed,
         );
+        if self.kind.swallows_items {
+            self.pickup_timer
+                .store(nbt.get_int("pickup_timer").unwrap_or(0), Ordering::Relaxed);
+        }
     }
 
     fn mob_tick(&self, _caller: &dyn EntityBase) {
@@ -373,7 +538,17 @@ impl Mob for CubeMobEntity {
             self.target_squish.store(1.0);
         }
         self.was_on_ground.store(on_ground, Ordering::Relaxed);
-        self.target_squish.store(self.target_squish.load() * 0.6);
+        self.target_squish
+            .store(self.target_squish.load() * self.kind.squish_decay);
+        if self.kind.swallows_items {
+            // Vanilla `SulfurCube.customServerAiStep`.
+            let timer = self.pickup_timer.load(Ordering::Relaxed);
+            if timer > 0 {
+                self.pickup_timer.store(timer - 1, Ordering::Relaxed);
+            }
+            self.react_to_body_item();
+            self.pick_up_items();
+        }
         self.is_aggressive.store(false, Ordering::Relaxed);
         self.speed_modifier.store(None);
     }
@@ -391,14 +566,91 @@ impl Mob for CubeMobEntity {
     }
 
     fn mob_player_collision(&self, player: &Arc<Player>) {
-        if self.can_deal_damage() && self.mob_entity.try_attack(self, &**player) {
-            self.on_attack(&**player);
+        if self.can_deal_damage() {
+            self.deal_damage(&**player);
         }
+    }
+
+    /// Vanilla `AbstractCubeMob.push`: an iron golem that bumps into a cube that deals damage
+    /// gets hurt.
+    fn mob_push(&self, entity: &dyn EntityBase) -> bool {
+        crate::entity::velocity::push_apart(self, entity);
+        if entity.get_entity().entity_type == &EntityType::IRON_GOLEM && self.can_deal_damage() {
+            self.deal_damage(entity);
+        }
+        true
+    }
+
+    /// Vanilla `AbstractCubeMob.jumpFromGround` and `MagmaCube.jumpFromGround`.
+    fn mob_jump_from_ground(&self) -> bool {
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        let mut velocity = entity.velocity.load();
+        velocity.y = living.get_jump_velocity(1.0)
+            + f64::from(self.get_size() as f32 * self.kind.jump_boost_per_size);
+        entity.velocity.store(velocity);
+        entity.velocity_dirty.store(true, Ordering::SeqCst);
+        true
+    }
+
+    /// Vanilla `MagmaCube.jumpInLiquid(LAVA)`.
+    fn mob_jump_in_lava(&self) -> bool {
+        let Some((base, per_size)) = self.kind.lava_jump else {
+            return false;
+        };
+        let entity = &self.mob_entity.living_entity.entity;
+        let mut velocity = entity.velocity.load();
+        velocity.y = f64::from(base + self.get_size() as f32 * per_size);
+        entity.velocity.store(velocity);
+        entity.velocity_dirty.store(true, Ordering::SeqCst);
+        true
+    }
+
+    /// Vanilla `AbstractCubeMob.finalizeSpawn`, which picks the size after the mob's own setup.
+    fn finalize_spawn(
+        &self,
+        world: &Arc<World>,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
+        self.mob_entity.finalize_spawn_base();
+        let pos = self.mob_entity.living_entity.entity.pos.load();
+        let special_multiplier = RegionalDifficulty::at(world, pos).special_multiplier;
+        self.set_size((self.kind.spawn_size)(special_multiplier), true);
+        group_data
     }
 }
 
-fn as_cube(mob: &dyn Mob) -> Option<&CubeMobEntity> {
+pub(crate) fn as_cube(mob: &dyn Mob) -> Option<&CubeMobEntity> {
     mob.cast_any().downcast_ref()
+}
+
+impl CubeMobEntity {
+    /// Vanilla `Mob.lookAt(target, 10, 10)` on the yaw (cubes never pitch), returning the new
+    /// yaw.
+    pub(crate) fn turn_towards(&self, target: Vector3<f64>) -> f32 {
+        let entity = &self.mob_entity.living_entity.entity;
+        let yaw = entity.yaw.load();
+        let pos = entity.pos.load();
+        let look_yaw = ((target.z - pos.z).atan2(target.x - pos.x).to_degrees() - 90.0) as f32;
+        let new_yaw = yaw + subtract_angles(yaw, look_yaw).clamp(-10.0, 10.0);
+        entity.yaw.store(new_yaw);
+        new_yaw
+    }
+
+    /// Vanilla `CubeMobMoveControl.setDirection`.
+    pub(crate) fn set_direction(&self, yaw: f32, aggressive: bool) {
+        self.target_yaw.store(yaw);
+        self.is_aggressive.store(aggressive, Ordering::Relaxed);
+    }
+
+    /// Vanilla `CubeMobMoveControl.setWantedMovement`.
+    pub(crate) fn set_wanted_movement(&self, speed: f64) {
+        self.speed_modifier.store(Some(speed));
+    }
+
+    pub(crate) fn pickup_timer(&self) -> i32 {
+        self.pickup_timer.load(Ordering::Relaxed)
+    }
 }
 
 struct CubeMobMoveControl {
@@ -431,6 +683,10 @@ impl MoveControlTrait for CubeMobMoveControl {
         let Some(cube) = as_cube(mob) else {
             return;
         };
+        // Vanilla `SulfurCubeMobMoveControl`: a sulfur cube holding an item stays put.
+        if cube.has_body_item() {
+            return;
+        }
         let mob_entity = &cube.mob_entity;
         let living_entity = &mob_entity.living_entity;
         let entity = &living_entity.entity;
@@ -536,22 +792,11 @@ impl Goal for CubeMobAttackGoal {
         let Some(cube) = as_cube(mob) else {
             return;
         };
-        let yaw = cube.mob_entity.living_entity.entity.yaw.load();
-        let mut new_yaw = yaw;
-        if let Some(target) = cube.mob_entity.get_target() {
-            let target_pos = target.get_entity().pos.load();
-            let pos = cube.mob_entity.living_entity.entity.pos.load();
-            // Vanilla Mob.lookAt(target, 10, 10).
-            let look_yaw = ((target_pos.z - pos.z)
-                .atan2(target_pos.x - pos.x)
-                .to_degrees()
-                - 90.0) as f32;
-            new_yaw = yaw + subtract_angles(yaw, look_yaw).clamp(-10.0, 10.0);
-            cube.mob_entity.living_entity.entity.yaw.store(new_yaw);
-        }
-        cube.target_yaw.store(new_yaw);
-        cube.is_aggressive
-            .store(cube.can_deal_damage(), Ordering::Relaxed);
+        let new_yaw = cube.mob_entity.get_target().map_or_else(
+            || cube.mob_entity.living_entity.entity.yaw.load(),
+            |target| cube.turn_towards(target.get_entity().pos.load()),
+        );
+        cube.set_direction(new_yaw, cube.can_deal_damage());
     }
     fn should_run_every_tick(&self) -> bool {
         true
