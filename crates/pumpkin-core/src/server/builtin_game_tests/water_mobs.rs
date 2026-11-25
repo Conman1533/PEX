@@ -206,3 +206,81 @@ pub(super) async fn test_elder_guardian_gives_mining_fatigue(
     })?;
     Ok(())
 }
+
+/// Vanilla `Guardian`: water-bound navigation (`WaterBoundPathNavigation`), `GuardianMoveControl`
+/// and no float goal, so a guardian swims anywhere in the water, down as well as up. A glass
+/// tank 9 blocks long holds 10 blocks of water, split by two layers of stone with a gap one block
+/// wide across the far end. The guardian starts above the stone at the near end, and a survival player stands
+/// on the bottom below it, out of its sight from anywhere above the stone. The guardian has to
+/// swim along and down through the gap, where it sees the player 8 blocks away and hits it with
+/// its beam. A guardian that floats to the surface never gets there.
+pub(super) async fn test_guardian_swims_down_to_hidden_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    for x in 0..11 {
+        for z in 0..5 {
+            helper
+                .set_block_default(&BlockPos::new(x, 0, z), &Block::STONE)
+                .await?;
+            let wall = x == 0 || x == 10 || z == 0 || z == 4;
+            for y in 1..11 {
+                let block = if wall {
+                    &Block::GLASS
+                } else if (y == 5 || y == 6) && x != 9 {
+                    &Block::STONE
+                } else {
+                    &Block::WATER
+                };
+                helper
+                    .set_block_default(&BlockPos::new(x, y, z), block)
+                    .await?;
+            }
+        }
+    }
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(1, 1, 2),
+            "effect give @a[distance=..2] minecraft:water_breathing 1000 0 true",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 8, 2),
+            "summon minecraft:guardian ~0.5 ~ ~0.5 {PersistenceRequired:1b}",
+        )
+        .await?;
+
+    let player_min = BlockPos::new(1, 1, 2);
+    let player_max = BlockPos::new(2, 3, 3);
+    let tank_min = BlockPos::new(0, 0, 0);
+    let tank_max = BlockPos::new(11, 12, 5);
+    helper.succeed_when(move |helper| async move {
+        let health = helper
+            .entity_nbt_values("minecraft:player", player_min, player_max, "Health")
+            .await?;
+        let hurt = health
+            .iter()
+            .flatten()
+            .any(|tag| matches!(tag, NbtTag::Float(value) if *value < 20.0));
+        if hurt {
+            return Ok(());
+        }
+        // Where the guardian is, for a failure: under the stone (y below 5) or not.
+        let guardian = helper
+            .entity_nbt_values("minecraft:guardian", tank_min, tank_max, "Pos")
+            .await?;
+        let player = helper
+            .entity_nbt_values("minecraft:player", player_min, player_max, "Pos")
+            .await?;
+        helper.assert_true(
+            false,
+            format!(
+                "the guardian never hit the player; guardian at {guardian:?}, player at {player:?}"
+            ),
+        )
+    })?;
+    Ok(())
+}

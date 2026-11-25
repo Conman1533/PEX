@@ -344,6 +344,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:illusioner_shoots_bow_at_survival_player",
     "pumpkin:vex_flies_through_wall_to_target",
     "pumpkin:elder_guardian_gives_mining_fatigue",
+    "pumpkin:guardian_swims_down_to_hidden_player",
 ];
 
 #[must_use]
@@ -1070,6 +1071,13 @@ pub fn ensure_builtin_game_tests_registered() {
             1500,
             0,
             water_mobs::test_elder_guardian_gives_mining_fatigue,
+        );
+        register_function_test(
+            "pumpkin:guardian_swims_down_to_hidden_player",
+            "pumpkin:empty_11x12x5",
+            3600,
+            0,
+            water_mobs::test_guardian_swims_down_to_hidden_player,
         );
 
         // redstone_wire_and_power (15)
