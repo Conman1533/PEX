@@ -90,23 +90,6 @@ impl PendingConnection {
             return Some(PacketHandlerResult::Stop);
         };
 
-        if let Some(online_player) = server
-            .get_player_by_name(&profile.name)
-            .filter(|online_player| online_player.gameprofile.id != profile.id)
-        {
-            debug!(
-                "A player (IP '{}', attempted username '{}') tried to log in with the same username as an online player (UUID '{}', username '{}')",
-                &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
-            );
-            self.kick(TextComponent::translate_cross(
-                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
-                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
-                [],
-            ))
-            .await;
-            return Some(PacketHandlerResult::Stop);
-        }
-
         self.finish_login(server, &profile).await
     }
 
@@ -130,6 +113,25 @@ impl PendingConnection {
         server: &Arc<Server>,
         profile: &GameProfile,
     ) -> Option<PacketHandlerResult> {
+        // Every login path ends here (encryption on or off, and the proxies), so the name check
+        // runs for all of them.
+        if let Some(online_player) = server
+            .get_player_by_name(&profile.name)
+            .filter(|online_player| online_player.gameprofile.id != profile.id)
+        {
+            debug!(
+                "A player (IP '{}', attempted username '{}') tried to log in with the same username as an online player (UUID '{}', username '{}')",
+                &self.address, &profile.name, &profile.id, &online_player.gameprofile.name
+            );
+            self.kick(TextComponent::translate_cross(
+                translation::java::MULTIPLAYER_DISCONNECT_DUPLICATE_LOGIN,
+                translation::bedrock::DISCONNECTIONSCREEN_LOGGEDINOTHERLOCATION,
+                [],
+            ))
+            .await;
+            return Some(PacketHandlerResult::Stop);
+        }
+
         let mut pre_login_event =
             crate::plugin::api::events::player::async_player_pre_login::AsyncPlayerPreLoginEvent {
                 player_name: profile.name.clone(),
