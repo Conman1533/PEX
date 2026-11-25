@@ -739,32 +739,40 @@ impl ProtoChunk {
 
         let world_x = (self.x << 4) | local_x;
         let world_z = (self.z << 4) | local_z;
+        let at_position = |nbt: &NbtCompound| {
+            nbt.get_int("x") == Some(world_x)
+                && nbt.get_int("y") == Some(y)
+                && nbt.get_int("z") == Some(world_z)
+        };
         if block_state.block_entity_type != u16::MAX {
             if let Some(&be_name) = pumpkin_data::block_properties::BLOCK_ENTITY_TYPES
                 .get(block_state.block_entity_type as usize)
             {
-                let exists = self.pending_block_entities.iter().any(|nbt| {
-                    nbt.get_int("x") == Some(world_x)
-                        && nbt.get_int("y") == Some(y)
-                        && nbt.get_int("z") == Some(world_z)
+                let existing = self.pending_block_entities.iter().position(at_position);
+                // Vanilla `WorldGenRegion.setBlock` gives the new block fresh block entity data, so
+                // a sculk catalyst placed over a sensor doesn't keep the sensor's. Data a structure
+                // already gave this kind of block entity stays.
+                let same_type = existing.is_some_and(|index| {
+                    self.pending_block_entities[index]
+                        .get_string("id")
+                        .is_some_and(|id| id.strip_prefix("minecraft:").unwrap_or(id) == be_name)
                 });
-                if !exists {
+                if !same_type {
                     let mut nbt = NbtCompound::new();
                     nbt.put_string("id", format!("minecraft:{be_name}"));
                     nbt.put_int("x", world_x);
                     nbt.put_int("y", y);
                     nbt.put_int("z", world_z);
-                    self.pending_block_entities.push(nbt);
+                    match existing {
+                        Some(index) => self.pending_block_entities[index] = nbt,
+                        None => self.pending_block_entities.push(nbt),
+                    }
                 }
             }
         } else if old_state_id != BlockStateId::AIR
             && old_state_id.to_state().block_entity_type != u16::MAX
         {
-            self.pending_block_entities.retain(|nbt| {
-                !(nbt.get_int("x") == Some(world_x)
-                    && nbt.get_int("y") == Some(y)
-                    && nbt.get_int("z") == Some(world_z))
-            });
+            self.pending_block_entities.retain(|nbt| !at_position(nbt));
         }
     }
 

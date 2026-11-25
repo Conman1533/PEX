@@ -1,5 +1,5 @@
 use pumpkin_data::{
-    BlockState, BlockStateId,
+    Block, BlockState, BlockStateId,
     item::JavaToBedrockItemMapping,
     tag::{Block as BlockTag, Taggable},
 };
@@ -32,8 +32,8 @@ impl BlockEntity for BedBlockEntity {
 
     /// Vanilla 26.3 has no bed block entity, so beds have no block entity type to check against.
     /// This one only carries the bed colour for Bedrock and never ticks.
-    fn is_valid_block_state(&self, _state: &BlockState) -> bool {
-        true
+    fn is_valid_block_state(&self, state: &BlockState) -> bool {
+        Self::is_bed(Block::from_state_id(state.id))
     }
 
     fn bedrock_block_actor_data(&self, state_id: BlockStateId) -> Option<NbtCompound> {
@@ -65,6 +65,12 @@ impl BedBlockEntity {
     #[must_use]
     pub const fn new(position: BlockPos) -> Self {
         Self { position }
+    }
+
+    /// Vanilla's `AbstractBedBlock`s, the blocks that get a bed block entity when placed.
+    #[must_use]
+    pub fn is_bed(block: &Block) -> bool {
+        block == &Block::STRAW_BED || block.has_tag(&BlockTag::MINECRAFT_BEDS)
     }
 }
 
