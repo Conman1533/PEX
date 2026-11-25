@@ -852,3 +852,82 @@ pub(super) async fn test_summon_with_nbt_gives_no_random_equipment(
         .then_succeed();
     Ok(())
 }
+
+/// Roadmap G6-44: `team join` and `team leave` take score holders like vanilla, so names that
+/// are not online players and selectors both work, and a holder is on one team at most. The
+/// `team` and `scores` selector options find mobs by their scoreboard name, their UUID.
+pub(super) async fn test_team_members_are_score_holders(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 5, 5).await?;
+    let origin = BlockPos::new(2, 1, 2);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            for _ in 0..2 {
+                helper
+                    .execute_command(&origin, "summon minecraft:pig ~ ~ ~ {NoAI:1b}")
+                    .await?;
+            }
+            helper
+                .execute_command(&origin, "team add pex_g644_a")
+                .await?;
+            helper
+                .execute_command(&origin, "team add pex_g644_b")
+                .await?;
+            helper
+                .execute_command(&origin, "scoreboard objectives add pex_g644 dummy")
+                .await?;
+            helper
+                .execute_command(
+                    &origin,
+                    "scoreboard players set @e[type=minecraft:pig,distance=..2] pex_g644 5",
+                )
+                .await?;
+            let checks = [
+                ("team join pex_g644_a PexFakeHolder", 1),
+                (
+                    "team join pex_g644_a @e[type=minecraft:pig,distance=..2]",
+                    2,
+                ),
+                (
+                    "execute if entity @e[type=minecraft:pig,distance=..2,team=pex_g644_a]",
+                    2,
+                ),
+                ("team join pex_g644_b PexFakeHolder", 1),
+                ("team leave PexFakeHolder", 1),
+                ("team leave PexFakeHolder", 0),
+                ("team leave @e[type=minecraft:pig,distance=..2]", 2),
+                (
+                    "execute if entity @e[type=minecraft:pig,distance=..2,team=]",
+                    2,
+                ),
+                (
+                    "execute if entity @e[type=minecraft:pig,distance=..2,scores={pex_g644=5}]",
+                    2,
+                ),
+            ];
+            for (command, expected) in checks {
+                let result = helper.execute_command(&origin, command).await?;
+                helper.assert_true(
+                    result == expected,
+                    format!("`{command}` should give {expected}, gave {result}"),
+                )?;
+            }
+            helper
+                .execute_command(&origin, "scoreboard objectives remove pex_g644")
+                .await?;
+            helper
+                .execute_command(&origin, "team remove pex_g644_a")
+                .await?;
+            helper
+                .execute_command(&origin, "team remove pex_g644_b")
+                .await?;
+            helper
+                .execute_command(&origin, "kill @e[type=minecraft:pig,distance=..2]")
+                .await?;
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}

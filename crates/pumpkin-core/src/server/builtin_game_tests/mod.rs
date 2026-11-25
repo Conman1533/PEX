@@ -277,6 +277,7 @@ const BUILTIN_TEST_IDS: &[&str] = &[
     "pumpkin:commands/data_modify_block_changes_block_entity",
     "pumpkin:commands/block_predicates_check_states_tags_and_nbt",
     "pumpkin:commands/summon_with_nbt_gives_no_random_equipment",
+    "pumpkin:commands/team_members_are_score_holders",
 ];
 
 /// Tests that spawn mobs, outside `BUILTIN_TEST_IDS`. The tester spaces them wider than other
@@ -880,6 +881,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             commands_and_entities_extended::test_data_modify_block_changes_block_entity,
+        );
+        register_function_test(
+            "pumpkin:commands/team_members_are_score_holders",
+            "pumpkin:empty_5x4x5",
+            20,
+            0,
+            commands_and_entities_extended::test_team_members_are_score_holders,
         );
         register_function_test(
             "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",

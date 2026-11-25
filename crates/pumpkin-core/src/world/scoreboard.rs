@@ -565,14 +565,28 @@ impl Scoreboard {
         team_name: &str,
         player: String,
     ) {
-        let Some(team) = self.teams.get_mut(team_name) else {
+        if !self.teams.contains_key(team_name) {
             warn!(
                 "Tried to add player to Team which does not exist, {}",
                 team_name
             );
             return;
-        };
+        }
 
+        // Vanilla `Scoreboard.addPlayerToTeam`: a holder is on one team at most, so joining
+        // another team leaves the old one first.
+        let previous = self
+            .teams
+            .values()
+            .find(|team| team.name != team_name && team.players.contains(&player))
+            .map(|team| team.name.clone());
+        if let Some(previous) = previous {
+            self.remove_player_from_team(target, &previous, &player);
+        }
+
+        let Some(team) = self.teams.get_mut(team_name) else {
+            return;
+        };
         if team.players.contains(&player) {
             return;
         }
@@ -833,6 +847,28 @@ pub struct Team {
     pub player_prefix: TextComponent,
     pub player_suffix: TextComponent,
     pub players: Vec<String>,
+}
+
+impl Team {
+    /// Vanilla `PlayerTeam.getFormattedDisplayName`: the display name in square brackets, with the
+    /// team's name on hover and as insertion, in the team's colour. PEX keeps white for vanilla's
+    /// `RESET`, so white teams stay uncoloured.
+    #[must_use]
+    pub fn formatted_display_name(&self) -> TextComponent {
+        let wrapped = self
+            .display_name
+            .clone()
+            .hover_event(pumpkin_util::text::hover::HoverEvent::show_text(
+                TextComponent::text(self.name.clone()),
+            ))
+            .insertion(self.name.clone())
+            .wrap_in_square_brackets();
+        if self.color == NamedColor::White {
+            wrapped
+        } else {
+            wrapped.color_named(self.color)
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
