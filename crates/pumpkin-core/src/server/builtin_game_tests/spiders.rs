@@ -68,9 +68,10 @@ pub(super) async fn test_spider_climbs_wall_to_target(
 
 /// Vanilla `SpiderTargetGoal` (no new target at a brightness of 0.5 or more) and
 /// `SpiderAttackGoal.canContinueToUse` (a 1 in 100 chance each tick to drop the target there):
-/// a cave spider that found a player in the dark gives up once its roof is gone at noon, and
-/// does not pick the player again. The player floats out of reach, so it never gets hurt.
-pub(super) async fn test_cave_spider_stops_targeting_in_daylight(
+/// a cave spider that found a player in the dark gives up once its floor turns to glowstone,
+/// and does not pick the player again. Both read block light as well as sky light, and the mob
+/// test cells have no sky above them. The player floats out of reach, so it never gets hurt.
+pub(super) async fn test_cave_spider_stops_targeting_in_bright_light(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
     build_dark_box(&helper, 9, 7, 5).await?;
@@ -99,15 +100,14 @@ pub(super) async fn test_cave_spider_stops_targeting_in_daylight(
                 .await
         })
         .then_execute(|helper| async move {
-            helper
-                .execute_command(&BlockPos::new(0, 1, 0), "time set noon")
-                .await?;
-            helper
-                .execute_command(
-                    &BlockPos::new(0, 1, 0),
-                    "fill ~1 ~6 ~1 ~7 ~6 ~5 minecraft:air",
-                )
-                .await?;
+            // Block by block: `/fill` does not update light yet.
+            for x in 1..8 {
+                for z in 1..6 {
+                    helper
+                        .set_block_default(&BlockPos::new(x, 0, z), &Block::GLOWSTONE)
+                        .await?;
+                }
+            }
             Ok(())
         })
         .then_wait_until(move |helper| async move {

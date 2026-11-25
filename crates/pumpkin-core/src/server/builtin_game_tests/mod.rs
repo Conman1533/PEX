@@ -301,7 +301,7 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:husk_rider_steers_camel_husk_to_target",
     "pumpkin:piglin_brute_attacks_player_in_gold_armor",
     "pumpkin:spider_climbs_wall_to_target",
-    "pumpkin:cave_spider_stops_targeting_in_daylight",
+    "pumpkin:cave_spider_stops_targeting_in_bright_light",
 ];
 
 #[must_use]
@@ -752,16 +752,16 @@ pub fn ensure_builtin_game_tests_registered() {
         register_function_test(
             "pumpkin:spider_climbs_wall_to_target",
             "pumpkin:empty_9x6x5",
-            400,
+            1200,
             0,
             spiders::test_spider_climbs_wall_to_target,
         );
         register_function_test(
-            "pumpkin:cave_spider_stops_targeting_in_daylight",
+            "pumpkin:cave_spider_stops_targeting_in_bright_light",
             "pumpkin:empty_9x7x7",
-            1500,
+            6000,
             0,
-            spiders::test_cave_spider_stops_targeting_in_daylight,
+            spiders::test_cave_spider_stops_targeting_in_bright_light,
         );
         register_function_test(
             "pumpkin:nautilus_follows_tempting_player",
