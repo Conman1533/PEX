@@ -232,4 +232,19 @@ pub trait GameTestWorld: Send + Sync {
             "execute_command is not supported by this GameTestWorld".to_string(),
         ))
     }
+
+    /// Starts a raid centred on `center` that spawns no waves of its own, so raiders summoned
+    /// with its `RaidId` are in an active raid. Returns the raid id.
+    async fn start_raid_without_waves(&self, _center: &BlockPos) -> GameTestResult<i32> {
+        Err(GameTestError::World(
+            "raids are not supported by this GameTestWorld".to_string(),
+        ))
+    }
+
+    /// Stops a raid [`Self::start_raid_without_waves`] started.
+    async fn stop_raid(&self, _raid_id: i32) -> GameTestResult<()> {
+        Err(GameTestError::World(
+            "raids are not supported by this GameTestWorld".to_string(),
+        ))
+    }
 }
