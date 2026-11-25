@@ -931,3 +931,44 @@ pub(super) async fn test_team_members_are_score_holders(
         .then_succeed();
     Ok(())
 }
+
+/// Roadmap G6-45: `fill` updates light like vanilla `Level.setBlock`. A hollow stone box shuts
+/// out the sky, glowstone filled inside lights the room, and air filled over it darkens it again.
+pub(super) async fn test_fill_updates_light(helper: GameTestHelper) -> GameTestResult<()> {
+    let origin = BlockPos::new(0, 0, 0);
+    let beside = BlockPos::new(1, 1, 2);
+    helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(&origin, "fill ~ ~ ~ ~4 ~3 ~4 minecraft:stone hollow")
+                .await?;
+            let (_, sky) = helper.light_levels(&beside).await?;
+            helper.assert_true(
+                sky == 0,
+                format!("sky light inside the box is {sky}, not 0"),
+            )?;
+            helper
+                .execute_command(&origin, "fill ~2 ~1 ~2 ~2 ~1 ~2 minecraft:glowstone")
+                .await?;
+            let (block, _) = helper.light_levels(&beside).await?;
+            helper.assert_true(
+                block == 14,
+                format!("block light beside the glowstone is {block}, not 14"),
+            )?;
+            helper
+                .execute_command(&origin, "fill ~2 ~1 ~2 ~2 ~1 ~2 minecraft:air")
+                .await?;
+            let (block, _) = helper.light_levels(&beside).await?;
+            helper.assert_true(
+                block == 0,
+                format!("block light after removing the glowstone is {block}, not 0"),
+            )?;
+            helper
+                .execute_command(&origin, "fill ~ ~ ~ ~4 ~3 ~4 minecraft:air")
+                .await?;
+            Ok(())
+        })
+        .then_succeed();
+    Ok(())
+}

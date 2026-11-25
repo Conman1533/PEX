@@ -217,6 +217,13 @@ pub trait GameTestWorld: Send + Sync {
         ))
     }
 
+    /// Block light and sky light at a position.
+    async fn light_levels(&self, _position: &BlockPos) -> GameTestResult<(u8, u8)> {
+        Err(GameTestError::World(
+            "light_levels is not supported by this GameTestWorld".to_string(),
+        ))
+    }
+
     async fn random_tick(&self, _position: &BlockPos) -> GameTestResult<()> {
         Err(GameTestError::World(
             "random_tick is not supported by this GameTestWorld".to_string(),

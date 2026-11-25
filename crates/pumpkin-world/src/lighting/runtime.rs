@@ -279,7 +279,13 @@ impl DynamicLightEngine {
     fn perform_sky_light_increase_updates(&self, level: &Arc<Level>) -> i32 {
         let mut updates = 0;
         while let Some((pos, expected_light)) = self.sky_increase.pop() {
-            self.propagate_sky_light_increase(level, &pos, expected_light);
+            // A position a later decrease darkened after it was queued must not spread its old
+            // level again, or a column cut off by several new blocks at once (a `fill`) lights
+            // itself back up from its own stale neighbours.
+            let light = expected_light.min(self.get_sky_light_level(level, &pos));
+            if light > 0 {
+                self.propagate_sky_light_increase(level, &pos, light);
+            }
             updates += 1;
         }
         updates
