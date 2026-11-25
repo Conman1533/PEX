@@ -23,12 +23,16 @@ pub const MAGMA_CUBE: CubeKind = CubeKind {
             small: Sound::EntityMagmaCubeDeathSmall,
         },
     },
-    // Vanilla adds the 2 in getAttackDamage instead of the attribute.
     size_attributes: &[
-        (Attributes::ATTACK_DAMAGE, |size| f64::from(size + 2)),
+        (Attributes::ATTACK_DAMAGE, |size| f64::from(size)),
         (Attributes::ARMOR, |size| f64::from(size * 3)),
     ],
     jump_delay_multiplier: 4,
     contact_damage: ContactDamage::Always,
+    // `MagmaCube.getAttackDamage` adds 2 to the attribute.
+    attack_damage_bonus: 2.0,
+    squish_decay: 0.9,
+    jump_boost_per_size: 0.1,
+    lava_jump: Some((0.22, 0.05)),
     ..SLIME
 };

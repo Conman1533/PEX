@@ -1558,17 +1558,29 @@ impl LivingEntity {
             let on_ground = self.entity.on_ground.load(SeqCst);
 
             if (in_water || in_lava) && (!on_ground || fluid_height > swim_height) {
-                // Swim upward
+                // Swim upward. Vanilla checks water first, so only lava alone reaches the mob's
+                // `jumpInLiquid(LAVA)`.
+                if !(in_lava
+                    && !in_water
+                    && caller
+                        .get_mob()
+                        .is_some_and(crate::entity::mob::Mob::mob_jump_in_lava))
+                {
+                    let mut velo = self.entity.velocity.load();
 
-                let mut velo = self.entity.velocity.load();
+                    velo.y += 0.04;
 
-                velo.y += 0.04;
-
-                self.entity.velocity.store(velo);
+                    self.entity.velocity.store(velo);
+                }
             } else if (on_ground || in_water && fluid_height <= swim_height)
                 && self.jumping_cooldown.load(SeqCst) == 0
             {
-                self.jump();
+                if !caller
+                    .get_mob()
+                    .is_some_and(crate::entity::mob::Mob::mob_jump_from_ground)
+                {
+                    self.jump();
+                }
 
                 self.jumping_cooldown.store(10, SeqCst);
             }

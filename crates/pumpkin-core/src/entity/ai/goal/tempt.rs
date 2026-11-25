@@ -17,6 +17,14 @@ const SCARE_ROTATION: f32 = 5.0;
 /// Vanilla's `Predicate<ItemStack>`. It also gets the tempted mob, which vanilla's lambdas capture.
 pub type TemptItems = fn(&dyn Mob, &ItemStack) -> bool;
 
+/// Vanilla `TemptGoal.navigateTowards` and `stopNavigation` for a mob without a navigator, like
+/// the overrides of `TemptGoal.ForNonPathfinders` subclasses.
+#[derive(Clone, Copy)]
+pub struct TemptMovement {
+    pub navigate_towards: fn(&dyn Mob, &Player),
+    pub stop_navigation: fn(&dyn Mob),
+}
+
 pub struct TemptGoal {
     goal_control: Controls,
     speed: f64,
@@ -33,6 +41,8 @@ pub struct TemptGoal {
     can_use: Option<MobFilter>,
     /// Vanilla `OcelotTemptGoal.canScare`'s extra condition.
     scare_condition: Option<MobFilter>,
+    /// Moves the mob in place of the navigator.
+    movement: Option<TemptMovement>,
 }
 
 impl TemptGoal {
@@ -62,7 +72,16 @@ impl TemptGoal {
             running: false,
             can_use: None,
             scare_condition: None,
+            movement: None,
         }
+    }
+
+    /// Moves the mob through `movement` instead of its navigator, and claims only `controls`.
+    #[must_use]
+    pub const fn moving_with(mut self, movement: TemptMovement, controls: Controls) -> Self {
+        self.movement = Some(movement);
+        self.goal_control = controls;
+        self
     }
 
     /// Extra condition for starting and for continuing, e.g. an untamed cat.
@@ -203,9 +222,19 @@ impl Goal for TemptGoal {
             );
 
         let mob_pos = mob_entity.living_entity.entity.pos.load();
+        let close =
+            mob_pos.squared_distance_to_vec(&player_pos) < self.stop_distance * self.stop_distance;
+        if let Some(movement) = self.movement {
+            if close {
+                (movement.stop_navigation)(mob);
+            } else {
+                (movement.navigate_towards)(mob, player);
+            }
+            return;
+        }
         let steered = mob_entity.steered();
         let mut navigator = steered.navigator();
-        if mob_pos.squared_distance_to_vec(&player_pos) < self.stop_distance * self.stop_distance {
+        if close {
             navigator.stop();
         } else {
             navigator.set_progress(NavigatorGoal::new(mob_pos, player_pos, self.speed));
@@ -214,7 +243,11 @@ impl Goal for TemptGoal {
 
     fn stop(&mut self, mob: &dyn Mob) {
         self.target_player = None;
-        mob.get_mob_entity().steered().navigator().stop();
+        if let Some(movement) = self.movement {
+            (movement.stop_navigation)(mob);
+        } else {
+            mob.get_mob_entity().steered().navigator().stop();
+        }
         self.cooldown = to_goal_ticks(100);
         self.running = false;
     }
