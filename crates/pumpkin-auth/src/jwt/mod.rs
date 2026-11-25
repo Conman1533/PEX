@@ -24,6 +24,10 @@ pub struct PlayerClaims {
     pub uuid: String,
     /// The player's Xbox User ID (XUID).
     pub xuid: String,
+    /// The token had neither `xid` nor `leguuid`, so `uuid` is vanilla's offline UUID of
+    /// `display_name`. A server that changes the name, with a prefix for example, derives the
+    /// UUID from the name it uses instead.
+    pub uuid_from_name: bool,
 }
 
 /// Represents the possible errors that can occur during JWT verification.
@@ -511,6 +515,7 @@ fn extract_oidc_player_claims(payload: &Value) -> PlayerClaims {
         .unwrap_or_default()
         .to_string();
 
+    let mut uuid_from_name = false;
     let uuid = if xuid.is_empty() {
         let leguuid = payload
             .get("leguuid")
@@ -519,27 +524,27 @@ fn extract_oidc_player_claims(payload: &Value) -> PlayerClaims {
             .to_string();
 
         if leguuid.is_empty() {
-            let input = format!("pocket-auth-1-xuid:{xuid}");
-            let mut bytes = *md5::compute(input.as_bytes());
-            bytes[6] = (bytes[6] & 0x0f) | 0x30;
-            bytes[8] = (bytes[8] & 0x3f) | 0x80;
-            uuid::Uuid::from_bytes(bytes).to_string()
+            // Every such token used to get the MD5 of `pocket-auth-1-xuid:` with nothing after
+            // it, so all of them shared one UUID. The name tells them apart.
+            uuid_from_name = true;
+            name_uuid(&format!("OfflinePlayer:{display_name}"))
         } else {
             leguuid
         }
     } else {
-        xuid_to_uuid(&xuid)
+        name_uuid(&format!("pocket-auth-1-xuid:{xuid}"))
     };
 
     PlayerClaims {
         display_name,
         uuid,
         xuid,
+        uuid_from_name,
     }
 }
 
-fn xuid_to_uuid(xuid: &str) -> String {
-    let input = format!("pocket-auth-1-xuid:{xuid}");
+/// Java's `UUID.nameUUIDFromBytes`: MD5 with the version 3 bits.
+fn name_uuid(input: &str) -> String {
     let mut bytes = *md5::compute(input.as_bytes());
     bytes[6] = (bytes[6] & 0x0f) | 0x30;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -561,4 +566,34 @@ pub fn extract_cpk_from_token(token: &str) -> Result<PublicKey, AuthError> {
         .ok_or_else(|| AuthError::PublicKeyBuild("OIDC payload missing cpk".into()))?;
 
     build_public_key_from_b64(cpk_b64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_oidc_player_claims;
+    use serde_json::json;
+
+    #[test]
+    fn tokens_without_ids_get_different_uuids_for_different_names() {
+        let alex = extract_oidc_player_claims(&json!({ "xname": "Alex" }));
+        let steve = extract_oidc_player_claims(&json!({ "xname": "Steve" }));
+        assert_ne!(alex.uuid, steve.uuid);
+        assert!(alex.uuid_from_name && steve.uuid_from_name);
+        // Vanilla's offline UUID of the name, as `offline_uuid` in pumpkin-core gives it.
+        let notch = extract_oidc_player_claims(&json!({ "xname": "Notch" }));
+        assert_eq!(notch.uuid, "b50ad385-829d-3141-a216-7e7d7539ba7f");
+    }
+
+    #[test]
+    fn xid_and_leguuid_keep_their_uuids() {
+        let xbox = json!({ "xname": "Alex", "xid": "2535400000000000" });
+        let xbox = extract_oidc_player_claims(&xbox);
+        assert_eq!(xbox.uuid, "174319cc-f69f-30d8-a279-6ace57f2011e");
+        assert!(!xbox.uuid_from_name);
+
+        let legacy = "0f4d3a8e-6b1c-4a5e-9d2f-1c3b5a7e9f01";
+        let old = extract_oidc_player_claims(&json!({ "xname": "Alex", "leguuid": legacy }));
+        assert_eq!(old.uuid, legacy);
+        assert!(!old.uuid_from_name);
+    }
 }

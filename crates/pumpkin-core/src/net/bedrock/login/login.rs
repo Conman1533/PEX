@@ -26,6 +26,16 @@ fn build_username(display_name: &str, prefix: &str, replace_spaces: bool) -> Str
     name
 }
 
+/// The UUID a Bedrock player joins with. A token with neither `xid` nor `leguuid` gets vanilla's
+/// offline UUID of the name the player joins under, prefix included, as an offline Java player
+/// with that name would.
+fn profile_id(claims: &pumpkin_auth::jwt::PlayerClaims, name: &str) -> Result<Uuid, LoginError> {
+    if claims.uuid_from_name {
+        return Ok(crate::net::offline_uuid(name));
+    }
+    Uuid::parse_str(&claims.uuid).map_err(|_| LoginError::InvalidUuid)
+}
+
 /// The checks a Java login runs before the player joins, for a Bedrock login: the player limit,
 /// bans and the whitelist, then an online player with the same UUID or name.
 async fn login_refusal(
@@ -156,7 +166,7 @@ impl BedrockClient {
         );
 
         let profile = GameProfile {
-            id: Uuid::parse_str(&player_data.uuid).map_err(|_| LoginError::InvalidUuid)?,
+            id: profile_id(&player_data, &name)?,
             name,
             properties: ArcSwap::new(Arc::new(Vec::new())),
             profile_actions: None,
@@ -205,7 +215,30 @@ impl BedrockClient {
 
 #[cfg(test)]
 mod tests {
-    use super::build_username;
+    use super::{build_username, profile_id};
+    use pumpkin_auth::jwt::PlayerClaims;
+
+    fn claims(uuid: &str, uuid_from_name: bool) -> PlayerClaims {
+        PlayerClaims {
+            display_name: "Alex".to_string(),
+            uuid: uuid.to_string(),
+            xuid: String::new(),
+            uuid_from_name,
+        }
+    }
+
+    #[test]
+    fn a_token_without_ids_gets_the_offline_uuid_of_the_prefixed_name() {
+        let id = profile_id(&claims("ignored", true), ".Alex").unwrap();
+        assert_eq!(id, crate::net::offline_uuid(".Alex"));
+        assert_eq!(id.to_string(), "1adc11bf-9d7f-359f-a731-5a83190586df");
+    }
+
+    #[test]
+    fn a_token_with_an_id_keeps_its_uuid() {
+        let xbox = "174319cc-f69f-30d8-a279-6ace57f2011e";
+        assert_eq!(profile_id(&claims(xbox, false), ".Alex").unwrap().to_string(), xbox);
+    }
 
     #[test]
     fn spaces_become_underscores_by_default() {
