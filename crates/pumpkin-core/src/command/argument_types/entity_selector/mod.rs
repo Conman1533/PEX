@@ -521,20 +521,22 @@ impl EntitySelectorPredicate {
                     .contains(expected_tag);
                 has_tag ^ invert
             }
+            // Vanilla `EntitySelectorOptions` `team`: the entity's team by its scoreboard name
+            // (a player's name, else its UUID), and `team=` matches entities on no team.
             Self::Team(expected_team, invert) => {
-                let actual_name = entity_actual_name(entity);
+                let holder = entity.get_scoreboard_name();
                 let world = entity.get_entity().world.load();
                 let scoreboard = world
                     .scoreboard
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let has_team = scoreboard.get_teams().iter().any(|(name, team)| {
-                    name == expected_team && team.players.contains(&actual_name)
-                });
-                has_team ^ invert
+                let team_name = scoreboard
+                    .get_entity_team(&holder)
+                    .map_or("", |team| team.name.as_str());
+                (team_name == expected_team) ^ invert
             }
             Self::Scores(scores_map) => {
-                let actual_name = entity_actual_name(entity);
+                let actual_name = entity.get_scoreboard_name();
                 let world = entity.get_entity().world.load();
                 let scoreboard = world
                     .scoreboard
