@@ -158,7 +158,8 @@ impl GuardianState {
                             .squared_distance_to_vec(&guardian.get_entity().pos.load())
                             > 9.0
                     })
-            }),
+            })
+            .including_players(),
         );
     }
 
