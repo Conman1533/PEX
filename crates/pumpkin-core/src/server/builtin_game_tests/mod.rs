@@ -30,6 +30,7 @@ mod redstone_wire_and_power;
 mod scaffolding;
 mod skeletons;
 mod small_hostiles;
+mod spiders;
 mod target_and_projectiles;
 mod tripwire;
 mod walls_stairs_and_shapes;
@@ -324,6 +325,8 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:stray_arrow_applies_slowness",
     "pumpkin:bogged_arrow_applies_poison",
     "pumpkin:parched_arrow_applies_weakness",
+    "pumpkin:spider_climbs_wall_to_target",
+    "pumpkin:cave_spider_stops_targeting_in_bright_light",
 ];
 
 #[must_use]
@@ -924,6 +927,20 @@ pub fn ensure_builtin_game_tests_registered() {
             100,
             0,
             entities_and_ai::test_zombie_targets_survival_mock_player,
+        );
+        register_function_test(
+            "pumpkin:spider_climbs_wall_to_target",
+            "pumpkin:empty_9x6x5",
+            1200,
+            0,
+            spiders::test_spider_climbs_wall_to_target,
+        );
+        register_function_test(
+            "pumpkin:cave_spider_stops_targeting_in_bright_light",
+            "pumpkin:empty_9x7x7",
+            6000,
+            0,
+            spiders::test_cave_spider_stops_targeting_in_bright_light,
         );
         register_function_test(
             "pumpkin:nautilus_follows_tempting_player",
