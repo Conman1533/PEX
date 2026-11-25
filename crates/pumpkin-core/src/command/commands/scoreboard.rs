@@ -1,4 +1,5 @@
 use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
+use crate::command::argument_types::component::ComponentArgumentType;
 use crate::command::argument_types::core::integer::IntegerArgumentType;
 use crate::command::argument_types::core::string::StringArgumentType;
 use crate::command::argument_types::objective::ObjectiveArgumentType;
@@ -61,7 +62,7 @@ impl CommandExecutor for ObjectivesAddExecutor {
         let criterion = StringArgumentType::get(context, ARG_CRITERION)?;
 
         let display_name = if self.has_display_name {
-            TextComponent::text(StringArgumentType::get(context, ARG_DISPLAY_NAME)?.to_string())
+            ComponentArgumentType::get(context, ARG_DISPLAY_NAME)?
         } else {
             TextComponent::text(objective_name.to_string())
         };
@@ -626,11 +627,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &PermissionRegistr
                                         has_display_name: false,
                                     })
                                     .then(
-                                        argument(
-                                            ARG_DISPLAY_NAME,
-                                            StringArgumentType::GreedyPhrase,
-                                        )
-                                        .executes(
+                                        argument(ARG_DISPLAY_NAME, ComponentArgumentType).executes(
                                             ObjectivesAddExecutor {
                                                 has_display_name: true,
                                             },
