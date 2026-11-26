@@ -13,7 +13,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 45 | 15 | 1 | 29 | |
+| G1 Mob AI | 47 | 15 | 1 | 31 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 216 | 98 | 6 | 96 | 16 |
+| Total | 218 | 98 | 6 | 98 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -810,6 +810,22 @@ Rules for every mob piece (G1-04 to G1-44):
 - Done when: in the End with a survival player 30 to 60 blocks from the dragon for 5 minutes, the dragon keeps its UUID and the fight spawns no second dragon.
 - Result (2026-11-04): found in the G1-27 play test: the dragon vanished about 40 s after each spawn, with no death or log, and the fight spawned a new one 1200 ticks later. The cause is the generic random despawn (a `MONSTER` with no non-spectator player within 32 blocks); alpha has it too but its dragon circles close to the portal. Branch at `3875ccfd7`, pushed, PR draft `/srv/pex/pr-drafts/fix-ender-dragon-never-despawns.md`: a `Mob::checks_despawn` hook, false for the dragon. Play test on the integration build: one dragon for 5 minutes, 30 polls. No automated test (needs a survival player in the End).
 - Status (2026-11-19): on `alpha` since the 2026-11-05 merges. Merged as part of `feat/dragon-fight`.
+
+#### G1-46 The wither targets players
+- Scope: in: the wither's `NearestAttackableTargetGoal` uses `ActiveTargetGoal::including_players()`, as vanilla `WitherBoss.registerGoals` targets any `LivingEntity` that is not undead and can be attacked, players included. Out: the wither's skull aiming per head.
+- Depends on: none.
+- Branch: `fix/wither-targets-players`
+- Needs decision: none.
+- Done when: a GameTest with a survival mock player beside a summoned wither sees the wither target the player and shoot a skull at it.
+- Status (2026-11-26): filed by the 2.0 loop from the second lane's report while porting G1 pieces (the wither's target goal looks like it skips players).
+
+#### G1-47 Ageable mobs spawn as babies 5% of the time
+- Scope: in: `AgeableMob.finalizeSpawn` gives a spawn group a 5% chance (`BABY_START_SPAWN_CHANCE` 0.05) that the mob starts as a baby once the group already has one adult (`AgeableMobGroupData`), for natural, chunk generation, spawn egg and `summon` spawns without NBT. Out: per-mob overrides such as the chicken jockey.
+- Depends on: none.
+- Branch: `fix/ageable-baby-spawns`
+- Needs decision: none.
+- Done when: 1000 summoned cows on PEX and on vanilla 26.3 hold a baby share inside the same binomial range around 5% (CT 117 console side-by-side), and a unit test covers the group rule.
+- Status (2026-11-26): filed by the 2.0 loop from the second lane's report (no baby animals ever spawn).
 
 ### Proof
 
