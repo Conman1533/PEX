@@ -584,6 +584,21 @@ impl GameTestHelper {
             .await
     }
 
+    /// The player from [`Self::spawn_mock_player_at`] right-clicks every living `entity_name`
+    /// touching the relative box with the item it holds, such as wheat to feed animals. Returns
+    /// how many of them took the interaction.
+    pub async fn mock_player_interact_with_entities(
+        &self,
+        entity_name: &str,
+        relative_min: BlockPos,
+        relative_max: BlockPos,
+    ) -> GameTestResult<usize> {
+        let (_, min, max) = self.absolute_box(&relative_min, &relative_max);
+        self.world
+            .mock_player_interact_with_entities(MOCK_PLAYER_NAME, entity_name, min, max)
+            .await
+    }
+
     pub async fn set_container_item(
         &self,
         relative: &BlockPos,

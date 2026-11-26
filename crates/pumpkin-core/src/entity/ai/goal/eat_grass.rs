@@ -13,6 +13,8 @@ const MAX_TIMER: i32 = 40;
 const MAX_INTERVAL: i32 = 1000;
 const BABY_INTERVAL: i32 = 50;
 
+/// Vanilla `EatBlockGoal`. It does not run every tick, so its delays are halved and its timer
+/// counts every other tick, as in vanilla.
 pub struct EatGrassGoal {
     goal_control: Controls,
     timer: i32,
@@ -126,11 +128,23 @@ impl Goal for EatGrassGoal {
         self.timer = 0;
     }
 
-    fn should_run_every_tick(&self) -> bool {
-        true
-    }
-
     fn controls(&self) -> Controls {
         self.goal_control
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Vanilla `EatBlockGoal` leaves `requiresUpdateEveryTick` false, so `adjustedTickDelay`
+    /// halves its delays: a 1 in 500 roll every other tick, and a 20 step timer.
+    #[test]
+    fn delays_are_halved_like_vanilla() {
+        let goal = EatGrassGoal::default();
+        assert!(!goal.should_run_every_tick());
+        assert_eq!(goal.get_tick_count(MAX_INTERVAL), 500);
+        assert_eq!(goal.get_tick_count(BABY_INTERVAL), 25);
+        assert_eq!(goal.get_tick_count(MAX_TIMER), 20);
     }
 }

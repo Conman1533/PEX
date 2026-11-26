@@ -45,16 +45,13 @@ pub struct PigEntity {
 
 impl PigEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let world = entity.world.load();
-        let biome = world.get_biome(&entity.block_pos.load());
-        let variant = PigVariant::select_for_biome(biome.registry_id);
         let mob_entity = MobEntity::new(entity);
         let pig = Self {
             mob_entity,
             ageable_data: crate::entity::ageable::AgeableData::default(),
             steering: ItemBasedSteering::default(),
             saddled: AtomicBool::new(false),
-            variant: AtomicU8::new(variant.id()),
+            variant: AtomicU8::new(PigVariant::default().id()),
             sound_variant: AtomicU8::new(PigSoundVariant::Classic as u8),
         };
         let mob_arc = Arc::new(pig);
@@ -193,18 +190,70 @@ impl Mob for PigEntity {
         crate::entity::mob::player_steers(self)
     }
 
-    /// Vanilla `Pig.finalizeSpawn` rolls a random sound variant.
+    /// Vanilla `Pig.finalizeSpawn` picks the variant for the biome and a random sound variant.
     fn finalize_spawn(
         &self,
-        _world: &Arc<World>,
+        world: &Arc<World>,
         group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
     ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        let biome = world.get_biome(&self.get_entity().block_pos.load());
+        self.set_variant(PigVariant::select_for_biome(biome.registry_id));
         let sound_variants = PigSoundVariant::ALL;
         self.set_sound_variant(
             sound_variants[self.get_random().random_range(0..sound_variants.len())],
         );
         self.mob_entity.finalize_spawn_base();
         group_data
+    }
+
+    /// Vanilla `Pig.thunderHit`: outside peaceful the pig becomes a persistent zombified piglin
+    /// (`ConversionType.SINGLE`, equipment not kept) and takes no lightning damage itself.
+    fn mob_on_lightning_strike(
+        &self,
+        caller: &dyn EntityBase,
+        lightning: &crate::entity::lightning::LightningBoltEntity,
+    ) {
+        let entity = self.get_entity();
+        let world = entity.world.load_full();
+        if world.level_info.load().difficulty == pumpkin_util::Difficulty::Peaceful
+            || entity.is_removed()
+        {
+            self.mob_entity
+                .living_entity
+                .on_lightning_strike(caller, lightning);
+            return;
+        }
+        let zombified = crate::entity::r#type::from_type(
+            &EntityType::ZOMBIFIED_PIGLIN,
+            entity.pos.load(),
+            &world,
+            uuid::Uuid::new_v4(),
+        );
+        let to = zombified.get_entity();
+        to.set_rotation(entity.yaw.load(), entity.pitch.load());
+        to.head_yaw.store(entity.head_yaw.load());
+        to.body_yaw.store(entity.body_yaw.load());
+        to.velocity.store(entity.velocity.load());
+        to.on_ground
+            .store(entity.on_ground.load(Ordering::Relaxed), Ordering::Relaxed);
+        if let Some(custom_name) = &**entity.custom_name.load() {
+            to.set_custom_name(custom_name.clone());
+        }
+        to.set_custom_name_visible(entity.custom_name_visible.load(Ordering::Relaxed));
+        to.set_silent(entity.is_silent());
+        to.set_has_no_gravity(entity.has_no_gravity());
+        if let Some(mob) = zombified.get_mob() {
+            let mob_entity = mob.get_mob_entity();
+            mob_entity.set_no_ai(self.mob_entity.is_no_ai());
+            mob_entity
+                .persistence_required
+                .store(true, Ordering::Relaxed);
+            if self.is_baby() {
+                mob.spawn_as_baby();
+            }
+        }
+        world.spawn_entity(zombified);
+        entity.remove();
     }
 
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
@@ -316,10 +365,27 @@ impl Mob for PigEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        if item_stack.get_item() == &pumpkin_data::item::Item::SADDLE
-            && self.can_be_saddled()
-            && !self.is_saddled()
+        // Pig.mobInteract: riding first, then feeding, then putting on a saddle.
+        if !self.is_food(item_stack)
+            && self.is_saddled()
+            && !self.get_entity().has_passengers()
+            && !player.get_entity().is_sneaking()
         {
+            let world = player.world();
+            if let Some(vehicle) = world.get_entity_by_id(self.get_entity().entity_id)
+                && let Some(passenger) = world.get_player_by_id(player.entity_id())
+            {
+                self.get_entity()
+                    .add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
+            }
+            return true;
+        }
+
+        if self.animal_interact(player, item_stack) {
+            return true;
+        }
+
+        if item_stack.get_item() == &Item::SADDLE && self.can_be_saddled() && !self.is_saddled() {
             self.set_saddled(true);
             item_stack.decrement_unless_creative(player.gamemode.load(), 1);
             let entity = self.get_entity();
@@ -332,18 +398,7 @@ impl Mob for PigEntity {
             );
             return true;
         }
-
-        if self.is_saddled() && !self.is_food(item_stack) {
-            let world = player.world();
-            if let Some(vehicle) = world.get_entity_by_id(self.get_entity().entity_id)
-                && let Some(passenger) = world.get_player_by_id(player.entity_id())
-            {
-                self.get_entity()
-                    .add_passenger(vehicle, passenger as Arc<dyn EntityBase>);
-                return true;
-            }
-        }
-        self.animal_interact(player, item_stack)
+        false
     }
 }
 
