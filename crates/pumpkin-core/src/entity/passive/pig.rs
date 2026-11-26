@@ -206,6 +206,56 @@ impl Mob for PigEntity {
         group_data
     }
 
+    /// Vanilla `Pig.thunderHit`: outside peaceful the pig becomes a persistent zombified piglin
+    /// (`ConversionType.SINGLE`, equipment not kept) and takes no lightning damage itself.
+    fn mob_on_lightning_strike(
+        &self,
+        caller: &dyn EntityBase,
+        lightning: &crate::entity::lightning::LightningBoltEntity,
+    ) {
+        let entity = self.get_entity();
+        let world = entity.world.load_full();
+        if world.level_info.load().difficulty == pumpkin_util::Difficulty::Peaceful
+            || entity.is_removed()
+        {
+            self.mob_entity
+                .living_entity
+                .on_lightning_strike(caller, lightning);
+            return;
+        }
+        let zombified = crate::entity::r#type::from_type(
+            &EntityType::ZOMBIFIED_PIGLIN,
+            entity.pos.load(),
+            &world,
+            uuid::Uuid::new_v4(),
+        );
+        let to = zombified.get_entity();
+        to.set_rotation(entity.yaw.load(), entity.pitch.load());
+        to.head_yaw.store(entity.head_yaw.load());
+        to.body_yaw.store(entity.body_yaw.load());
+        to.velocity.store(entity.velocity.load());
+        to.on_ground
+            .store(entity.on_ground.load(Ordering::Relaxed), Ordering::Relaxed);
+        if let Some(custom_name) = &**entity.custom_name.load() {
+            to.set_custom_name(custom_name.clone());
+        }
+        to.set_custom_name_visible(entity.custom_name_visible.load(Ordering::Relaxed));
+        to.set_silent(entity.is_silent());
+        to.set_has_no_gravity(entity.has_no_gravity());
+        if let Some(mob) = zombified.get_mob() {
+            let mob_entity = mob.get_mob_entity();
+            mob_entity.set_no_ai(self.mob_entity.is_no_ai());
+            mob_entity
+                .persistence_required
+                .store(true, Ordering::Relaxed);
+            if self.is_baby() {
+                mob.spawn_as_baby();
+            }
+        }
+        world.spawn_entity(zombified);
+        entity.remove();
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         crate::entity::mob::StepSound::Sound(
             PigSoundVariant::from_id(self.sound_variant.load(Ordering::Relaxed))
