@@ -35,7 +35,7 @@ const MOB_TEST_GRID_SPACING: i32 = 56;
 /// `summon` gives `PersistenceRequired`), so a cell may sit more than 128 blocks from the
 /// nearest mock player without its mobs despawning (`Mob.checkDespawn`). Cell (3, 3) is left
 /// out because it overlaps the grid of the other tests at `TEST_BASE_X` and `TEST_BASE_Z`.
-const MOB_TEST_CELLS: [(i32, i32); 61] = [
+const MOB_TEST_CELLS: [(i32, i32); 73] = [
     (0, -1),
     (-1, 0),
     (1, 0),
@@ -97,6 +97,18 @@ const MOB_TEST_CELLS: [(i32, i32); 61] = [
     (-3, -4),
     (3, -4),
     (-4, 3),
+    (-4, -4),
+    (4, -4),
+    (-4, 4),
+    (4, 0),
+    (4, -1),
+    (4, -2),
+    (4, -3),
+    (0, 4),
+    (-1, 4),
+    (1, 4),
+    (-2, 4),
+    (2, 4),
 ];
 /// The suite always gets at least this many ticks, plus a margin over the longest test.
 const MIN_GAMETEST_TICKS: usize = 500;
