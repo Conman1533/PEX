@@ -528,3 +528,62 @@ const SCHOOL_TICKS: u32 = 500;
 
 /// How far from the player a squid has to get, along the tank.
 const SQUID_SAFE_X: f64 = 12.0;
+
+/// Vanilla `BreathAirGoal`: a dolphin at the bottom of a pool with its air nearly gone swims up
+/// and breathes before it starts to drown. Its eyes leave the water, so `increaseAirSupply` fills
+/// its 4800 air at once.
+pub(super) async fn test_dolphin_swims_up_to_breathe(helper: GameTestHelper) -> GameTestResult<()> {
+    // A glass tank with water ten blocks deep (y 1 to 10), open to the air above.
+    for x in 0..7 {
+        for z in 0..7 {
+            helper
+                .set_block_default(&BlockPos::new(x, 0, z), &Block::GLASS)
+                .await?;
+            let wall = x == 0 || x == 6 || z == 0 || z == 6;
+            for y in 1..=10 {
+                let block = if wall { &Block::GLASS } else { &Block::WATER };
+                helper
+                    .set_block_default(&BlockPos::new(x, y, z), block)
+                    .await?;
+            }
+        }
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(3, 1, 3),
+            "summon minecraft:dolphin ~0.5 ~ ~0.5 {PersistenceRequired:1b}",
+        )
+        .await?;
+    // `finalizeSpawn` fills the air, so it is lowered afterwards: `BreathAirGoal` starts below
+    // 140, and at -20 the dolphin would drown.
+    helper
+        .execute_command(
+            &BlockPos::new(3, 1, 3),
+            "data merge entity @e[type=minecraft:dolphin,distance=..2,limit=1] {Air:150s}",
+        )
+        .await?;
+
+    let tank_min = BlockPos::new(0, 0, 0);
+    let tank_max = BlockPos::new(7, 14, 7);
+    helper.succeed_when(move |helper| async move {
+        let air = helper
+            .entity_nbt_values("minecraft:dolphin", tank_min, tank_max, "Air")
+            .await?;
+        let health = helper
+            .entity_nbt_values("minecraft:dolphin", tank_min, tank_max, "Health")
+            .await?;
+        let breathed = matches!(
+            air.first().and_then(|values| values.first()),
+            Some(NbtTag::Short(air)) if *air >= 4000
+        );
+        let unhurt = matches!(
+            health.first().and_then(|values| values.first()),
+            Some(NbtTag::Float(health)) if *health >= 10.0
+        );
+        helper.assert_true(
+            breathed && unhurt,
+            format!("the dolphin has not breathed unhurt yet: Air {air:?}, Health {health:?}"),
+        )
+    })?;
+    Ok(())
+}
