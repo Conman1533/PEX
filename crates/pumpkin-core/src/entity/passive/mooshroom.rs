@@ -313,6 +313,42 @@ impl Mob for MooshroomEntity {
         );
     }
 
+    /// Vanilla `MushroomCow.getWalkTargetValue`: mycelium is worth 10, anywhere else the light
+    /// level decides (no grass bonus, unlike other animals).
+    fn get_walk_target_value(&self, pos: &pumpkin_util::math::position::BlockPos) -> f32 {
+        let world = self.get_entity().world.load();
+        if world.get_block(&pos.down()).id == pumpkin_data::Block::MYCELIUM.id {
+            10.0
+        } else {
+            world.get_light_level_dependent_magic_value(pos) - 0.5
+        }
+    }
+
+    /// Vanilla `MushroomCow.thunderHit`: each bolt swaps red and brown once, and the mooshroom
+    /// takes no lightning damage or fire.
+    fn mob_on_lightning_strike(
+        &self,
+        _caller: &dyn EntityBase,
+        lightning: &crate::entity::lightning::LightningBoltEntity,
+    ) {
+        let bolt = lightning.get_entity().entity_uuid;
+        if self.last_lightning_bolt_uuid.swap(Some(bolt)) == Some(bolt) {
+            return;
+        }
+        self.set_variant(match self.get_variant() {
+            MooshroomVariant::Red => MooshroomVariant::Brown,
+            MooshroomVariant::Brown => MooshroomVariant::Red,
+        });
+        let entity = self.get_entity();
+        entity.world.load().play_sound_fine(
+            Sound::EntityMooshroomConvert,
+            SoundCategory::Neutral,
+            &entity.pos.load(),
+            2.0,
+            1.0,
+        );
+    }
+
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
         let item = item_stack.get_item();
 
@@ -379,10 +415,21 @@ impl Mob for MooshroomEntity {
             && !self.is_baby()
             && item.has_tag(&tag::Item::MINECRAFT_SMALL_FLOWERS)
         {
-            item_stack.decrement_unless_creative(player.gamemode.load(), 1);
             let entity = self.get_entity();
             let world = entity.world.load();
             let pos = entity.pos.load();
+            // Vanilla keeps the flower and puffs smoke while the last one's effect is unused.
+            if self.stew_effect.load().is_some() {
+                world.spawn_particle(
+                    pos + Vector3::new(0.0, 0.5, 0.0),
+                    Vector3::new(0.5, 0.0, 0.5),
+                    0.0,
+                    2,
+                    Particle::Smoke,
+                );
+                return true;
+            }
+            item_stack.decrement_unless_creative(player.gamemode.load(), 1);
             self.stew_effect.store(Some(1));
             world.play_sound(Sound::EntityMooshroomEat, SoundCategory::Neutral, &pos);
             // Vanilla `SpellParticleOption.create(EFFECT, -1, 1.0)`: color as an int, then power.
