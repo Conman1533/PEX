@@ -70,6 +70,14 @@ impl TadpoleEntity {
 }
 
 impl AgeableMob for TadpoleEntity {
+    /// Vanilla `Tadpole` is an `AbstractFish`, not an `AgeableMob`, so it has no baby roll.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        group_data
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

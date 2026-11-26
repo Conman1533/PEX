@@ -106,6 +106,14 @@ impl SkeletonHorseEntity {
 }
 
 impl AgeableMob for SkeletonHorseEntity {
+    /// Vanilla `AbstractHorse.finalizeSpawn`: a new group has a 20% baby chance.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        crate::entity::mob::spawn::ageable_group_or(group_data, true, 0.2)
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }
