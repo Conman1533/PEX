@@ -160,12 +160,14 @@ impl WitherEntity {
             goal_selector.add_goal(7, Box::new(RandomLookAroundGoal::default()));
 
             target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
-            // Vanilla NearestAttackableTargetGoal(LivingEntity, 0, false, false, LIVING_ENTITY_SELECTOR).
+            // Vanilla NearestAttackableTargetGoal(LivingEntity, 0, false, false, LIVING_ENTITY_SELECTOR),
+            // which takes players too.
             target_selector.add_goal(
                 2,
                 ActiveTargetGoal::predicated(&mob_arc.mob_entity, 0, false, |target, _| {
                     is_wither_prey(target)
-                }),
+                })
+                .including_players(),
             );
         };
 

@@ -1,6 +1,6 @@
 use pumpkin_data::Block;
 use pumpkin_gametest::{GameTestHelper, GameTestResult};
-use pumpkin_util::math::position::BlockPos;
+use pumpkin_util::math::{position::BlockPos, vector3::Vector3};
 
 use super::build_stone_floor;
 
@@ -98,5 +98,43 @@ pub(super) async fn test_wither_pattern_spawns(helper: GameTestHelper) -> GameTe
     helper.assert_entity_present("minecraft:wither").await?;
 
     helper.succeed();
+    Ok(())
+}
+
+/// Vanilla `WitherBoss.registerGoals`: its `NearestAttackableTargetGoal` over `LivingEntity`, with
+/// `LIVING_ENTITY_SELECTOR`, makes a survival player its target, and its `RangedAttackGoal` then
+/// shoots a skull at it. The heads pick their own targets apart from this, so the test checks the
+/// wither's target itself before it waits for the skull.
+pub(super) async fn test_wither_targets_survival_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_stone_floor(&helper, 11, 11).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(8.5, 1.0, 5.5))
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:wither", Vector3::new(2.5, 1.0, 5.5))
+        .await?;
+    // The wither flies about while it attacks, so the box is taller than the test.
+    let area_min = BlockPos::new(-10, -5, -10);
+    let area_max = BlockPos::new(20, 20, 20);
+    helper
+        .start_sequence()
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_target(
+                    "minecraft:wither",
+                    area_min,
+                    area_max,
+                    Some("minecraft:player"),
+                )
+                .await
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_present_in_box("minecraft:wither_skull", area_min, area_max)
+                .await
+        })
+        .then_succeed();
     Ok(())
 }

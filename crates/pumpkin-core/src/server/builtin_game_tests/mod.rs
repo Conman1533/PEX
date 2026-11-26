@@ -326,6 +326,7 @@ const MOB_TEST_IDS: &[&str] = &[
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
 /// `MOB_TEST_IDS`, since mobs in other tests can see the player.
 const MOCK_PLAYER_TEST_IDS: &[&str] = &[
+    "pumpkin:wither_targets_survival_player",
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
     "pumpkin:chicken_follows_seeds",
     "pumpkin:pig_follows_carrot_on_a_stick",
@@ -652,6 +653,13 @@ pub fn ensure_builtin_game_tests_registered() {
             20,
             0,
             golems::test_wither_pattern_spawns,
+        );
+        register_function_test(
+            "pumpkin:wither_targets_survival_player",
+            "pumpkin:empty_11x6x11",
+            100,
+            0,
+            golems::test_wither_targets_survival_player,
         );
         register_function_test(
             "pumpkin:item_entities_merge",
