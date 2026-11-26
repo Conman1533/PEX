@@ -15,8 +15,10 @@ use rand::RngExt;
 
 use crate::entity::{
     Entity, EntityBase,
-    ai::util::goal_utils,
-    living::LivingEntity,
+    ai::{
+        goal::{Goal, to_goal_ticks},
+        util::goal_utils,
+    },
     mob::{Mob, MobEntity},
 };
 
@@ -25,16 +27,38 @@ use crate::entity::{
 /// Wiki: <https://minecraft.wiki/w/Squid>
 pub struct SquidEntity {
     pub mob_entity: MobEntity,
-    pub movement: SquidMovement,
+    pub movement: Arc<SquidMovement>,
 }
 
 impl SquidEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
+        let mob_entity = MobEntity::new(entity);
+        let movement = Arc::new(SquidMovement::new());
+        register_squid_goals(&mob_entity, &movement);
         Arc::new(Self {
-            mob_entity: MobEntity::new(entity),
-            movement: SquidMovement::new(),
+            mob_entity,
+            movement,
         })
     }
+}
+
+/// Vanilla `Squid.registerGoals`: a new heading now and then, and fleeing whoever
+/// hurt it. Neither takes a control, so both run together, the flight overriding
+/// the heading.
+pub fn register_squid_goals(mob_entity: &MobEntity, movement: &Arc<SquidMovement>) {
+    let goals = &mob_entity.goals_selector;
+    goals.add_goal(
+        0,
+        Box::new(SquidRandomMovementGoal {
+            movement: movement.clone(),
+        }),
+    );
+    goals.add_goal(
+        1,
+        Box::new(SquidFleeGoal {
+            movement: movement.clone(),
+        }),
+    );
 }
 
 impl Mob for SquidEntity {
@@ -59,7 +83,7 @@ impl Mob for SquidEntity {
         &self.mob_entity
     }
 
-    fn mob_tick(&self, _caller: &dyn EntityBase) {
+    fn mob_ai_step(&self) {
         self.movement.tick(self);
     }
 
@@ -139,37 +163,13 @@ impl SquidMovement {
         }
     }
 
-    /// One tick of vanilla's `Squid.aiStep`, with its two goals folded in:
-    /// `SquidFleeGoal` steers away from whoever hurt the squid, and otherwise
-    /// `SquidRandomMovementGoal` picks a new heading about every 50 ticks.
+    /// The rest of vanilla's `Squid.aiStep`, after the goals and `travel`: a shove
+    /// along the heading once per tentacle stroke, or a fall out of water.
     pub fn tick(&self, mob: &dyn Mob) {
         let living = &mob.get_mob_entity().living_entity;
         let entity = &living.entity;
-        let in_water = entity.touching_water.load(Ordering::Relaxed);
+        let in_water = entity.is_in_water();
         let mut rng = mob.get_random();
-
-        let fleeing = in_water && self.flee(living);
-        if !fleeing {
-            if mob
-                .get_mob_entity()
-                .living_entity
-                .no_action_time
-                .load(Ordering::Relaxed)
-                > 100
-            {
-                self.movement_vector.store(Vector3::default());
-            } else if rng.random_range(0..50) == 0
-                || !in_water
-                || self.movement_vector.load() == Vector3::default()
-            {
-                let angle = rng.random::<f32>() * TAU;
-                self.movement_vector.store(Vector3::new(
-                    f64::from(angle.cos() * 0.2),
-                    f64::from(-0.1 + rng.random::<f32>() * 0.2),
-                    f64::from(angle.sin() * 0.2),
-                ));
-            }
-        }
 
         let mut tentacle = self.tentacle_movement.load() + self.tentacle_speed.load();
         if tentacle > TAU {
@@ -215,28 +215,91 @@ impl SquidMovement {
         mob.get_mob_entity().living_entity.make_move(caller);
         true
     }
+}
 
-    /// `SquidFleeGoal`: while whoever last hurt the squid is within ten blocks,
-    /// head straight away from them. Returns whether the squid is fleeing.
-    fn flee(&self, living: &LivingEntity) -> bool {
+/// Vanilla `Squid.hasMovementVector`.
+fn has_movement_vector(movement: Vector3<f64>) -> bool {
+    movement.length_squared() > 1.0e-5
+}
+
+/// Vanilla `SquidRandomMovementGoal`: always running, and now and then (or when out
+/// of water or still) it picks a new heading. A squid left alone for 100 ticks
+/// stops.
+struct SquidRandomMovementGoal {
+    movement: Arc<SquidMovement>,
+}
+
+impl Goal for SquidRandomMovementGoal {
+    fn can_start(&mut self, _mob: &dyn Mob) -> bool {
+        true
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let living = &mob.get_mob_entity().living_entity;
+        let mut rng = mob.get_random();
+        if living.no_action_time.load(Ordering::Relaxed) > 100 {
+            self.movement.movement_vector.store(Vector3::default());
+        } else if rng.random_range(0..to_goal_ticks(50)) == 0
+            || !living.entity.is_in_water()
+            || !has_movement_vector(self.movement.movement_vector.load())
+        {
+            let angle = rng.random::<f32>() * TAU;
+            self.movement.movement_vector.store(Vector3::new(
+                f64::from(angle.cos() * 0.2),
+                f64::from(-0.1 + rng.random::<f32>() * 0.2),
+                f64::from(angle.sin() * 0.2),
+            ));
+        }
+    }
+}
+
+/// Vanilla `SquidFleeGoal`: while in water and whoever last hurt the squid is
+/// within ten blocks, head straight away from them, every tick.
+struct SquidFleeGoal {
+    movement: Arc<SquidMovement>,
+}
+
+impl SquidFleeGoal {
+    /// Vanilla `getLastHurtByMob`: whoever last hurt the squid, forgotten 100 ticks
+    /// after the hit.
+    fn attacker(mob: &dyn Mob) -> Option<Arc<dyn EntityBase>> {
+        let living = &mob.get_mob_entity().living_entity;
         let entity = &living.entity;
-        let attacker_id = living.last_attacker_id.load(Ordering::Relaxed);
-        // Vanilla forgets an attacker a hundred ticks after the hit.
+        let id = living.last_attacker_id.load(Ordering::Relaxed);
         let since_hit = entity.tick_count.load(Ordering::Relaxed)
             - living.last_attacked_time.load(Ordering::Relaxed);
-        if attacker_id == 0 || since_hit > 100 {
-            return false;
+        if id == 0 || since_hit > 100 {
+            return None;
         }
-        let world = entity.world.load();
-        let Some(attacker) = world.get_entity_by_id(attacker_id) else {
-            return false;
+        entity.world.load().get_entity_by_id(id)
+    }
+}
+
+impl Goal for SquidFleeGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        let entity = mob.get_entity();
+        entity.is_in_water()
+            && Self::attacker(mob).is_some_and(|attacker| {
+                entity
+                    .pos
+                    .load()
+                    .squared_distance_to_vec(&attacker.get_entity().pos.load())
+                    < 100.0
+            })
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        true
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let Some(attacker) = Self::attacker(mob) else {
+            return;
         };
+        let entity = mob.get_entity();
+        let world = entity.world.load();
         let pos = entity.pos.load();
         let mut away = pos - attacker.get_entity().pos.load();
-        if away.length_squared() >= 100.0 {
-            return false;
-        }
-
         let probe = BlockPos::floored(pos.x + away.x, pos.y + away.y, pos.z + away.z);
         let open_air = world.get_block_state(&probe).is_air();
         if goal_utils::is_water(&world, &probe) || open_air {
@@ -255,9 +318,10 @@ impl SquidMovement {
             if open_air {
                 away.y = 0.0;
             }
-            self.movement_vector.store(away / 20.0);
+            self.movement.movement_vector.store(away / 20.0);
         }
-        true
+        // Vanilla also adds a bubble every 10 ticks of flight, through
+        // `Level.addParticle`, which does nothing on the server.
     }
 }
 
