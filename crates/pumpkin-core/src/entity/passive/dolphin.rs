@@ -20,9 +20,10 @@ use crate::entity::{
         smooth_swimming_move_control::SmoothSwimmingMoveControl,
     },
     ai::goal::{
-        Controls, Goal, breath_air::BreathAirGoal, look_around::RandomLookAroundGoal,
-        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
-        to_goal_ticks, try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        Controls, Goal, avoid_entity::AvoidEntityGoal, breath_air::BreathAirGoal,
+        look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
+        melee_attack::MeleeAttackGoal, random_swimming::RandomSwimmingGoal, revenge::RevengeGoal,
+        to_goal_ticks, try_find_water::TryFindWaterGoal,
     },
     ai::pathfinder::{Navigator, NavigatorGoal},
     ai::util::default_random_pos,
@@ -86,19 +87,47 @@ impl DolphinEntity {
             goal_selector.add_goal(0, Box::new(BreathAirGoal::new()));
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
             goal_selector.add_goal(1, Box::new(DolphinSwimToTreasureGoal { stuck: false }));
-            goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
+            goal_selector.add_goal(2, Box::new(DolphinSwimWithPlayerGoal::new(4.0)));
+            goal_selector.add_goal(4, Box::new(RandomSwimmingGoal::new(1.0, 10)));
             goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
             goal_selector.add_goal(
                 5,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 6.0),
             );
+            goal_selector.add_goal(5, Box::new(DolphinJumpGoal::new(10)));
             goal_selector.add_goal(6, Box::new(MeleeAttackGoal::new(1.2, true)));
+            // Vanilla `AvoidEntityGoal<>(Guardian.class, ..)` takes elder guardians too.
+            goal_selector.add_goal(
+                9,
+                Box::new(AvoidEntityGoal::new(&EntityType::GUARDIAN, 8.0, 1.0, 1.0)),
+            );
+            goal_selector.add_goal(
+                9,
+                Box::new(AvoidEntityGoal::new(
+                    &EntityType::ELDER_GUARDIAN,
+                    8.0,
+                    1.0,
+                    1.0,
+                )),
+            );
         };
 
         {
             let target_selector = &mob_arc.mob_entity.target_selector;
 
-            target_selector.add_goal(1, Box::new(RevengeGoal::new(true)));
+            // Vanilla `HurtByTargetGoal(this, Guardian.class).setAlertOthers()`: guardians can't
+            // make it angry.
+            target_selector.add_goal(
+                1,
+                Box::new(
+                    RevengeGoal::new(true)
+                        .ignoring(|entity_type| {
+                            entity_type == &EntityType::GUARDIAN
+                                || entity_type == &EntityType::ELDER_GUARDIAN
+                        })
+                        .alerting_others(),
+                ),
+            );
         };
 
         mob_arc
@@ -349,7 +378,243 @@ impl Goal for DolphinSwimToTreasureGoal {
     }
 }
 
+/// Vanilla `Entity.getMotionDirection` (`Direction.fromYRot`) as a step in x and z.
+fn motion_step(mob: &dyn Mob) -> (i32, i32) {
+    let yaw = mob.get_entity().yaw.load();
+    match ((f64::from(yaw) / 90.0 + 0.5).floor() as i32) & 3 {
+        0 => (0, 1),
+        1 => (-1, 0),
+        2 => (0, -1),
+        _ => (1, 0),
+    }
+}
+
+/// Vanilla `DolphinJumpGoal`: now and then a dolphin with clear water ahead and open air above
+/// it leaps out of the water.
+struct DolphinJumpGoal {
+    interval: i32,
+    breached: bool,
+}
+
+impl DolphinJumpGoal {
+    const STEPS_TO_CHECK: [i32; 6] = [0, 1, 4, 5, 6, 7];
+
+    const fn new(interval: i32) -> Self {
+        Self {
+            interval: to_goal_ticks(interval),
+            breached: false,
+        }
+    }
+
+    fn water_is_clear(world: &crate::world::World, pos: &BlockPos) -> bool {
+        let (fluid, _) = world.get_fluid_and_fluid_state(pos);
+        fluid.has_tag(&tag::Fluid::MINECRAFT_WATER)
+            && !world
+                .get_block(pos)
+                .has_tag(&tag::Block::MINECRAFT_BLOCKS_DOLPHIN_JUMP)
+    }
+
+    fn surface_is_clear(world: &crate::world::World, pos: &BlockPos) -> bool {
+        world.get_block_state(&pos.up()).is_air()
+            && world.get_block_state(&pos.up_height(2)).is_air()
+    }
+}
+
+impl Goal for DolphinJumpGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        if mob.get_random().random_range(0..self.interval) != 0 {
+            return false;
+        }
+        let (step_x, step_z) = motion_step(mob);
+        let entity = mob.get_entity();
+        let world = entity.world.load();
+        let origin = entity.block_pos.load();
+        Self::STEPS_TO_CHECK.iter().all(|&step| {
+            let pos = BlockPos::new(
+                origin.0.x + step_x * step,
+                origin.0.y,
+                origin.0.z + step_z * step,
+            );
+            Self::water_is_clear(&world, &pos) && Self::surface_is_clear(&world, &pos)
+        })
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        let entity = mob.get_entity();
+        let yd = entity.velocity.load().y;
+        let pitch = entity.pitch.load();
+        (yd * yd >= 0.03 || pitch == 0.0 || pitch.abs() >= 10.0 || !entity.is_in_water())
+            && !entity.on_ground.load(Ordering::Relaxed)
+    }
+
+    fn can_stop(&self) -> bool {
+        false
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        let (step_x, step_z) = motion_step(mob);
+        let entity = mob.get_entity();
+        entity.velocity.store(
+            entity.velocity.load()
+                + Vector3::new(f64::from(step_x) * 0.6, 0.7, f64::from(step_z) * 0.6),
+        );
+        entity.velocity_dirty.store(true, Ordering::Relaxed);
+        mob.stop_navigation();
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        mob.get_entity().pitch.store(0.0);
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let entity = mob.get_entity();
+        // As in vanilla, `breached` is never reset, so only the first leap plays the sound.
+        let already_breached = self.breached;
+        if !already_breached {
+            let world = entity.world.load();
+            let (fluid, _) = world.get_fluid_and_fluid_state(&entity.block_pos.load());
+            self.breached = fluid.has_tag(&tag::Fluid::MINECRAFT_WATER);
+        }
+        if self.breached && !already_breached {
+            let world = entity.world.load();
+            world.play_sound(
+                Sound::EntityDolphinJump,
+                SoundCategory::Neutral,
+                &entity.pos.load(),
+            );
+        }
+        let movement = entity.velocity.load();
+        let pitch = entity.pitch.load();
+        if movement.y * movement.y < 0.03 && pitch != 0.0 {
+            entity
+                .pitch
+                .store(pitch + 0.2 * pumpkin_util::math::wrap_degrees(0.0 - pitch));
+        } else if movement.length() > 1.0e-5 {
+            let horizontal = movement.horizontal_length();
+            entity
+                .pitch
+                .store((-movement.y).atan2(horizontal).to_degrees() as f32);
+        }
+    }
+
+    fn controls(&self) -> Controls {
+        Controls::MOVE | Controls::JUMP
+    }
+}
+
+/// Vanilla `Dolphin.DolphinSwimWithPlayerGoal`: a dolphin swims alongside a swimming player within
+/// 10 blocks and gives them Dolphin's Grace.
+struct DolphinSwimWithPlayerGoal {
+    speed: f64,
+    player: Option<Arc<Player>>,
+}
+
+impl DolphinSwimWithPlayerGoal {
+    const fn new(speed: f64) -> Self {
+        Self {
+            speed,
+            player: None,
+        }
+    }
+
+    fn give_grace(player: &Player) {
+        player.add_effect(pumpkin_data::potion::Effect {
+            effect_type: &pumpkin_data::effect::StatusEffect::DOLPHINS_GRACE,
+            duration: 100,
+            amplifier: 0,
+            ambient: false,
+            show_particles: true,
+            show_icon: true,
+            blend: false,
+        });
+    }
+
+    fn is_target(mob: &dyn Mob, player: &Player) -> bool {
+        mob.get_mob_entity()
+            .target
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .is_some_and(|target| target.get_entity().entity_id == player.get_entity().entity_id)
+    }
+}
+
+impl Goal for DolphinSwimWithPlayerGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        let entity = mob.get_entity();
+        let world = entity.world.load();
+        // Vanilla `TargetingConditions.forNonCombat().range(10.0).ignoreLineOfSight()`.
+        self.player = world.get_nearest_player(entity.pos.load(), 10.0, |player| {
+            !player.is_spectator() && player.get_entity().is_alive()
+        });
+        self.player
+            .as_ref()
+            .is_some_and(|player| player.is_swimming() && !Self::is_target(mob, player))
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        let pos = mob.get_entity().pos.load();
+        self.player.as_ref().is_some_and(|player| {
+            player.is_swimming()
+                && player.get_entity().pos.load().squared_distance_to_vec(&pos) < 256.0
+        })
+    }
+
+    fn start(&mut self, _mob: &dyn Mob) {
+        if let Some(player) = &self.player {
+            Self::give_grace(player);
+        }
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.player = None;
+        mob.stop_navigation();
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        let Some(player) = self.player.clone() else {
+            return;
+        };
+        let player_entity = player.get_entity();
+        let target = player_entity.pos.load();
+        mob.get_mob_entity()
+            .look_control
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .look_at_with_range(
+                target.x,
+                player_entity.get_eye_y(),
+                target.z,
+                mob.get_max_head_rotation() + 20.0,
+                mob.get_max_look_pitch_change(),
+            );
+        let pos = mob.get_entity().pos.load();
+        if pos.squared_distance_to_vec(&target) < 6.25 {
+            mob.stop_navigation();
+        } else {
+            mob.navigate_to(pos, target, self.speed);
+        }
+        if player.is_swimming() && mob.get_random().random_range(0..6) == 0 {
+            Self::give_grace(&player);
+        }
+    }
+
+    fn controls(&self) -> Controls {
+        Controls::MOVE | Controls::LOOK
+    }
+}
+
 impl Mob for DolphinEntity {
+    /// Vanilla `Dolphin.getMaxHeadYRot`.
+    fn get_max_head_rotation(&self) -> f32 {
+        1.0
+    }
+
+    /// Vanilla `Dolphin.getMaxHeadXRot`.
+    fn get_max_look_pitch_change(&self) -> f32 {
+        1.0
+    }
+
     fn base_tick(&self) {
         self.tick_air();
     }
