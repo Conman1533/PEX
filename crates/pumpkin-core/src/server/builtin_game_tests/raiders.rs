@@ -159,6 +159,59 @@ pub(super) async fn test_ravager_breaks_leaves_in_its_path(
     Ok(())
 }
 
+/// G1-48, vanilla `Ravager.registerGoals`: its `AbstractVillager` target goal skips babies
+/// (`!target.isBaby()`). A ravager penned with a baby villager leaves it alone for 200 ticks, then
+/// targets the same villager once it has grown up.
+pub(super) async fn test_ravager_ignores_baby_villager(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_pen(&helper, 11, 5, 3).await?;
+    let villager = BlockPos::new(8, 1, 2);
+    helper
+        .execute_command(
+            &villager,
+            "summon minecraft:villager ~ ~ ~ {NoAI:1b,PersistenceRequired:1b,Age:-24000}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 1, 2),
+            "summon minecraft:ravager ~ ~ ~ {PersistenceRequired:1b}",
+        )
+        .await?;
+
+    let pen_min = BlockPos::new(1, 1, 1);
+    let pen_max = BlockPos::new(10, 4, 4);
+    helper
+        .start_sequence()
+        .then_execute_for(200, move |helper| async move {
+            helper
+                .assert_entity_target("minecraft:ravager", pen_min, pen_max, None)
+                .await
+        })
+        .then_execute(move |helper| async move {
+            helper
+                .execute_command(
+                    &villager,
+                    "data merge entity @e[type=minecraft:villager,distance=..2,limit=1] {Age:0}",
+                )
+                .await?;
+            Ok(())
+        })
+        .then_wait_until(move |helper| async move {
+            helper
+                .assert_entity_target(
+                    "minecraft:ravager",
+                    pen_min,
+                    pen_max,
+                    Some("minecraft:villager"),
+                )
+                .await
+        })
+        .then_succeed();
+    Ok(())
+}
+
 /// Vanilla `Witch.registerGoals`: `NearestHealableRaiderTargetGoal` picks a raider of the
 /// witch's raid, and `performRangedAttack` throws healing at one with 4 health or less.
 pub(super) async fn test_witch_heals_hurt_raider(helper: GameTestHelper) -> GameTestResult<()> {

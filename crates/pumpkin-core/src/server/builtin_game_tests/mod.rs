@@ -294,6 +294,7 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:slime_hurts_iron_golem_it_bumps_into",
     "pumpkin:vindicator_named_johnny_attacks_any_mob",
     "pumpkin:ravager_breaks_leaves_in_its_path",
+    "pumpkin:ravager_ignores_baby_villager",
     "pumpkin:witch_heals_hurt_raider",
     "pumpkin:zombie_pathfinds_to_villager",
     "pumpkin:zombie_tramples_turtle_egg",
@@ -753,6 +754,13 @@ pub fn ensure_builtin_game_tests_registered() {
             1200,
             0,
             raiders::test_ravager_breaks_leaves_in_its_path,
+        );
+        register_function_test(
+            "pumpkin:ravager_ignores_baby_villager",
+            "pumpkin:empty_11x5x5",
+            600,
+            0,
+            raiders::test_ravager_ignores_baby_villager,
         );
         register_function_test(
             "pumpkin:witch_heals_hurt_raider",
