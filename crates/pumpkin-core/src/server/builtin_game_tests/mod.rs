@@ -314,12 +314,18 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:persistent_endermite_never_expires",
     "pumpkin:priming_creeper_sets_off_sculk_sensor",
     "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
+    "pumpkin:sheep_eats_grass_and_regrows_wool",
+    "pumpkin:pig_struck_by_lightning_becomes_zombified_piglin",
+    "pumpkin:mooshroom_struck_by_lightning_turns_brown",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
 /// `MOB_TEST_IDS`, since mobs in other tests can see the player.
 const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:cow_follows_wheat_and_panics_when_hit",
+    "pumpkin:chicken_follows_seeds",
+    "pumpkin:pig_follows_carrot_on_a_stick",
+    "pumpkin:mooshrooms_breed_when_fed_wheat",
     "pumpkin:quoted_non_ascii_player_name_in_commands",
     "pumpkin:zombie_targets_survival_mock_player",
     "pumpkin:nautilus_follows_tempting_player",
@@ -856,6 +862,49 @@ pub fn ensure_builtin_game_tests_registered() {
             200,
             0,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
+        );
+        register_function_test(
+            "pumpkin:chicken_follows_seeds",
+            "pumpkin:empty_11x4x5",
+            200,
+            0,
+            farm_animals::test_chicken_follows_seeds,
+        );
+        register_function_test(
+            "pumpkin:pig_follows_carrot_on_a_stick",
+            "pumpkin:empty_11x4x5",
+            200,
+            0,
+            farm_animals::test_pig_follows_carrot_on_a_stick,
+        );
+        register_function_test(
+            "pumpkin:mooshrooms_breed_when_fed_wheat",
+            "pumpkin:empty_9x4x5",
+            400,
+            0,
+            farm_animals::test_mooshrooms_breed_when_fed_wheat,
+        );
+        register_function_test(
+            "pumpkin:sheep_eats_grass_and_regrows_wool",
+            "pumpkin:empty_7x4x7",
+            // Each of the four sheep starts eating with a 1 in 1000 chance a tick.
+            2400,
+            0,
+            farm_animals::test_sheep_eats_grass_and_regrows_wool,
+        );
+        register_function_test(
+            "pumpkin:pig_struck_by_lightning_becomes_zombified_piglin",
+            "pumpkin:empty_5x5x5",
+            100,
+            0,
+            farm_animals::test_pig_struck_by_lightning_becomes_zombified_piglin,
+        );
+        register_function_test(
+            "pumpkin:mooshroom_struck_by_lightning_turns_brown",
+            "pumpkin:empty_5x5x5",
+            100,
+            0,
+            farm_animals::test_mooshroom_struck_by_lightning_turns_brown,
         );
         register_function_test(
             "pumpkin:piglin_brute_attacks_player_in_gold_armor",
