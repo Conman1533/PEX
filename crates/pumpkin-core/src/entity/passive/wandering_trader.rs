@@ -630,6 +630,18 @@ impl ScreenHandlerFactory for WanderingTraderEntity {
 }
 
 impl AgeableMob for WanderingTraderEntity {
+    /// Vanilla `AbstractVillager.finalizeSpawn`: a new group never spawns babies.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        crate::entity::mob::spawn::ageable_group_or(
+            group_data,
+            false,
+            crate::entity::mob::spawn::DEFAULT_BABY_SPAWN_CHANCE,
+        )
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

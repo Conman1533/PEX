@@ -193,6 +193,14 @@ impl RabbitEntity {
 }
 
 impl AgeableMob for RabbitEntity {
+    /// Vanilla `Rabbit.RabbitGroupData`: every rabbit after the first of a group is a baby.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        crate::entity::mob::spawn::ageable_group_or(group_data, true, 1.0)
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

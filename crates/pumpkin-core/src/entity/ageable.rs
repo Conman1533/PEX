@@ -29,6 +29,20 @@ impl Default for AgeableData {
 pub trait AgeableMob: Mob {
     fn get_ageable_data(&self) -> &AgeableData;
 
+    /// The `AgeableMobGroupData` this mob's vanilla `finalizeSpawn` hands to
+    /// `AgeableMob.finalizeSpawn`. By default a new group with a 5% baby chance when there is
+    /// none.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        crate::entity::mob::spawn::ageable_group_or(
+            group_data,
+            true,
+            crate::entity::mob::spawn::DEFAULT_BABY_SPAWN_CHANCE,
+        )
+    }
+
     fn get_baby_start_age(&self) -> i32 {
         BABY_START_AGE
     }

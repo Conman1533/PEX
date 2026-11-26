@@ -151,6 +151,14 @@ fn polar_bear_warning(mob: &dyn Mob, standing: bool) {
 }
 
 impl AgeableMob for PolarBearEntity {
+    /// Vanilla `PolarBear.finalizeSpawn`: every bear after the first of a group is a cub.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        crate::entity::mob::spawn::ageable_group_or(group_data, true, 1.0)
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

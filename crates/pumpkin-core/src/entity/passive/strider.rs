@@ -111,6 +111,21 @@ impl StriderEntity {
 }
 
 impl AgeableMob for StriderEntity {
+    /// Vanilla `Strider.finalizeSpawn`: an adult starts a new group (a 50% chance, or 0% after a
+    /// jockey) every time, so it never rolls a baby; a baby keeps the group it was given.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        if self.is_baby() {
+            group_data
+        } else {
+            Some(crate::entity::mob::spawn::SpawnGroupData::Ageable(
+                crate::entity::mob::spawn::AgeableGroupData::new(true, 0.5),
+            ))
+        }
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

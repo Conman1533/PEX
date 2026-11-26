@@ -214,6 +214,29 @@ impl AxolotlEntity {
 }
 
 impl AgeableMob for AxolotlEntity {
+    /// Vanilla `Axolotl.finalizeSpawn`: `AxolotlGroupData` never rolls a baby, but every axolotl
+    /// from the third of a group on is one.
+    fn ageable_spawn_group(
+        &self,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        use crate::entity::mob::spawn::{
+            AgeableGroupData, DEFAULT_BABY_SPAWN_CHANCE, SpawnGroupData,
+        };
+        match group_data {
+            Some(SpawnGroupData::Ageable(group)) => {
+                if group.group_size >= 2 {
+                    self.set_baby(true);
+                }
+                Some(SpawnGroupData::Ageable(group))
+            }
+            _ => Some(SpawnGroupData::Ageable(AgeableGroupData::new(
+                false,
+                DEFAULT_BABY_SPAWN_CHANCE,
+            ))),
+        }
+    }
+
     fn get_ageable_data(&self) -> &AgeableData {
         &self.ageable_data
     }

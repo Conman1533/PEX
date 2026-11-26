@@ -929,26 +929,31 @@ impl Mob for FoxEntity {
         group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
     ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
         self.get_mob_entity().finalize_spawn_base();
-        let (variant, size) =
+        let (variant, ageable) =
             if let Some(crate::entity::mob::spawn::SpawnGroupData::FoxGroupData {
                 variant,
-                group_size,
+                ageable,
             }) = group_data
             {
-                (variant, group_size + 1)
+                (variant, ageable)
             } else {
                 let pos = self.get_entity().block_pos.load();
                 let biome = world.get_biome(&pos);
-                (FoxVariant::select_for_biome(biome.registry_id), 1)
+                (
+                    FoxVariant::select_for_biome(biome.registry_id),
+                    crate::entity::mob::spawn::AgeableGroupData::new(
+                        false,
+                        crate::entity::mob::spawn::DEFAULT_BABY_SPAWN_CHANCE,
+                    ),
+                )
             };
         self.set_variant(variant);
-        if size >= 3 {
+        // Vanilla: a fox from the third of a group on is a kit. `AgeableMob.finalizeSpawn` counts
+        // the group afterwards.
+        if ageable.group_size >= 2 {
             self.get_mob_entity().set_baby_by_age();
         }
-        Some(crate::entity::mob::spawn::SpawnGroupData::FoxGroupData {
-            variant,
-            group_size: size,
-        })
+        Some(crate::entity::mob::spawn::SpawnGroupData::FoxGroupData { variant, ageable })
     }
 
     fn on_offspring_spawned_from_egg(&self, player: &Player) {
