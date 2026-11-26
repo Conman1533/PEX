@@ -20,15 +20,22 @@ use crate::entity::{
         smooth_swimming_move_control::SmoothSwimmingMoveControl,
     },
     ai::goal::{
-        Controls, Goal, look_around::RandomLookAroundGoal, look_at_entity::LookAtEntityGoal,
-        melee_attack::MeleeAttackGoal, revenge::RevengeGoal, swim::SwimGoal, to_goal_ticks,
-        try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        Controls, Goal, breath_air::BreathAirGoal, look_around::RandomLookAroundGoal,
+        look_at_entity::LookAtEntityGoal, melee_attack::MeleeAttackGoal, revenge::RevengeGoal,
+        to_goal_ticks, try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
     },
     ai::pathfinder::{Navigator, NavigatorGoal},
     ai::util::default_random_pos,
     mob::{Mob, MobEntity},
     player::Player,
 };
+
+/// Vanilla `Dolphin.TOTAL_AIR_SUPPLY`.
+pub const TOTAL_AIR_SUPPLY: i32 = 4800;
+/// Vanilla `Dolphin.TOTAL_MOISTNESS_LEVEL`.
+const TOTAL_MOISTNESS_LEVEL: i32 = 2400;
+/// Vanilla `LivingEntity.shouldTakeDrowningDamage`: air at or below this hurts.
+const DROWNING_AIR: i32 = -20;
 
 pub struct DolphinEntity {
     pub mob_entity: MobEntity,
@@ -41,6 +48,12 @@ pub struct DolphinEntity {
 impl DolphinEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
         let mut mob_entity = MobEntity::new(entity);
+        // Vanilla `Entity` starts with `getMaxAirSupply()`.
+        mob_entity
+            .living_entity
+            .entity
+            .air_supply
+            .store(TOTAL_AIR_SUPPLY, Ordering::Relaxed);
         *mob_entity
             .move_control
             .get_mut()
@@ -58,7 +71,7 @@ impl DolphinEntity {
         let dolphin = Self {
             mob_entity,
             got_fish: AtomicBool::new(false),
-            moistness_level: AtomicI32::new(2400),
+            moistness_level: AtomicI32::new(TOTAL_MOISTNESS_LEVEL),
             treasure_pos: Mutex::new(None),
         };
         let mob_arc = Arc::new(dolphin);
@@ -70,9 +83,8 @@ impl DolphinEntity {
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
+            goal_selector.add_goal(0, Box::new(BreathAirGoal::new()));
             goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
-            // Not in vanilla: it stands in for `BreathAirGoal`, which is not ported yet.
-            goal_selector.add_goal(0, Box::new(SwimGoal::default()));
             goal_selector.add_goal(1, Box::new(DolphinSwimToTreasureGoal { stuck: false }));
             goal_selector.add_goal(4, Box::new(WanderAroundGoal::new(1.0)));
             goal_selector.add_goal(4, Box::new(RandomLookAroundGoal::default()));
@@ -99,6 +111,61 @@ impl DolphinEntity {
 
     pub fn set_got_fish(&self, val: bool) {
         self.got_fish.store(val, Ordering::Relaxed);
+    }
+
+    #[must_use]
+    pub fn moistness_level(&self) -> i32 {
+        self.moistness_level.load(Ordering::Relaxed)
+    }
+
+    pub fn set_moistness_level(&self, level: i32) {
+        self.moistness_level.store(level, Ordering::Relaxed);
+        self.get_entity().set_synced_data(
+            pumpkin_data::tracked_data::dolphin::MOISTNESS_LEVEL,
+            pumpkin_protocol::codec::var_int::VarInt(level),
+        );
+    }
+
+    /// Vanilla `LivingEntity.baseTick`'s air: with its eyes under water (outside a bubble column)
+    /// a dolphin loses one air a tick and takes 2 drowning damage each time it reaches -20.
+    /// `increaseAirSupply` gives a dolphin its whole supply back at once, so out of the water, or
+    /// with water breathing, it is full again. `Dolphin.handleAirSupply` is empty, so it doesn't
+    /// also run out of air on land like other water creatures.
+    fn tick_air(&self) {
+        use pumpkin_data::effect::StatusEffect;
+
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        if !entity.is_alive() || living.is_dead_or_dying() {
+            return;
+        }
+        let air = entity.air_supply.load(Ordering::Relaxed);
+        let world = entity.world.load();
+        let pos = entity.pos.load();
+        let eye = BlockPos::floored(pos.x, entity.get_eye_y(), pos.z);
+        if entity.is_submerged_in_water()
+            && world.get_block(&eye) != &pumpkin_data::Block::BUBBLE_COLUMN
+        {
+            let water_breathing = living.has_effect(&StatusEffect::WATER_BREATHING);
+            let conduit_power = living.has_effect(&StatusEffect::CONDUIT_POWER);
+            let nautilus = living.has_effect(&StatusEffect::BREATH_OF_THE_NAUTILUS);
+            if !(water_breathing || conduit_power || nautilus) {
+                entity.set_air_supply(air - 1);
+                if air - 1 <= DROWNING_AIR {
+                    entity.set_air_supply(0);
+                    world.send_entity_status(
+                        entity,
+                        EntityStatus::DrownParticles,
+                        ActorEventID::None,
+                    );
+                    self.damage(self, 2.0, pumpkin_data::damage::DamageType::DROWN);
+                }
+            } else if air < TOTAL_AIR_SUPPLY && (!nautilus || water_breathing || conduit_power) {
+                entity.set_air_supply(TOTAL_AIR_SUPPLY);
+            }
+        } else if air < TOTAL_AIR_SUPPLY {
+            entity.set_air_supply(TOTAL_AIR_SUPPLY);
+        }
     }
 
     #[must_use]
@@ -283,6 +350,54 @@ impl Goal for DolphinSwimToTreasureGoal {
 }
 
 impl Mob for DolphinEntity {
+    fn base_tick(&self) {
+        self.tick_air();
+    }
+
+    /// Vanilla `Dolphin.tick`: without AI it never runs out of air. Otherwise it keeps moist in
+    /// water or rain and dries out elsewhere, taking 1 damage a tick once its moistness is gone,
+    /// and flops about on the ground.
+    fn mob_tick(&self, _caller: &dyn EntityBase) {
+        let entity = self.get_entity();
+        if self.mob_entity.is_no_ai() {
+            entity.set_air_supply(TOTAL_AIR_SUPPLY);
+            return;
+        }
+        if entity.is_in_water_or_rain() {
+            self.set_moistness_level(TOTAL_MOISTNESS_LEVEL);
+            return;
+        }
+        let moistness = self.moistness_level() - 1;
+        self.set_moistness_level(moistness);
+        if moistness <= 0 {
+            self.damage(self, 1.0, pumpkin_data::damage::DamageType::DRY_OUT);
+        }
+        if entity.on_ground.load(Ordering::Relaxed) {
+            let dx = f64::from((self.get_random().random::<f32>() * 2.0 - 1.0) * 0.2);
+            let dz = f64::from((self.get_random().random::<f32>() * 2.0 - 1.0) * 0.2);
+            let yaw = self.get_random().random::<f32>() * 360.0;
+            entity
+                .velocity
+                .store(entity.velocity.load() + Vector3::new(dx, 0.5, dz));
+            entity.yaw.store(yaw);
+            entity.on_ground.store(false, Ordering::Relaxed);
+            entity.velocity_dirty.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Vanilla `Dolphin.finalizeSpawn`: a full air supply and a level head.
+    fn finalize_spawn(
+        &self,
+        _world: &Arc<crate::world::World>,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        self.mob_entity.finalize_spawn_base();
+        let entity = self.get_entity();
+        entity.set_air_supply(TOTAL_AIR_SUPPLY);
+        entity.pitch.store(0.0);
+        group_data
+    }
+
     fn swim_splash_sound(&self) -> pumpkin_data::sound::Sound {
         pumpkin_data::sound::Sound::EntityDolphinSplash
     }
@@ -335,7 +450,7 @@ impl Mob for DolphinEntity {
             self.set_got_fish(got_fish);
         }
         if let Some(moistness) = nbt.get_int("Moistness") {
-            self.moistness_level.store(moistness, Ordering::Relaxed);
+            self.set_moistness_level(moistness);
         }
     }
 
