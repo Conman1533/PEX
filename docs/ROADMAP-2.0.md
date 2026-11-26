@@ -8,22 +8,24 @@ Progress checked on 2026-11-19 against `alpha` at `466d2af9d` (2026-11-05, still
 
 ## Status on 2026-11-20
 
-Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `28d20c48d`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landing since; now at `b2ea50869`. "Landed" means the piece's branch, or the batch branch that did its work, is on `alpha`. "Built, proof missing" means the code is on `alpha` with unit tests, but the bot, boot or vanilla test its Done when names is not. Most of those came from the 2026-11-04/05 feature batch (`feat/dragon-fight`, `feat/survival-basics`, `feat/water-mob-ai`, `feat/vanilla-saved-data`, `feat/long-tick-delays`), which was built outside this roadmap and merged on 2026-11-05.
+
+Batches 19 to 24 also carried: `fix/block-entity-bookkeeping-v2` (`43ec6e08c`, the old block entity bookkeeping branch brought onto `alpha`), `fix/plugin-shutdown-host-task-test` (`7143d24aa`: Wasmtime counts only component model tasks, so the old shutdown test raced; it now checks that shutdown drops host tasks), `fix/scoreboard-objective-brackets` (objective names in brackets and display names as text components, like vanilla), tester mob cells for the larger mob test count, a typos rule for commit hashes, and untracked Python caches.
 
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 48 | 15 | 1 | 32 | |
+| G1 Mob AI | 48 | 24 | 1 | 23 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
-| G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
+| G4 Offline UUIDs | 7 | 3 | 0 | 4 | |
 | G5 Redstone | 16 | 8 | 5 | 3 | |
-| G6 Survival | 45 | 23 | 0 | 20 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
+| G6 Survival | 45 | 25 | 0 | 18 | G6-26 dropped (no code); G6-29 dropped (not a PEX bug) |
 | G7 Worlds | 32 | 28 | 0 | 4 | |
-| G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
+| G8 Bedrock | 22 | 5 | 0 | 9 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 219 | 98 | 6 | 99 | 16 |
+| Total | 219 | 112 | 6 | 85 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -535,6 +537,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-spiders`
 - Needs decision: D1-3 (#4368).
 - Done when: `pumpkin:spider_climbs_wall_to_target` and `pumpkin:cave_spider_stops_targeting_in_daylight` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-spiders`, `499718f63`, second lane, with ideas from upstream Pumpkin PR #4368 by BouncingElf10). Spiders and cave spiders climb walls to their target, and the cave spider gives up in bright light, like vanilla. GameTests `pumpkin:spider_climbs_wall_to_target` and `pumpkin:cave_spider_stops_targeting_in_bright_light` pass. Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-09 Creeper, silverfish, endermite
 - Scope: audit creeper and silverfish; endermite priorities and HurtByTarget. Out: explosion damage.
@@ -559,6 +562,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-cube-mobs`
 - Needs decision: D1-3 (#4392).
 - Done when: `pumpkin:slime_hops_toward_survival_player`, `pumpkin:magma_cube_targets_iron_golem` and `pumpkin:sulfur_cube_picks_up_dropped_item` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-cube-mobs`, `3b51d8ca8`, second lane, building on upstream Pumpkin PR #4392). Slimes and magma cubes hurt what they touch, magma cubes jump like vanilla, and the sulfur cube swallows items. GameTests `pumpkin:slime_hops_toward_survival_player`, `pumpkin:magma_cube_targets_iron_golem`, `pumpkin:sulfur_cube_picks_up_dropped_item` and `pumpkin:slime_hurts_iron_golem_it_bumps_into` pass. Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-12 Blaze, ghast, strider
 - Scope: blaze goal list and alerting; ghast fireball and move control; StriderGoToLavaGoal and StriderPathNavigation. Out: strider riding.
@@ -575,6 +579,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-raiders`
 - Needs decision: D1-3 (#4393).
 - Done when: `pumpkin:pillager_shoots_crossbow_at_survival_player`, `pumpkin:vindicator_named_johnny_attacks_any_mob`, `pumpkin:ravager_breaks_leaves_in_its_path` and `pumpkin:witch_heals_hurt_raider` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-raiders`, `e5382bb29`, second lane; the witch part follows upstream Pumpkin PR #4393 by Tertosie21). Raider goals with GameTests `pumpkin:vindicator_named_johnny_attacks_any_mob`, `pumpkin:ravager_breaks_leaves_in_its_path`, `pumpkin:witch_heals_hurt_raider` and `pumpkin:pillager_shoots_crossbow_at_survival_player`. Not ported: the ravager's stun and roar, and raid waves. Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-14 Spellcasters
 - Scope: evoker avoid and patrol goals; illusioner spells and bow; vex flying move control and no-clip. Out: raid spawning.
@@ -582,6 +587,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-spellcasters`
 - Needs decision: none.
 - Done when: `pumpkin:evoker_summons_vexes_at_survival_player`, `pumpkin:illusioner_shoots_bow_at_survival_player` and `pumpkin:vex_flies_through_wall_to_target` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-spellcasters`, `1e3122aad`, second lane). The evoker, illusioner and vex run vanilla's goals. GameTests `pumpkin:evoker_summons_vexes_at_survival_player`, `pumpkin:illusioner_shoots_bow_at_survival_player` and `pumpkin:vex_flies_through_wall_to_target` pass 20 of 20. Landed through merge branch `land/g7-batch-21` (`d34b8b6b6`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-15 Guardians
 - Scope: guardian and elder guardian on water navigation, guardian move control, laser attack goal. Out: monument generation.
@@ -589,6 +595,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-guardians`
 - Needs decision: none.
 - Done when: `pumpkin:guardian_laser_kills_squid` and `pumpkin:elder_guardian_gives_mining_fatigue` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-guardians`, `475c37206`, second lane). GameTests `pumpkin:guardian_laser_kills_squid`, `pumpkin:elder_guardian_gives_mining_fatigue` and `pumpkin:guardian_swims_down_to_hidden_player` pass. Landed through merge branch `land/g7-batch-22` (`68ff6355c`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-16 Fish and squid
 - Scope: merge `abstract_fish.rs` and `fish.rs` so salmon and tropical fish school like cod (start from `wip/fish-movement`); pufferfish; squid and glow squid goals. Out: buckets.
@@ -596,6 +603,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-fish`
 - Needs decision: none.
 - Done when: `pumpkin:cod_school_follows_leader`, `pumpkin:salmon_school_follows_leader`, `pumpkin:tropical_fish_school_follows_leader` (one shared function), `pumpkin:pufferfish_puffs_up_near_survival_player`, `pumpkin:squid_flees_when_hit` and `pumpkin:glow_squid_flees_when_hit` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-fish`, `7062ff770`, second lane). Schooling fish follow a leader, the pufferfish puffs up, and squid flee when hit. GameTests `pumpkin:cod_school_follows_leader`, `pumpkin:salmon_school_follows_leader`, `pumpkin:tropical_fish_school_follows_leader`, `pumpkin:pufferfish_puffs_up_near_survival_player`, `pumpkin:squid_flees_when_hit` and `pumpkin:glow_squid_flees_when_hit` pass. Landed through merge branch `land/g7-batch-22` (`68ff6355c`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-17 Dolphin and turtle
 - Scope: dolphin BreathAir, DolphinJump and the rest of its 15 goals; turtle amphibious TurtlePathNavigation, move control, home and egg goals. Out: treasure maps.
@@ -610,6 +618,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/mobai-farm`
 - Needs decision: D1-3 (#4387).
 - Done when: `pumpkin:cow_follows_wheat_and_panics_when_hit`, `pumpkin:chicken_follows_seeds`, `pumpkin:mooshrooms_breed_when_fed_wheat`, `pumpkin:pig_follows_carrot_on_a_stick` and `pumpkin:sheep_eats_grass_and_regrows_wool` pass.
+- Status (2026-11-26): landed (branch `fix/mobai-farm`, `549a5a332`, second lane). Chicken, cow, sheep, pig and mooshroom behaviour audited against vanilla (`docs/MOB-PARITY.md`). GameTests include `pumpkin:sheep_eats_grass_and_regrows_wool`, `pumpkin:pig_struck_by_lightning_becomes_zombified_piglin` and `pumpkin:mooshroom_struck_by_lightning_turns_brown`. Landed through merge branch `land/g7-batch-22` (`68ff6355c`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-19 Horses
 - Scope: horse, donkey, mule, skeleton_horse, zombie_horse: RunAroundLikeCrazy, MountPanic, RandomStand, skeleton trap. Out: horse inventory.
@@ -817,7 +826,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/wither-targets-players`
 - Needs decision: none.
 - Done when: a GameTest with a survival mock player beside a summoned wither sees the wither target the player and shoot a skull at it.
-- Status (2026-11-26): filed by the 2.0 loop from the second lane's report while porting G1 pieces (the wither's target goal looks like it skips players).
+- Status (2026-11-26): landed (branch `fix/mobai-wither-targets`, `71fcf030f`, second lane). Landed through merge branch `land/g7-batch-23` (`736b0b8c3`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-47 Ageable mobs spawn as babies 5% of the time
 - Scope: in: `AgeableMob.finalizeSpawn` with `AgeableMobGroupData`: the first mob of a spawn pack never starts as a baby, and each later one starts as a baby with chance 0.05 (`BABY_START_SPAWN_CHANCE`), for natural and chunk generation packs. A `summon` or spawn egg mob gets fresh group data, so it is never a baby, as in vanilla. Out: per-mob overrides such as the chicken jockey.
@@ -825,7 +834,7 @@ Rules for every mob piece (G1-04 to G1-44):
 - Branch: `fix/ageable-baby-spawns`
 - Needs decision: none.
 - Done when: a same-seed chunk generation area on PEX and vanilla 26.3 holds a baby share among its passive animals inside the same binomial range (about 5% of the non-first pack members), `summon` never gives a baby on either, and a unit test covers the group rule.
-- Status (2026-11-26): filed by the 2.0 loop from the second lane's report (no baby animals ever spawn); done-when corrected the same day after the second lane checked vanilla (summoned mobs are never babies).
+- Status (2026-11-26): landed (branch `fix/ageable-baby-spawns`, `6fb47dac6`, second lane). Later members of natural and chunk generation packs start as babies 5% of the time; `summon` and spawn eggs never give babies. Proof runs 20 of 20. Landed through merge branch `land/g7-batch-24` (`b2ea50869`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G1-48 Ravagers leave baby villagers alone
 - Scope: in: the ravager's villager target goal skips babies, as vanilla `Ravager.registerGoals` targets `AbstractVillager` only when `!entity.isBaby()`. Out: other raider targeting.
@@ -1617,7 +1626,7 @@ Format and place of the lists, outside the migration:
 - Branch: fix/offline-duplicate-login
 - Needs decision: none
 - Done when: a bot test logs in twice with the same offline name, with encryption on and off, and the old session is replaced like vanilla 26.3 in both.
-- Status (2026-11-25): filed by the 2.0 loop from the agent harness thread's report (2026-11-21).
+- Status (2026-11-26): landed (branch `fix/offline-duplicate-login`, `0412eae80`, the 2.0 loop). The same-name check moved into `finish_login`, which every login path ends in (encryption on or off, and the proxies). With encryption off, `bot:duplicate_login_kicks_old_session` shows the old session replaced; the tester bot has no encryption, so the encryption-on half has no automated test. Landed through merge branch `land/g7-batch-20` (`442fdba54`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 ### Proof
 
@@ -2336,7 +2345,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/team-members-argument
 - Needs decision: none
 - Done when: `team join red A B` and `team leave A B` with two offline names and with a selector print the same lines on PEX and vanilla 26.3 (CT 117 side-by-side); a GameTest.
-- Status (2026-11-25): filed by the 2.0 loop from the agent harness server.
+- Status (2026-11-26): landed (branch `fix/team-members-argument`, `77aa9ecd5`, the 2.0 loop). `team join` and `team leave` take score holders (names and selectors) like vanilla, a holder is on one team at most, team names print in brackets with their color, and the `team` and `scores` selector options match by scoreboard name (UUID for mobs); `scores` read scores per objective and a missing score never matches. CT 117 console side-by-side against vanilla 26.3 matched line for line. GameTest `pumpkin:commands/team_members_are_score_holders` passes. Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G6-45 fill updates light
 
@@ -2345,7 +2354,7 @@ Neon answered parts of this on 2026-10-29 for the earlier roadmap, and those ans
 - Branch: fix/fill-light
 - Needs decision: none
 - Done when: a GameTest fills a closed room with glowstone then air and reads block light 15 then 0 inside, and a filled stone roof over open ground drops sky light under it to vanilla's values.
-- Status (2026-11-25): filed by the 2.0 loop from the second lane's report.
+- Status (2026-11-26): landed (branch `fix/fill-light`, `4fb8f5260`, the 2.0 loop). `fill` runs the light engine's checks for every changed block whose light properties changed, then propagates once. The fill also showed queued sky light increases spreading a stale level after a later decrease had darkened the spot, so a roofed column lit itself back up; the increase now spreads the stored level. GameTest `pumpkin:commands/fill_updates_light` (hollow box shuts out the sky, glowstone 14 beside it, 0 after air) passes. Landed through merge branch `land/g7-batch-20` (`442fdba54`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 ### Proof
 
@@ -2943,6 +2952,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
 - Branch: docs/bedrock-coverage
 - Needs decision: none
 - Done when: a script kept outside the repo diffs the call-site grep from Current state against the table and prints nothing; the unhandled-packet rows come from the WARN lines of a real 1.26.60 session of at least 15 minutes.
+- Status (2026-11-26): landed with G8-21 (branch `docs/bedrock-version-policy`, `834e36079`). Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G8-11 Bedrock test bot
 
@@ -3031,6 +3041,7 @@ G8-01 to G8-12 are needed whatever D8-1 says (G8-11 and G8-12 wait on D8-3 only 
 - Branch: docs/bedrock-version-policy
 - Needs decision: D8-2
 - Done when: `docs/BEDROCK.md` and `README.md` state the same policy as D8-2's answer, and the release step names the two sources to compare.
+- Status (2026-11-26): landed (branch `docs/bedrock-version-policy`, `834e36079`, which also carries G8-10). Landed through merge branch `land/g7-batch-19` (`e59fe3f07`), which passed the world round trip, full CI and the whole tester on CT 117 and the Z420 (the Windows box was offline); batches 19 to 24 went onto `alpha` together on 2026-11-26 with Neon's approval.
 
 #### G8-22 Remaining coverage rows (one piece per group, numbered on from G8-22)
 
