@@ -1,4 +1,6 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering::Relaxed};
+//! Vanilla's `AbstractFish`: what cod, salmon, tropical fish and pufferfish share.
+
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use crate::entity::{
     EntityBase,
@@ -14,12 +16,12 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::math::vector3::Vector3;
 use rand::RngExt;
 
-use super::water_animal::{AMBIENT_SOUND_INTERVAL, WaterAnimal};
+use super::water_animal::WaterAnimal;
 
+/// What every fish keeps beyond the mob: whether it came out of a bucket.
 #[derive(Default)]
 pub struct FishData {
     pub from_bucket: AtomicBool,
-    ambient_sound_time: AtomicI32,
 }
 
 const WATER_ACCELERATION: f32 = 0.01;
@@ -28,6 +30,8 @@ const SINK_SPEED: f64 = 0.005;
 const FLOP_HORIZONTAL: f32 = 0.05;
 const FLOP_VERTICAL: f32 = 0.4;
 
+/// Vanilla `AbstractFish`'s navigation and move control, in place of the walking
+/// ones every mob starts with.
 pub fn initialize_fish_movement(mob: &mut MobEntity) {
     let navigator = mob
         .navigator
@@ -47,6 +51,8 @@ const AVOID_PLAYER_SPRINT_SPEED: f64 = 1.4;
 const RANDOM_SWIM_SPEED: f64 = 1.0;
 const RANDOM_SWIM_INTERVAL: i32 = 40;
 
+/// Vanilla `AbstractFish.registerGoals`: panic when hurt, keep clear of players and
+/// swim to random spots. Schooling fish add `FollowFlockLeaderGoal` at 5.
 pub fn register_fish_goals(mob: &MobEntity) {
     use crate::entity::ai::goal::{avoid_entity::AvoidEntityGoal, escape_danger::EscapeDangerGoal};
     let goals = &mob.goals_selector;
@@ -157,7 +163,17 @@ pub trait AbstractFish: WaterAnimal + crate::entity::bucketable::Bucketable {
 
     fn fish_data(&self) -> &FishData;
 
-    fn ambient_sound(&self) -> Sound;
+    fn fish_is_from_bucket(&self) -> bool {
+        self.fish_data().from_bucket.load(Relaxed)
+    }
+
+    fn fish_set_from_bucket(&self, from_bucket: bool) {
+        self.fish_data().from_bucket.store(from_bucket, Relaxed);
+        self.get_entity().set_synced_data(
+            pumpkin_data::tracked_data::abstract_fish::FROM_BUCKET,
+            from_bucket,
+        );
+    }
 
     fn fish_write_nbt(&self, nbt: &mut NbtCompound) {
         nbt.put_bool("FromBucket", self.is_from_bucket());
@@ -167,33 +183,36 @@ pub trait AbstractFish: WaterAnimal + crate::entity::bucketable::Bucketable {
         self.set_from_bucket(nbt.get_bool("FromBucket").unwrap_or(false));
     }
 
+    /// Vanilla `Mob.playAmbientSound`, also played when a fish is let out of a bucket.
     fn play_ambient_sound(&self) {
-        let entity = self.get_entity();
-        if !entity.is_silent() {
-            entity.world.load().play_sound_raw(
-                self.ambient_sound() as u16,
-                pumpkin_data::sound::SoundCategory::Neutral,
-                &entity.pos.load(),
-                1.0,
-                self.get_mob_entity().living_entity.get_pitch(),
-            );
+        if let Some(sound) = self.get_ambient_sound() {
+            self.make_sound(sound);
         }
     }
 
+    /// Vanilla `WaterAnimal.baseTick`: out of water a fish runs out of air.
     fn fish_base_tick(&self, caller: &dyn crate::entity::EntityBase) {
-        if !self.get_mob_entity().living_entity.is_dead_or_dying()
-            && self.get_random().random_range(0..1000)
-                < self.fish_data().ambient_sound_time.fetch_add(1, Relaxed)
-        {
-            AbstractFish::reset_ambient_sound_time(self);
-            self.play_ambient_sound();
-        }
         self.handle_air_supply(caller);
     }
 
-    fn reset_ambient_sound_time(&self) {
-        self.fish_data()
-            .ambient_sound_time
-            .store(-AMBIENT_SOUND_INTERVAL, Relaxed);
+    /// Vanilla `AbstractFish.removeWhenFarAway`.
+    fn fish_remove_when_far_away(&self) -> bool {
+        !self.is_from_bucket() && self.get_entity().custom_name.load().is_none()
+    }
+
+    /// Vanilla `AbstractFish.requiresCustomPersistence`.
+    fn fish_requires_custom_persistence(&self) -> bool {
+        let entity = self.get_entity();
+        self.is_from_bucket()
+            || entity
+                .vehicle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_some()
+            || entity
+                .leashed_to
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_some()
     }
 }

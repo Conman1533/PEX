@@ -5,8 +5,12 @@ use std::sync::{
 
 use rand::RngExt;
 
-use super::abstract_fish::AbstractFish;
-use crate::entity::{EntityBase, mob::spawn::SpawnGroupData};
+use super::abstract_fish::{AbstractFish, register_fish_goals};
+use crate::entity::{
+    EntityBase,
+    ai::goal::follow_flock_leader::FollowFlockLeaderGoal,
+    mob::{MobEntity, spawn::SpawnGroupData},
+};
 
 pub const SCHOOL_SEARCH_RANGE: f64 = 8.0;
 const LEADER_DISTANCE_SQR: f64 = 121.0;
@@ -27,6 +31,14 @@ impl SchoolingFishData {
             school_size: AtomicI32::new(1),
         }
     }
+}
+
+/// Vanilla `AbstractSchoolingFish.registerGoals`: the fish goals, then following a
+/// school leader at 5.
+pub fn register_schooling_fish_goals(mob: &MobEntity) {
+    register_fish_goals(mob);
+    mob.goals_selector
+        .add_goal(5, Box::new(FollowFlockLeaderGoal::default()));
 }
 
 pub trait AbstractSchoolingFish: AbstractFish {
