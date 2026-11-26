@@ -13,7 +13,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | Goal | Pieces | Landed | Built, proof missing | Left for 2.0 | Not in 2.0 |
 | :-- | --: | --: | --: | --: | :-- |
 | G0 Shared tooling | 5 | 3 | 0 | 2 | |
-| G1 Mob AI | 47 | 15 | 1 | 31 | |
+| G1 Mob AI | 48 | 15 | 1 | 32 | |
 | G2 Plugin API | 10 | 1 | 0 | 4 | G2-06 dropped; G2-07 to G2-10 wait on upstream |
 | G3 Config | 10 | 7 | 0 | 3 | |
 | G4 Offline UUIDs | 7 | 2 | 0 | 5 | |
@@ -23,7 +23,7 @@ Checked against `alpha` at `466d2af9d` on 2026-11-19 and updated for each landin
 | G8 Bedrock | 22 | 3 | 0 | 11 | G8-13 to G8-19 and G8-22 after 2.0 |
 | G9 Performance | 14 | 6 | 0 | 7 | G9-06 dropped |
 | G10 Releases | 10 | 2 | 0 | 8 | |
-| Total | 218 | 98 | 6 | 98 | 16 |
+| Total | 219 | 98 | 6 | 99 | 16 |
 
 Landed on `alpha` on 2026-11-20 as landing batch 1 (branch `land/batch1`), by the 2.0 loop. Local full CI passed except `scaffolding_distance_and_collapse` (failing on `alpha` before). The merge also fixed the tester's player move broadcast test, whose mover could regenerate health while counting now that player health is synced like vanilla:
 
@@ -820,12 +820,20 @@ Rules for every mob piece (G1-04 to G1-44):
 - Status (2026-11-26): filed by the 2.0 loop from the second lane's report while porting G1 pieces (the wither's target goal looks like it skips players).
 
 #### G1-47 Ageable mobs spawn as babies 5% of the time
-- Scope: in: `AgeableMob.finalizeSpawn` gives a spawn group a 5% chance (`BABY_START_SPAWN_CHANCE` 0.05) that the mob starts as a baby once the group already has one adult (`AgeableMobGroupData`), for natural, chunk generation, spawn egg and `summon` spawns without NBT. Out: per-mob overrides such as the chicken jockey.
+- Scope: in: `AgeableMob.finalizeSpawn` with `AgeableMobGroupData`: the first mob of a spawn pack never starts as a baby, and each later one starts as a baby with chance 0.05 (`BABY_START_SPAWN_CHANCE`), for natural and chunk generation packs. A `summon` or spawn egg mob gets fresh group data, so it is never a baby, as in vanilla. Out: per-mob overrides such as the chicken jockey.
 - Depends on: none.
 - Branch: `fix/ageable-baby-spawns`
 - Needs decision: none.
-- Done when: 1000 summoned cows on PEX and on vanilla 26.3 hold a baby share inside the same binomial range around 5% (CT 117 console side-by-side), and a unit test covers the group rule.
-- Status (2026-11-26): filed by the 2.0 loop from the second lane's report (no baby animals ever spawn).
+- Done when: a same-seed chunk generation area on PEX and vanilla 26.3 holds a baby share among its passive animals inside the same binomial range (about 5% of the non-first pack members), `summon` never gives a baby on either, and a unit test covers the group rule.
+- Status (2026-11-26): filed by the 2.0 loop from the second lane's report (no baby animals ever spawn); done-when corrected the same day after the second lane checked vanilla (summoned mobs are never babies).
+
+#### G1-48 Ravagers leave baby villagers alone
+- Scope: in: the ravager's villager target goal skips babies, as vanilla `Ravager.registerGoals` targets `AbstractVillager` only when `!entity.isBaby()`. Out: other raider targeting.
+- Depends on: none.
+- Branch: `fix/ravager-skips-baby-villagers`
+- Needs decision: none.
+- Done when: a GameTest with a ravager, a baby villager and an iron golem out of reach sees the ravager never target the baby villager.
+- Status (2026-11-26): filed by the 2.0 loop from the second lane's report.
 
 ### Proof
 
