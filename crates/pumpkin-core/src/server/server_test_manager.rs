@@ -825,6 +825,46 @@ impl GameTestWorld for ServerGameTestWorld {
         Ok(())
     }
 
+    async fn mock_player_interact_with_entities(
+        &self,
+        name: &str,
+        entity_name: &str,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+    ) -> GameTestResult<usize> {
+        let player = self
+            .mock_players
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .find(|player| player.gameprofile.name == name)
+            .cloned()
+            .ok_or_else(|| GameTestError::World(format!("No mock player called '{name}'")))?;
+        let server = self
+            .world
+            .server
+            .upgrade()
+            .ok_or_else(|| GameTestError::World("the server is gone".to_string()))?;
+        let mut interactions = 0;
+        for target in self.living_entities_in_box(entity_name, min, max) {
+            // The main hand path of the Java interact packet handler.
+            let hand = pumpkin_util::Hand::Right;
+            let mut stack = player.inventory().get_stack_in_hand(hand);
+            let interacted = target
+                .interact_with_hand(&player, &mut stack, hand)
+                .unwrap_or_else(|| target.interact(&player, &mut stack));
+            if interacted {
+                interactions += 1;
+            } else {
+                server
+                    .item_registry
+                    .use_on_entity(&mut stack, &player, target.clone());
+            }
+            player.inventory().set_stack_in_hand(hand, stack);
+        }
+        Ok(interactions)
+    }
+
     async fn remove_mock_players(&self) {
         self.discard_mock_players();
     }

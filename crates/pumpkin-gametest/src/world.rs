@@ -120,6 +120,21 @@ pub trait GameTestWorld: Send + Sync {
         ))
     }
 
+    /// The mock player called `name` right-clicks each living `entity_name` touching the box
+    /// with its main hand item, the way the server handles a player's interact packet. Returns
+    /// how many of them took the interaction.
+    async fn mock_player_interact_with_entities(
+        &self,
+        _name: &str,
+        _entity_name: &str,
+        _min: Vector3<f64>,
+        _max: Vector3<f64>,
+    ) -> GameTestResult<usize> {
+        Err(GameTestError::World(
+            "mock players are not supported by this GameTestWorld".to_string(),
+        ))
+    }
+
     /// Removes the players added by [`Self::spawn_mock_player`]. Called when an attempt finishes.
     async fn remove_mock_players(&self) {}
 
