@@ -15,12 +15,16 @@ use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_protocol::java::client::play::GameEvent;
 use pumpkin_util::math::boundingbox::{BoundingBox, EntityDimensions};
 
+use super::{
+    abstract_fish::{AbstractFish, FishData},
+    water_animal::{AMBIENT_SOUND_INTERVAL, WaterAnimal},
+};
 use crate::entity::{
     Entity, EntityBase,
     ai::{goal::pufferfish_puff::PufferfishPuffGoal, target_predicate::TargetPredicate},
+    bucketable::Bucketable,
     custom_sound::CustomSound,
-    mob::{Mob, MobEntity},
-    passive::fish,
+    mob::{Mob, MobEntity, StepSound},
     player::Player,
 };
 
@@ -52,6 +56,7 @@ impl PuffState {
 /// Wiki: <https://minecraft.wiki/w/Pufferfish>
 pub struct PufferfishEntity {
     pub mob_entity: MobEntity,
+    fish_data: FishData,
     puff_state: AtomicI32,
     inflate_counter: AtomicI32,
     deflate_timer: AtomicI32,
@@ -59,10 +64,12 @@ pub struct PufferfishEntity {
 
 impl PufferfishEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
-        fish::init(&mob_entity);
+        let mut mob_entity = MobEntity::new(entity);
+        super::abstract_fish::initialize_fish_movement(&mut mob_entity);
+        super::abstract_fish::register_fish_goals(&mob_entity);
         let pufferfish = Self {
             mob_entity,
+            fish_data: FishData::default(),
             puff_state: AtomicI32::new(PuffState::Small.id()),
             inflate_counter: AtomicI32::new(0),
             deflate_timer: AtomicI32::new(0),
@@ -217,21 +224,63 @@ impl PufferfishEntity {
 }
 
 impl Mob for PufferfishEntity {
-    fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
-        crate::entity::mob::StepSound::Silent
+    fn mob_step_sound(&self) -> StepSound {
+        StepSound::Silent
     }
 
-    fn swim_sound(&self) -> pumpkin_data::sound::Sound {
-        pumpkin_data::sound::Sound::EntityFishSwim
+    fn swim_sound(&self) -> Sound {
+        Sound::EntityFishSwim
+    }
+
+    fn get_ambient_sound_interval(&self) -> i32 {
+        AMBIENT_SOUND_INTERVAL
     }
 
     fn get_mob_entity(&self) -> &MobEntity {
         &self.mob_entity
     }
 
-    fn mob_tick(&self, caller: &dyn EntityBase) {
-        fish::flop(self, Sound::EntityPufferFishFlop);
+    fn before_mob_ai_step(&self) {
+        self.fish_ai_step();
+    }
 
+    fn travel_in_water(&self, caller: &dyn EntityBase, _gravity: f64, _falling: bool) {
+        self.fish_travel_in_water(caller);
+    }
+
+    fn as_fish(&self) -> Option<&dyn AbstractFish> {
+        Some(self)
+    }
+
+    fn mob_init_data_tracker(&self) {
+        self.set_from_bucket(self.is_from_bucket());
+    }
+
+    fn remove_when_far_away(&self, _distance_sq: f64) -> bool {
+        self.fish_remove_when_far_away()
+    }
+
+    fn requires_custom_persistence(&self) -> bool {
+        self.fish_requires_custom_persistence()
+    }
+
+    fn check_spawn_obstruction(&self, world: &crate::world::World) -> bool {
+        self.water_animal_spawn_obstruction(world)
+    }
+
+    fn can_be_leashed(&self) -> bool {
+        false
+    }
+
+    fn get_base_experience_reward(&self) -> u32 {
+        self.water_animal_experience_reward()
+    }
+
+    fn base_tick(&self) {
+        self.fish_base_tick(self);
+    }
+
+    fn mob_tick(&self, caller: &dyn EntityBase) {
         if self.is_alive() && !self.mob_entity.is_no_ai() {
             self.tick_puff();
         }
@@ -239,10 +288,6 @@ impl Mob for PufferfishEntity {
         if self.is_alive() && self.get_puff_state() != PuffState::Small {
             self.touch_nearby_mobs(caller);
         }
-    }
-
-    fn travel(&self, caller: &dyn EntityBase) -> bool {
-        fish::travel(self, caller)
     }
 
     fn mob_is_pushed_by_fluids(&self) -> bool {
@@ -258,10 +303,12 @@ impl Mob for PufferfishEntity {
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
+        self.fish_write_nbt(nbt);
         nbt.put_int("PuffState", self.puff_state.load(Ordering::Relaxed));
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
+        self.fish_read_nbt(nbt);
         if let Some(state_id) = nbt.get_int("PuffState") {
             self.set_puff_state(PuffState::from_id(state_id));
         }
@@ -287,6 +334,38 @@ impl Mob for PufferfishEntity {
             }
             player.add_effect(poison(puff_state));
         }
+    }
+}
+
+impl WaterAnimal for PufferfishEntity {}
+
+impl AbstractFish for PufferfishEntity {
+    fn flop_sound(&self) -> Sound {
+        Sound::EntityPufferFishFlop
+    }
+
+    fn fish_data(&self) -> &FishData {
+        &self.fish_data
+    }
+}
+
+/// Keeps vanilla's `FromBucket` flag. Bucket pickup still goes through the water
+/// bucket's own path, so `as_bucketable` stays unset.
+impl Bucketable for PufferfishEntity {
+    fn is_from_bucket(&self) -> bool {
+        self.fish_is_from_bucket()
+    }
+
+    fn set_from_bucket(&self, from_bucket: bool) {
+        self.fish_set_from_bucket(from_bucket);
+    }
+
+    fn bucket_item(&self) -> &'static pumpkin_data::item::Item {
+        &pumpkin_data::item::Item::PUFFERFISH_BUCKET
+    }
+
+    fn pickup_sound(&self) -> Sound {
+        Sound::ItemBucketFillFish
     }
 }
 

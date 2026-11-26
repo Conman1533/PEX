@@ -284,3 +284,247 @@ pub(super) async fn test_guardian_swims_down_to_hidden_player(
     })?;
     Ok(())
 }
+
+/// A glass tank filling a `size_x` by `size_z` structure, with water `depth` blocks deep inside.
+async fn build_sized_water_tank(
+    helper: &GameTestHelper,
+    size_x: i32,
+    size_z: i32,
+    depth: i32,
+) -> GameTestResult<()> {
+    for x in 0..size_x {
+        for z in 0..size_z {
+            helper
+                .set_block_default(&BlockPos::new(x, 0, z), &Block::GLASS)
+                .await?;
+            let wall = x == 0 || x == size_x - 1 || z == 0 || z == size_z - 1;
+            for y in 1..=depth {
+                let block = if wall { &Block::GLASS } else { &Block::WATER };
+                helper
+                    .set_block_default(&BlockPos::new(x, y, z), block)
+                    .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Where each `entity_name` in the box is, relative to the test.
+async fn relative_positions(
+    helper: &GameTestHelper,
+    entity_name: &str,
+    min: BlockPos,
+    max: BlockPos,
+) -> GameTestResult<Vec<Vector3<f64>>> {
+    let origin = helper.absolute_vec(Vector3::new(0.0, 0.0, 0.0));
+    let values = helper
+        .entity_nbt_values(entity_name, min, max, "Pos")
+        .await?;
+    Ok(values
+        .iter()
+        .filter_map(|tags| match tags.first() {
+            Some(NbtTag::List(list)) => match list.as_slice() {
+                [NbtTag::Double(x), NbtTag::Double(y), NbtTag::Double(z)] => {
+                    Some(Vector3::new(*x, *y, *z) - origin)
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect())
+}
+
+/// Vanilla `AbstractSchoolingFish`: four fish of one kind start at the corners of a tank of water
+/// 8 blocks across, so they are always in reach of each other's `FollowFlockLeaderGoal` search
+/// (8 blocks). When the first one's goal comes round, after 200 to 219 ticks, it makes itself
+/// the leader and the other three follow it, staying close and no longer swimming off on their
+/// own. Fish that don't school drift apart again.
+async fn fish_school_follows_leader(
+    helper: GameTestHelper,
+    entity_name: &'static str,
+) -> GameTestResult<()> {
+    build_sized_water_tank(&helper, 10, 10, 3).await?;
+    for (x, z) in SCHOOL_FISH {
+        helper
+            .spawn_entity_at(entity_name, Vector3::new(x, 1.5, z))
+            .await?;
+    }
+    let tank_min = BlockPos::new(1, 1, 1);
+    let tank_max = BlockPos::new(9, 5, 9);
+    let together_ticks = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    helper.succeed_when(move |helper| {
+        let together_ticks = together_ticks.clone();
+        async move {
+            let fish = relative_positions(&helper, entity_name, tank_min, tank_max).await?;
+            let count = fish.len() as f64;
+            let middle = fish
+                .iter()
+                .fold(Vector3::new(0.0, 0.0, 0.0), |sum, pos| sum + *pos)
+                / count;
+            let together = fish.len() == SCHOOL_FISH.len()
+                && fish
+                    .iter()
+                    .all(|pos| (*pos - middle).length() <= SCHOOL_RADIUS);
+            let ticks = if together {
+                together_ticks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+            } else {
+                together_ticks.store(0, std::sync::atomic::Ordering::Relaxed);
+                0
+            };
+            helper.assert_true(
+                ticks >= SCHOOL_TICKS,
+                format!("the {entity_name} never schooled; fish at {fish:?}"),
+            )
+        }
+    })?;
+    Ok(())
+}
+
+pub(super) async fn test_cod_school_follows_leader(helper: GameTestHelper) -> GameTestResult<()> {
+    fish_school_follows_leader(helper, "minecraft:cod").await
+}
+
+pub(super) async fn test_salmon_school_follows_leader(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    fish_school_follows_leader(helper, "minecraft:salmon").await
+}
+
+pub(super) async fn test_tropical_fish_school_follows_leader(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    fish_school_follows_leader(helper, "minecraft:tropical_fish").await
+}
+
+/// Vanilla `PufferfishPuffGoal`: a survival player within 2 blocks makes a pufferfish puff up
+/// (`PuffState` 1, then 2).
+pub(super) async fn test_pufferfish_puffs_up_near_survival_player(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    build_water_tank(&helper).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(2.5, 1.0, 2.5))
+        .await?;
+    helper
+        .execute_command(
+            &BlockPos::new(2, 1, 2),
+            "effect give @a[distance=..2] minecraft:water_breathing 1000 0 true",
+        )
+        .await?;
+    helper
+        .spawn_entity_at("minecraft:pufferfish", Vector3::new(4.0, 1.5, 2.5))
+        .await?;
+    let tank_min = BlockPos::new(1, 1, 1);
+    let tank_max = BlockPos::new(10, 4, 4);
+    helper.succeed_when(move |helper| async move {
+        let states = helper
+            .entity_nbt_values("minecraft:pufferfish", tank_min, tank_max, "PuffState")
+            .await?;
+        let puffed = states
+            .iter()
+            .flatten()
+            .any(|tag| matches!(tag, NbtTag::Int(state) if *state > 0));
+        helper.assert_true(
+            puffed,
+            format!("the pufferfish never puffed up: {states:?}"),
+        )
+    })?;
+    Ok(())
+}
+
+/// Vanilla `SquidFleeGoal`: a squid hurt by a player within 10 blocks heads straight away from
+/// them, three times as fast as it swims about. It starts 4 blocks from the player and has to get
+/// 10.5 blocks away. It can't be knocked back, so only fleeing moves it away at once. A glow
+/// squid also has to go dark.
+async fn squid_flees_when_hit(
+    helper: GameTestHelper,
+    entity_name: &'static str,
+    goes_dark: bool,
+) -> GameTestResult<()> {
+    build_sized_water_tank(&helper, 21, 5, 3).await?;
+    helper
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .await?;
+    helper
+        .spawn_entity_at(entity_name, Vector3::new(5.5, 1.5, 2.5))
+        .await?;
+    let tank_min = BlockPos::new(1, 1, 1);
+    let tank_max = BlockPos::new(20, 5, 4);
+    let sequence = helper
+        .start_sequence()
+        .then_execute(move |helper| async move {
+            let player = BlockPos::new(1, 1, 2);
+            helper
+                .execute_command(
+                    &player,
+                    "effect give @a[distance=..2] minecraft:water_breathing 1000 0 true",
+                )
+                .await?;
+            helper
+                .execute_command(
+                    &player,
+                    &format!(
+                        "attribute @e[type={entity_name},limit=1,sort=nearest] \
+                         minecraft:knockback_resistance base set 1"
+                    ),
+                )
+                .await?;
+            helper
+                .execute_command(
+                    &player,
+                    &format!(
+                        "damage @e[type={entity_name},limit=1,sort=nearest] 1 \
+                         minecraft:player_attack by @p"
+                    ),
+                )
+                .await
+                .map(|_| ())
+        });
+    // Vanilla `GlowSquid.hurtServer`: a hurt glow squid goes dark for 100 ticks.
+    let sequence = if goes_dark {
+        sequence.then_wait_until(move |helper| async move {
+            let dark = helper
+                .entity_nbt_values(entity_name, tank_min, tank_max, "DarkTicksRemaining")
+                .await?;
+            helper.assert_true(
+                dark.iter()
+                    .flatten()
+                    .any(|tag| matches!(tag, NbtTag::Int(ticks) if *ticks > 0)),
+                format!("the hurt {entity_name} never went dark: {dark:?}"),
+            )
+        })
+    } else {
+        sequence
+    };
+    sequence
+        .then_wait_until(move |helper| async move {
+            let squid = relative_positions(&helper, entity_name, tank_min, tank_max).await?;
+            helper.assert_true(
+                squid.iter().any(|pos| pos.x >= SQUID_SAFE_X),
+                format!("the {entity_name} never fled; it is at {squid:?}"),
+            )
+        })
+        .then_succeed();
+    Ok(())
+}
+
+pub(super) async fn test_squid_flees_when_hit(helper: GameTestHelper) -> GameTestResult<()> {
+    squid_flees_when_hit(helper, "minecraft:squid", false).await
+}
+
+pub(super) async fn test_glow_squid_flees_when_hit(helper: GameTestHelper) -> GameTestResult<()> {
+    squid_flees_when_hit(helper, "minecraft:glow_squid", true).await
+}
+
+/// How many fish `fish_school_follows_leader` spawns, one at each corner of a square.
+const SCHOOL_FISH: [(f64, f64); 4] = [(1.5, 1.5), (8.5, 1.5), (1.5, 8.5), (8.5, 8.5)];
+
+/// How close to the middle of the school every fish has to stay.
+const SCHOOL_RADIUS: f64 = 3.5;
+
+/// How many ticks in a row the school has to hold together. Four fish that don't school stay
+/// that close for at most about 280 ticks in a row in this tank.
+const SCHOOL_TICKS: u32 = 500;
+
+/// How far from the player a squid has to get, along the tank.
+const SQUID_SAFE_X: f64 = 12.0;
