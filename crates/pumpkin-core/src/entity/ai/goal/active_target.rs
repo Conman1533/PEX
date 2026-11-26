@@ -81,6 +81,8 @@ pub struct ActiveTargetGoal {
     target_predicate: TargetPredicate,
     condition: TargetCondition,
     gate: Option<MobFilter>,
+    /// Also search players when there is no target type, which the entity search leaves out.
+    include_players: bool,
 }
 
 impl ActiveTargetGoal {
@@ -116,6 +118,7 @@ impl ActiveTargetGoal {
             target_predicate,
             condition: TargetCondition::Always,
             gate: None,
+            include_players: false,
         }
     }
 
@@ -137,6 +140,15 @@ impl ActiveTargetGoal {
     #[must_use]
     pub fn gated_by(mut self: Box<Self>, gate: MobFilter) -> Box<Self> {
         self.gate = Some(gate);
+        self
+    }
+
+    /// Vanilla `NearestAttackableTargetGoal` over `LivingEntity`, which takes the nearest match
+    /// among players too. For [`Self::predicated`], whose search otherwise only sees non-player
+    /// entities.
+    #[must_use]
+    pub fn including_players(mut self: Box<Self>) -> Box<Self> {
+        self.include_players = true;
         self
     }
 
@@ -171,6 +183,7 @@ impl ActiveTargetGoal {
             target_predicate,
             condition: TargetCondition::Always,
             gate: None,
+            include_players: false,
         })
     }
 
@@ -202,6 +215,7 @@ impl ActiveTargetGoal {
             target_predicate,
             condition: TargetCondition::Always,
             gate: None,
+            include_players: false,
         })
     }
 
@@ -252,7 +266,7 @@ impl ActiveTargetGoal {
                 .map(|p: Arc<Player>| p as Arc<dyn EntityBase>)
         } else {
             let entity_types = self.target_type.map(|t| [t]);
-            world.get_nearest_entity(
+            let entity = world.get_nearest_entity(
                 search_pos,
                 follow_range,
                 entity_types.as_ref().map(<[&EntityType; 1]>::as_slice),
@@ -260,7 +274,31 @@ impl ActiveTargetGoal {
                     predicate.test(&world, Some(mob), entity.as_ref())
                         && condition.allows_target(mob, entity.as_ref(), &world)
                 },
-            )
+            );
+            let player = (self.include_players && self.target_type.is_none())
+                .then(|| {
+                    world.get_nearest_player(search_pos, follow_range, |player| {
+                        predicate.test(&world, Some(mob), player.as_ref())
+                            && condition.allows_target(mob, player.as_ref(), &world)
+                    })
+                })
+                .flatten()
+                .map(|player| player as Arc<dyn EntityBase>);
+            let distance = |found: &Arc<dyn EntityBase>| {
+                found
+                    .get_entity()
+                    .pos
+                    .load()
+                    .squared_distance_to_vec(&search_pos)
+            };
+            match (entity, player) {
+                (Some(entity), Some(player)) => Some(if distance(&player) < distance(&entity) {
+                    player
+                } else {
+                    entity
+                }),
+                (entity, player) => entity.or(player),
+            }
         };
 
         self.target = found;

@@ -254,6 +254,10 @@ impl LookControlTrait for BeeLookControl {
         self.0
             .look_at_with_range(x, y, z, max_yaw_change, max_pitch_change);
     }
+
+    fn looking_at(&self) -> Option<pumpkin_util::math::vector3::Vector3<f64>> {
+        self.0.looking_at()
+    }
 }
 
 impl Mob for BeeEntity {

@@ -1,5 +1,6 @@
 use crate::entity::ai::control::{Control, LookControlTrait, look_control::LookControl};
 use crate::entity::mob::Mob;
+use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::math::wrap_degrees;
 
 pub struct SmoothSwimmingLookControl {
@@ -28,6 +29,10 @@ impl LookControlTrait for SmoothSwimmingLookControl {
     ) {
         self.look
             .look_at_with_range(x, y, z, max_yaw_change, max_pitch_change);
+    }
+
+    fn looking_at(&self) -> Option<Vector3<f64>> {
+        self.look.looking_at()
     }
 
     fn tick(&mut self, mob: &dyn Mob) {

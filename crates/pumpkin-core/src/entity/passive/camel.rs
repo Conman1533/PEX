@@ -354,6 +354,10 @@ impl LookControlTrait for CamelLookControl {
             max_pitch_change,
         );
     }
+
+    fn looking_at(&self) -> Option<Vector3<f64>> {
+        LookControlTrait::looking_at(&self.0)
+    }
 }
 
 impl AgeableMob for CamelEntity {
