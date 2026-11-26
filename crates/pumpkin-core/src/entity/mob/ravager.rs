@@ -88,8 +88,10 @@ impl RavagerEntity {
             );
             target_selector.add_goal(
                 4,
+                // Vanilla `(target, level) -> !target.isBaby()`: a baby villager is left alone.
                 ActiveTargetGoal::predicated(&mob_arc.mob_entity, 10, true, |target, _| {
                     is_abstract_villager(target.entity.entity_type)
+                        && target.entity.age.load(Ordering::Relaxed) >= 0
                 }),
             );
             target_selector.add_goal(
