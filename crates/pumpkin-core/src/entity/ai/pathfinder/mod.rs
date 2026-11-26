@@ -2124,8 +2124,13 @@ impl PathNavigationTrait for WallClimberNavigation {
     }
 }
 
+/// A mob's own `PathNavigation.isStableDestination`, such as vanilla `TurtlePathNavigation`'s.
+pub type StableDestination = std::sync::Arc<dyn Fn(&World, &BlockPos) -> bool + Send + Sync>;
+
 pub struct AmphibiousPathNavigation {
     pub inner: PathNavigation,
+    /// Replaces vanilla `AmphibiousPathNavigation.isStableDestination` when set.
+    pub stable_destination: Option<StableDestination>,
 }
 
 impl Default for AmphibiousPathNavigation {
@@ -2141,11 +2146,20 @@ impl AmphibiousPathNavigation {
             inner: PathNavigation::new(EvaluatorKind::Amphibious(AmphibiousNodeEvaluator::new(
                 prefers_shallow_swimming,
             ))),
+            stable_destination: None,
         }
     }
 }
 
 impl PathNavigationTrait for AmphibiousPathNavigation {
+    /// Vanilla `AmphibiousPathNavigation.isStableDestination`: anything but air below.
+    fn is_stable_destination(&self, world: &World, pos: &BlockPos) -> bool {
+        self.stable_destination.as_ref().map_or_else(
+            || !world.get_block_state(&pos.down()).is_air(),
+            |stable| stable(world, pos),
+        )
+    }
+
     fn set_progress(&mut self, goal: NavigatorGoal) {
         self.inner.set_progress(goal);
     }
@@ -2225,18 +2239,28 @@ impl PathNavigationTrait for AmphibiousPathNavigation {
             } else if let Some(path) = &mut self.inner.path
                 && let Some(pos) = path.get_next_node_pos()
             {
-                let target_pos = Vector3::new(
-                    f64::from(pos.0.x) + 0.5,
-                    f64::from(pos.0.y) + 0.5,
-                    f64::from(pos.0.z) + 0.5,
-                );
+                // Vanilla `PathNavigation.followThePath`, where `AmphibiousPathNavigation`'s
+                // `getTempMobPos` is the mob's own position. Each axis is tested on its own against
+                // half the width of a mob wider than 0.75, so a turtle (1.2 wide), which stands at a
+                // corner of the node's block at its entity position there, reaches the node.
                 let current_pos = entity.entity.pos.load();
-                let dx = target_pos.x - current_pos.x;
-                let dy = target_pos.y - current_pos.y;
-                let dz = target_pos.z - current_pos.z;
-                let dist_sq = dx * dx + dy * dy + dz * dz;
-
-                if dist_sq < 0.5 * 0.5 {
+                self.inner.max_distance_to_waypoint =
+                    PathNavigation::waypoint_margin(entity.entity.width());
+                let margin = f64::from(self.inner.max_distance_to_waypoint);
+                let dx = current_pos.x - (f64::from(pos.0.x) + 0.5);
+                let dy = current_pos.y - f64::from(pos.0.y);
+                let dz = current_pos.z - (f64::from(pos.0.z) + 0.5);
+                let close_enough =
+                    dx.abs() < margin && dz.abs() < margin && dy.abs() < NODE_REACH_Y;
+                let corner_cut = path
+                    .get_next_node()
+                    .is_some_and(|node| PathNavigation::can_cut_corner(node.path_type))
+                    && PathNavigation::should_target_next_node_in_direction(
+                        current_pos,
+                        path,
+                        || false,
+                    );
+                if close_enough || corner_cut {
                     path.advance();
                 }
             }
