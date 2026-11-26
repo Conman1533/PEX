@@ -184,6 +184,20 @@ impl Animal for HoglinEntity {
 }
 
 impl Mob for HoglinEntity {
+    /// Vanilla `Hoglin.finalizeSpawn`: one hoglin in five spawns as a baby, before the
+    /// `AgeableMob` roll.
+    fn finalize_spawn(
+        &self,
+        _world: &std::sync::Arc<crate::world::World>,
+        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
+    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
+        self.mob_entity.finalize_spawn_base();
+        if rand::random::<f32>() < 0.2 {
+            self.set_baby(true);
+        }
+        group_data
+    }
+
     fn get_ambient_sound(&self) -> Option<pumpkin_data::sound::Sound> {
         // Vanilla `HoglinAi.getSoundForActivity`; PEX hoglins run goals, so fighting is having a
         // target. Avoiding piglins and repellents is not simulated.
