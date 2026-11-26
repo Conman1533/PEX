@@ -314,6 +314,9 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:persistent_endermite_never_expires",
     "pumpkin:priming_creeper_sets_off_sculk_sensor",
     "pumpkin:commands/spreadplayers_lands_on_the_only_dry_block",
+    "pumpkin:cod_school_follows_leader",
+    "pumpkin:salmon_school_follows_leader",
+    "pumpkin:tropical_fish_school_follows_leader",
 ];
 
 /// Tests that add a mock player, outside `BUILTIN_TEST_IDS`. The tester spaces them like
@@ -342,6 +345,9 @@ const MOCK_PLAYER_TEST_IDS: &[&str] = &[
     "pumpkin:evoker_summons_vexes_at_survival_player",
     "pumpkin:illusioner_shoots_bow_at_survival_player",
     "pumpkin:vex_flies_through_wall_to_target",
+    "pumpkin:pufferfish_puffs_up_near_survival_player",
+    "pumpkin:squid_flees_when_hit",
+    "pumpkin:glow_squid_flees_when_hit",
 ];
 
 #[must_use]
@@ -1054,6 +1060,48 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             water_mobs::test_zombie_nautilus_charges_survival_player,
+        );
+        register_function_test(
+            "pumpkin:cod_school_follows_leader",
+            "pumpkin:empty_10x6x10",
+            1600,
+            0,
+            water_mobs::test_cod_school_follows_leader,
+        );
+        register_function_test(
+            "pumpkin:salmon_school_follows_leader",
+            "pumpkin:empty_10x6x10",
+            1600,
+            0,
+            water_mobs::test_salmon_school_follows_leader,
+        );
+        register_function_test(
+            "pumpkin:tropical_fish_school_follows_leader",
+            "pumpkin:empty_10x6x10",
+            1600,
+            0,
+            water_mobs::test_tropical_fish_school_follows_leader,
+        );
+        register_function_test(
+            "pumpkin:pufferfish_puffs_up_near_survival_player",
+            "pumpkin:empty_11x5x5",
+            200,
+            0,
+            water_mobs::test_pufferfish_puffs_up_near_survival_player,
+        );
+        register_function_test(
+            "pumpkin:squid_flees_when_hit",
+            "pumpkin:empty_21x5x5",
+            300,
+            0,
+            water_mobs::test_squid_flees_when_hit,
+        );
+        register_function_test(
+            "pumpkin:glow_squid_flees_when_hit",
+            "pumpkin:empty_21x5x5",
+            300,
+            0,
+            water_mobs::test_glow_squid_flees_when_hit,
         );
 
         // redstone_wire_and_power (15)
