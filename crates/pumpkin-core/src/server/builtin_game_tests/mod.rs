@@ -873,11 +873,15 @@ pub fn ensure_builtin_game_tests_registered() {
             0,
             entities_and_ai::test_dragon_fireball_leaves_breath_cloud,
         );
-        register_function_test(
+        // The panic runs to random spots, and in about 1 run of 40 they all fall inside the
+        // lane the test watches (2 of about 80 runs on CT 117), so a run may be retried.
+        register_flaky_function_test(
             "pumpkin:cow_follows_wheat_and_panics_when_hit",
             "pumpkin:empty_11x4x5",
             200,
             0,
+            3,
+            1,
             farm_animals::test_cow_follows_wheat_and_panics_when_hit,
         );
         register_function_test(
