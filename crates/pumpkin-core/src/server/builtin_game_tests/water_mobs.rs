@@ -528,3 +528,149 @@ const SCHOOL_TICKS: u32 = 500;
 
 /// How far from the player a squid has to get, along the tank.
 const SQUID_SAFE_X: f64 = 12.0;
+
+/// Vanilla `BreathAirGoal`: a dolphin at the bottom of a pool with its air nearly gone swims up
+/// and breathes before it starts to drown. Its eyes leave the water, so `increaseAirSupply` fills
+/// its 4800 air at once.
+pub(super) async fn test_dolphin_swims_up_to_breathe(helper: GameTestHelper) -> GameTestResult<()> {
+    // A glass tank with water ten blocks deep (y 1 to 10), open to the air above.
+    for x in 0..7 {
+        for z in 0..7 {
+            helper
+                .set_block_default(&BlockPos::new(x, 0, z), &Block::GLASS)
+                .await?;
+            let wall = x == 0 || x == 6 || z == 0 || z == 6;
+            for y in 1..=10 {
+                let block = if wall { &Block::GLASS } else { &Block::WATER };
+                helper
+                    .set_block_default(&BlockPos::new(x, y, z), block)
+                    .await?;
+            }
+        }
+    }
+    helper
+        .execute_command(
+            &BlockPos::new(3, 1, 3),
+            "summon minecraft:dolphin ~0.5 ~ ~0.5 {PersistenceRequired:1b}",
+        )
+        .await?;
+    // `finalizeSpawn` fills the air, so it is lowered afterwards: `BreathAirGoal` starts below
+    // 140, and at -20 the dolphin would drown.
+    helper
+        .execute_command(
+            &BlockPos::new(3, 1, 3),
+            "data merge entity @e[type=minecraft:dolphin,distance=..2,limit=1] {Air:150s}",
+        )
+        .await?;
+
+    let tank_min = BlockPos::new(0, 0, 0);
+    let tank_max = BlockPos::new(7, 14, 7);
+    helper.succeed_when(move |helper| async move {
+        let air = helper
+            .entity_nbt_values("minecraft:dolphin", tank_min, tank_max, "Air")
+            .await?;
+        let health = helper
+            .entity_nbt_values("minecraft:dolphin", tank_min, tank_max, "Health")
+            .await?;
+        let breathed = matches!(
+            air.first().and_then(|values| values.first()),
+            Some(NbtTag::Short(air)) if *air >= 4000
+        );
+        let unhurt = matches!(
+            health.first().and_then(|values| values.first()),
+            Some(NbtTag::Float(health)) if *health >= 10.0
+        );
+        helper.assert_true(
+            breathed && unhurt,
+            format!("the dolphin has not breathed unhurt yet: Air {air:?}, Health {health:?}"),
+        )
+    })?;
+    Ok(())
+}
+
+/// Vanilla `TurtleGoHomeGoal` and `TurtleLayEggGoal`: a turtle carrying an egg 14 blocks out in
+/// the water makes its way back to the beach it calls home, digs, and lays its eggs there.
+pub(super) async fn test_turtle_returns_to_home_beach_to_lay_egg(
+    helper: GameTestHelper,
+) -> GameTestResult<()> {
+    // A stone floor, shallow water at x 1 to 15 and a stone beach at x 16 to 19 with one sand
+    // block in its far corner, inside glass walls. A turtle leaves the water only by stepping up
+    // from the bottom against the bank, and vanilla paths a mob two blocks wide by the low corner of
+    // its footprint, with `moveTo` stopping a block short of the target. With glass on two sides of
+    // the sand no path can end beside it, so `TurtleLayEggGoal`'s path always ends on the stone
+    // diagonally in front of it, inside the goal's 1.0, from wherever `TurtleGoHomeGoal` (which
+    // keeps restarting while the turtle carries an egg) has walked it off to.
+    for x in 0..21 {
+        for z in 0..7 {
+            helper
+                .set_block_default(&BlockPos::new(x, 0, z), &Block::STONE)
+                .await?;
+            let wall = x == 0 || x == 20 || z == 0 || z == 6;
+            let block = if wall {
+                &Block::GLASS
+            } else if x <= 15 {
+                &Block::WATER
+            } else if (x, z) == (19, 5) {
+                &Block::SAND
+            } else {
+                &Block::STONE
+            };
+            helper
+                .set_block_default(&BlockPos::new(x, 1, z), block)
+                .await?;
+            if wall {
+                helper
+                    .set_block_default(&BlockPos::new(x, 2, z), &Block::GLASS)
+                    .await?;
+            }
+        }
+    }
+    // `finalizeSpawn` makes the beach its home; then it gets an egg and is moved out to sea.
+    let beach = BlockPos::new(18, 2, 3);
+    helper
+        .execute_command(
+            &beach,
+            "summon minecraft:turtle ~0.5 ~ ~0.5 {PersistenceRequired:1b}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &beach,
+            "data merge entity @e[type=minecraft:turtle,distance=..2,limit=1] {has_egg:1b}",
+        )
+        .await?;
+    helper
+        .execute_command(
+            &beach,
+            "tp @e[type=minecraft:turtle,distance=..2,limit=1] ~-13.5 ~-1 ~0.5",
+        )
+        .await?;
+
+    helper.succeed_when(move |helper| async move {
+        if helper
+            .assert_block_present(&BlockPos::new(19, 2, 5), &Block::TURTLE_EGG)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+        let area_min = BlockPos::new(0, 0, 0);
+        let area_max = BlockPos::new(21, 5, 7);
+        let pos = helper
+            .entity_nbt_values("minecraft:turtle", area_min, area_max, "Pos")
+            .await?;
+        let egg = helper
+            .entity_nbt_values("minecraft:turtle", area_min, area_max, "has_egg")
+            .await?;
+        let home = helper
+            .entity_nbt_values("minecraft:turtle", area_min, area_max, "home_pos")
+            .await?;
+        helper.assert_true(
+            false,
+            format!(
+                "no turtle egg on the beach yet: turtle at {pos:?}, has_egg {egg:?}, home {home:?}"
+            ),
+        )
+    })?;
+    Ok(())
+}

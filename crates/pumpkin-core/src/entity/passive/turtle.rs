@@ -23,8 +23,8 @@ use crate::entity::{
     ageable::{AgeableData, AgeableMob},
     ai::goal::{
         Controls, Goal, breed::BreedGoal, escape_danger::EscapeDangerGoal,
-        look_at_entity::LookAtEntityGoal, move_to_block::MoveToBlockGoal, swim::SwimGoal,
-        tempt::TemptGoal, try_find_water::TryFindWaterGoal, wander_around::WanderAroundGoal,
+        look_at_entity::LookAtEntityGoal, move_to_block::MoveToBlockGoal, tempt::TemptGoal,
+        to_goal_ticks, wander_around::WanderAroundGoal,
     },
     experience_orb::ExperienceOrbEntity,
     living::LivingEntity,
@@ -146,11 +146,458 @@ pub struct TurtleEntity {
     /// Vanilla `homePos`: where it spawned; `None` until first needed (vanilla falls back to
     /// the current block on load).
     pub home_pos: Mutex<Option<BlockPos>>,
+    /// Vanilla `travelPos`: where `TurtleTravelGoal` is swimming to. Shared with the navigation,
+    /// whose stable destinations depend on it.
+    pub travel_pos: Arc<Mutex<Option<BlockPos>>>,
+    /// Vanilla `goingHome`, set while `TurtleGoHomeGoal` runs.
+    pub going_home: AtomicBool,
+}
+
+/// Vanilla `Turtle.TurtleMoveControl`: slower in water away from home and as a baby, and on land,
+/// and it swims up or down towards where it is heading.
+struct TurtleMoveControl {
+    inner: crate::entity::ai::control::move_control::MoveControl,
+}
+
+impl crate::entity::ai::control::Control for TurtleMoveControl {}
+
+impl TurtleMoveControl {
+    /// Vanilla `updateSpeed`.
+    fn update_speed(mob: &dyn Mob) {
+        let mob_entity = mob.get_mob_entity();
+        let living = &mob_entity.living_entity;
+        let entity = &living.entity;
+        let turtle = mob.cast_any().downcast_ref::<TurtleEntity>();
+        if entity.is_in_water() {
+            entity
+                .velocity
+                .store(entity.velocity.load().add_raw(0.0, 0.005, 0.0));
+            if turtle.is_some_and(|turtle| !turtle.is_near_home(16.0)) {
+                mob_entity.set_speed((living.get_speed() / 2.0).max(0.08));
+            }
+            if entity.age.load(Ordering::Relaxed) < 0 {
+                mob_entity.set_speed((living.get_speed() / 3.0).max(0.06));
+            }
+        } else if entity.on_ground.load(Ordering::Relaxed) {
+            mob_entity.set_speed((living.get_speed() / 2.0).max(0.06));
+        }
+    }
+}
+
+impl crate::entity::ai::control::MoveControlTrait for TurtleMoveControl {
+    fn tick(&mut self, mob: &dyn Mob) {
+        use crate::entity::ai::control::move_control::{MoveControl, Operation};
+        use pumpkin_data::attributes::Attributes;
+
+        Self::update_speed(mob);
+        let mob_entity = mob.get_mob_entity();
+        let living = &mob_entity.living_entity;
+        let entity = &living.entity;
+        if self.inner.operation != Operation::MoveTo || mob_entity.steered().navigator().is_done() {
+            mob_entity.set_speed(0.0);
+            return;
+        }
+        let pos = entity.pos.load();
+        let xd = self.inner.wanted_x - pos.x;
+        let yd = self.inner.wanted_y - pos.y;
+        let zd = self.inner.wanted_z - pos.z;
+        let distance = (xd * xd + yd * yd + zd * zd).sqrt();
+        if distance < 1.0e-5 {
+            mob_entity.set_speed(0.0);
+            return;
+        }
+        let yd = yd / distance;
+        let yaw = MoveControl::rotlerp(
+            entity.yaw.load(),
+            zd.atan2(xd).to_degrees() as f32 - 90.0,
+            90.0,
+        );
+        entity.yaw.store(yaw);
+        entity.body_yaw.store(yaw);
+        let target_speed = (self.inner.speed_modifier
+            * living.get_attribute_value(&Attributes::MOVEMENT_SPEED))
+            as f32;
+        let speed = living.get_speed() + 0.125 * (target_speed - living.get_speed());
+        mob_entity.set_speed(speed);
+        entity.velocity.store(entity.velocity.load().add_raw(
+            0.0,
+            f64::from(speed) * yd * 0.1,
+            0.0,
+        ));
+    }
+
+    fn set_wanted_position(&mut self, x: f64, y: f64, z: f64, speed_modifier: f64) {
+        self.inner.set_wanted_position(x, y, z, speed_modifier);
+    }
+
+    fn strafe(&mut self, forwards: f32, right: f32) {
+        self.inner.strafe(forwards, right);
+    }
+
+    fn has_wanted(&self) -> bool {
+        self.inner.has_wanted()
+    }
+}
+
+/// Vanilla `Turtle.TurtleGoHomeGoal`: an adult with an egg, or now and then one more than 64
+/// blocks from home, swims and walks back to the beach it hatched on.
+struct TurtleGoHomeGoal {
+    speed: f64,
+    stuck: bool,
+    close_to_home_try_ticks: i32,
+}
+
+impl TurtleGoHomeGoal {
+    const fn new(speed: f64) -> Self {
+        Self {
+            speed,
+            stuck: false,
+            close_to_home_try_ticks: 0,
+        }
+    }
+}
+
+impl Goal for TurtleGoHomeGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        let Some(turtle) = TurtleEntity::of(mob) else {
+            return false;
+        };
+        if turtle.get_entity().age.load(Ordering::Relaxed) < 0 {
+            return false;
+        }
+        if turtle.has_egg() {
+            return true;
+        }
+        mob.get_random().random_range(0..to_goal_ticks(700)) == 0 && !turtle.is_near_home(64.0)
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        TurtleEntity::of(mob).is_some_and(|turtle| {
+            !turtle.is_near_home(7.0)
+                && !self.stuck
+                && self.close_to_home_try_ticks <= self.get_tick_count(600)
+        })
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        if let Some(turtle) = TurtleEntity::of(mob) {
+            turtle.going_home.store(true, Ordering::Relaxed);
+        }
+        self.stuck = false;
+        self.close_to_home_try_ticks = 0;
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        if let Some(turtle) = TurtleEntity::of(mob) {
+            turtle.going_home.store(false, Ordering::Relaxed);
+        }
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        use crate::entity::ai::util::default_random_pos::get_pos_towards;
+        use std::f64::consts::{FRAC_PI_2, PI};
+
+        let Some(turtle) = TurtleEntity::of(mob) else {
+            return;
+        };
+        let home = turtle.home_pos();
+        let close_to_home = turtle.is_near_home(16.0);
+        if close_to_home {
+            self.close_to_home_try_ticks += 1;
+        }
+        if !mob.is_navigator_idle() {
+            return;
+        }
+        let target = Vector3::new(
+            f64::from(home.0.x) + 0.5,
+            f64::from(home.0.y),
+            f64::from(home.0.z) + 0.5,
+        );
+        let mut next = get_pos_towards(mob, 16, 3, target, PI / 10.0)
+            .or_else(|| get_pos_towards(mob, 8, 7, target, FRAC_PI_2));
+        if let Some(pos) = next
+            && !close_to_home
+            && turtle
+                .get_entity()
+                .world
+                .load()
+                .get_block(&pos.to_block_pos())
+                != &Block::WATER
+        {
+            next = get_pos_towards(mob, 16, 5, target, FRAC_PI_2);
+        }
+        let Some(next) = next else {
+            self.stuck = true;
+            return;
+        };
+        mob.navigate_to(mob.get_entity().pos.load(), next, self.speed);
+    }
+}
+
+/// Vanilla `Turtle.TurtleGoToWaterGoal`: a turtle on land heads for water within 24 blocks.
+struct TurtleGoToWaterGoal {
+    move_to_block: MoveToBlockGoal,
+}
+
+impl TurtleGoToWaterGoal {
+    const GIVE_UP_TICKS: i32 = 1200;
+
+    /// Vanilla passes `turtle.isBaby() ? 2.0 : speedModifier` while the turtle is being built,
+    /// before any age is set, so it is always the given speed.
+    fn new(speed: f64) -> Self {
+        let mut move_to_block = MoveToBlockGoal::new(
+            speed,
+            24,
+            1,
+            Box::new(|world, pos| world.get_block(&pos) == &Block::WATER),
+        )
+        .with_recalculate_interval(160);
+        move_to_block.vertical_search_start = -1;
+        Self { move_to_block }
+    }
+}
+
+impl Goal for TurtleGoToWaterGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        let Some(turtle) = TurtleEntity::of(mob) else {
+            return false;
+        };
+        let in_water = turtle.get_entity().is_in_water();
+        let baby = turtle.get_entity().age.load(Ordering::Relaxed) < 0;
+        if (baby && !in_water)
+            || (!turtle.going_home.load(Ordering::Relaxed) && !in_water && !turtle.has_egg())
+        {
+            self.move_to_block.can_start(mob)
+        } else {
+            false
+        }
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        let entity = mob.get_entity();
+        let world = entity.world.load();
+        !entity.is_in_water()
+            && self.move_to_block.try_ticks <= Self::GIVE_UP_TICKS
+            && (self.move_to_block.is_valid_target)(&world, self.move_to_block.target_pos)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        self.move_to_block.start(mob);
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.move_to_block.stop(mob);
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        self.move_to_block.tick(mob);
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        self.move_to_block.should_run_every_tick()
+    }
+
+    fn controls(&self) -> Controls {
+        self.move_to_block.controls()
+    }
+}
+
+/// Vanilla `Turtle.TurtleTravelGoal`: in the water, a turtle without an egg swims towards a random
+/// spot up to 512 blocks away.
+struct TurtleTravelGoal {
+    speed: f64,
+    stuck: bool,
+}
+
+impl TurtleTravelGoal {
+    const fn new(speed: f64) -> Self {
+        Self {
+            speed,
+            stuck: false,
+        }
+    }
+}
+
+impl Goal for TurtleTravelGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        TurtleEntity::of(mob).is_some_and(|turtle| {
+            !turtle.going_home.load(Ordering::Relaxed)
+                && !turtle.has_egg()
+                && turtle.get_entity().is_in_water()
+        })
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        TurtleEntity::of(mob).is_some_and(|turtle| {
+            !mob.is_navigator_idle()
+                && !self.stuck
+                && !turtle.going_home.load(Ordering::Relaxed)
+                && turtle.mob_entity.love_ticks.load(Ordering::Relaxed) <= 0
+                && !turtle.has_egg()
+        })
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        let Some(turtle) = TurtleEntity::of(mob) else {
+            return;
+        };
+        let entity = turtle.get_entity();
+        let x = mob.get_random().random_range(0..1025) - 512;
+        let mut y = mob.get_random().random_range(0..9) - 4;
+        let z = mob.get_random().random_range(0..1025) - 512;
+        let pos = entity.pos.load();
+        let sea_level = entity.world.load().sea_level;
+        if f64::from(y) + pos.y > f64::from(sea_level - 1) {
+            y = 0;
+        }
+        *turtle
+            .travel_pos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(BlockPos::floored(
+            f64::from(x) + pos.x,
+            f64::from(y) + pos.y,
+            f64::from(z) + pos.z,
+        ));
+        self.stuck = false;
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        if let Some(turtle) = TurtleEntity::of(mob) {
+            *turtle
+                .travel_pos
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        }
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        use crate::entity::ai::util::default_random_pos::get_pos_towards;
+        use std::f64::consts::{FRAC_PI_2, PI};
+
+        let Some(turtle) = TurtleEntity::of(mob) else {
+            return;
+        };
+        let travel = *turtle
+            .travel_pos
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(travel) = travel else {
+            self.stuck = true;
+            return;
+        };
+        if !mob.is_navigator_idle() {
+            return;
+        }
+        let target = Vector3::new(
+            f64::from(travel.0.x) + 0.5,
+            f64::from(travel.0.y),
+            f64::from(travel.0.z) + 0.5,
+        );
+        let mut next = get_pos_towards(mob, 16, 3, target, PI / 10.0)
+            .or_else(|| get_pos_towards(mob, 8, 7, target, FRAC_PI_2));
+        // Vanilla `hasChunksAt(x - 34, z - 34, x + 34, z + 34)`.
+        if let Some(pos) = next {
+            let world = turtle.get_entity().world.load();
+            let (x, z) = (pos.x.floor() as i32, pos.z.floor() as i32);
+            let y = pos.y.floor() as i32;
+            let loaded = ((x - 34) >> 4..=(x + 34) >> 4).all(|cx| {
+                ((z - 34) >> 4..=(z + 34) >> 4)
+                    .all(|cz| world.is_loaded(&BlockPos::new(cx << 4, y, cz << 4)))
+            });
+            if !loaded {
+                next = None;
+            }
+        }
+        let Some(next) = next else {
+            self.stuck = true;
+            return;
+        };
+        mob.navigate_to(mob.get_entity().pos.load(), next, self.speed);
+    }
+}
+
+/// Vanilla `Turtle.TurtleRandomStrollGoal`: strolls only on land, and not on the way home or with
+/// an egg.
+struct TurtleRandomStrollGoal {
+    stroll: WanderAroundGoal,
+}
+
+impl TurtleRandomStrollGoal {
+    fn allowed(mob: &dyn Mob) -> bool {
+        TurtleEntity::of(mob).is_some_and(|turtle| {
+            !turtle.get_entity().is_in_water()
+                && !turtle.going_home.load(Ordering::Relaxed)
+                && !turtle.has_egg()
+        })
+    }
+}
+
+impl Goal for TurtleRandomStrollGoal {
+    fn can_start(&mut self, mob: &dyn Mob) -> bool {
+        Self::allowed(mob) && self.stroll.can_start(mob)
+    }
+
+    fn should_continue(&mut self, mob: &dyn Mob) -> bool {
+        self.stroll.should_continue(mob)
+    }
+
+    fn start(&mut self, mob: &dyn Mob) {
+        self.stroll.start(mob);
+    }
+
+    fn stop(&mut self, mob: &dyn Mob) {
+        self.stroll.stop(mob);
+    }
+
+    fn tick(&mut self, mob: &dyn Mob) {
+        self.stroll.tick(mob);
+    }
+
+    fn should_run_every_tick(&self) -> bool {
+        self.stroll.should_run_every_tick()
+    }
+
+    fn controls(&self) -> Controls {
+        self.stroll.controls()
+    }
 }
 
 impl TurtleEntity {
     pub fn new(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
+        use crate::entity::ai::pathfinder::{AmphibiousPathNavigation, Navigator, node::PathType};
+
+        let mut mob_entity = MobEntity::new(entity);
+        let travel_pos: Arc<Mutex<Option<BlockPos>>> = Arc::new(Mutex::new(None));
+        // Vanilla `TurtlePathNavigation`: while travelling, only water is a stable
+        // destination; otherwise anything but air below.
+        let mut navigation = AmphibiousPathNavigation::new(false);
+        let travelling = travel_pos.clone();
+        navigation.stable_destination = Some(Arc::new(move |world, pos| {
+            if travelling
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_some()
+            {
+                world.get_block(pos) == &Block::WATER
+            } else {
+                !world.get_block_state(&pos.down()).is_air()
+            }
+        }));
+        let mut navigator = Navigator::new(navigation);
+        navigator.set_pathfinding_malus(PathType::Water, 0.0);
+        navigator.set_pathfinding_malus(PathType::DoorIronClosed, -1.0);
+        navigator.set_pathfinding_malus(PathType::DoorWoodClosed, -1.0);
+        navigator.set_pathfinding_malus(PathType::DoorOpen, -1.0);
+        *mob_entity
+            .navigator
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = navigator;
+        *mob_entity
+            .move_control
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Box::new(TurtleMoveControl {
+            inner: crate::entity::ai::control::move_control::MoveControl::default(),
+        });
         let turtle = Self {
             mob_entity,
             ageable_data: AgeableData::default(),
@@ -158,6 +605,8 @@ impl TurtleEntity {
             laying_egg: AtomicBool::new(false),
             lay_egg_counter: AtomicI32::new(0),
             home_pos: Mutex::new(None),
+            travel_pos,
+            going_home: AtomicBool::new(false),
         };
         let mob_arc = Arc::new(turtle);
         let mob_weak: Weak<dyn Mob> = {
@@ -168,8 +617,6 @@ impl TurtleEntity {
         {
             let goal_selector = &mob_arc.mob_entity.goals_selector;
 
-            goal_selector.add_goal(0, Box::new(TryFindWaterGoal));
-            goal_selector.add_goal(1, Box::new(SwimGoal::default()));
             goal_selector.add_goal(0, EscapeDangerGoal::new(1.2).seeking_water(7));
             goal_selector.add_goal(1, BreedGoal::new(1.0));
             goal_selector.add_goal(1, Box::new(TurtleLayEggGoal::new(Arc::downgrade(&mob_arc))));
@@ -181,11 +628,19 @@ impl TurtleEntity {
                     false,
                 )),
             );
+            goal_selector.add_goal(3, Box::new(TurtleGoToWaterGoal::new(1.0)));
+            goal_selector.add_goal(4, Box::new(TurtleGoHomeGoal::new(1.0)));
+            goal_selector.add_goal(7, Box::new(TurtleTravelGoal::new(1.0)));
             goal_selector.add_goal(
                 8,
                 LookAtEntityGoal::with_default(mob_weak, &EntityType::PLAYER, 8.0),
             );
-            goal_selector.add_goal(9, Box::new(WanderAroundGoal::with_interval(1.0, 100)));
+            goal_selector.add_goal(
+                9,
+                Box::new(TurtleRandomStrollGoal {
+                    stroll: WanderAroundGoal::with_interval(1.0, 100),
+                }),
+            );
         };
 
         mob_arc
@@ -223,6 +678,10 @@ impl AgeableMob for TurtleEntity {
 }
 
 impl TurtleEntity {
+    fn of(mob: &dyn Mob) -> Option<&Self> {
+        mob.cast_any().downcast_ref::<Self>()
+    }
+
     pub fn home_pos(&self) -> BlockPos {
         *self
             .home_pos
@@ -236,6 +695,12 @@ impl TurtleEntity {
             .home_pos
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(pos);
+    }
+
+    /// Vanilla `level.getFluidState(pos).is(FluidTags.WATER)`.
+    fn is_water_at(world: &World, pos: &BlockPos) -> bool {
+        let (fluid, _) = world.get_fluid_and_fluid_state(pos);
+        fluid.has_tag(&tag::Fluid::MINECRAFT_WATER)
     }
 
     /// Vanilla `homePos.closerToCenterThan(position(), distance)`.
@@ -302,6 +767,43 @@ impl Animal for TurtleEntity {
 }
 
 impl Mob for TurtleEntity {
+    /// Vanilla `Turtle.getWalkTargetValue`: water (unless heading home) and sand are worth 10.
+    fn get_walk_target_value(&self, pos: &BlockPos) -> f32 {
+        let world = self.get_entity().world.load();
+        if !self.going_home.load(Ordering::Relaxed) && Self::is_water_at(&world, pos) {
+            return 10.0;
+        }
+        if TurtleEggBlock::on_sand(&**world, pos) {
+            return 10.0;
+        }
+        world.get_light_level_dependent_magic_value(pos) - 0.5
+    }
+
+    /// Vanilla `Turtle.travelInWater`: a slow swimmer, sinking unless it has a target or is on
+    /// its way home and within 20 blocks of it.
+    fn travel_in_water(&self, caller: &dyn EntityBase, _gravity: f64, _falling: bool) {
+        let living = &self.mob_entity.living_entity;
+        let entity = &living.entity;
+        entity.update_velocity_from_input(living.movement_input.load(), 0.1);
+        living.make_move(caller);
+        let mut velocity = entity.velocity.load() * 0.9;
+        let has_target = self
+            .mob_entity
+            .target
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some();
+        if !has_target && (!self.going_home.load(Ordering::Relaxed) || !self.is_near_home(20.0)) {
+            velocity.y -= 0.005;
+        }
+        entity.velocity.store(velocity);
+    }
+
+    /// Vanilla `Turtle.isPushedByFluid`.
+    fn mob_is_pushed_by_fluids(&self) -> bool {
+        false
+    }
+
     fn mob_step_sound(&self) -> crate::entity::mob::StepSound {
         let sound = if self.is_baby() {
             pumpkin_data::sound::Sound::EntityTurtleShambleBaby

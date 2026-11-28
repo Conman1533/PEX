@@ -318,6 +318,8 @@ const MOB_TEST_IDS: &[&str] = &[
     "pumpkin:cod_school_follows_leader",
     "pumpkin:salmon_school_follows_leader",
     "pumpkin:tropical_fish_school_follows_leader",
+    "pumpkin:dolphin_swims_up_to_breathe",
+    "pumpkin:turtle_returns_to_home_beach_to_lay_egg",
     "pumpkin:sheep_eats_grass_and_regrows_wool",
     "pumpkin:pig_struck_by_lightning_becomes_zombified_piglin",
     "pumpkin:mooshroom_struck_by_lightning_turns_brown",
@@ -1187,6 +1189,20 @@ pub fn ensure_builtin_game_tests_registered() {
             300,
             0,
             water_mobs::test_glow_squid_flees_when_hit,
+        );
+        register_function_test(
+            "pumpkin:dolphin_swims_up_to_breathe",
+            "pumpkin:empty_7x14x7",
+            400,
+            0,
+            water_mobs::test_dolphin_swims_up_to_breathe,
+        );
+        register_function_test(
+            "pumpkin:turtle_returns_to_home_beach_to_lay_egg",
+            "pumpkin:empty_21x5x7",
+            3600,
+            0,
+            water_mobs::test_turtle_returns_to_home_beach_to_lay_egg,
         );
 
         // redstone_wire_and_power (15)
