@@ -23,9 +23,7 @@ use crate::entity::{
     mob::{
         Mob, MobEntity,
         patrol::{PatrolData, PatrollingMonster},
-        raider::{
-            Raider, RaiderData, is_abstract_villager, raider_can_attack, register_raider_goals,
-        },
+        raider::{Raider, RaiderData, is_abstract_villager, register_raider_goals},
     },
 };
 
@@ -173,10 +171,6 @@ impl Mob for RavagerEntity {
         if tick > 0 {
             self.attack_tick.store(tick - 1, Ordering::Relaxed);
         }
-    }
-
-    fn can_attack(&self, target: &dyn EntityBase) -> bool {
-        raider_can_attack(self, target)
     }
 
     fn before_melee_attack(&self, _target: &dyn EntityBase) {
