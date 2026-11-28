@@ -319,7 +319,9 @@ pub(super) async fn test_blaze_alerts_nearby_blazes_when_hit(
 }
 
 /// Vanilla `GhastShootFireballGoal`: a ghast that sees a survival player level with it charges
-/// for 20 ticks and fires a large fireball at them.
+/// for 20 ticks and fires a large fireball at them. Its `RandomFloatAroundGoal` keeps it drifting
+/// up to 16 blocks a move, so it can be well outside the 11x6x5 structure when it fires, and
+/// the fireball is looked for in a box that reaches 24 blocks past the structure on every side.
 pub(super) async fn test_ghast_shoots_fireball_at_survival_player(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
@@ -334,7 +336,13 @@ pub(super) async fn test_ghast_shoots_fireball_at_survival_player(
         )
         .await?;
     helper.succeed_when(|helper| async move {
-        helper.assert_entity_present("minecraft:fireball").await
+        helper
+            .assert_entity_present_in_box(
+                "minecraft:fireball",
+                BlockPos::new(-24, -24, -24),
+                BlockPos::new(35, 30, 29),
+            )
+            .await
     })?;
     Ok(())
 }
