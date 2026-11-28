@@ -968,7 +968,7 @@ pub fn ensure_builtin_game_tests_registered() {
         );
         register_function_test(
             "pumpkin:ghast_shoots_fireball_at_survival_player",
-            "pumpkin:empty_11x6x5",
+            "pumpkin:empty_11x7x7",
             200,
             0,
             entities_and_ai::test_ghast_shoots_fireball_at_survival_player,

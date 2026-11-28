@@ -319,30 +319,35 @@ pub(super) async fn test_blaze_alerts_nearby_blazes_when_hit(
 }
 
 /// Vanilla `GhastShootFireballGoal`: a ghast that sees a survival player level with it charges
-/// for 20 ticks and fires a large fireball at them. Its `RandomFloatAroundGoal` keeps it drifting
-/// up to 16 blocks a move, so it can be well outside the 11x6x5 structure when it fires, and
-/// the fireball is looked for in a box that reaches 24 blocks past the structure on every side.
+/// for 20 ticks and fires a large fireball at them. Its `RandomFloatAroundGoal` moves it up to
+/// 16 blocks at a time, and its target goal only takes a player within 4 blocks of its height,
+/// so it is walled in with barriers, ceiling included, to stay level with the player.
 pub(super) async fn test_ghast_shoots_fireball_at_survival_player(
     helper: GameTestHelper,
 ) -> GameTestResult<()> {
-    build_stone_floor(&helper, 11, 5).await?;
+    build_stone_floor(&helper, 11, 7).await?;
+    for x in 0..11 {
+        for z in 0..7 {
+            let wall = x == 0 || x == 10 || z == 0 || z == 6;
+            let bottom = if wall { 1 } else { 6 };
+            for y in bottom..=6 {
+                helper
+                    .set_block_default(&BlockPos::new(x, y, z), &Block::BARRIER)
+                    .await?;
+            }
+        }
+    }
     helper
-        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 2.5))
+        .spawn_survival_mock_player_at("minecraft:stick", Vector3::new(1.5, 1.0, 3.5))
         .await?;
     helper
         .execute_command(
-            &BlockPos::new(9, 1, 2),
+            &BlockPos::new(7, 1, 3),
             "summon minecraft:ghast ~ ~ ~ {PersistenceRequired:1b}",
         )
         .await?;
     helper.succeed_when(|helper| async move {
-        helper
-            .assert_entity_present_in_box(
-                "minecraft:fireball",
-                BlockPos::new(-24, -24, -24),
-                BlockPos::new(35, 30, 29),
-            )
-            .await
+        helper.assert_entity_present("minecraft:fireball").await
     })?;
     Ok(())
 }
