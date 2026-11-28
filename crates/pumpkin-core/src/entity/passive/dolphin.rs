@@ -615,17 +615,22 @@ impl Mob for DolphinEntity {
         1.0
     }
 
+    /// Vanilla `Dolphin.tick` runs the base tick inside `super.tick()` and only then fills a
+    /// dolphin without AI back up, so one without AI always ends the tick with its whole supply.
+    /// PEX runs `mob_tick` before the base tick, so the refill has to come after `tick_air` here.
     fn base_tick(&self) {
         self.tick_air();
+        if self.mob_entity.is_no_ai() {
+            self.get_entity().set_air_supply(TOTAL_AIR_SUPPLY);
+        }
     }
 
-    /// Vanilla `Dolphin.tick`: without AI it never runs out of air. Otherwise it keeps moist in
-    /// water or rain and dries out elsewhere, taking 1 damage a tick once its moistness is gone,
-    /// and flops about on the ground.
+    /// Vanilla `Dolphin.tick`: without AI it never runs out of air (see `base_tick`). Otherwise
+    /// it keeps moist in water or rain and dries out elsewhere, taking 1 damage a tick once its
+    /// moistness is gone, and flops about on the ground.
     fn mob_tick(&self, _caller: &dyn EntityBase) {
         let entity = self.get_entity();
         if self.mob_entity.is_no_ai() {
-            entity.set_air_supply(TOTAL_AIR_SUPPLY);
             return;
         }
         if entity.is_in_water_or_rain() {
